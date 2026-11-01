@@ -462,7 +462,8 @@ ${human} can write to you while you are working. Such a message reaches you betw
   const memoryFile = folder ? join(repo, "MEMORY.md") : "MEMORY.md";
   const budget = memoryBudget(settings.memory.dreaming.maxMemoryChars);
   const profile = ctx.profile ? `\n\n${profileBlock(ctx.profile, human, folder ? join(repo, PROFILE_FILE) : PROFILE_FILE)}` : "";
-  const today = describeDay(ctx.now).split(" (")[0]!;
+  const now = ctx.now ?? new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
   const projectMemory = folder
     ? ` Facts about the attached folder itself — its code, build and test steps, conventions — belong in Claude Code's project memory for that folder (its auto memory), not in \`${memoryFile}\`, which is about ${human}, your work and your tools across projects.`
     : "";
