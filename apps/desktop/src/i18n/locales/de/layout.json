@@ -121,6 +121,7 @@
     "week": "Diese Woche",
     "left": "{{percent}} % übrig",
     "label": "Claude-Nutzung: {{fiveHour}} % des 5-Stunden-Limits und {{week}} % des Wochenlimits übrig",
+    "labelWeek": "Claude-Nutzung: {{week}} % des Wochenlimits übrig",
     "notStarted": "Beginnt mit deiner nächsten Nachricht",
     "resetsSoon": "Setzt sich gleich zurück",
     "resetsIn": "Zurückgesetzt um {{time}} (in {{duration}})",
@@ -128,7 +129,8 @@
     "hours": "{{h}} Std. {{m}} Min.",
     "minutes": "{{m}} Min.",
     "stale": "Gerade nicht aktualisierbar – zeigt den letzten Stand",
-    "hint": "Äußerer Ring: 5 Stunden · innerer Ring: Woche. Klicken zum Aktualisieren."
+    "hint": "Äußerer Ring: 5 Stunden · innerer Ring: Woche. Klicken zum Aktualisieren.",
+    "hintWeek": "Dein Plan hat kein 5-Stunden-Limit, nur ein Wochenlimit. Klicken zum Aktualisieren."
   },
   "claudeSignedOut": {
     "keyRefused": "Claude hat deinen Anthropic-API-Schlüssel abgelehnt.",

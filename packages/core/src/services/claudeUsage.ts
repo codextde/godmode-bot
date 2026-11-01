@@ -74,7 +74,7 @@ export function parseUsage(body: unknown, plan: string | null): ClaudeUsage {
   const data = (body && typeof body === "object" ? body : {}) as Record<string, unknown>;
   return {
     state: "ok",
-    fiveHour: toWindow(data.five_hour) ?? { percent: 0, resetsAt: null },
+    fiveHour: toWindow(data.five_hour),
     week: toWindow(data.seven_day) ?? { percent: 0, resetsAt: null },
     plan,
     checkedAt: now(),
