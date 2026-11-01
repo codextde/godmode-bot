@@ -11,6 +11,7 @@ import { useLicense } from "@/lib/hooks";
 import { syncUpdater } from "@/stores/updater";
 import { AppShell } from "@/components/layout/app-shell";
 import { CloudStatePage, type CloudState } from "@/components/layout/cloud-state";
+import { useLicenseDeepLinks } from "@/components/license/deep-link";
 import { LicenseGate } from "@/components/license/license-gate";
 import { SplashScreen } from "@/components/layout/splash";
 import { LoginPage } from "@/pages/auth/login";
@@ -94,6 +95,7 @@ export function App() {
     retryDelay: 500,
   });
   const authed = auth.data?.authenticated ?? false;
+  useLicenseDeepLinks(authed && !cloudContext);
   const boot = useQuery({ queryKey: qk.bootstrap, queryFn: api.bootstrap, enabled: authed, staleTime: 5_000 });
   // The licence gate is for the computer itself; through the cloud, refused runs say why in their toast.
   const license = useLicense(authed && !cloudContext && !!boot.data?.settings.onboardingComplete && !!boot.data?.vault.unlocked);

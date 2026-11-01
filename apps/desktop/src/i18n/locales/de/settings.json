@@ -1399,7 +1399,7 @@
       "active": "Aktiv",
       "trial": "Kostenlose Testphase",
       "pastDue": "Zahlung fällig",
-      "grace": "Gratiswoche",
+      "grace": "Testphase",
       "unverified": "Noch nicht geprüft",
       "missing": "Keine Lizenz",
       "invalid": "Ungültiger Schlüssel",
@@ -1424,9 +1424,11 @@
     "activate": {
       "title": "Godmode aktivieren",
       "description": "Jede Funktion in jedem Tarif. Deine Agenten, Chats und Logins bleiben auf diesem Computer.",
-      "remote": "Füge den Lizenzschlüssel in Godmode auf dem Computer selbst hinzu."
+      "remote": "Füge den Lizenzschlüssel in Godmode auf dem Computer selbst hinzu.",
+      "trialTitle": "Godmode nach der Testphase behalten",
+      "trialDescription": "Wähl jederzeit einen Plan. Alles, was du eingerichtet hast, bleibt auf diesem Computer."
     },
-    "freeUntil": "Gratis bis",
+    "freeUntil": "Testphase bis",
     "trialEndsStops": "Testphase endet, dann Schluss",
     "cancelsOn": "Endet am",
     "renews": "Verlängert sich",

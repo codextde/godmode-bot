@@ -4,11 +4,37 @@
   "gate": {
     "nothingChanged": "Nothing changed yet",
     "checkFailed": "Couldn't check the licence",
-    "freeWeekOver": "Your free week is over",
     "activateTitle": "Activate Godmode",
-    "subtitle": "Start your free trial, or enter your licence key to keep your agents working.",
+    "subtitle": "Pick a plan, or enter your licence key to keep your agents working.",
     "keyEndingIn": "Key ending in <key>{{hint}}</key>",
-    "dataSafe": "Your agents, chats and logins stay safe on this computer."
+    "dataSafe": "Nothing is deleted. Your agents, logins and memory stay on this computer.",
+    "dataSafeMac": "Nothing is deleted. Your agents, logins and memory stay on this Mac.",
+    "trialOver": "Your free trial is over",
+    "endedTitle": "Your licence has ended",
+    "readyTitle": "Godmode is ready when you are",
+    "readyText": "Pick a plan and hand over your first task. Godmode keeps working while you get on with your day.",
+    "doneInDays_one": "In {{days}} days, Godmode finished one task for you.",
+    "doneInDays_other": "In {{days}} days, Godmode finished {{formatted}} tasks for you.",
+    "doneSoFar_one": "So far, Godmode finished one task for you.",
+    "doneSoFar_other": "So far, Godmode finished {{formatted}} tasks for you.",
+    "yourAgents_one": "Your agent",
+    "yourAgents_other": "Your {{count}} agents",
+    "automationCount_one": "{{count}} automation",
+    "automationCount_other": "{{count}} automations",
+    "readyBoth": "{{agents}} and {{automations}} are ready to keep going.",
+    "readyAgents_one": "Your agent is ready to keep going.",
+    "readyAgents_other": "Your {{count}} agents are ready to keep going.",
+    "readyAutomations_one": "Your automation is ready to keep going.",
+    "readyAutomations_other": "Your {{count}} automations are ready to keep going.",
+    "stats": {
+      "time": "of work for you",
+      "hoursValue": "{{value}} h",
+      "minutesValue": "{{value}} min",
+      "automationRuns_one": "automation run",
+      "automationRuns_other": "automation runs",
+      "logins_one": "login saved",
+      "logins_other": "logins saved"
+    }
   },
   "banner": {
     "trialEnds": {
@@ -29,11 +55,17 @@
     "viewLicence": "View licence",
     "pastDue": "The last payment didn't go through. Update your payment method to keep Godmode working.",
     "updatePayment": "Update payment",
-    "grace": "Free until {{date}}. Then add your licence key or start the 14-day free trial.",
-    "startTrial": "Start free trial",
     "addKey": "Add key",
     "unverified": "Your licence key couldn't be checked yet. Godmode accepts it until {{date}}.",
-    "dismiss": "Dismiss for today"
+    "dismiss": "Dismiss for today",
+    "freeTrial": {
+      "today": "Your free trial ends today.",
+      "tomorrow": "Your free trial ends tomorrow.",
+      "daysLeft_one": "{{count}} day left of your free trial.",
+      "daysLeft_other": "{{count}} days left of your free trial.",
+      "hint": "Pick a plan and everything you set up keeps working."
+    },
+    "seePlans": "See plans"
   },
   "keyForm": {
     "label": "Licence key",
@@ -44,11 +76,42 @@
     "activated": "Godmode is activated"
   },
   "panel": {
-    "startTrial": "Start 14-day free trial",
-    "seePlans": "See plans",
-    "finishCheckout": "Finish the checkout in your browser, then paste your licence key below.",
-    "pricing": "14 days free, then $39 a month. Cancel any time.",
     "lostKey": "Lost your key?",
     "lostKeyHint": "It's on the page you see after checkout and on your invoices."
+  },
+  "chip": {
+    "label": "Free trial",
+    "today": "ends today",
+    "daysLeft_one": "{{count}} day left",
+    "daysLeft_other": "{{count}} days left",
+    "until": "Free until {{date}}"
+  },
+  "plans": {
+    "label": "Plan",
+    "monthly": "Monthly",
+    "yearly": "Yearly",
+    "amount": "${{price}}",
+    "month": "/ month",
+    "billedMonthly": "Billed monthly",
+    "billedYearly": "${{price}} billed once a year",
+    "save": "Save {{percent}}%",
+    "perMonth": "${{price}}/month",
+    "perYear": "${{price}}/year",
+    "keep": "Keep Godmode",
+    "subscribe": "Subscribe",
+    "guarantee": "{{days}}-day money-back guarantee. Cancel anytime.",
+    "finishCheckout": "Finish the checkout in your browser. Then click “Open Godmode” on the welcome page, or paste your key below."
+  },
+  "deepLink": {
+    "activating": "Activating your licence…",
+    "alreadyActive": "This licence is already active",
+    "failed": "Couldn't activate the licence",
+    "replaceTitle": "Use the new licence key?",
+    "replaceText": "Godmode already has a working key (ending in {{old}}). Replace it with the key ending in {{next}}?",
+    "replace": "Use new key",
+    "keep": "Keep current key",
+    "confirmTitle": "Activate this licence key?",
+    "confirmText": "A link wants to add the licence key ending in {{next}} to Godmode. Only continue if you just bought it or got it from someone you trust.",
+    "cancel": "Cancel"
   }
 }
