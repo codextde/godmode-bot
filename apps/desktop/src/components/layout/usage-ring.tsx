@@ -90,12 +90,12 @@ export function UsageRing() {
   const fetching = useIsFetching({ queryKey: qk.claudeUsage }) > 0;
   const refresh = () => void qc.fetchQuery({ queryKey: qk.claudeUsage, queryFn: () => api.doctor.claudeUsage(true), staleTime: 0 });
   const data = usage.data;
-  if (!data?.fiveHour || !data.week) return null;
-  const fiveHour = left(data.fiveHour);
+  if (!data?.week) return null;
+  const fiveHour = data.fiveHour ? left(data.fiveHour) : null;
   const week = left(data.week);
   const outer = SIZE / 2 - STROKE / 2;
   const inner = outer - STROKE - GAP;
-  const lowest = Math.min(fiveHour, week);
+  const lowest = Math.min(fiveHour ?? 100, week);
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -103,22 +103,28 @@ export function UsageRing() {
           variant="ghost"
           size="icon"
           className={cn("size-8", fetching && "opacity-70")}
-          aria-label={t("usage.label", { fiveHour, week })}
+          aria-label={fiveHour === null ? t("usage.labelWeek", { week }) : t("usage.label", { fiveHour, week })}
           onClick={refresh}
         >
           <svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`} aria-hidden className={cn(lowest <= 10 && "animate-pulse motion-reduce:animate-none")}>
-            <Arc radius={outer} remaining={fiveHour} />
-            <Arc radius={inner} remaining={week} />
+            {fiveHour === null ? (
+              <Arc radius={outer} remaining={week} />
+            ) : (
+              <>
+                <Arc radius={outer} remaining={fiveHour} />
+                <Arc radius={inner} remaining={week} />
+              </>
+            )}
           </svg>
         </Button>
       </TooltipTrigger>
       <TooltipContent className="w-64">
         <div className="flex flex-col gap-2 py-0.5">
           <p className="font-semibold">{t("usage.title")}</p>
-          <Row label={t("usage.fiveHour")} window={data.fiveHour} />
+          {data.fiveHour && <Row label={t("usage.fiveHour")} window={data.fiveHour} />}
           <Row label={t("usage.week")} window={data.week} />
           {data.state !== "ok" && <p className="text-warning">{t("usage.stale")}</p>}
-          <p className="opacity-60">{t("usage.hint")}</p>
+          <p className="opacity-60">{data.fiveHour ? t("usage.hint") : t("usage.hintWeek")}</p>
         </div>
       </TooltipContent>
     </Tooltip>

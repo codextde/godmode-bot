@@ -215,7 +215,7 @@ function AccountRow({
       </div>
 
       <div className="w-full space-y-1.5 @xl:w-48">
-        <Meter label={t("accounts.session")} window={account.usage?.fiveHour ?? null} />
+        {!(account.usage?.state === "ok" && !account.usage.fiveHour) && <Meter label={t("accounts.session")} window={account.usage?.fiveHour ?? null} />}
         <Meter label={t("accounts.week")} window={account.usage?.week ?? null} />
       </div>
 

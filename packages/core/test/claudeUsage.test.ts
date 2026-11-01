@@ -17,10 +17,10 @@ describe("claudeUsage", () => {
     expect(parseCredentials("not json")).toBeNull();
   });
 
-  test("maps the windows and treats an unstarted window as untouched", () => {
+  test("maps the windows and drops the 5-hour window when the plan has none", () => {
     const usage = parseUsage({ five_hour: null, seven_day: { utilization: 26, resets_at: "2026-11-04T05:00:00.007109+00:00" } }, "max");
     expect(usage.state).toBe("ok");
-    expect(usage.fiveHour).toEqual({ percent: 0, resetsAt: null });
+    expect(usage.fiveHour).toBeNull();
     expect(usage.week).toEqual({ percent: 26, resetsAt: "2026-11-04T05:00:00.007Z" });
     expect(parseUsage({ seven_day: { utilization: 140 } }, null).week?.percent).toBe(100);
   });
