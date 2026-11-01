@@ -2,6 +2,7 @@ import { isValidElement, memo, useMemo, type ReactElement, type ReactNode } from
 import ReactMarkdown, { type Components, type Options } from "react-markdown";
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
+import remend, { INCOMPLETE_IMAGE_PLACEHOLDER, type RemendOptions } from "remend";
 import { Link } from "react-router";
 import { cn } from "@/lib/utils";
 import { CodeBlock as AicssCodeBlock } from "@/components/aicss/CodeBlock";
@@ -10,6 +11,7 @@ import { CoreFileLink, CoreImage, isCoreFile } from "./core-file";
 import { content, rehypeLocalFiles, type HastNode } from "./local-file-tree";
 import { FileLink, MessageFilesScope, Picture, useMessageFiles } from "./local-files";
 import { PullRequestLink, isPullRequestLink } from "@/components/github/pull-request-link";
+import { rehypeStreamFade } from "./rehype-stream-fade";
 
 /** Fenced code in chat — aicss code block (line numbers + copy), height-capped for long snippets. */
 export function CodeBlock({ lang, code, className }: { lang: string; code: string; className?: string }) {
@@ -77,7 +79,7 @@ const components: Components = {
   img({ node, src, alt }) {
     const local = (node as HastNode | undefined)?.data?.gmFile;
     if (local) return <Picture file={local} />;
-    if (!src || typeof src !== "string") return null;
+    if (!src || typeof src !== "string" || src === INCOMPLETE_IMAGE_PLACEHOLDER) return null;
     if (isCoreFile(src)) return <CoreImage src={src} alt={alt} />;
     return <img src={src} alt={alt ?? ""} loading="lazy" className="max-h-96 max-w-full rounded-lg border" />;
   },
@@ -98,14 +100,22 @@ const remarkPluginsWithBreaks = [remarkGfm, remarkBreaks];
  * GitHub-flavoured markdown with the chat prose styles, copyable code blocks and safe external links. In a chat, the
  * files and folders it names open in the file manager and its pictures are shown.
  */
-export const Markdown = memo(function Markdown({ children, className, breaks }: { children: string; className?: string; breaks?: boolean }) {
+const healOptions: RemendOptions = { linkMode: "text-only", comparisonOperators: false, singleTilde: false };
+
+export const Markdown = memo(function Markdown({ children, className, breaks, marks }: { children: string; className?: string; breaks?: boolean; marks?: number[] }) {
   const files = useMessageFiles(children);
-  const rehypePlugins = useMemo<Options["rehypePlugins"]>(() => (files ? [[rehypeLocalFiles, files.byRef]] : undefined), [files]);
+  const rehypePlugins = useMemo<Options["rehypePlugins"]>(() => {
+    const plugins: NonNullable<Options["rehypePlugins"]> = [];
+    if (files) plugins.push([rehypeLocalFiles, files.byRef]);
+    if (marks?.length) plugins.push([rehypeStreamFade, { marks }]);
+    return plugins.length ? plugins : undefined;
+  }, [files, marks]);
+  const source = useMemo(() => (marks ? remend(children, healOptions) : children), [children, marks]);
   return (
     <MessageFilesScope files={files}>
       <div className={cn("prose-chat min-w-0 break-words", className)}>
         <ReactMarkdown remarkPlugins={breaks ? remarkPluginsWithBreaks : remarkPlugins} rehypePlugins={rehypePlugins} components={components}>
-          {children}
+          {source}
         </ReactMarkdown>
       </div>
     </MessageFilesScope>

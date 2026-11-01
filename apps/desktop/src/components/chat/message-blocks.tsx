@@ -27,6 +27,7 @@ import { useLive } from "@/stores/live";
 import { intlLocale, t as translate } from "@/i18n";
 import { useLocale } from "@/i18n/language";
 import { Markdown } from "./markdown";
+import { useSmoothText } from "./use-smooth-text";
 import { UserBubble } from "./user-bubble";
 import { CopyButton } from "./copy-button";
 import { Lightbox } from "./lightbox";
@@ -199,7 +200,11 @@ export function MessageBlocks({
           case "text":
             return (
               <div key={item.key} className="min-w-0">
-                <Markdown className={cn(compact && "text-[0.85rem]", active && lastBlock?.type === "text" && "gm-streaming")}>{item.text}</Markdown>
+                {streaming ? (
+                  <StreamingMarkdown text={item.text} className={cn(compact && "text-[0.85rem]", active && lastBlock?.type === "text" && "gm-streaming")} />
+                ) : (
+                  <Markdown className={cn(compact && "text-[0.85rem]")}>{item.text}</Markdown>
+                )}
               </div>
             );
           case "thinking":
@@ -435,6 +440,18 @@ function imageSrc(image: string): string {
   const mime = image.startsWith("/9j/") ? "image/jpeg" : image.startsWith("R0lG") ? "image/gif" : image.startsWith("UklG") ? "image/webp" : "image/png";
   return `data:${mime};base64,${image}`;
 }
+
+function StreamingMarkdown({ text, className }: { text: string; className?: string }) {
+  const reduce = useReduceAnimations();
+  const smooth = useSmoothText(text);
+  return (
+    <Markdown className={className} marks={reduce ? EMPTY_MARKS : smooth.marks}>
+      {smooth.text}
+    </Markdown>
+  );
+}
+
+const EMPTY_MARKS: number[] = [];
 
 function stepRunning(block: ToolUseBlock, streaming: boolean) {
   return streaming && block.result === undefined && !block.isError;

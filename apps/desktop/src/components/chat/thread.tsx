@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { format, isToday, isYesterday } from "date-fns";
 import { AnimatePresence, motion } from "motion/react";
 import type { Agent, Conversation, Message } from "@godmode/shared";
@@ -40,7 +40,7 @@ export interface ThreadProps {
 export function Thread({ messages, agent, inflight, onStop, stopping, onPause, pausing, empty, delegatedFrom, after, focusId }: ThreadProps) {
   const { t } = useTranslation("chat");
   const reduce = useReduceAnimations();
-  const { scrollRef, contentRef, atBottom, scrollToBottom, unstick } = useStickToBottom();
+  const { scrollRef, contentRef, spacerRef, atBottom, scrollToBottom, pinTurn, unstick } = useStickToBottom({ reduceMotion: reduce });
   const [flash, setFlash] = useState<string | null>(null);
   const focusPresent = !!focusId && messages.some((m) => m.id === focusId);
   useEffect(() => {
@@ -58,13 +58,21 @@ export function Thread({ messages, agent, inflight, onStop, stopping, onPause, p
   }, [focusId, focusPresent, scrollRef, unstick]);
   const initialIds = useRef<Set<string> | null>(null);
   if (initialIds.current === null) initialIds.current = new Set(messages.map((m) => m.id));
+  const sentCount = messages.filter((m) => m.role === "user" && !m.source).length;
+  const lastSent = useRef(sentCount);
+  useLayoutEffect(() => {
+    const grew = sentCount > lastSent.current;
+    lastSent.current = sentCount;
+    const last = messages[messages.length - 1];
+    if (grew && last?.role === "user" && !last.source && !initialIds.current!.has(last.id)) pinTurn();
+  }, [sentCount, messages, pinTurn]);
 
   const isEmpty = messages.length === 0 && !inflight;
   let lastDay = "";
 
   return (
     <div className="relative min-h-0 flex-1">
-      <div ref={scrollRef} className="h-full overflow-y-auto overscroll-contain" tabIndex={-1} aria-label={t("thread.messages")}>
+      <div ref={scrollRef} className="h-full overflow-y-auto overscroll-contain [overflow-anchor:none]" tabIndex={-1} aria-label={t("thread.messages")}>
         <div ref={contentRef} className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 pt-6 pb-10 @xl:px-6">
           {isEmpty && empty}
           {messages.map((m) => {
@@ -83,6 +91,7 @@ export function Thread({ messages, agent, inflight, onStop, stopping, onPause, p
                 )}
                 <motion.div
                   data-message-id={m.id}
+                  data-turn-anchor={m.role === "user" && !m.source ? "" : undefined}
                   className={`rounded-xl transition-shadow duration-700 ${flash === m.id ? "ring-2 ring-primary/40 ring-offset-4 ring-offset-background" : "ring-0"}`}
                   initial={animate ? { opacity: 0, y: 8 } : false}
                   animate={{ opacity: 1, y: 0 }}
@@ -115,6 +124,7 @@ export function Thread({ messages, agent, inflight, onStop, stopping, onPause, p
             />
           )}
         </div>
+        <div ref={spacerRef} aria-hidden className="pointer-events-none shrink-0" style={{ height: 0 }} />
       </div>
 
       {inflight?.live && <BackgroundSubagentsPill blocks={inflight.live.blocks} agent={agent} scrollRef={scrollRef} />}

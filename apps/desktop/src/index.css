@@ -554,6 +554,16 @@
   from { opacity: 0; }
 }
 
+.gm-fade {
+  animation: gm-fade-in 420ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+@keyframes gm-fade-in {
+  from { opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gm-fade { animation: none; }
+}
+
 /* Markdown prose inside chat bubbles */
 .prose-chat {
   @apply text-[0.9375rem] leading-[1.65];
