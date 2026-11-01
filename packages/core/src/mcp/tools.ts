@@ -13,6 +13,8 @@ import type {
   ConnectorAccess,
   ConnectorTool,
   Credential,
+  McpServer,
+  McpServerInput,
   MissingLoginKind,
   Mod,
   Project,
@@ -29,6 +31,7 @@ import {
   ARTIFACT_BRIDGE_DOC,
   ARTIFACT_KIT_DOC,
   MAX_ARTIFACT_DATA,
+  SECRET_MASK,
   MAX_ARTIFACT_HTML,
   checkSpec,
   specDocument,
@@ -136,7 +139,7 @@ import { nameGuessMatchesHost } from "../vault/match";
 import { chatWorkspaceId, createProfile, currentPage, deleteProfile, fillIntoPage, listProfiles, probeOtpPage, resolveProfileForAgent, solveCaptchaInPage } from "../browser/manager";
 import { SOLVERS, activeSolver, captchaSolvingAvailable } from "../browser/captcha";
 import { currentVmPage, fillIntoVm, probeOtpInVm, solveCaptchaInVm } from "../vm/guest";
-import { getMcpServer, mcpServerInAgentScope } from "../integrations/mcpServers";
+import { createMcpServer, deleteMcpServer, getMcpServer, listMcpServers, mcpServerInAgentScope, TRANSPORTS, updateMcpServer } from "../integrations/mcpServers";
 import { apiToolEnvOwners, apiToolKey, apiToolsForAgent, findApiToolForAgent, hasApiTools, markApiToolUsed } from "../integrations/apiTools";
 import { callApiTool, METHODS, type ApiCallResult, type CallPlaces } from "../integrations/apiToolRequest";
 import { chatSources, createProject, deleteProject, getProject, projectOfChat, updateProject } from "../services/projects";
@@ -935,6 +938,38 @@ const canArtifact = (_agent: Agent, ctx: RunContext) =>
 
 const androidOn = () => getSettings().android.enabled;
 const pluginsOn = () => getSettings().plugins.enabled;
+const integrationsOn = () => getSettings().integrations.enabled;
+
+function mcpServerSummary(s: McpServer, names: Map<string, string>, agentNames: Map<string, string>) {
+  return {
+    id: s.id,
+    name: s.name,
+    description: s.description,
+    source: s.source,
+    transport: s.transport,
+    ...(s.transport === "stdio" ? { command: s.command, args: s.args } : { url: s.url }),
+    ...(s.envKeys.length ? { envKeys: s.envKeys } : {}),
+    ...(s.headerKeys.length ? { headerKeys: s.headerKeys } : {}),
+    enabled: s.enabled,
+    scope: s.agentId ? "agent" : s.workspaceId ? "workspace" : "global",
+    workspace: scopeName(s.workspaceId, names),
+    workspaceId: s.workspaceId,
+    ...(s.agentId ? { agentId: s.agentId, agent: agentNames.get(s.agentId) ?? s.agentId } : {}),
+  };
+}
+
+function mcpServerReaches(server: { id: string | null; workspaceId: string | null; agentId: string | null }, a: Agent): boolean {
+  if (!mcpServerInAgentScope(server, a)) return false;
+  return server.agentId === a.id || (server.id !== null && a.mcpServerIds.includes(server.id)) || a.inheritMcp;
+}
+
+function mcpScopeRefusal(caller: Agent, workspaceId: string | null, agentId: string | null): string | null {
+  if (!caller.workspaceId) return null;
+  const target = agentId ? listAgents({ workspaceId: "all" }).find((a) => a.id === agentId) : null;
+  if (agentId && target?.workspaceId !== caller.workspaceId) return "You can only set up MCP servers for agents in your own workspace.";
+  if (!agentId && workspaceId !== caller.workspaceId) return "You can only set up MCP servers for your own workspace; global ones and other workspaces' stay with the human.";
+  return null;
+}
 const vmsOn = () => getSettings().vm.enabled;
 
 async function artifactCode(input: { spec?: Record<string, unknown>; html?: string; htmlPath?: string }, title: string): Promise<string | null> {
@@ -3454,6 +3489,147 @@ Polished, calm, real hierarchy, responsive from 360 px, light and dark; no emoji
         ...modSummary(saved),
         next: saved.check && !saved.check.ok ? "Fix the errors and save again with this plugin's id." : "Saved as a draft. Tell the human to review it under Plugins and switch it on.",
       });
+    },
+  }),
+
+  defineTool({
+    name: "mcp_servers_list",
+    description:
+      "List the custom MCP servers set up under Settings → Integrations → Tools (stdio programs, streamable HTTP or SSE endpoints) and the Composio servers of connected apps: transport, command and args or URL, whether it is on, and its scope — global (every agent that inherits MCP servers), a workspace, or one agent. Environment variables and headers show only their names, never their values. `scope` narrows the list; \"workspace\" takes `workspaceId`, \"agent\" takes `agentId`.",
+    schema: z.object({
+      scope: z.enum(["all", "global", "workspace", "agent"]).optional().describe('Default "all"'),
+      workspaceId: z.string().optional().describe('Workspace id for scope "workspace"'),
+      agentId: z.string().optional().describe('Agent id for scope "agent"'),
+    }),
+    when: (agent) => isManager(agent) && integrationsOn(),
+    run: ({ scope = "all", workspaceId, agentId }, { agent }) => {
+      if (scope === "workspace" && !workspaceId) return fail('Scope "workspace" needs `workspaceId` (workspaces_list shows them).');
+      if (scope === "agent" && !agentId) return fail('Scope "agent" needs `agentId` (agents_list shows them).');
+      const team = listAgents({ workspaceId: "all" });
+      const agentNames = new Map(team.map((a) => [a.id, a.name]));
+      const agentWs = new Map(team.map((a) => [a.id, a.workspaceId]));
+      const servers = listMcpServers().filter((s) => {
+        if (agent.workspaceId) {
+          if (s.agentId ? agentWs.get(s.agentId) !== agent.workspaceId : s.workspaceId !== null && s.workspaceId !== agent.workspaceId) return false;
+        }
+        if (scope === "global") return s.workspaceId === null && s.agentId === null;
+        if (scope === "workspace") return s.workspaceId === workspaceId && s.agentId === null;
+        if (scope === "agent") return s.agentId === agentId;
+        return true;
+      });
+      const names = workspaceNames();
+      return json(servers.map((s) => mcpServerSummary(s, names, agentNames)));
+    },
+  }),
+
+  defineTool({
+    name: "mcp_server_save",
+    description:
+      "Add a custom MCP server, or change one with `serverId` — the same as Settings → Integrations → Tools. Without `serverId` it is created (`name` and `transport` required): \"stdio\" runs `command` with `args` (e.g. npx, [\"-y\", \"@modelcontextprotocol/server-github\"]), \"http\" and \"sse\" connect to `url`. `env` (stdio) and `headers` (http/sse) hold secrets such as API keys: they are encrypted in the vault and never shown again; on a change, a value of \"********\" keeps the stored one and a key left out is removed, and leaving `env`/`headers` out keeps them all. Scope: `agentId` for one agent, `workspaceId` for a workspace's agents, both null for every agent; agents that inherit MCP servers get it. Changes apply from each agent's next run, not to runs already going. Composio servers are managed by connecting apps, not here. The human is told what you changed.",
+    schema: z.object({
+      serverId: z.string().optional().describe("Id of the server to change (mcp_servers_list); omit to add one"),
+      name: z.string().trim().min(1).max(100).optional(),
+      description: z.string().max(2000).optional().describe("What its tools are for"),
+      transport: z.enum(TRANSPORTS as [McpServerInput["transport"], ...McpServerInput["transport"][]]).optional(),
+      command: z.string().max(1024).optional().describe("stdio: the program to run"),
+      args: z.array(z.string().max(8192)).max(200).optional().describe("stdio: its arguments"),
+      url: z.string().max(4096).optional().describe("http/sse: the endpoint"),
+      env: z.record(z.string().max(256), z.string().max(16_384)).optional().describe("stdio: environment variables, name → value"),
+      headers: z.record(z.string().max(256), z.string().max(16_384)).optional().describe("http/sse: request headers, name → value"),
+      enabled: z.boolean().optional(),
+      workspaceId: z.string().min(1).nullable().optional().describe("Workspace id, or null for global"),
+      agentId: z.string().min(1).nullable().optional().describe("Agent id to give it to only that agent, or null"),
+    }),
+    when: (agent) => managesSetup(agent) && integrationsOn(),
+    run: async ({ serverId, ...input }, { agent, ctx }) => {
+      if (lockedVm(ctx)) return fail("This task runs in a virtual machine and is kept off the human's computer, and MCP servers run in agents' runs there — only the human sets them up.");
+      const actor = `agent:${agent.id}`;
+      let existing: McpServer | null = null;
+      if (serverId) {
+        try {
+          existing = getMcpServer(serverId);
+        } catch {
+          return fail(`There is no MCP server "${serverId}". mcp_servers_list shows them.`);
+        }
+        if (existing.source === "composio") return fail(`"${existing.name}" comes from a connected Composio app: it changes with the connection, not here.`);
+      } else {
+        if (!input.name) return fail("A new MCP server needs a `name`.");
+        if (!input.transport) return fail('A new MCP server needs a `transport`: "stdio", "http" or "sse".');
+      }
+      const team = listAgents({ workspaceId: "all" });
+      const agentId = input.agentId !== undefined ? input.agentId : (existing?.agentId ?? null);
+      const pinned = agentId ? team.find((a) => a.id === agentId) : null;
+      if (agentId && !pinned) return fail(`There is no agent "${agentId}". agents_list shows them.`);
+      const workspaceId =
+        input.workspaceId !== undefined ? input.workspaceId : input.agentId !== undefined && pinned ? pinned.workspaceId : existing ? existing.workspaceId : agent.workspaceId;
+      const scopeRefusal = (existing ? mcpScopeRefusal(agent, existing.workspaceId, existing.agentId) : null) ?? mcpScopeRefusal(agent, workspaceId, agentId);
+      if (scopeRefusal) return fail(scopeRefusal);
+
+      if (existing && !revealsHere(agent, ctx)) {
+        const target = (s: { transport: string; command: string; args: string[]; url: string; workspaceId: string | null; agentId: string | null }) =>
+          JSON.stringify([s.transport, s.command, s.args, s.url, s.workspaceId, s.agentId]);
+        const next = {
+          transport: input.transport ?? existing.transport,
+          command: input.command ?? existing.command,
+          args: input.args ?? existing.args,
+          url: input.url ?? existing.url,
+          workspaceId,
+          agentId,
+        };
+        const keeps = (given: Record<string, string> | undefined, stored: string[]) =>
+          stored.length > 0 && (given === undefined || Object.values(given).includes(SECRET_MASK));
+        if (target(next) !== target(existing) && (keeps(input.env, existing.envKeys) || keeps(input.headers, existing.headerKeys))) {
+          return fail("Its stored secrets would go along to a different program, endpoint or scope, and you can't read raw secrets. Give every `env`/`headers` value again, or ask the human to make this change.");
+        }
+      }
+
+      const finalEnabled = input.enabled ?? existing?.enabled ?? true;
+      if (finalEnabled) {
+        const reach = { id: existing?.id ?? null, workspaceId, agentId };
+        const refusal = memberRefusal(agent, ctx, (a) => mcpServerReaches(reach, a), "give it an MCP server");
+        if (refusal) return fail(`${refusal} Give the server to the agents that need it (\`agentId\`) instead.`);
+      }
+
+      let saved: McpServer;
+      try {
+        saved = existing
+          ? await updateMcpServer(existing.id, { ...input, workspaceId, agentId }, actor)
+          : await createMcpServer({ ...input, name: input.name!, transport: input.transport!, workspaceId, agentId }, actor);
+      } catch (err) {
+        if (err instanceof HttpError) return fail(toolErrorMessage(err));
+        throw err;
+      }
+      notify(
+        "info",
+        existing ? `${agent.name} changed the MCP server ${saved.name}` : `${agent.name} added the MCP server ${saved.name}`,
+        saved.enabled ? "It applies from each agent's next run. Review it under Settings → Integrations → Tools." : "It is switched off. Review it under Settings → Integrations → Tools.",
+        "/settings/integrations?tab=tools",
+      );
+      const agentNames = new Map(team.map((a) => [a.id, a.name]));
+      return json({ ...mcpServerSummary(saved, workspaceNames(), agentNames), next: "Applies from each agent's next run." });
+    },
+  }),
+
+  defineTool({
+    name: "mcp_server_delete",
+    description:
+      "Remove a custom MCP server and its stored secrets. Agents stop getting it from their next run. Only do this when the human asked for it or the server is broken and replaced. Composio servers go away by disconnecting their app instead.",
+    schema: z.object({ serverId: z.string().describe("Id of the server (mcp_servers_list)") }),
+    when: (agent) => managesSetup(agent) && integrationsOn(),
+    run: ({ serverId }, { agent, ctx }) => {
+      if (lockedVm(ctx)) return fail("This task runs in a virtual machine and is kept off the human's computer, and MCP servers run in agents' runs there — only the human changes them.");
+      let server: McpServer;
+      try {
+        server = getMcpServer(serverId);
+      } catch {
+        return fail(`There is no MCP server "${serverId}". mcp_servers_list shows them.`);
+      }
+      if (server.source === "composio") return fail(`"${server.name}" comes from a connected Composio app: disconnect the app instead.`);
+      const refusal = mcpScopeRefusal(agent, server.workspaceId, server.agentId);
+      if (refusal) return fail(refusal);
+      deleteMcpServer(server.id, `agent:${agent.id}`);
+      notify("info", `${agent.name} removed the MCP server ${server.name}`, "Agents stop getting it from their next run.", "/settings/integrations?tab=tools");
+      return `Removed the MCP server "${server.name}". Agents stop getting it from their next run.`;
     },
   }),
 
