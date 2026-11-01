@@ -1,0 +1,111 @@
+---
+import { Image } from 'astro:assets';
+import Words from '../ui/Words.astro';
+import Icon from '../ui/Icon.astro';
+import BrandMark from '../ui/BrandMark.astro';
+import { LEGAL, PRICING, SITE } from '@/config/site';
+import daniel from '@/assets/daniel-ehrhardt.webp';
+import premier from '@/assets/brand/shopify-premier.svg?raw';
+
+const facts = [
+  {
+    mark: 'apple',
+    title: 'Notarized by Apple',
+    text: `The Mac app is signed by ${LEGAL.company}, and Apple checks it before it opens.`,
+  },
+  {
+    mark: 'github',
+    title: 'Open source (MIT)',
+    text: 'Every line of code is public on GitHub. Read it, or build the app yourself.',
+    href: SITE.repo,
+    cta: 'View the code',
+  },
+  {
+    icon: 'refresh-cw',
+    title: 'Updated every week',
+    text: '30+ releases since September 2026, with fixes for what users tell us.',
+    href: '/changelog',
+    cta: 'What’s new',
+  },
+  {
+    icon: 'building-2',
+    title: 'A company you can call',
+    text: `${LEGAL.company}, ${LEGAL.city.replace(/^\d+\s/, '')}, Germany. ${LEGAL.registry.split(',')[0]}. Phone ${LEGAL.phone}.`,
+    href: '/legal/imprint',
+    cta: 'Imprint',
+  },
+  {
+    icon: 'shield-check',
+    title: `${PRICING.guaranteeDays}-day money-back`,
+    text: `Free for ${PRICING.freeDays} days without a card. If you pay and change your mind, you get your money back.`,
+    href: '/legal/refunds',
+    cta: 'Refund policy',
+  },
+] as const;
+---
+
+<section id="proof" class="relative py-16 sm:py-24" data-track-view="proof">
+  <div class="container-x">
+    <div class="mx-auto max-w-[760px] text-center">
+      <p class="eyebrow justify-center" data-reveal>Who is behind it</p>
+      <Words text="Made by a real company. *Used there every day.*" class="h-section mx-auto mt-4" />
+    </div>
+
+    <div class="mt-14 grid gap-4 lg:grid-cols-[1.05fr_0.95fr]">
+      <figure class="card founder-card p-7 sm:p-10" data-reveal>
+        <svg class="founder-quote-mark" width="44" height="34" viewBox="0 0 44 34" aria-hidden="true"><path fill="currentColor" d="M0 34V20.6C0 8.6 6.4 1.8 17.4 0l1.8 5.2C13 7 10 10.8 9.8 16H18v18H0zm25.4 0V20.6C25.4 8.6 31.8 1.8 42.8 0l1.2 5.2C38.2 7 35.4 10.8 35.2 16H43.4v18H25.4z"></path></svg>
+        <blockquote class="mt-5 text-[clamp(19px,2vw,23px)] font-medium leading-[1.45] tracking-[-0.02em] text-text">
+          We built Godmode for our own team first. Today it does a big part of the office work at Codext: it drafts our
+          monthly invoices, works through our ticket inbox and answers our shop customers. If something doesn’t work for
+          you, write to us. A real person answers, usually the same day.
+        </blockquote>
+        <figcaption class="mt-8 flex items-center gap-4">
+          <Image src={daniel} alt="Daniel Ehrhardt" width={112} height={112} class="founder-photo" />
+          <span>
+            <span class="serif block text-[26px] leading-none text-text">Daniel Ehrhardt</span>
+            <span class="mt-1.5 block text-[14px] text-muted">Founder and managing director, {LEGAL.company}</span>
+          </span>
+          <span class="premier ml-auto hidden sm:block" set:html={premier} title="Shopify Premier Partner" />
+        </figcaption>
+        <p class="mt-6 border-t border-line pt-5 text-[13.5px] leading-relaxed text-muted">
+          Our team also builds online shops as a <span class="font-medium text-text-2">Shopify Premier Partner</span>.
+          Questions about Godmode: <a class="link" href={`mailto:${SITE.email}`}>{SITE.email}</a>
+        </p>
+      </figure>
+
+      <ul class="grid gap-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+        {
+          facts.map((f, i) => {
+            const body = (
+              <>
+                <span class="proof-icon">
+                  {'mark' in f ? <BrandMark name={f.mark} size={18} /> : <Icon name={f.icon} size={18} />}
+                </span>
+                <span class="min-w-0">
+                  <span class="block text-[15.5px] font-semibold tracking-[-0.015em] text-text">{f.title}</span>
+                  <span class="mt-1 block text-[14px] leading-relaxed text-muted">{f.text}</span>
+                  {'cta' in f && (
+                    <span class="mt-2 inline-flex items-center gap-1 text-[13px] font-semibold text-brand">
+                      {f.cta} <Icon name="arrow-up-right" size={13} class="arrow" />
+                    </span>
+                  )}
+                </span>
+              </>
+            );
+            return (
+              <li data-reveal style={`--d:${i * 60}`} class:list={[i === facts.length - 1 && 'xl:col-span-2']}>
+                {'href' in f ? (
+                  <a href={f.href} class="proof-fact card card-hover" {...(f.href.startsWith('http') ? { target: '_blank', rel: 'noopener' } : {})} data-track={`proof_${i}`}>
+                    {body}
+                  </a>
+                ) : (
+                  <div class="proof-fact card">{body}</div>
+                )}
+              </li>
+            );
+          })
+        }
+      </ul>
+    </div>
+  </div>
+</section>

@@ -1,0 +1,110 @@
+---
+import Words from '../ui/Words.astro';
+import Icon from '../ui/Icon.astro';
+import { RECORDINGS } from '@/config/recordings';
+import { TOOL_BY_SLUG } from '@/config/tools';
+
+const recs = RECORDINGS.filter((r) => r.src);
+const single = recs.length === 1;
+---
+
+<section id="recordings" class="relative py-16 sm:py-24" data-track-view="recordings">
+  <div class="container-x">
+    <div class="grid items-end gap-6 lg:grid-cols-[1.1fr_0.9fr]">
+      <div class="max-w-[720px]">
+        <p class="eyebrow" data-reveal><span class="live-dot !size-1.5"></span> Real screen recordings</p>
+        <Words text="Don’t take our word for it. *Watch it work.*" class="h-section mt-4" />
+      </div>
+      <p class="lead max-w-[460px]" data-reveal style="--d:150">
+        Real jobs on a normal Mac with a fresh install. Nothing staged: we only cut the waiting and sped it up.
+      </p>
+    </div>
+
+    <div class="rec-grid mt-12" data-recs data-reveal style="--d:100">
+      <div role="tablist" aria-label="Recordings" class="rec-list">
+        {
+          recs.map((r, i) => (
+            <button
+              type="button"
+              role="tab"
+              id={`rec-tab-${r.slug}`}
+              aria-controls={`rec-${r.slug}`}
+              aria-selected={i === 0 ? 'true' : 'false'}
+              tabindex={i === 0 ? 0 : -1}
+              data-key={r.slug}
+              class="rec-tab"
+            >
+              <span class="rec-tab-icon">
+                <Icon name={r.icon} size={16} />
+              </span>
+              <span class="min-w-0 flex-1 text-left">
+                <span class="block text-[12px] font-semibold text-brand">{r.label}</span>
+                <span class="rec-tab-title">{r.title}</span>
+              </span>
+              <span class="rec-progress" aria-hidden="true"><i></i></span>
+            </button>
+          ))
+        }
+      </div>
+
+      <div class="min-w-0">
+        {
+          recs.map((r, i) => (
+            <figure role="tabpanel" id={`rec-${r.slug}`} aria-labelledby={`rec-tab-${r.slug}`} hidden={i !== 0} class="rec-panel">
+              <div class="window">
+                <div class="window-bar traffic">
+                  <i />
+                  <i />
+                  <i />
+                  <span class="mx-auto flex items-center gap-2 text-[12px] font-medium text-muted">
+                    <span class="live-dot !size-1.5" /> Real screen recording, {r.speed}
+                  </span>
+                </div>
+                <div class="relative aspect-video bg-surface-3">
+                  <video
+                    class="absolute inset-0 size-full object-cover object-top"
+                    muted
+                    playsinline
+                    loop={single}
+                    preload="none"
+                    poster={`${r.src}-poster.jpg`}
+                    aria-label={`Real screen recording: ${r.title}. ${r.result}`}
+                  >
+                    <source src={`${r.src}.webm`} type="video/webm" />
+                    <source src={`${r.src}.mp4`} type="video/mp4" />
+                  </video>
+                </div>
+              </div>
+              <figcaption class="rec-caption">
+                <div>
+                  <p class="rec-k">You typed</p>
+                  <p class="mt-1.5 text-[15px] leading-relaxed text-text">“{r.task}”</p>
+                </div>
+                <div>
+                  <p class="rec-k">It came back with</p>
+                  <p class="mt-1.5 flex items-start gap-2 text-[15px] leading-relaxed text-text-2">
+                    <span class="tick mt-0.5">
+                      <Icon name="check" size={13} stroke={3} />
+                    </span>
+                    <span>{r.result}</span>
+                  </p>
+                  <div class="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 text-[12px] text-dim">
+                    <span class="flex items-center gap-1.5">
+                      {r.tools.map((t) => (
+                        <img src={`/logos/${t}.svg`} alt={TOOL_BY_SLUG[t]?.name ?? t} title={TOOL_BY_SLUG[t]?.name} width="18" height="18" loading="lazy" class="size-[18px]" />
+                      ))}
+                    </span>
+                    <span aria-hidden="true">·</span>
+                    <span>{r.feature}</span>
+                    <span aria-hidden="true">·</span>
+                    <span>Recorded {r.recorded}</span>
+                  </div>
+                </div>
+              </figcaption>
+            </figure>
+          ))
+        }
+      </div>
+    </div>
+  </div>
+</section>

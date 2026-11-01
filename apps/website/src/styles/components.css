@@ -194,14 +194,94 @@ html.menu-open { overflow: hidden; }
 .face-row { display: flex; align-items: flex-end; justify-content: center; }
 .face-row > .gm-char-wrap + .gm-char-wrap { margin-left: -6px; }
 
-/* Tool marquee ---------------------------------------------------------------------------------- */
-.marquee-tool {
-  font-size: 17px;
+/* Tool logos ------------------------------------------------------------------------------------ */
+.logo-chip {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 10px;
+  height: 48px;
+  padding: 0 18px 0 14px;
+  border-radius: 999px;
+  background: var(--surface);
+  box-shadow: 0 0 0 1px var(--line) inset, var(--shadow-sm);
+  font-size: 15px;
   font-weight: 600;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.015em;
+  color: var(--text-2);
   white-space: nowrap;
-  color: var(--dim);
+  transition: transform 0.4s var(--ease-out), box-shadow 0.4s var(--ease-out);
 }
+.logo-chip img { width: 22px; height: 22px; object-fit: contain; }
+.logo-chip:hover { transform: translateY(-2px); box-shadow: 0 0 0 1px var(--line-2) inset, var(--shadow); }
+
+/* Recordings gallery ------------------------------------------------------------------------------ */
+.rec-grid { display: grid; gap: 16px; }
+@media (min-width: 1024px) { .rec-grid { grid-template-columns: 330px minmax(0, 1fr); gap: 24px; align-items: start; } }
+.rec-list { display: flex; gap: 8px; overflow-x: auto; margin: 0 -16px; padding: 2px 16px 6px; scrollbar-width: none; }
+.rec-list::-webkit-scrollbar { display: none; }
+@media (min-width: 1024px) { .rec-list { flex-direction: column; margin: 0; padding: 0; overflow: visible; } }
+.rec-tab {
+  position: relative;
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 12px;
+  width: min(300px, 78vw);
+  padding: 14px 16px;
+  border-radius: 18px;
+  text-align: left;
+  background: transparent;
+  box-shadow: 0 0 0 1px var(--line) inset;
+  overflow: hidden;
+  cursor: pointer;
+  transition: background-color 0.3s ease, box-shadow 0.4s var(--ease-out);
+}
+@media (min-width: 1024px) { .rec-tab { width: auto; } }
+.rec-tab:hover { background: var(--surface); }
+.rec-tab[aria-selected="true"] { background: var(--surface); box-shadow: 0 0 0 1px var(--brand-line) inset, var(--shadow); }
+.rec-tab:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.rec-tab-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  color: var(--muted);
+  background: var(--surface-2);
+  transition: color 0.3s ease, background-color 0.3s ease;
+}
+.rec-tab[aria-selected="true"] .rec-tab-icon { color: var(--brand); background: var(--brand-soft); }
+.rec-tab-title {
+  display: -webkit-box;
+  margin-top: 2px;
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+  color: var(--text-2);
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.rec-progress { position: absolute; inset: auto 16px 0; height: 2px; border-radius: 2px; overflow: hidden; }
+.rec-progress i { display: block; width: 100%; height: 100%; background: var(--brand); transform: scaleX(var(--p, 0)); transform-origin: 0 50%; opacity: 0; }
+.rec-tab[aria-selected="true"] .rec-progress i { opacity: 1; }
+.rec-panel { margin: 0; }
+.rec-caption {
+  display: grid;
+  gap: 20px;
+  margin-top: 12px;
+  padding: 22px 24px;
+  border-radius: 20px;
+  background: var(--surface);
+  box-shadow: 0 0 0 1px var(--line) inset, var(--shadow-sm);
+}
+@media (min-width: 768px) { .rec-caption { grid-template-columns: 1fr 1fr; gap: 32px; } }
+.rec-k { font-size: 12px; font-weight: 600; letter-spacing: 0.02em; color: var(--dim); }
+.js .rec-panel:not([hidden]) { animation: rec-in 0.6s var(--ease-out); }
+@keyframes rec-in { from { opacity: 0; transform: translateY(6px); } }
 
 /* Jobs grid -------------------------------------------------------------------------------------- */
 .job-card {
@@ -232,7 +312,8 @@ html.menu-open { overflow: hidden; }
   line-height: 1.45;
   color: var(--text-2);
 }
-.job-done .tick {
+.job-done .tick,
+.rec-caption .tick {
   display: grid;
   place-items: center;
   flex: none;
@@ -521,3 +602,38 @@ html.menu-open { overflow: hidden; }
 .prose-gm a:hover { text-decoration-color: var(--brand); }
 .prose-gm strong { color: var(--text); font-weight: 600; }
 }
+
+/* Proof / founder ------------------------------------------------------------------------------- */
+.founder-card { background: linear-gradient(160deg, var(--surface) 55%, var(--brand-soft) 160%); }
+.founder-quote-mark { color: var(--brand); opacity: 0.85; }
+.founder-photo {
+  width: 64px;
+  height: 64px;
+  flex: none;
+  border-radius: 20px;
+  object-fit: cover;
+  object-position: top;
+  box-shadow: 0 0 0 3px var(--surface), 0 0 0 4px var(--line-2), var(--shadow);
+}
+.premier svg { display: block; width: auto; height: 40px; opacity: 0.85; }
+.proof-fact { display: flex; gap: 14px; height: 100%; padding: 20px 22px; border-radius: 20px; }
+.proof-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  color: var(--text);
+  background: var(--surface-2);
+  box-shadow: 0 0 0 1px var(--line) inset;
+}
+a.proof-fact:hover .arrow { transform: translate(2px, -2px); }
+a.proof-fact .arrow { transition: transform 0.35s var(--ease-out); }
+.link { color: var(--brand); font-weight: 500; text-decoration: underline; text-decoration-color: var(--brand-line); text-underline-offset: 3px; }
+.link:hover { text-decoration-color: var(--brand); }
+
+/* Hero trust row ------------------------------------------------------------------------------- */
+.trust-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px 22px; font-size: 13px; font-weight: 500; color: var(--muted); }
+.trust-row > * { display: inline-flex; align-items: center; gap: 7px; }
+.trust-row a:hover { color: var(--text); }

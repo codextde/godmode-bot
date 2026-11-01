@@ -4,7 +4,8 @@ import Words from '../ui/Words.astro';
 import Icon from '../ui/Icon.astro';
 import Character from '../ui/Character.astro';
 import DownloadButton from '../ui/DownloadButton.astro';
-import { PRICING } from '@/config/site';
+import BrandMark from '../ui/BrandMark.astro';
+import { PRICING, SITE } from '@/config/site';
 import recording from '@/assets/shots/hero-recording.jpg';
 ---
 
@@ -45,6 +46,12 @@ import recording from '@/assets/shots/hero-recording.jpg';
       <span><Icon name="check" size={15} class="text-brand" stroke={2.4} /> No sign-up</span>
     </p>
     <p class="mt-2 text-[13px] text-dim" data-reveal style="--d:720">For Mac with Apple chip or Intel. No coding needed.</p>
+    <div class="trust-row mt-7" data-reveal style="--d:780">
+      <span><BrandMark name="apple" size={15} class="text-text" /> Notarized by Apple</span>
+      <a href={SITE.repo} target="_blank" rel="noopener" data-track="hero_github"><BrandMark name="github" size={15} class="text-text" /> Open source</a>
+      <a href="#proof" data-track="hero_proof"><Icon name="building-2" size={15} class="text-text" /> Made in Germany by Codext GmbH</a>
+      <span><BrandMark name="claude" size={15} class="text-claude" /> Runs on your Claude plan</span>
+    </div>
   </div>
 
   <div class="container-x relative mt-16 sm:mt-20" data-reveal="fade" style="--d:800">

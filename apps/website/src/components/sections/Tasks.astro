@@ -53,10 +53,6 @@ const groups: { name: string; icon: string; jobs: Job[] }[] = [
     ],
   },
 ];
-const tools =
-  'Gmail · Outlook · Excel · Google Sheets · Word · WhatsApp Web · Slack · HubSpot · Shopify · Amazon · eBay · Etsy · Meta Ads · Google Ads · TikTok Ads · Canva · Instagram · LinkedIn · QuickBooks · DATEV · PayPal · your bank · any website'.split(
-    ' · ',
-  );
 ---
 
 <section id="jobs" class="relative py-16 sm:py-24" data-track-view="jobs">
@@ -108,20 +104,4 @@ const tools =
     </div>
   </div>
 
-  <div class="container-x mt-20">
-    <p class="text-center text-[14px] font-medium text-muted" data-reveal>
-      Works in the websites and programs you already use. It signs in with your own logins. No coding.
-    </p>
-  </div>
-  <div class="marquee-wrap mask-x mt-6 overflow-hidden" data-reveal style="--d:100">
-    <div class="marquee items-center gap-10" style="--dur:80s">
-      {
-        [...tools, ...tools].map((t, i) => (
-          <span class="marquee-tool" aria-hidden={i >= tools.length ? 'true' : undefined}>
-            {t}
-          </span>
-        ))
-      }
-    </div>
-  </div>
 </section>

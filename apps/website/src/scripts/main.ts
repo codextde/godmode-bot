@@ -132,6 +132,64 @@ modal?.addEventListener('click', (e) => {
 });
 modal?.addEventListener('close', () => modal.querySelector('video')?.pause());
 
+// Recordings gallery: plays the selected recording while in view, then moves on to the next ----------
+document.querySelectorAll<HTMLElement>('[data-recs]').forEach((root) => {
+  const tabs = [...root.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
+  const panels = [...root.querySelectorAll<HTMLElement>('[role="tabpanel"]')];
+  const videos = panels.map((p) => p.querySelector('video')!);
+  let current = 0;
+  let visible = false;
+
+  const play = () => {
+    const v = videos[current];
+    if (!visible || reduced || !v) return;
+    if (v.preload === 'none') v.preload = 'auto';
+    void v.play().catch(() => {});
+  };
+  const select = (i: number, focus = false) => {
+    videos[current]?.pause();
+    tabs[current]?.style.setProperty('--p', '0');
+    current = (i + tabs.length) % tabs.length;
+    tabs.forEach((t, j) => {
+      t.setAttribute('aria-selected', String(j === current));
+      t.tabIndex = j === current ? 0 : -1;
+    });
+    panels.forEach((p, j) => (p.hidden = j !== current));
+    const v = videos[current];
+    if (v) v.currentTime = 0;
+    if (focus) tabs[current].focus();
+    play();
+  };
+
+  tabs.forEach((t, i) =>
+    t.addEventListener('click', () => {
+      select(i);
+      track('recording', t.dataset.key);
+    }),
+  );
+  root.querySelector('[role="tablist"]')?.addEventListener('keydown', (e) => {
+    const k = (e as KeyboardEvent).key;
+    if (k === 'ArrowDown' || k === 'ArrowRight') select(current + 1, true);
+    else if (k === 'ArrowUp' || k === 'ArrowLeft') select(current - 1, true);
+    else return;
+    e.preventDefault();
+  });
+  videos.forEach((v, i) => {
+    v.addEventListener('timeupdate', () => {
+      if (v.duration) tabs[i].style.setProperty('--p', String(v.currentTime / v.duration));
+    });
+    v.addEventListener('ended', () => select(i + 1));
+  });
+  new IntersectionObserver(
+    ([e]) => {
+      visible = e.isIntersecting;
+      if (visible) play();
+      else videos[current]?.pause();
+    },
+    { threshold: 0.35 },
+  ).observe(root);
+});
+
 // Typewriter (used by use-case prompts) ----------------------------------------------------------
 async function typeInto(el: HTMLElement, text: string, signal: { cancelled: boolean }) {
   el.textContent = '';
