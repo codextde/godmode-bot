@@ -35,6 +35,14 @@
       "reduceAnimations": "Animationen reduzieren",
       "reduceAnimationsDescription": "Weniger und kürzere Animationen: Nachrichten erscheinen sofort, Menüs blenden nur ein, keine leuchtenden Rahmen, während Agenten arbeiten."
     },
+    "chat": {
+      "title": "Chat",
+      "description": "Wie Unterhaltungen auf diesem Computer aussehen.",
+      "toolCalls": "Werkzeugaufrufe",
+      "toolCallsDescription": "Karten zeigen jeden Schritt mit seinem Befehl und lassen die Schritte offen, solange der Agent arbeitet. Kompakt fasst jede Gruppe in einer dezenten Zeile zusammen; ein Klick zeigt die Schritte.",
+      "cards": "Karten",
+      "compact": "Kompakt"
+    },
     "summaries": {
       "title": "KI-Zusammenfassungen",
       "description": "Kurze Texte, die Haiku für dich schreibt. Jeder ist ein schneller, günstiger Aufruf über dein Claude-Konto.",
