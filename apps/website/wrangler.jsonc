@@ -7,7 +7,7 @@
   "main": "./src/worker.ts",
   "assets": { "binding": "ASSETS", "directory": "./dist" },
   "observability": { "enabled": true },
-  // Hourly: lifecycle emails to buyers and trials (src/lib/mail.ts), sent only with LIFECYCLE_EMAILS = "on".
+  // Hourly: lifecycle emails to buyers and trials, and the one abandoned-checkout email (src/lib/mail.ts), sent only with LIFECYCLE_EMAILS = "on".
   "triggers": { "crons": ["17 * * * *"] },
   "send_email": [{ "name": "EMAIL", "remote": true }],
   "routes": [

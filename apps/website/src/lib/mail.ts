@@ -2,7 +2,9 @@ import { env } from 'cloudflare:workers';
 import { SITE } from '@/config/site';
 import { db } from './db';
 import { minLivemode } from './entitlement';
-import { compose, dueKinds, type EmailKind, type LifecycleOrder } from './lifecycle';
+import { compose, dueKinds, type Composed, type EmailKind, type LifecycleOrder } from './lifecycle';
+import { composeRecovery, RECOVERY_WINDOW, recoveryDue, type RecoveryRow } from './recovery';
+import { unsubscribeUrl } from './signed';
 
 const DAY = 86_400_000;
 
@@ -23,30 +25,36 @@ const SELECT = `SELECT o.session_id, o.created_at, o.plan, o.email, o.name, o.li
   WHERE o.status = 'paid' AND COALESCE(o.comp, 0) = 0 AND o.email IS NOT NULL AND o.license_key IS NOT NULL
     AND o.livemode >= ?`;
 
-async function send(kind: EmailKind, o: Candidate): Promise<boolean> {
+type Outgoing = { sessionId: string; kind: string; to: string; mail: Composed; headers?: Record<string, string> };
+
+/** Claims the (session, kind) slot in `emails`, sends, and stores the message id; frees the slot again if sending fails. */
+async function sendOnce({ sessionId, kind, to, mail, headers }: Outgoing): Promise<boolean> {
   const claim = await db()
     .prepare(`INSERT OR IGNORE INTO emails (session_id, kind, sent_at) VALUES (?, ?, ?)`)
-    .bind(o.session_id, kind, Date.now())
+    .bind(sessionId, kind, Date.now())
     .run();
   if (!claim.meta.changes) return false;
-  const mail = compose(kind, o, SITE.url.replace(/\/$/, ''));
   try {
     const res = await env.EMAIL!.send({
       from: { name: env.MAIL_FROM_NAME ?? 'Daniel from Godmode', email: env.MAIL_FROM ?? 'daniel@usegodmode.com' },
       replyTo: env.MAIL_REPLY_TO ?? SITE.email,
-      to: o.email,
+      to,
       subject: mail.subject,
       text: mail.text,
       html: mail.html,
+      ...(headers ? { headers } : {}),
     });
-    await db().prepare(`UPDATE emails SET message_id = ? WHERE session_id = ? AND kind = ?`).bind(res.messageId, o.session_id, kind).run();
+    await db().prepare(`UPDATE emails SET message_id = ? WHERE session_id = ? AND kind = ?`).bind(res.messageId, sessionId, kind).run();
     return true;
   } catch (e) {
-    console.error('lifecycle email failed', kind, o.session_id, e);
-    await db().prepare(`DELETE FROM emails WHERE session_id = ? AND kind = ?`).bind(o.session_id, kind).run();
+    console.error('email failed', kind, sessionId, e);
+    await db().prepare(`DELETE FROM emails WHERE session_id = ? AND kind = ?`).bind(sessionId, kind).run();
     return false;
   }
 }
+
+const send = (kind: EmailKind, o: Candidate) =>
+  sendOnce({ sessionId: o.session_id, kind, to: o.email, mail: compose(kind, o, SITE.url.replace(/\/$/, '')) });
 
 /** One email per order per day at most, the most urgent due kind first. */
 async function deliver(o: Candidate, now: number) {
@@ -75,4 +83,46 @@ export async function runLifecycle(now = Date.now()) {
     .bind(minLivemode(), now - 30 * DAY)
     .all<Candidate>();
   for (const o of rows.results ?? []) await deliver(o, now);
+}
+
+type RecoveryCandidate = RecoveryRow & { mailed: number; bought: number; unsubscribed: number };
+
+/**
+ * Hourly: one recovery email per person for an abandoned checkout, a day after it expired, only with their consent
+ * (see recoveryDue). Rows only exist for checkouts that expired after this shipped, so nobody gets one retroactively.
+ */
+export async function runRecovery(now = Date.now()) {
+  const rows = await db()
+    .prepare(
+      `SELECT r.session_id, r.expired_at, r.plan, r.email, r.consent, r.recovery_url, r.recovery_expires_at,
+         EXISTS (SELECT 1 FROM emails e JOIN checkout_recovery p ON p.session_id = e.session_id
+                 WHERE e.kind = 'recovery' AND p.email = r.email) AS mailed,
+         EXISTS (SELECT 1 FROM orders o WHERE LOWER(o.email) = r.email
+                 AND o.status IN ('paid', 'pending', 'past_due', 'canceled', 'refunded')) AS bought,
+         EXISTS (SELECT 1 FROM unsubscribes u WHERE u.email = r.email) AS unsubscribed
+       FROM checkout_recovery r
+       WHERE r.livemode >= ? AND r.email IS NOT NULL AND r.consent = 'opt_in' AND r.expired_at > ?
+       ORDER BY r.expired_at`,
+    )
+    .bind(minLivemode(), now - RECOVERY_WINDOW)
+    .all<RecoveryCandidate>();
+  const base = SITE.url.replace(/\/$/, '');
+  const done = new Set<string>();
+  for (const r of rows.results ?? []) {
+    const history = { mailed: Boolean(r.mailed) || done.has(r.email!), bought: Boolean(r.bought), unsubscribed: Boolean(r.unsubscribed) };
+    if (!recoveryDue(r, history, now)) continue;
+    if (!enabled()) {
+      console.log('recovery email due (sending is off)', r.session_id);
+      continue;
+    }
+    const unsubscribe = await unsubscribeUrl(base, r.email!);
+    const sent = await sendOnce({
+      sessionId: r.session_id,
+      kind: 'recovery',
+      to: r.email!,
+      mail: composeRecovery(r, base, unsubscribe),
+      headers: { 'List-Unsubscribe': `<${unsubscribe}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' },
+    });
+    if (sent) done.add(r.email!);
+  }
 }

@@ -46,7 +46,7 @@ function price(o: LifecycleOrder) {
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 
 /** Plain text is the source; the HTML part is the same words with links, no images or tracking. */
-function render(subject: string, paragraphs: string[]): Composed {
+export function render(subject: string, paragraphs: string[]): Composed {
   const text = paragraphs.join('\n\n');
   const linkify = (p: string) => esc(p).replace(/https:\/\/[^\s<]+/g, (u) => `<a href="${u}" style="color:#0a7f5a">${u}</a>`);
   const html = `<!doctype html><html><body style="margin:0;padding:24px;background:#fff;color:#111;font:15px/1.6 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif"><div style="max-width:560px">${paragraphs
