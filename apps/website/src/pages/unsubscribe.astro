@@ -1,0 +1,55 @@
+---
+// Unsubscribe from Godmode's promotional emails. GET only asks (link scanners open links too); the button and mail
+// clients' one-click unsubscribe (RFC 8058) POST here.
+import Base from '@/layouts/Base.astro';
+import Nav from '@/components/Nav.astro';
+import Footer from '@/components/Footer.astro';
+import { db } from '@/lib/db';
+import { emailFromUnsubscribeToken } from '@/lib/signed';
+
+export const prerender = false;
+
+const token = Astro.url.searchParams.get('t');
+const email = await emailFromUnsubscribeToken(token);
+let done = false;
+if (Astro.request.method === 'POST' && email) {
+  await db().prepare('INSERT OR IGNORE INTO unsubscribes (email, ts) VALUES (?, ?)').bind(email, Date.now()).run();
+  await db().prepare('DELETE FROM leads WHERE email = ?').bind(email).run();
+  done = true;
+}
+if (!email) Astro.response.status = 400;
+---
+
+<Base title="Unsubscribe" noindex>
+  <Nav home={false} />
+  <main class="relative pt-36 pb-24">
+    <div class="container-x max-w-[640px]">
+      {
+        done ? (
+          <>
+            <h1 class="h-section">You’re unsubscribed.</h1>
+            <p class="lead mt-5">No more emails like this to {email}. Emails about a licence you buy still reach you.</p>
+          </>
+        ) : email ? (
+          <>
+            <h1 class="h-section">Unsubscribe?</h1>
+            <p class="lead mt-5">Stop emails about Godmode offers to {email}.</p>
+            <form method="post" class="mt-8">
+              <button type="submit" class="btn btn-primary btn-lg">
+                <span class="btn-label">Unsubscribe</span>
+              </button>
+            </form>
+          </>
+        ) : (
+          <>
+            <h1 class="h-section">This link doesn’t work any more.</h1>
+            <p class="lead mt-5">
+              Reply to the email with “unsubscribe” and I take you off the list by hand.
+            </p>
+          </>
+        )
+      }
+    </div>
+  </main>
+  <Footer />
+</Base>

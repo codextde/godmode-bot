@@ -65,3 +65,39 @@ export async function setKeyCookie(cookies: AstroCookies, key: string, secure: b
 }
 
 export const keyFromCookie = (cookies: AstroCookies) => verify(cookies.get(KEY_COOKIE)?.value);
+
+const UNSUBSCRIBE_TTL = 2 * 365 * 24 * 3600;
+const toB64url = (s: string) => btoa(String.fromCharCode(...enc.encode(s))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+const fromB64url = (s: string) =>
+  new TextDecoder().decode(Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0)));
+
+/** A signed one-click unsubscribe link for an address (base64url keeps the dots of the address out of the token). */
+export async function unsubscribeUrl(base: string, email: string) {
+  return `${base}/unsubscribe?t=${encodeURIComponent(await sign(toB64url(email), UNSUBSCRIBE_TTL))}`;
+}
+
+export async function emailFromUnsubscribeToken(token: string | null | undefined): Promise<string | null> {
+  const payload = await verify(token ?? undefined);
+  if (!payload) return null;
+  try {
+    return fromB64url(payload);
+  } catch {
+    return null;
+  }
+}
+
+// The checkout this browser opened last, for "email me this checkout" on /checkout/canceled. Only /api/remind reads it.
+export const CHECKOUT_COOKIE = 'gm_checkout';
+const CHECKOUT_TTL = 2 * 24 * 3600;
+
+export async function setCheckoutCookie(cookies: AstroCookies, sessionId: string, secure: boolean) {
+  cookies.set(CHECKOUT_COOKIE, await sign(sessionId, CHECKOUT_TTL), {
+    httpOnly: true,
+    secure,
+    sameSite: 'lax',
+    path: '/api/remind',
+    maxAge: CHECKOUT_TTL,
+  });
+}
+
+export const checkoutFromCookie = (cookies: AstroCookies) => verify(cookies.get(CHECKOUT_COOKIE)?.value);

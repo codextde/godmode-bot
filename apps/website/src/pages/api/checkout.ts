@@ -7,6 +7,7 @@ import { newLicenseKey } from '@/lib/license';
 import { foundingTaken, insertOpenOrder, type Attribution } from '@/lib/db';
 import { minLivemode } from '@/lib/entitlement';
 import { allowed, BOTS } from '@/lib/limit';
+import { setCheckoutCookie } from '@/lib/signed';
 
 export const prerender = false;
 
@@ -38,7 +39,7 @@ const unavailable = (wantsJson: boolean) =>
 // checkouts with no email and make the funnel look like real people quit at the card step.
 const isBot = (request: Request) => BOTS.test(request.headers.get('user-agent') ?? '');
 
-export const POST: APIRoute = async ({ request, url }) => {
+export const POST: APIRoute = async ({ request, url, cookies }) => {
   const wantsJson = (request.headers.get('accept') ?? '').includes('application/json');
   let plan: Plan = 'monthly';
   if (isBot(request)) {
@@ -65,7 +66,9 @@ export const POST: APIRoute = async ({ request, url }) => {
     const mode = 'subscription';
     const managed = flag(env.STRIPE_MANAGED_PAYMENTS);
     const requireTos = flag(env.STRIPE_REQUIRE_TOS);
-    // Needs "promotional emails" accepted under Dashboard → Settings → Checkout first.
+    // Stripe's promotional-consent checkbox. Stripe offers it to US businesses only: on the Codext GmbH (DE) account
+    // it rejects the session ("not available in your country"), so it stays off there and the opt-in on
+    // /checkout/canceled collects consent for the recovery email instead.
     const promotions = flag(env.STRIPE_COLLECT_PROMOTIONS);
 
     const base = siteBase(url.origin);
@@ -76,6 +79,8 @@ export const POST: APIRoute = async ({ request, url }) => {
       cancel_url: `${base}/checkout/canceled?plan=${plan}`,
       integration_identifier: INTEGRATION_ID,
       allow_promotion_codes: true,
+      // An expired session gets a recovery link (valid 30 days) for the abandoned-checkout email.
+      after_expiration: { recovery: { enabled: true, allow_promotion_codes: true } },
       billing_address_collection: 'auto',
       metadata,
       ...(promotions || requireTos
@@ -126,6 +131,7 @@ export const POST: APIRoute = async ({ request, url }) => {
     } catch (e) {
       console.error('could not record open order', e);
     }
+    await setCheckoutCookie(cookies, session.id, url.protocol === 'https:').catch(() => {});
 
     if (wantsJson) return Response.json({ url: session.url });
     return new Response(null, { status: 303, headers: { location: session.url! } });
