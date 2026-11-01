@@ -24,7 +24,7 @@ writing the same emails. Not developers (they are welcome, but we don't sell to 
   - Runs on its own: every Monday, when an email arrives, when a price changes.
   - Remembers how you like things.
   - Message it from your phone, Slack, Telegram or Teams.
-  - Runs on your own computer, Mac or Windows.
+  - Runs on your own Mac (Apple chip or Intel). Windows is not available yet; there is a waitlist.
 
 ## Jobs to show (use these, in this order of priority)
 
@@ -45,7 +45,7 @@ Never lead with coding, bug fixing, pull requests, test suites or servers.
 - Not "always asks first": asking is the default, it skips it when the task already says to do that step.
 - Passwords are hidden from the AI and blacked out in chats and logs, not in screenshots.
 - Banks that confirm logins in their phone app still need the user; say "it asks you when a site wants your phone".
-- The always-on version for a spare computer installs with one copy-paste command (Founding members get help).
+- The always-on version for a spare computer installs with one copy-paste command (we help by email).
 
 ## Words
 
@@ -75,7 +75,10 @@ trust line. "Agents" is fine once the reader knows what Godmode is ("AI coworker
 - "Stop copy-pasting between tabs." (screen recording of Godmode doing it)
 - "POV: you told your computer what to do in one sentence."
 
-## Offer (unchanged)
+## Offer (since 2026-11-01)
 
-14 days free, then $39/month or $29/month yearly. Founding 100 until October 31: setup call with the founder,
-price locked, 10 hours back in 30 days or full refund, code FOUNDING20.
+Download for Mac and use it free for 14 days: no card, no sign-up. The app handles the free period. After that
+$39/month, or $29/month billed yearly ($348/year), with a 14-day money-back guarantee on the first payment. The main
+call to action is always "Download for Mac — free"; the price is shown, but lower on the page. Website "Subscribe"
+buttons check out with `trial=0` (billed today). The Founding 100 offer (code FOUNDING20, price lock, setup call,
+10 hours back or refund) ended on 2026-11-01 07:00 UTC and is no longer shown on public pages.

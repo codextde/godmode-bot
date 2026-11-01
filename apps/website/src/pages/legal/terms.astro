@@ -14,7 +14,7 @@ const { monthly, yearly } = PRICING.plans;
   <h2>1. Contract and delivery</h2>
   <p>
     The product pages are an invitation to buy. You make an offer by completing checkout; the contract is concluded when
-    your payment is confirmed or, for a plan with a free trial, when your trial starts. The Software is delivered by
+    your payment is confirmed or, for a checkout with a free trial, when your trial starts. The Software is delivered by
     download from this website; your license key is shown right after checkout and in your billing portal. Contract language is English.
   </p>
 
@@ -30,11 +30,15 @@ const { monthly, yearly } = PRICING.plans;
     </li>
   </ul>
   <p>
-    <strong>Free trial.</strong> Both Godmode Pro plans start with a free {PRICING.trialDays}-day trial. You add a payment
-    method at checkout, but nothing is charged during the trial. If you cancel before the trial ends, you pay nothing and
-    your license stops working when the trial ends. If you don’t cancel, your subscription starts automatically when the
-    trial ends: the first month or year (depending on your plan) is charged to your payment method then, and it renews
-    automatically after that. Checkout and the welcome page show the date your trial ends.
+    <strong>Free period.</strong> The downloaded app can be used free for {PRICING.freeDays} days, without a payment
+    method or an account. Nothing is charged and no contract for a paid plan is concluded during that time.
+  </p>
+  <p>
+    <strong>Billing.</strong> A subscription started with “billed today” at checkout is charged right away for the first
+    month or year and renews automatically after that. Checkout links that include a free trial start with a free
+    {PRICING.trialDays}-day trial: you add a payment method, nothing is charged during the trial, and if you cancel before
+    it ends you pay nothing. If you don’t cancel, your subscription starts automatically when the trial ends and the first
+    month or year is charged then. Checkout shows which of the two applies before you pay.
   </p>
   <p>
     <strong>Cancelling a subscription.</strong> You can cancel anytime in the billing portal or by email. Access continues
@@ -81,18 +85,19 @@ const { monthly, yearly } = PRICING.plans;
   <h2>5. Money-back guarantee</h2>
   <p>
     If you’re not happy, email us within {PRICING.guaranteeDays} days of your first payment on any plan (for Godmode Pro,
-    the first payment after the free trial) and we’ll refund it in full.
+    the first payment after any free trial) and we’ll refund it in full.
     This voluntary guarantee is in addition to any statutory rights. See <a href="/legal/refunds">Refunds & cancellation</a>.
   </p>
   <p>
     <strong>Code {COUPON.code}.</strong> Entering the code {COUPON.code} at checkout gives {COUPON.percentOff}% off the first
-    {COUPON.months} months of a new monthly Godmode Pro subscription, or off the first year of a new yearly one. It can be
+    {COUPON.months} months of a new monthly Godmode Pro subscription, or off the first year of a new yearly one. It could be
     redeemed until the end of {FOUNDING.endLabel}, 2026 (US Pacific time), at most {COUPON.maxRedemptions} times in
     total, and can’t be combined with other codes. The discount is shown in checkout before you pay.
   </p>
   <p>
-    <strong>Founding 100.</strong> Subscriptions started through the Founding 100 offer (the first {FOUNDING.seats} checkouts
-    from October 5, 2026 until {FOUNDING.endLabel}, 2026, marked “Founding” on your receipt) also include: (a) one
+    <strong>Founding 100.</strong> The Founding 100 offer closed at the end of {FOUNDING.endLabel}, 2026. Subscriptions
+    started through it (the first {FOUNDING.seats} checkouts from October 5, 2026 until {FOUNDING.endLabel}, 2026, marked
+    “Founding” on your receipt) keep these extras: (a) one
     {FOUNDING.setupMinutes}-minute setup call with the founder, booked within {FOUNDING.outcomeDays} days of your trial
     start; (b) if your first automation isn’t running {FOUNDING.runningHours} hours after you install, we help you set it
     up personally; (c) your plan’s price stays the same for as long as your subscription runs without interruption; and

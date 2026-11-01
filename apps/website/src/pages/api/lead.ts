@@ -26,7 +26,9 @@ export const POST: APIRoute = async ({ request }) => {
 
   if (source !== 'app') {
     await db()
-      .prepare('INSERT OR IGNORE INTO leads (ts, email, source, utm_source, utm_campaign) VALUES (?, ?, ?, ?, ?)')
+      .prepare(
+        'INSERT INTO leads (ts, email, source, utm_source, utm_campaign) VALUES (?, ?, ?, ?, ?) ON CONFLICT(email) DO UPDATE SET source = COALESCE(excluded.source, leads.source)',
+      )
       .bind(now, email, source, s(body?.utm_source), s(body?.utm_campaign))
       .run();
     return Response.json({ ok: true });

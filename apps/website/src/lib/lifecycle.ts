@@ -1,4 +1,4 @@
-import { FOUNDING, PRICING } from '@/config/site';
+import { PRICING } from '@/config/site';
 
 export type EmailKind = 'welcome' | 'day3' | 'trial_ending';
 
@@ -74,9 +74,9 @@ export function compose(kind: EmailKind, o: LifecycleOrder, base: string): Compo
       hi,
       trialEnd ? 'thanks for starting your Godmode trial. Here is everything you need in one place.' : 'thanks for getting Godmode. Here is everything you need in one place.',
       `Your license key: ${o.license_key}`,
-      `Download for Mac, Windows or Linux (your key is already filled in):\n${download}`,
+      `Download for Mac (your key is already filled in):\n${download}`,
       'Getting started takes about five minutes:\n1. Install Godmode and open it. Onboarding sets up Claude Code for you.\n2. Sign in with your Claude Pro or Max plan, or paste an Anthropic API key.\n3. Hand over your first task in one sentence, for example "Log into my Amazon account and download all invoices from this year into a folder."',
-      `As a founding member you also get a ${FOUNDING.setupMinutes}-minute setup call with me. Reply with two times that work for you and the three things you want Godmode to take off your plate, and we set them up together.`,
+      'Reply with the three things you want Godmode to take off your plate, and I send you the exact messages to give it.',
       ...(trialEnd ? [`Your trial runs until ${trialEnd}. You can cancel any time${manage ? `, right here:\n${manage}` : ' by replying to this email.'}`] : []),
       'If anything gets stuck, just reply. This comes straight to me.',
       sign,
@@ -88,9 +88,9 @@ export function compose(kind: EmailKind, o: LifecycleOrder, base: string): Compo
       return render('Did Godmode install OK?', [
         hi,
         'I noticed your Godmode key has not been activated yet, so I wanted to check if something got in the way.',
-        `Here is your download again, with the key filled in. Open it on your Mac or PC, not on your phone:\n${download}`,
+        `Here is your download again, with the key filled in. Open it on your Mac, not on your phone:\n${download}`,
         `Your key, in case you need to paste it: ${o.license_key}`,
-        'If the install stopped somewhere, reply with a screenshot or one line about where, and I will help you get it running. Or send me two times for the setup call and we do it together in 20 minutes.',
+        'If the install stopped somewhere, reply with a screenshot or one line about where, and I will help you get it running.',
         sign,
       ]);
     }
@@ -99,14 +99,14 @@ export function compose(kind: EmailKind, o: LifecycleOrder, base: string): Compo
       'good to see Godmode running on your computer. Three good first tasks, each one message:',
       '1. "Every weekday at 8, go through my inbox and send me a short list of what needs an answer today."\n2. "Log into my supplier portals and download this month\'s invoices into one folder."\n3. "Find 20 companies that match my ideal customer, with website and contact, and put them in a spreadsheet."',
       'Anything you do in a browser more than once a week is a good candidate. Ask Godmode to turn it into an agent with a schedule and it keeps doing it for you.',
-      'Tell me what you would like to automate first and I will send you the exact message to give it. The setup call is still open too, just reply with two times.',
+      'Tell me what you would like to automate first and I will send you the exact message to give it.',
       sign,
     ]);
   }
 
   return render(`Your Godmode trial ends on ${trialEnd}`, [
     hi,
-    `a quick heads-up: your free trial ends on ${trialEnd}. After that your card is charged ${price(o)}, the founding price, locked for as long as you stay.`,
+    `a quick heads-up: your free trial ends on ${trialEnd}. After that your card is charged ${price(o)}.`,
     'Nothing to do if you want to keep going.',
     `If Godmode is not for you, cancel before ${trialEnd} and you will not be charged${manage ? `:\n${manage}` : ' (just reply to this email).'}`,
     `And if you stay but it does not pay off, the ${PRICING.guaranteeDays}-day money-back guarantee still applies after the first charge.`,

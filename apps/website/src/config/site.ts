@@ -7,7 +7,7 @@ export const SITE = {
   url: import.meta.env.SITE ?? 'https://usegodmode.com',
   title: 'Godmode — your computer work, done for you',
   description:
-    'Godmode is the AI coworker for everyone who works at a computer. Tell it the task in plain words and it does the job start to finish in your own browser and apps: emails, invoices, spreadsheets, online shop orders, ad reports. No coding. Powered by Claude.',
+    'Godmode is the AI coworker for everyone who works at a computer. Tell it the task in plain words and it does the job start to finish in your own browser and apps: emails, invoices, spreadsheets, online shop orders, ad reports. No coding. Download it for Mac and use it free for 14 days.',
   email: 'kontakt@codext.de',
   model: 'Claude Opus 5.5',
   repo: 'https://github.com/codextde/godmode-bot',
@@ -26,6 +26,9 @@ export const isPlan = (v: unknown): v is Plan => v === 'monthly' || v === 'yearl
 
 export const PRICING = {
   currency: 'USD',
+  /** Free period of the downloaded app: no card, no sign-up. The main offer on every page. */
+  freeDays: 14,
+  /** Stripe trial for checkouts that don't pass trial=0 (old links). Website buttons always pass trial=0. */
   trialDays: 14,
   guaranteeDays: 14,
   plans: {
@@ -49,8 +52,8 @@ export const PRICING = {
 } as const;
 
 /**
- * Founding 100: the launch offer. Seats are checkouts started after `start` (see foundingTaken). Subscriptions keep
- * their Stripe price, so the price lock holds as long as founders aren't migrated to a new price.
+ * Founding 100: the launch offer, closed on November 1, 2026 07:00 UTC. Kept for checkout, lifecycle mails, admin and
+ * the terms that still apply to founding subscriptions; public pages no longer show it.
  */
 export const FOUNDING = {
   seats: 100,
@@ -118,7 +121,7 @@ export const LEGAL = {
   phone: '+49 7904 5203106',
   email: 'kontakt@codext.de',
   // Bump by hand only when the legal texts change.
-  updated: 'October 5, 2026',
+  updated: 'November 1, 2026',
 } as const;
 
 export const TRACKING = {

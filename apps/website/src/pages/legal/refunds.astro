@@ -4,23 +4,25 @@ import { FOUNDING, LEGAL, PRICING } from '@/config/site';
 ---
 
 <Legal title="Refunds & cancellation" description="Free trial, money-back guarantee, cancelling a subscription and the EU right of withdrawal.">
-  <h2>Free trial</h2>
+  <h2>Free period and trials</h2>
   <p>
-    Godmode Pro (monthly or yearly) starts with a free {PRICING.trialDays}-day trial. Nothing is charged during the trial.
-    Cancel before it ends — in the billing portal, from the app or by email — and you pay nothing at all. If you don’t
-    cancel, the subscription starts automatically when the trial ends and your first month or year is charged then.
+    The Godmode app is free for {PRICING.freeDays} days after you download it, with no card and no account, so nothing
+    can be charged. When you subscribe after that, your first month or year is charged at checkout. Checkout links that
+    include a free {PRICING.trialDays}-day trial charge nothing during the trial: cancel before it ends — in the billing
+    portal, from the app or by email — and you pay nothing at all. If you don’t cancel, the subscription starts
+    automatically when the trial ends and your first month or year is charged then.
   </p>
 
   <h2>{PRICING.guaranteeDays}-day money-back guarantee</h2>
   <p>
     Not the right fit? Email <a href={`mailto:${LEGAL.email}`}>{LEGAL.email}</a> within {PRICING.guaranteeDays} days of
-    your first payment (the first payment after the trial). We refund the full amount to your original payment method — no questions, no forms — and your license is
+    your first payment (after a trial, the first payment after it). We refund the full amount to your original payment method — no questions, no forms — and your license is
     deactivated.
   </p>
 
   <h2>Founding 100: {FOUNDING.outcomeHours} hours back, or every cent back</h2>
   <p>
-    If you joined through the Founding 100 offer, you get a longer, outcome-based guarantee on top: set up at least
+    The Founding 100 offer closed at the end of {FOUNDING.endLabel}, 2026. If you joined through it, you get a longer, outcome-based guarantee on top: set up at least
     {FOUNDING.setupAutomations} automations (we help on your setup call), and if Godmode hasn’t saved you
     {FOUNDING.outcomeHours} hours of work in the first {FOUNDING.outcomeDays} days after your first payment, email
     <a href={`mailto:${LEGAL.email}`}>{LEGAL.email}</a> within those {FOUNDING.outcomeDays} days. We refund that payment in
