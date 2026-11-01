@@ -1,7 +1,7 @@
 import { Star } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { WorkspaceClaudeAccounts } from "@godmode/shared";
-import { AccountAvatar, DefaultTag, PlanTag, useClaudeAccounts } from "@/components/settings/claude-accounts-section";
+import { AccountAvatar, DefaultTag, PlanTag, useClaudeAccounts } from "@/components/claude-accounts/shared";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";

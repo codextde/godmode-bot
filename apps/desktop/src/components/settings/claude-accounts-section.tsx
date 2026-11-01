@@ -4,6 +4,7 @@ import { ArrowLeftRight, LogIn, MoreHorizontal, Plus, RefreshCw, Star, Trash2, U
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import type { ClaudeAccount, ClaudeAccountLogin, ClaudeAccountsState, ClaudeUsageWindow, Settings } from "@godmode/shared";
+import { AccountAvatar, DefaultTag, healthOf, PlanTag, useAccountName, useClaudeAccounts } from "@/components/claude-accounts/shared";
 import { useResetLabel } from "@/components/layout/usage-ring";
 import { ClaudeSignInSteps, type SignInFlow } from "@/components/onboarding/claude-sign-in";
 import {
@@ -27,66 +28,6 @@ import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
 import { intlLocale } from "@/i18n";
 import { Callout, NumberField, SectionHeading, SettingRow, SettingsGroup, useSettingsPatch } from "./settings-kit";
-
-/* ------------------------------------------------------------------ */
-/* Shared bits (also used by the workspace dialog)                      */
-/* ------------------------------------------------------------------ */
-
-export function useClaudeAccounts() {
-  return useQuery({ queryKey: qk.claudeAccounts, queryFn: api.claudeAccounts.list, refetchInterval: 60_000 });
-}
-
-export function planLabel(plan: string | null): string | null {
-  if (!plan) return null;
-  return plan.charAt(0).toUpperCase() + plan.slice(1);
-}
-
-function initials(a: ClaudeAccount): string {
-  const source = a.name || a.email || "C";
-  const parts = source.split(/[\s@._-]+/).filter(Boolean);
-  return ((parts[0]?.[0] ?? "C") + (a.name && parts[1] ? parts[1][0] : "")).toUpperCase();
-}
-
-type Health = "ok" | "limited" | "signedOut" | "unknown";
-
-function healthOf(a: ClaudeAccount): Health {
-  if (a.needsSignIn) return "signedOut";
-  if (a.limitedUntil) return "limited";
-  if (a.usage?.state === "ok") return "ok";
-  return "unknown";
-}
-
-const DOT: Record<Health, string> = {
-  ok: "bg-success",
-  limited: "bg-warning",
-  signedOut: "bg-destructive",
-  unknown: "bg-muted-foreground/40",
-};
-
-export function AccountAvatar({ account, className }: { account: ClaudeAccount; className?: string }) {
-  return (
-    <span className={cn("relative grid size-9 shrink-0 place-items-center rounded-full border bg-paper-2 text-[13px] font-medium tracking-tight", className)}>
-      {initials(account)}
-      <span className={cn("absolute -right-0.5 -bottom-0.5 size-2.5 rounded-full ring-2 ring-card", DOT[healthOf(account)])} aria-hidden />
-    </span>
-  );
-}
-
-export function PlanTag({ plan }: { plan: string | null }) {
-  const label = planLabel(plan);
-  if (!label) return null;
-  return <span className="rounded-[5px] border px-1.5 py-px text-[11px] leading-4 font-medium text-muted-foreground">{label}</span>;
-}
-
-export function DefaultTag() {
-  const { t } = useTranslation("settings");
-  return (
-    <span className="inline-flex items-center gap-1 rounded-[5px] bg-brand/10 px-1.5 py-px text-[11px] leading-4 font-medium text-brand">
-      <Star className="size-2.5 fill-current" aria-hidden />
-      {t("accounts.default")}
-    </span>
-  );
-}
 
 function tone(percent: number): string {
   if (percent >= 90) return "bg-destructive";
@@ -191,6 +132,7 @@ function AccountRow({
 }) {
   const { t } = useTranslation("settings");
   const health = healthOf(account);
+  const accountName = useAccountName();
   const subtitle = account.system ? t("accounts.systemLogin") : account.organization || account.name || t("accounts.addedHere");
   return (
     <div className="group flex flex-wrap items-center gap-x-4 gap-y-3 py-3.5 @xl:flex-nowrap">
@@ -198,7 +140,7 @@ function AccountRow({
         <AccountAvatar account={account} />
         <div className="min-w-0">
           <div className="flex min-w-0 items-center gap-1.5">
-            <span className="truncate text-sm font-medium">{account.email ?? (account.system ? t("accounts.thisComputer") : t("accounts.unknown"))}</span>
+            <span className="truncate text-sm font-medium">{accountName(account)}</span>
             <PlanTag plan={account.plan} />
             {account.isDefault && <DefaultTag />}
           </div>
