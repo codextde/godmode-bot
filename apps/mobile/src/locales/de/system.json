@@ -167,6 +167,8 @@
     "photoLibrary": "Fotomediathek",
     "takePhoto": "Foto aufnehmen",
     "chooseFile": "Datei auswählen",
+    "scanDocument": "Dokument scannen",
+    "camera": "Kamera",
     "attach": "Anhängen"
   },
   "composer": {

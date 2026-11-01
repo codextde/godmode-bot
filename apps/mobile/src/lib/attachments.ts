@@ -1,3 +1,4 @@
+import { CameraView } from "expo-camera";
 import * as DocumentPicker from "expo-document-picker";
 import { File } from "expo-file-system";
 import * as ImagePicker from "expo-image-picker";
@@ -130,11 +131,54 @@ async function fromFiles(room: number): Promise<PendingFile[]> {
   return result.assets.map((a) => ({ id: nextId(), uri: a.uri, name: a.name, mime: mimeOf(a.name, a.mimeType), size: sizeOf(a.uri, a.size) }));
 }
 
+export function canScanDocuments(): boolean {
+  if (process.env.EXPO_OS === "web") return false;
+  try {
+    return CameraView.isDocumentScannerAvailable;
+  } catch {
+    return false;
+  }
+}
+
+function scanName(): string {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `scan-${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}.pdf`;
+}
+
+async function fromScan(): Promise<PendingFile[]> {
+  const result = await CameraView.scanDocumentAsync({ requestPdf: true, quality: 0.85 });
+  if (!result) return [];
+  if (result.pdfUri) {
+    const name = scanName();
+    return [{ id: nextId(), uri: result.pdfUri, name, mime: "application/pdf", size: sizeOf(result.pdfUri) }];
+  }
+  return result.pages.map((uri, i) => {
+    const name = scanName().replace(/\.pdf$/, `-${i + 1}.jpg`);
+    return { id: nextId(), uri, name, mime: "image/jpeg", size: sizeOf(uri) };
+  });
+}
+
+export function chooseCameraMode(): Promise<"camera" | "scan" | null> {
+  if (!canScanDocuments()) return Promise.resolve("camera");
+  return new Promise((resolve) => {
+    Alert.alert(
+      t("system:attachments.camera"),
+      undefined,
+      [
+        { text: t("system:attachments.takePhoto"), onPress: () => resolve("camera") },
+        { text: t("system:attachments.scanDocument"), onPress: () => resolve("scan") },
+      ],
+      { cancelable: true, onDismiss: () => resolve(null) },
+    );
+  });
+}
+
 export function fromPasted(files: PastedFile[]): PendingFile[] {
   return files.map((f) => ({ id: nextId(), uri: f.uri, name: f.name, mime: mimeOf(f.name, f.mime), size: sizeOf(f.uri, f.size) }));
 }
 
-export type FileSource = "library" | "camera" | "files";
+export type FileSource = "library" | "camera" | "scan" | "files";
 
 export async function pickFrom(source: FileSource, room: number): Promise<PendingFile[]> {
   if (room <= 0) {
@@ -144,6 +188,7 @@ export async function pickFrom(source: FileSource, room: number): Promise<Pendin
   try {
     if (source === "library") return await fromLibrary(room);
     if (source === "camera") return await fromCamera();
+    if (source === "scan") return await fromScan();
     return await fromFiles(room);
   } catch (err) {
     Alert.alert(t("system:attachments.couldNotAdd"), err instanceof Error ? err.message : String(err));
@@ -154,6 +199,7 @@ export async function pickFrom(source: FileSource, room: number): Promise<Pendin
 const SOURCES = [
   { source: "library", labelKey: "system:attachments.photoLibrary" },
   { source: "camera", labelKey: "system:attachments.takePhoto" },
+  { source: "scan", labelKey: "system:attachments.scanDocument" },
   { source: "files", labelKey: "system:attachments.chooseFile" },
 ] as const satisfies readonly { source: FileSource; labelKey: string }[];
 
@@ -161,12 +207,14 @@ const SOURCES = [
 export function chooseSource(): Promise<FileSource | null> {
   return new Promise((resolve) => {
     if (process.env.EXPO_OS === "ios") {
-      ActionSheetIOS.showActionSheetWithOptions({ options: [...SOURCES.map((s) => t(s.labelKey)), t("common:actions.cancel")], cancelButtonIndex: SOURCES.length }, (i) =>
-        resolve(SOURCES[i]?.source ?? null),
+      const sources = SOURCES.filter((s) => s.source !== "scan" || canScanDocuments());
+      ActionSheetIOS.showActionSheetWithOptions({ options: [...sources.map((s) => t(s.labelKey)), t("common:actions.cancel")], cancelButtonIndex: sources.length }, (i) =>
+        resolve(sources[i]?.source ?? null),
       );
       return;
     }
-    Alert.alert(t("system:attachments.attach"), undefined, SOURCES.map((s) => ({ text: t(s.labelKey), onPress: () => resolve(s.source) })), {
+    const sources = SOURCES.filter((s) => s.source !== "scan");
+    Alert.alert(t("system:attachments.attach"), undefined, sources.map((s) => ({ text: t(s.labelKey), onPress: () => resolve(s.source === "camera" ? chooseCameraMode() : s.source) })), {
       cancelable: true,
       onDismiss: () => resolve(null),
     });

@@ -29,6 +29,7 @@ export default function TabsLayout() {
 
   return (
     <NativeTabs
+      activityEnabled
       tintColor={tint ?? c.text}
       minimizeBehavior="onScrollDown"
       backgroundColor={Platform.OS === "android" ? c.surface : undefined}

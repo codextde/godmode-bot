@@ -167,6 +167,8 @@
     "photoLibrary": "Photo Library",
     "takePhoto": "Take Photo",
     "chooseFile": "Choose File",
+    "scanDocument": "Scan Document",
+    "camera": "Camera",
     "attach": "Attach"
   },
   "composer": {
