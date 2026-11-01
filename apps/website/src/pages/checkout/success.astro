@@ -8,6 +8,7 @@ import { syncSubscription, upsertFromSession } from '@/lib/db';
 import { ORDER_COOKIE, publicId, sign, verify } from '@/lib/signed';
 import { allowed } from '@/lib/limit';
 import type Stripe from 'stripe';
+import { licenseDeepLink } from '@godmode/shared';
 
 export const prerender = false;
 
@@ -85,6 +86,8 @@ const purchase =
 
 // The handoff link for buyers on a phone: opens the download page on their computer with the key filled in.
 const handoffUrl = licenseKey ? `${Astro.url.origin}/download?key=${licenseKey}` : '';
+// Godmode on this computer takes the key from this link and activates it (desktop builds that know godmode:// links).
+const openAppUrl = licenseKey ? licenseDeepLink(licenseKey) : '';
 const mailBody = `Your Godmode license key: ${licenseKey}\n\nDownload Godmode on your Mac or PC (your key is already filled in):\n${handoffUrl}\n`;
 const mailto = `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent('Your Godmode license')}&body=${encodeURIComponent(mailBody)}`;
 
@@ -220,6 +223,19 @@ const steps = [
                 <p class="mt-3 text-[13px] text-muted">
                   Keep it somewhere safe — it’s also shown in your billing portal.
                 </p>
+                {openAppUrl && (
+                  <div class="mt-6 hidden flex-col gap-4 border-t border-line pt-6 sm:flex sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p class="text-[15px] font-medium">Godmode already on this computer?</p>
+                      <p class="mt-1 text-[13.5px] leading-relaxed text-muted">
+                        Open it and your key is added for you. Nothing happens? Paste the key in Godmode under Settings → License.
+                      </p>
+                    </div>
+                    <a href={openAppUrl} class="btn btn-primary flex-none" data-track="open_app">
+                      Open Godmode <Icon name="arrow-right" size={16} class="arrow" />
+                    </a>
+                  </div>
+                )}
               </div>
 
               <div class="send-card card order-first p-6 sm:order-last sm:p-8" data-send data-reveal style="--d:250">

@@ -1399,7 +1399,7 @@
       "active": "Active",
       "trial": "Free trial",
       "pastDue": "Payment due",
-      "grace": "Free week",
+      "grace": "Free trial",
       "unverified": "Not checked yet",
       "missing": "No licence",
       "invalid": "Invalid key",
@@ -1424,9 +1424,11 @@
     "activate": {
       "title": "Activate Godmode",
       "description": "Every feature in every plan. Your agents, chats and logins stay on this computer.",
-      "remote": "Add the licence key in Godmode on the computer itself."
+      "remote": "Add the licence key in Godmode on the computer itself.",
+      "trialTitle": "Keep Godmode after your free trial",
+      "trialDescription": "Pick a plan any time. Everything you set up stays on this computer."
     },
-    "freeUntil": "Free until",
+    "freeUntil": "Free trial until",
     "trialEndsStops": "Trial ends, then stops",
     "cancelsOn": "Cancels on",
     "renews": "Renews",

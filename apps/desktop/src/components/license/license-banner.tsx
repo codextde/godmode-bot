@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { useLocation, useNavigate } from "react-router";
+import { Link, useLocation, useNavigate } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { differenceInCalendarDays, format } from "date-fns";
@@ -9,12 +9,13 @@ import type { LicenseState } from "@godmode/shared";
 import { Button } from "@/components/ui/button";
 import { dateLocale, t } from "@/i18n";
 import { api } from "@/lib/api";
-import { storageKey } from "@/lib/core";
+import { cloudContext, storageKey } from "@/lib/core";
 import { openExternal } from "@/lib/desktop";
 import { useLicense } from "@/lib/hooks";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
 import { checkoutUrl } from "./activate";
+import { noteCheckoutOpened } from "./deep-link";
 
 const DAY_MS = 86_400_000;
 
@@ -55,7 +56,15 @@ function trialText(iso: string, cancelAtPeriodEnd: boolean): string {
 
 const shortDate = (iso: string) => format(new Date(iso), t("license:banner.dateFormat"), { locale: dateLocale() });
 
-function noticeFor(s: LicenseState, actions: { settings: () => void; manage: () => void; refresh: () => void; trial: () => void }): Notice | null {
+function freeTrialText(iso: string): string {
+  const days = differenceInCalendarDays(new Date(iso), new Date());
+  return days <= 0 ? t("license:banner.freeTrial.today") : days === 1 ? t("license:banner.freeTrial.tomorrow") : t("license:banner.freeTrial.daysLeft", { count: days });
+}
+
+/** The free trial gets a banner only in its last days; before that the sidebar shows a quiet chip. */
+const GRACE_BANNER_DAYS = 3;
+
+function noticeFor(s: LicenseState, actions: { settings: () => void; manage: () => void; refresh: () => void; plans: () => void }): Notice | null {
   if (s.blocked) return null;
   if (s.status === "trial" && s.trialEndsAt) {
     const left = new Date(s.trialEndsAt).getTime() - Date.now();
@@ -81,12 +90,17 @@ function noticeFor(s: LicenseState, actions: { settings: () => void; manage: () 
   }
   if (!s.enforced) return null;
   if (s.status === "grace" && s.graceEndsAt) {
+    if (differenceInCalendarDays(new Date(s.graceEndsAt), new Date()) > GRACE_BANNER_DAYS) return null;
     return {
       kind: "grace",
       tone: "info",
       icon: <Gift />,
-      text: t("license:banner.grace", { date: shortDate(s.graceEndsAt) }),
-      action: { label: t("license:banner.startTrial"), run: actions.trial },
+      text: (
+        <>
+          {freeTrialText(s.graceEndsAt)} <span className="text-muted-foreground">{t("license:banner.freeTrial.hint")}</span>
+        </>
+      ),
+      action: { label: t("license:banner.seePlans"), run: actions.plans },
       secondary: { label: t("license:banner.addKey"), run: actions.settings },
     };
   }
@@ -116,8 +130,9 @@ export function LicenseBanner() {
         settings: () => navigate("/settings/license"),
         manage: () => data.manageUrl && void openExternal(data.manageUrl),
         refresh: () => refresh.mutate(),
-        trial: () => {
+        plans: () => {
           navigate("/settings/license");
+          noteCheckoutOpened();
           void openExternal(checkoutUrl("banner"));
         },
       })
@@ -172,5 +187,24 @@ export function LicenseBanner() {
         </motion.div>
       )}
     </AnimatePresence>
+  );
+}
+
+/** Sidebar footer during the free trial: how many days are left, one click from the plans. */
+export function FreeTrialChip() {
+  const { t } = useTranslation("license");
+  const { data } = useLicense(!cloudContext);
+  if (cloudContext || !data?.enforced || data.status !== "grace" || !data.graceEndsAt) return null;
+  const left = differenceInCalendarDays(new Date(data.graceEndsAt), new Date());
+  return (
+    <Link
+      to="/settings/license"
+      title={t("chip.until", { date: shortDate(data.graceEndsAt) })}
+      className="flex h-8 w-full min-w-0 items-center gap-2.5 rounded-md px-2.5 text-xs text-muted-foreground outline-none transition-colors hover:bg-sidebar-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring group-data-[collapsible=icon]:hidden"
+    >
+      <Gift className="size-4 shrink-0 text-brand-strong" aria-hidden />
+      <span className="min-w-0 flex-1 truncate">{t("chip.label")}</span>
+      <span className="shrink-0 text-[11px] text-foreground/70 tabular-nums">{left <= 0 ? t("chip.today") : t("chip.daysLeft", { count: left })}</span>
+    </Link>
   );
 }

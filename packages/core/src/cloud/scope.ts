@@ -455,6 +455,7 @@ const RULES: [methods: string, path: string, rule: Rule][] = [
   // The licence key is entered and removed on the computer; its owner may see the state and ask the server again.
   ["GET", "/api/license", "owner"],
   ["POST", "/api/license/refresh", "owner"],
+  ["GET", "/api/license/usage", "owner"],
   ["PUT|DELETE", "/api/license", refused(COMPUTER_ONLY)],
 ];
 
