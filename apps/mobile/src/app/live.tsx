@@ -185,7 +185,7 @@ export default function Live() {
         {uri ? (
           <Pressable
             onPress={(e) => press(e, "left")}
-            onLongPress={mac ? (e) => press(e, "right") : null}
+            onLongPress={mac ? (e) => press(e, "right") : undefined}
             delayLongPress={380}
             disabled={!control}
             accessibilityHint={mac ? t("live.controlHintMac") : t("live.controlHint")}

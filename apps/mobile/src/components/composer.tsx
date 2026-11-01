@@ -1,7 +1,7 @@
 import { Button as MenuButton, Host, Image as SwiftImage, Menu } from "@expo/ui/swift-ui";
 import { accessibilityLabel, background, contentShape, frame, shapes } from "@expo/ui/swift-ui/modifiers";
 import { useEffect, useImperativeHandle, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, TextInput, View, type TextInputInstance } from "react-native";
 import { useTranslation } from "react-i18next";
 import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
 import type { SlashCommand } from "@godmode/shared";
@@ -11,7 +11,7 @@ import { Glass } from "./glass";
 import { Icon } from "./icon";
 import { T, tap } from "./ui";
 import { errorText } from "@/lib/api";
-import { addFiles, fromPasted, MAX_FILES, pickFrom, type FileSource, type PendingFile } from "@/lib/attachments";
+import { addFiles, canScanDocuments, chooseCameraMode, fromPasted, MAX_FILES, pickFrom, type FileSource, type PendingFile } from "@/lib/attachments";
 import { findCommand, rankCommands, useDraft, useDrafts, useSlashCommands } from "@/lib/composer";
 import { fonts, radius, space, type, useColors } from "@/lib/theme";
 import { addPasteListener, setPasteActive } from "../../modules/paste-input";
@@ -61,7 +61,7 @@ export function Composer({
 }) {
   const c = useColors();
   const { t: tr } = useTranslation(["components", "common"]);
-  const input = useRef<TextInput>(null);
+  const input = useRef<TextInputInstance>(null);
   const draft = useDraft(draftKey);
   const setDraft = useDrafts((s) => s.set);
   const { text, files } = draft;
@@ -237,7 +237,7 @@ export function ComposerDock({ children }: { children: ReactNode }) {
   return <View style={styles.dock}>{children}</View>;
 }
 
-/** Photos, camera and files: the system menu on iOS, a choice dialog on Android. */
+/** Photos, camera, document scan and files: the system menu on iOS, a choice dialog on Android. */
 function AttachButton({ onPick, disabled }: { onPick: (source: FileSource) => void; disabled?: boolean }) {
   const c = useColors();
   const { t } = useTranslation("components");
@@ -258,6 +258,7 @@ function AttachButton({ onPick, disabled }: { onPick: (source: FileSource) => vo
           >
             <MenuButton label={t("composer.photoLibrary")} systemImage="photo.on.rectangle" onPress={() => onPick("library")} />
             <MenuButton label={t("composer.takePhoto")} systemImage="camera" onPress={() => onPick("camera")} />
+            {canScanDocuments() ? <MenuButton label={t("composer.scanDocument")} systemImage="doc.viewfinder" onPress={() => onPick("scan")} /> : null}
             <MenuButton label={t("composer.chooseFiles")} systemImage="folder" onPress={() => onPick("files")} />
           </Menu>
         </Host>
@@ -273,7 +274,7 @@ function AttachButton({ onPick, disabled }: { onPick: (source: FileSource) => vo
         tap();
         Alert.alert(t("composer.attach"), t("composer.attachMessage"), [
           { text: t("composer.photos"), onPress: () => onPick("library") },
-          { text: t("composer.camera"), onPress: () => onPick("camera") },
+          { text: t("composer.camera"), onPress: () => void chooseCameraMode().then((mode) => mode && onPick(mode)) },
           { text: t("composer.files"), onPress: () => onPick("files") },
         ], { cancelable: true });
       }}

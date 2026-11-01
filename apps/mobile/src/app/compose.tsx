@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { Alert, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { Alert, Pressable, ScrollView, StyleSheet, View, type ScrollViewInstance } from "react-native";
 import { useTranslation } from "react-i18next";
 import { CharacterAvatar } from "@/components/character";
 import { Icon } from "@/components/icon";
@@ -42,7 +42,7 @@ export default function Compose() {
   const projectId = projectPick !== undefined ? listed(projectPick) : (listed(scopeProject) ?? listed(current?.projectId));
 
   const composer = useRef<ComposerHandle>(null);
-  const rail = useRef<ScrollView>(null);
+  const rail = useRef<ScrollViewInstance>(null);
   const revealed = useRef(false);
   const choice = useNewChatChoice((s) => s.choice);
   useEffect(() => {

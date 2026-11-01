@@ -32,7 +32,7 @@ export function T({
   ...props
 }: TextProps & { variant?: Variant; color?: ColorValue; muted?: boolean }) {
   const c = useColors();
-  const flat = StyleSheet.flatten([type[variant] as TextStyle, { color: color ?? (muted ? c.textMuted : c.text) }, style]);
+  const flat: TextStyle = StyleSheet.flatten([type[variant] as TextStyle, { color: color ?? (muted ? c.textMuted : c.text) }, style]) ?? {};
   // iOS Text only copies a whole block; a UITextView lets the human pick a range.
   return <UITextView {...props} uiTextView style={withFont(flat)} />;
 }

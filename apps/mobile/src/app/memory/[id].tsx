@@ -4,7 +4,7 @@ import * as Haptics from "expo-haptics";
 import { Stack, useLocalSearchParams, useNavigation } from "expo-router";
 import { usePreventRemove } from "expo-router/react-navigation";
 import { useMemo, useRef, useState } from "react";
-import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, TextInput, View } from "react-native";
+import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, TextInput, View, type ScrollViewInstance } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTranslation } from "react-i18next";
 import type { Agent, AgentMemory } from "@godmode/shared";
@@ -77,7 +77,7 @@ function MemoryView({ agent, memory, refetch }: { agent: Agent; memory: AgentMem
   const { t } = useTranslation(["memory", "common"]);
   const navigation = useNavigation();
   const pull = usePullRefresh(refetch);
-  const scroll = useRef<ScrollView>(null);
+  const scroll = useRef<ScrollViewInstance>(null);
   const offsets = useRef<number[]>([]);
   const readerY = useRef(0);
   // On iOS the content scrolls under the glass header.

@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { isHumanTaskWaiting } from "@godmode/shared";
-import { NativeTabs } from "expo-router/unstable-native-tabs";
+import { NativeTabs } from "expo-router/native-tabs";
 import { useTranslation } from "react-i18next";
 import { DynamicColorIOS, Platform } from "react-native";
 import { LiveAccessory } from "@/components/live-accessory";
@@ -29,6 +29,7 @@ export default function TabsLayout() {
 
   return (
     <NativeTabs
+      activityEnabled
       tintColor={tint ?? c.text}
       minimizeBehavior="onScrollDown"
       backgroundColor={Platform.OS === "android" ? c.surface : undefined}

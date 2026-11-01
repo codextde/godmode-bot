@@ -42,7 +42,7 @@ export function persistQueries(deviceId: string): () => void {
     if (timer) clearTimeout(timer);
     timer = null;
     try {
-      file().write(JSON.stringify({ v: VERSION, device: deviceId, at: Date.now(), state: dehydrate(queryClient, { shouldDehydrateQuery: kept }) }));
+      file().writeSync(JSON.stringify({ v: VERSION, device: deviceId, at: Date.now(), state: dehydrate(queryClient, { shouldDehydrateQuery: kept }) }));
     } catch {
       /* the next change tries again */
     }
