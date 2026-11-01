@@ -1952,18 +1952,24 @@
       "app": "Hex app",
       "found": "Found",
       "version": "Version {{version}}",
+      "autoInstall": "Godmode downloads Hex ({{size}}) by itself and starts it in the background — nothing to install or open.",
+      "installAction": "Install",
+      "notFoundTitle": "Hex isn't at this location",
+      "notFoundBody": "Fix the location below, or clear it and Godmode installs Hex by itself.",
+      "afterInstall": "Downloads right after Hex.",
       "missingTitle": "Hex isn't installed",
-      "missingBody": "Install Hex 3 or newer, then check again. Godmode starts it in the background by itself; you don't need to open it.",
+      "missingBody": "Godmode can't download Hex for this computer. Install Hex 3 or newer, then check again.",
       "errorTitle": "Hex didn't work",
       "model": "Speech model",
       "modelDescription": "All of these understand English and German. Parakeet v3 is fast and accurate.",
       "size": "{{size}}",
       "download": "Model on this Mac",
       "ready": "Downloaded and ready.",
-      "notDownloaded": "Not downloaded yet ({{size}}). Download it once to dictate with Hex.",
+      "notDownloaded": "Not downloaded yet ({{size}}). Godmode downloads it by itself.",
       "downloadAction": "Download",
       "downloadFailed": "Couldn't download the Hex model",
       "phase": {
+        "installing": "Downloading Hex… {{percent}} %",
         "starting": "Starting Hex…",
         "downloading": "Downloading… {{percent}} %",
         "verifying": "Checking the download…",
@@ -1972,7 +1978,7 @@
       "languageTitle": "Hex dictates in English and German",
       "languageBody": "Your voice language is {{language}}. Hex will listen for English — set the language to en-US or de-DE above.",
       "path": "Location",
-      "pathDescription": "Leave empty to find Hex in Applications. Otherwise the Hex app or its hex program."
+      "pathDescription": "Leave empty and Godmode uses Hex from Applications or installs its own copy. Otherwise the Hex app or its hex program."
     }
   }
 }

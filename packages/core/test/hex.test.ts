@@ -6,7 +6,8 @@ import { loadConfig } from "../src/config";
 import { closeDb, openDb } from "../src/db";
 import { setLogLevel } from "../src/log";
 import { resetSettingsCache, updateSettings } from "../src/services/settings";
-import { findHex, hexLanguage, hexStatus, stopHex } from "../src/voice/hex";
+import { findHex, hexLanguage, hexStatus, prepareHex, stopHex } from "../src/voice/hex";
+import { canInstallHex, managedHex } from "../src/voice/hexInstall";
 import { transcribe } from "../src/voice/voice";
 import { HttpError } from "../src/util";
 
@@ -48,6 +49,7 @@ beforeAll(() => {
     const req = new Request(input as RequestInfo, init);
     const url = new URL(req.url);
     calls.push({ url, auth: req.headers.get("authorization"), type: req.headers.get("content-type"), bytes: (await req.arrayBuffer()).byteLength });
+    if (url.hostname === "github.com") return new Response("not the real hex", { headers: { "content-length": "16" } });
     if (url.pathname === "/models") return Response.json([{ id: "parakeet_v3", installed, downloadBytes: 739508576, languages: ["en", "de"] }]);
     if (url.pathname === "/health") return Response.json({ version: "3.0.0", apiVersion: "2" });
     if (url.pathname === "/models/parakeet_v3/prepare") {
@@ -101,17 +103,35 @@ describe("hex", () => {
     expect(calls.map((c) => c.url.pathname)).toEqual(["/transcriptions"]);
   });
 
-  test("a missing model, a missing app and other audio are explained", async () => {
+  test("a missing model starts its download, a wrong location and other audio are explained", async () => {
     installed = false;
-    expect((await httpError(() => transcribe(wav()))).message).toContain("isn't downloaded yet");
+    const missing = await httpError(() => transcribe(wav()));
+    expect(missing.status).toBe(503);
+    expect(missing.code).toBe("hex_preparing");
+    await Bun.sleep(20);
+    expect(calls.some((c) => c.url.pathname.endsWith("/prepare"))).toBe(true);
     expect(calls.some((c) => c.url.pathname === "/transcriptions")).toBe(false);
     expect((await httpError(() => transcribe(new Blob(["not audio at all"], { type: "audio/webm" })))).message).toContain("WAV");
     updateSettings({ voice: { hexPath: join(dir, "nowhere") } });
-    expect((await httpError(() => transcribe(wav()))).message).toContain("Hex isn't installed");
+    expect((await httpError(() => transcribe(wav()))).message).toContain("Hex wasn't found at");
+    expect(await hexStatus()).toMatchObject({ path: null, canInstall: false });
   });
 
   test("status reports the app, its version and the model", async () => {
     installed = false;
-    expect(await hexStatus()).toMatchObject({ path: fake, version: "3.0.0", model: "parakeet_v3", installed: false, downloadBytes: 739508576, progress: null, error: null });
+    expect(await hexStatus()).toMatchObject({ path: fake, version: "3.0.0", model: "parakeet_v3", installed: false, downloadBytes: 739508576, canInstall: false, progress: null, error: null });
+  });
+
+  test("without Hex, Godmode offers to install it and refuses a download that fails its checksum", async () => {
+    updateSettings({ voice: { hexPath: "" } });
+    if (findHex()) return;
+    const status = await hexStatus();
+    expect(status.canInstall).toBe(canInstallHex());
+    if (!status.canInstall) return;
+    expect(status.appBytes).toBeGreaterThan(0);
+    await expect(prepareHex()).rejects.toThrow("checksum");
+    expect(calls.some((c) => c.url.hostname === "github.com")).toBe(true);
+    expect(managedHex()).toBeNull();
+    expect((await hexStatus()).error).toContain("checksum");
   });
 });

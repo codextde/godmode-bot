@@ -1952,18 +1952,24 @@
       "app": "Hex-App",
       "found": "Gefunden",
       "version": "Version {{version}}",
+      "autoInstall": "Godmode lädt Hex ({{size}}) selbst herunter und startet es im Hintergrund – du musst nichts installieren oder öffnen.",
+      "installAction": "Installieren",
+      "notFoundTitle": "Hex ist nicht an diesem Ort",
+      "notFoundBody": "Korrigiere den Speicherort unten oder leere ihn, dann installiert Godmode Hex selbst.",
+      "afterInstall": "Wird direkt nach Hex heruntergeladen.",
       "missingTitle": "Hex ist nicht installiert",
-      "missingBody": "Installiere Hex 3 oder neuer und prüfe dann erneut. Godmode startet Hex selbst im Hintergrund – du musst es nicht öffnen.",
+      "missingBody": "Godmode kann Hex für diesen Computer nicht herunterladen. Installiere Hex 3 oder neuer und prüfe dann erneut.",
       "errorTitle": "Hex hat nicht funktioniert",
       "model": "Sprachmodell",
       "modelDescription": "Alle verstehen Englisch und Deutsch. Parakeet v3 ist schnell und genau.",
       "size": "{{size}}",
       "download": "Modell auf diesem Mac",
       "ready": "Heruntergeladen und bereit.",
-      "notDownloaded": "Noch nicht heruntergeladen ({{size}}). Einmal herunterladen, um mit Hex zu diktieren.",
+      "notDownloaded": "Noch nicht heruntergeladen ({{size}}). Godmode lädt es selbst herunter.",
       "downloadAction": "Herunterladen",
       "downloadFailed": "Das Hex-Modell konnte nicht heruntergeladen werden",
       "phase": {
+        "installing": "Hex wird heruntergeladen… {{percent}} %",
         "starting": "Hex wird gestartet…",
         "downloading": "Wird heruntergeladen… {{percent}} %",
         "verifying": "Download wird geprüft…",
@@ -1972,7 +1978,7 @@
       "languageTitle": "Hex diktiert auf Englisch und Deutsch",
       "languageBody": "Deine Sprache ist {{language}}. Hex hört dann auf Englisch – stell die Sprache oben auf en-US oder de-DE.",
       "path": "Speicherort",
-      "pathDescription": "Leer lassen, um Hex unter Programme zu finden. Sonst die Hex-App oder ihr hex-Programm."
+      "pathDescription": "Leer lassen, dann nutzt Godmode Hex aus Programme oder installiert eine eigene Kopie. Sonst die Hex-App oder ihr hex-Programm."
     }
   }
 }

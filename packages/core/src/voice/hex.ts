@@ -6,6 +6,7 @@ import { HEX_LANGUAGES, HEX_MODELS, type HexLanguage, type HexStatus } from "@go
 import { logger } from "../log";
 import { getSettings } from "../services/settings";
 import { badRequest, HttpError } from "../util";
+import { canInstallHex, hexDownloadBytes, installHex, managedHex } from "./hexInstall";
 
 const log = logger("hex");
 
@@ -66,7 +67,21 @@ export function findHex(configured = getSettings().voice.hexPath): string | null
   }
   const name = process.platform === "win32" ? "hex.exe" : "hex";
   for (const dir of (process.env.PATH ?? "").split(delimiter)) if (dir) candidates.push(join(dir, name));
-  return candidates.find(executable) ?? null;
+  return candidates.find(executable) ?? managedHex();
+}
+
+function customPath(): string | null {
+  return getSettings().voice.hexPath.trim() || null;
+}
+
+function missingHex(): HttpError {
+  const custom = customPath();
+  if (custom) return badRequest(`Hex wasn't found at ${custom}. Clear the location in Settings → Voice and Godmode installs Hex by itself.`, { reason: "hex_missing" });
+  return badRequest("Godmode can't install Hex on this computer. Install Hex 3 from anoma.ly/hex.", { reason: "hex_missing" });
+}
+
+function autoInstallable(): boolean {
+  return !customPath() && canInstallHex();
 }
 
 export function hexLanguage(tag: string | null | undefined): HexLanguage {
@@ -149,7 +164,7 @@ function touch() {
 
 async function connection(): Promise<Endpoint> {
   const path = findHex();
-  if (!path) throw badRequest("Hex isn't installed. Install Hex from anoma.ly/hex or set its location in Settings → Voice.", { reason: "hex_missing" });
+  if (!path) throw missingHex();
   if (service && service.path !== path) await stopHex();
   service ??= start(path);
   touch();
@@ -199,7 +214,10 @@ async function call(path: string, init: RequestInit = {}, timeoutMs = 30_000): P
     message = data.error?.message ?? message;
     code = data.error?.code;
   } catch {}
-  if (code === "model-not-ready") throw badRequest("The Hex speech model isn't downloaded yet. Download it in Settings → Voice.", { reason: "hex_model_missing" });
+  if (code === "model-not-ready") {
+    prepareHex().catch(() => undefined);
+    throw gettingReady();
+  }
   if (res.status === 429 || code === "busy") throw new HttpError(429, `Hex is busy: ${message}`, "hex_busy");
   throw new HttpError(res.status >= 500 ? 502 : 400, `Hex: ${message}`, "hex_error");
 }
@@ -220,7 +238,8 @@ async function catalog(language: HexLanguage): Promise<CatalogEntry[]> {
 export async function hexStatus(): Promise<HexStatus> {
   const path = findHex();
   const model = hexModel();
-  const base: HexStatus = { path, version: null, model, installed: false, downloadBytes: null, progress, error: lastError };
+  const canInstall = !path && autoInstallable();
+  const base: HexStatus = { path, version: null, model, installed: false, downloadBytes: null, canInstall, appBytes: canInstall ? hexDownloadBytes() : null, progress, error: lastError };
   if (!path) return base;
   try {
     const entry = (await catalog(hexLanguage(getSettings().voice.language))).find((m) => m.id === model);
@@ -235,6 +254,14 @@ export async function hexStatus(): Promise<HexStatus> {
 }
 
 async function runPrepare(model: string, language: HexLanguage): Promise<void> {
+  if (!findHex()) {
+    if (!autoInstallable()) throw missingHex();
+    progress = { phase: "installing", downloadedBytes: 0, totalBytes: hexDownloadBytes() ?? 0 };
+    await installHex((downloadedBytes, totalBytes) => {
+      progress = { phase: "installing", downloadedBytes, totalBytes };
+    });
+    progress = { phase: "starting", downloadedBytes: 0, totalBytes: 0 };
+  }
   const res = await call(`/models/${encodeURIComponent(model)}/prepare?${new URLSearchParams({ language })}`, { method: "POST", signal: AbortSignal.timeout(60 * 60_000) });
   if (!res.body) throw new HttpError(502, "Hex returned no progress", "hex_error");
   const decoder = new TextDecoder();
@@ -283,6 +310,13 @@ export function prepareHex(language: HexLanguage = hexLanguage(getSettings().voi
   return promise;
 }
 
+function gettingReady(): HttpError {
+  const percent = progress?.totalBytes ? Math.round((progress.downloadedBytes / progress.totalBytes) * 100) : null;
+  const what = progress?.phase === "installing" ? "Hex" : "the Hex speech model";
+  const done = percent === null ? "" : ` (${percent} %)`;
+  return new HttpError(503, `Godmode is downloading ${what}${done}. Dictation works as soon as it's done — follow along in Settings → Voice.`, "hex_preparing");
+}
+
 export async function transcribeWithHex(audio: Blob, opts: { language?: string | null } = {}): Promise<string> {
   if (audio.size > MAX_WAV_BYTES) throw new HttpError(413, "Recordings for Hex are limited to 64 MB", "too_large");
   const head = new Uint8Array(await audio.slice(0, 12).arrayBuffer());
@@ -291,8 +325,17 @@ export async function transcribeWithHex(audio: Blob, opts: { language?: string |
   const language = hexLanguage(opts.language || getSettings().voice.language);
   const model = hexModel();
   if (!warm.has(`${model}:${language}`)) {
+    if (progress?.phase === "installing" || progress?.phase === "downloading") throw gettingReady();
+    if (!findHex()) {
+      if (!autoInstallable()) throw missingHex();
+      prepareHex(language, model).catch(() => undefined);
+      throw gettingReady();
+    }
     const entry = (await catalog(language)).find((m) => m.id === model);
-    if (!entry?.installed) throw badRequest("The Hex speech model isn't downloaded yet. Download it in Settings → Voice.", { reason: "hex_model_missing" });
+    if (!entry?.installed) {
+      prepareHex(language, model).catch(() => undefined);
+      throw gettingReady();
+    }
     await prepareHex(language, model);
   }
   const body = await audio.arrayBuffer();
