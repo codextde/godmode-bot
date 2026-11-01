@@ -11,7 +11,7 @@ import { bus } from "../src/events/bus";
 import { setLogLevel } from "../src/log";
 import type { MemorySnapshot } from "../src/memory/files";
 import { clearGroup, setGroup } from "../src/remote/group";
-import { mergeMemory, readMemoryState, writeMemoryState } from "../src/remote/memorySync";
+import { mergeMemory, mergeText, readMemoryState, writeMemoryState } from "../src/remote/memorySync";
 import { ensureReplica, madeHere, pendingKeys, resetReplicaCache } from "../src/remote/replica";
 import { appliedDigest, applySnapshot, buildSnapshot, snapshotDigest, type ConfigSnapshot } from "../src/remote/snapshot";
 import * as runner from "../src/runner/runner";
@@ -874,19 +874,25 @@ describe("merging an agent's memory", () => {
     expect(result.changedRemote).toBe(false);
   });
 
-  test("when both sides changed a file, local's lines stay in order and remote's new lines follow — none is lost", () => {
+  test("when both sides changed a file, both sides' additions are kept and what one side corrected stays corrected", () => {
     const base = snap({ "MEMORY.md": "# Memory\n- likes tea\n" });
     const local = snap({ "MEMORY.md": "# Memory\n- likes green tea\n- works at Acme\n" });
     const remote = snap({ "MEMORY.md": "# Memory\n- likes tea\n\n- birthday in May\n- works at Acme\n" });
     const { merged, changedLocal, changedRemote } = mergeMemory(base, local, remote);
-    expect(merged.files["MEMORY.md"]).toBe("# Memory\n- likes green tea\n- works at Acme\n- likes tea\n- birthday in May\n");
+    expect(merged.files["MEMORY.md"]).toBe("# Memory\n- likes green tea\n- works at Acme\n- birthday in May\n");
     expect(changedLocal).toBe(true);
     expect(changedRemote).toBe(true);
-    for (const line of [...local.files["MEMORY.md"]!.split("\n"), ...remote.files["MEMORY.md"]!.split("\n")]) {
-      expect(merged.files["MEMORY.md"]!.split("\n")).toContain(line);
-    }
     // Merged once, both sides agree: the next sync has nothing to do.
     expect(mergeMemory(merged, merged, merged)).toMatchObject({ changedLocal: false, changedRemote: false });
+  });
+
+  test("a three-way merge keeps edits in their place and conflicting rewrites side by side", () => {
+    expect(mergeText("# M\n- rent 1000 €\n- city Berlin\n", "# M\n- rent 1058 €\n- city Berlin\n", "# M\n- rent 1000 €\n- city Berlin\n- likes tea\n")).toBe(
+      "# M\n- rent 1058 €\n- city Berlin\n- likes tea\n",
+    );
+    expect(mergeText("a\nb\nc\n", "a\nc\n", "a\nb\nc\nd\n")).toBe("a\nc\nd\n");
+    expect(mergeText("a\nb\nc\n", "a\nB1\nc\n", "a\nB2\nc\n")).toBe("a\nB1\nB2\nc\n");
+    expect(mergeText("# A\n- x\n\n# B\n- y\n", "# A\n- x\n- x2\n\n# B\n- y\n", "# A\n- x\n\n# B\n- y\n- y2\n")).toBe("# A\n- x\n- x2\n\n# B\n- y\n- y2\n");
   });
 
   test("the first sync has no base: files of both sides are kept and differing ones merged", () => {
