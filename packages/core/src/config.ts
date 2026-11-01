@@ -8,6 +8,12 @@ export const VERSION = "0.2.40";
 export const BUILD = process.env.GODMODE_BUILD || "dev";
 /** A `bun build --compile` binary (release app sidecar, server binary, Docker image), not the sources. */
 export const COMPILED = Bun.main.startsWith("/$bunfs/") || Bun.main.startsWith("B:/~BUN/");
+export function releaseTag(version: string): string {
+  const v = version.replace(/^v/, "");
+  const canary = /^(\d+\.\d+\.\d+)-(\d+)$/.exec(v);
+  return canary ? `v${canary[1]}-canary.${canary[2]}` : `v${v}`;
+}
+
 export const PATCHED = COMPILED && !!process.env.GODMODE_CORE_BUNDLE;
 
 export type RunMode = "desktop" | "server";

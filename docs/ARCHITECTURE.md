@@ -1795,8 +1795,9 @@ the Claude run executor); shared types are in `packages/shared/src/remote.ts`.
 headless Godmode that Godmode itself starts on an SSH server (like t3code's SSH environments):
 
 * **Launch** (`launchScript`, piped into `sh -l -s` over a dedicated ssh2 connection, so PATH is the login shell's):
-  installs `godmode` with `install.sh` into `~/.local/bin` when it is missing (this version, else the latest; the
-  updater brings it to this computer's version afterwards), then starts `godmode runner serve --link-host 127.0.0.1
+  installs `godmode` with `install.sh` into `~/.local/bin` unless `godmode version` already prints this computer's
+  version (no fallback to the latest: an older build lacks `runner pairing-code`; `releaseTag` maps a canary's
+  `0.2.41-54` to its tag `v0.2.41-canary.54`), stops a running runner of another version, then starts `godmode runner serve --link-host 127.0.0.1
   --link-port 0` with `GODMODE_RUNNER_LEAN=1` under `nohup`, or reuses the one `runner.json` names. It prints the home
   folder and the link port. Runs again before every dial, because an update restarts the runner on another port.
 * **Tunnel**: a listener on 127.0.0.1 here whose connections go through `forwardOut` to the runner's loopback link port.

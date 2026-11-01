@@ -14,7 +14,9 @@ describe("runners on SSH servers", () => {
     const script = launchScript("1.2.3");
     expect(script).toContain("--link-host 127.0.0.1");
     expect(script).toContain("GODMODE_RUNNER_LEAN=1");
-    expect(script).toContain("GODMODE_VERSION='v1.2.3'");
+    expect(script).toContain("WANT='1.2.3'");
+    expect(script).toContain("TAG='v1.2.3'");
+    expect(launchScript("0.2.41-54")).toContain("TAG='v0.2.41-canary.54'");
   });
 
   test("the launch script is valid POSIX shell", async () => {

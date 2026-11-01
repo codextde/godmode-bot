@@ -7,7 +7,7 @@
  */
 import { createServer, type Server, type Socket } from "node:net";
 import { parseRunnerCode, type RunnerPairingCode } from "@godmode/shared";
-import { VERSION } from "../config";
+import { VERSION, releaseTag } from "../config";
 import { all, get } from "../db";
 import { logger } from "../log";
 import { badRequest } from "../util";
@@ -54,17 +54,33 @@ export function launchScript(version: string): string {
 umask 077
 BIN="$HOME/.local/bin/godmode"
 DATA="\${GODMODE_RUNNER_HOME:-$HOME/.godmode-runner}"
+WANT=${shellQuote(version)}
+TAG=${shellQuote(releaseTag(version))}
 echo "home:$HOME"
 fetch() { if command -v curl >/dev/null 2>&1; then curl -fsSL "$1"; elif command -v wget >/dev/null 2>&1; then wget -qO- "$1"; else echo "curl or wget is needed to install Godmode" >&2; return 1; fi; }
-if [ ! -x "$BIN" ]; then
-  echo "Installing Godmode on this server…" >&2
-  fetch ${shellQuote(INSTALL_URL)} > "\${TMPDIR:-/tmp}/godmode-install.$$.sh" || exit 3
-  GODMODE_VERSION=${shellQuote(`v${version}`)} GODMODE_INSTALL_DIR="$HOME/.local/bin" sh "\${TMPDIR:-/tmp}/godmode-install.$$.sh" >&2 ||
-    GODMODE_INSTALL_DIR="$HOME/.local/bin" sh "\${TMPDIR:-/tmp}/godmode-install.$$.sh" >&2 || { rm -f "\${TMPDIR:-/tmp}/godmode-install.$$.sh"; exit 3; }
-  rm -f "\${TMPDIR:-/tmp}/godmode-install.$$.sh"
+have=""
+[ -x "$BIN" ] && have=$("$BIN" version 2>/dev/null | head -n 1)
+if [ "$have" != "$WANT" ]; then
+  echo "Installing Godmode $WANT on this server…" >&2
+  script="\${TMPDIR:-/tmp}/godmode-install.$$.sh"
+  fetch ${shellQuote(INSTALL_URL)} > "$script" || exit 3
+  if ! GODMODE_VERSION="$TAG" GODMODE_INSTALL_DIR="$HOME/.local/bin" sh "$script" >&2; then
+    rm -f "$script"
+    echo "Godmode $WANT has no build for this server ($(uname -s) $(uname -m)) yet." >&2
+    exit 3
+  fi
+  rm -f "$script"
 fi
 field() { sed -n "s/.*\\"$1\\": *\\([0-9][0-9]*\\).*/\\1/p" "$DATA/runner.json" 2>/dev/null | head -n 1; }
+running() { sed -n 's/.*"version": *"\\([^"]*\\)".*/\\1/p' "$DATA/runner.json" 2>/dev/null | head -n 1; }
 serving() { pid=$(field pid); [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null && [ -n "$(field linkPort)" ]; }
+if serving && [ "$(running)" != "$WANT" ]; then
+  kill "$pid" 2>/dev/null
+  i=0
+  while [ $i -lt 20 ] && kill -0 "$pid" 2>/dev/null; do sleep 1; i=$((i + 1)); done
+  kill -9 "$pid" 2>/dev/null
+  rm -f "$DATA/runner.json"
+fi
 if ! serving; then
   mkdir -p "$DATA/logs"
   GODMODE_RUNNER_LEAN=1 nohup "$BIN" runner serve --link-host 127.0.0.1 --link-port 0 >> "$DATA/logs/ssh-serve.log" 2>&1 < /dev/null &
@@ -224,7 +240,10 @@ export async function pairingCodeVia(serverId: string): Promise<{ code: RunnerPa
   const res = await tunnel.exec(PAIRING_SCRIPT, CODE_TIMEOUT_MS);
   const text = res.stdout.split("\n").map((l) => l.trim()).find((l) => l.startsWith("gmr1."));
   const code = text ? parseRunnerCode(text) : null;
-  if (!code) throw new Error(`The runner on the server gave no pairing code${res.stderr.trim() ? `: ${res.stderr.trim().slice(0, 300)}` : "."}`);
+  if (!code) {
+    const said = [res.stderr, res.stdout].map((t) => t.trim()).find(Boolean)?.split("\n").slice(0, 3).join(" ").slice(0, 300);
+    throw new Error(`The runner on the server gave no pairing code${said ? `: ${said}` : "."}`);
+  }
   return { code: { ...code, addresses: ["127.0.0.1"], port: tunnel.localPort }, name: getServer(serverId).name };
 }
 

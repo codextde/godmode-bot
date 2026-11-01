@@ -17,7 +17,7 @@ import { chmodSync, closeSync, existsSync, mkdirSync, openSync, renameSync, rmSy
 import { arch, platform } from "node:os";
 import { dirname, join } from "node:path";
 import { LICENSE_SITE, type RunnerSelfUpdate } from "@godmode/shared";
-import { BUILD, COMPILED, VERSION, config } from "../config";
+import { BUILD, COMPILED, VERSION, config, releaseTag } from "../config";
 import { deleteMeta, getMeta, setMeta } from "../db";
 import { logger } from "../log";
 import { listActiveRuns } from "../runner/runner";
@@ -260,7 +260,7 @@ export async function downloadUpdate(input: { key: string; target: UpdateTarget;
   if (state.state === "installing" || state.state === "receiving") throw new HttpError(409, "An update is being installed right now.", "update_busy");
   resetStage();
   set({ state: "receiving", target: input.target, error: null });
-  const query = `key=${encodeURIComponent(input.key)}&version=${encodeURIComponent(`v${input.target.version.replace(/^v/, "")}`)}`;
+  const query = `key=${encodeURIComponent(input.key)}&version=${encodeURIComponent(releaseTag(input.target.version))}`;
   const base = `${(input.site ?? LICENSE_SITE).replace(/\/+$/, "")}/download/file/${asset}`;
   let sha256: string;
   try {

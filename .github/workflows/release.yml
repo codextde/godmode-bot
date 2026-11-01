@@ -4,11 +4,12 @@ name: Release
 # bumped first; when the tag is ahead of main, main gets a "Release v0.2.4" commit (`pnpm bump` does the same locally).
 # The tag builds:
 #   * desktop installers (macOS arm64 + x64) with the core sidecar,
-#   * standalone macOS `godmode` server binaries (web dashboard embedded),
+#   * standalone `godmode` server binaries for macOS and Linux (web dashboard embedded; canaries too, for runners
+#     Godmode starts on SSH servers),
 # all attached to a draft GitHub release that a maintainer publishes after a quick check. The last job drops the .sig
 # files (latest.json carries the signatures), adds SHA256SUMS and puts a download table on top of the notes.
 #
-# Windows, Linux and Docker are paused (last built in v0.2.38, which usegodmode.com keeps serving for them): restore
+# Windows, Linux desktop and Docker are paused (last built in v0.2.38, which usegodmode.com keeps serving for them): restore
 # their matrix entries from git history and set the repo variable LINUX_BUILDS=true to bring them back.
 #
 # Secrets for signed + notarized macOS builds (Developer ID Application: Codext GmbH): APPLE_CERTIFICATE (base64 .p12),
@@ -388,7 +389,6 @@ jobs:
   server:
     name: Server binaries (${{ matrix.os }})
     needs: create-release
-    if: needs.create-release.outputs.canary != 'true'
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     strategy:
@@ -397,6 +397,8 @@ jobs:
         include:
           - os: macos-latest
             targets: bun-darwin-arm64 bun-darwin-x64
+          - os: ubuntu-latest
+            targets: bun-linux-x64 bun-linux-x64-baseline bun-linux-arm64
     steps:
       - uses: actions/checkout@v7
         with:
@@ -406,7 +408,9 @@ jobs:
 
       - name: Set the version from the tag
         shell: bash
-        run: bun scripts/bump-version.ts "$TAG"
+        env:
+          APP_VERSION: ${{ needs.create-release.outputs.app_version }}
+        run: bun scripts/bump-version.ts "$APP_VERSION"
 
       - name: Build web UI
         run: pnpm --filter @godmode/desktop build
@@ -446,7 +450,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_ID: ${{ needs.create-release.outputs.release_id }}
+          CANARY: ${{ needs.create-release.outputs.canary }}
         run: |
+          if [ "$CANARY" = "true" ]; then
+            for f in godmode-*; do
+              case "$f" in *.sha256) continue ;; esac
+              shasum -a 256 "$f" > "$f.sha256"
+            done
+          fi
           for f in godmode-*; do
             # Replace an asset from a previous attempt of this workflow.
             old=$(gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets?per_page=100" --jq ".[] | select(.name == \"$f\") | .id")
@@ -458,6 +469,7 @@ jobs:
   downloads:
     name: Download table
     needs: [create-release, updater-manifest, server]
+    if: needs.create-release.outputs.canary != 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
