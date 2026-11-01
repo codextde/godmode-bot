@@ -19,20 +19,6 @@ const cases = [
     ],
   },
   {
-    key: 'marketing',
-    label: 'Marketing & ads',
-    icon: 'megaphone',
-    when: 'Fridays · 16:00',
-    prompt:
-      'Every Friday, pull this week’s spend and sales from Meta, Google and TikTok Ads into our report sheet, ask me before pausing any ad that spent $50 without a sale, and write three new versions of the best one.',
-    steps: [
-      ['globe', 'Opened Meta, Google and TikTok Ads, already signed in', 'your logins'],
-      ['table', 'Copied 31 ads into the weekly report sheet', ''],
-      ['circle-pause', 'Paused 4 ads that spent $50 without a sale', 'your OK'],
-      ['send', 'Wrote 3 new ad texts and sent the report to #marketing', 'done'],
-    ],
-  },
-  {
     key: 'finance',
     label: 'Finance',
     icon: 'landmark',
@@ -44,6 +30,20 @@ const cases = [
       ['file-down', 'Downloaded 23 new invoices to Drive › Invoices', ''],
       ['scale', 'Matched invoices against the bank payments', '2 mismatches'],
       ['send', 'Posted summary to Slack #finance', 'done'],
+    ],
+  },
+  {
+    key: 'marketing',
+    label: 'Marketing & ads',
+    icon: 'megaphone',
+    when: 'Fridays · 16:00',
+    prompt:
+      'Every Friday, pull this week’s spend and sales from Meta, Google and TikTok Ads into our report sheet, ask me before pausing any ad that spent $50 without a sale, and write three new versions of the best one.',
+    steps: [
+      ['globe', 'Opened Meta, Google and TikTok Ads, already signed in', 'your logins'],
+      ['table', 'Copied 31 ads into the weekly report sheet', ''],
+      ['circle-pause', 'Paused 4 ads that spent $50 without a sale', 'your OK'],
+      ['send', 'Wrote 3 new ad texts and sent the report to #marketing', 'done'],
     ],
   },
   {
@@ -91,13 +91,14 @@ const cases = [
 ];
 ---
 
-<section id="use-cases" class="relative py-20 sm:py-28" data-track-view="use_cases">
+<section id="runs" class="relative py-16 sm:py-24" data-track-view="use_cases">
   <div class="container-x">
-    <div class="max-w-[780px]">
-      <p class="eyebrow" data-reveal><span class="n">02</span> Use cases</p>
-      <Words text="Say it once. *It happens* every time." class="h-section mt-6" />
-      <p class="lead mt-6 max-w-[600px]" data-reveal style="--d:200">
-        Describe the work in a sentence, like you would to a colleague. Godmode figures out the clicks, and the schedule.
+    <div class="max-w-[760px]">
+      <p class="eyebrow" data-reveal>Watch a run</p>
+      <Words text="Say it once. *It happens every week.*" class="h-section mt-4" />
+      <p class="lead mt-5 max-w-[600px]" data-reveal style="--d:200">
+        Describe the work in a sentence. Godmode figures out the clicks, runs it on a schedule if you like, and tells you
+        when it’s done.
       </p>
     </div>
 
@@ -121,7 +122,7 @@ const cases = [
         }
       </div>
 
-      <div class="card mt-4 overflow-hidden">
+      <div class="card mt-4 overflow-hidden" style="background: var(--surface)">
         {
           cases.map((c, i) => (
             <div role="tabpanel" id={`panel-${c.key}`} aria-labelledby={`tab-${c.key}`} hidden={i !== 0} class="panel grid lg:grid-cols-[1.1fr_1fr]">
@@ -132,17 +133,17 @@ const cases = [
                   </span>
                 </div>
                 <div class="prompt-box mt-6">
-                  <div class="flex items-center gap-2 border-b border-line px-4 py-2.5 font-mono text-[11px] text-dim">
+                  <div class="flex items-center gap-2 border-b border-line px-4 py-2.5 text-[12px] font-medium text-muted">
                     <Logo size={18} />
                     Message Godmode
                   </div>
-                  <p class="min-h-[132px] px-4 py-4 text-[17px] leading-relaxed tracking-[-0.01em] text-text sm:text-[19px]">
+                  <p class="min-h-[132px] px-4 py-4 text-[17px] leading-relaxed tracking-[-0.01em] text-text sm:text-[18px]">
                     <span data-type={c.prompt}>{c.prompt}</span>
                     <span class="caret" aria-hidden="true" />
                   </p>
                 </div>
               </div>
-              <ol class="flex flex-col justify-center gap-2 p-7 sm:p-10">
+              <ol class="flex flex-col justify-center gap-2 bg-bg-2 p-7 sm:p-10">
                 {c.steps.map(([icon, text, tag]) => (
                   <li data-step class="step-row">
                     <span class="step-icon">
@@ -158,8 +159,8 @@ const cases = [
         }
       </div>
       <div class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <p class="text-[12.5px] text-dim">Illustrative runs. Godmode works with the tools and accounts you give it.</p>
-        <a href="/use-cases" class="btn btn-ghost btn-sm self-start" data-track="usecases_all">See all 60 use cases <Icon name="arrow-right" size={14} /></a>
+        <p class="text-[12.5px] text-dim">Example runs. Godmode works with the websites and accounts you give it.</p>
+        <a href="/use-cases" class="btn btn-ghost btn-sm self-start" data-track="usecases_all">See all 60 jobs <Icon name="arrow-right" size={14} /></a>
       </div>
     </div>
   </div>

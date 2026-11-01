@@ -4,8 +4,8 @@ import Nav from '@/components/Nav.astro';
 import Footer from '@/components/Footer.astro';
 import Icon from '@/components/ui/Icon.astro';
 import Words from '@/components/ui/Words.astro';
-import CheckoutButton from '@/components/ui/CheckoutButton.astro';
-import { yearlySavings, PRICING } from '@/config/site';
+import DownloadButton from '@/components/ui/DownloadButton.astro';
+import { PRICING } from '@/config/site';
 
 const groups: { name: string; icon: string; items: [string, string, string][] }[] = [
   {
@@ -74,8 +74,8 @@ const groups: { name: string; icon: string; items: [string, string, string][] }[
   <main class="pt-36 pb-16">
     <div class="container-x">
       <div class="max-w-[820px]">
-        <p class="eyebrow" data-reveal><span class="n">●</span> The Godmode Playbook</p>
-        <Words as="h1" text="25 automations to hand off *this week.*" class="h-section mt-6" />
+        <p class="eyebrow" data-reveal>The Godmode Playbook</p>
+        <Words as="h1" text="25 automations to hand off *this week.*" class="h-section mt-4" />
         <p class="lead mt-6 max-w-[620px]" data-reveal style="--d:200">
           Copy a task, paste it into Godmode, adjust the details. Godmode signs in with your saved logins, does the
           clicking, and asks before anything risky.
@@ -100,7 +100,7 @@ const groups: { name: string; icon: string; items: [string, string, string][] }[
                       <Icon name="repeat" size={11} /> {when}
                     </span>
                   </div>
-                  <p class="mt-4 flex-1 rounded-xl bg-[rgb(0_0_0/0.28)] p-4 text-[14.5px] leading-relaxed text-text-2 ring-1 ring-line">
+                  <p class="mt-4 flex-1 rounded-2xl bg-surface-2 p-4 text-[14.5px] leading-relaxed text-text-2 ring-1 ring-line">
                     {prompt}
                   </p>
                   <button type="button" class="btn btn-ghost btn-sm mt-4 self-start" data-copy={prompt} data-track={`copy_${title}`}>
@@ -116,11 +116,10 @@ const groups: { name: string; icon: string; items: [string, string, string][] }[
       <div class="card mt-24 p-8 text-center sm:p-12" data-reveal>
         <h2 class="text-[clamp(26px,3.4vw,40px)] font-semibold tracking-[-0.04em]">Ready to hand these off?</h2>
         <p class="mx-auto mt-3 max-w-[520px] text-muted">
-          {PRICING.trialDays} days free, then ${PRICING.plans.monthly.price}/month or ${PRICING.plans.yearly.perMonth}/month billed yearly. Cancel anytime.
+          Free for {PRICING.freeDays} days. No card, no sign-up. Then ${PRICING.plans.monthly.price}/month, or ${PRICING.plans.yearly.perMonth}/month billed yearly.
         </p>
         <div class="mt-7 flex flex-col justify-center gap-3 sm:flex-row">
-          <CheckoutButton plan="monthly" label={`Start ${PRICING.trialDays}-day free trial`} source="playbook" size="lg" />
-          <CheckoutButton plan="yearly" label={`Or yearly — $${PRICING.plans.yearly.perMonth}/mo, save ${yearlySavings}%`} source="playbook" variant="ghost" size="lg" />
+          <DownloadButton source="playbook" />
         </div>
       </div>
     </div>

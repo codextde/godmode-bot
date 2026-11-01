@@ -1,119 +1,104 @@
 ---
 import Words from '../ui/Words.astro';
-import { FOUNDING, PRICING, SITE } from '@/config/site';
+import WaitlistForm from '../ui/WaitlistForm.astro';
+import { PRICING, SITE } from '@/config/site';
 
 const { monthly, yearly } = PRICING.plans;
 
-const faqs: { key: string; q: string; a: string }[] = [
+const faqs: { key: string; q: string; a: string; waitlist?: boolean }[] = [
   {
-    key: 'what',
-    q: 'What exactly do I get?',
-    a: `The ready-to-install Godmode app for Mac, Windows and Linux (plus an always-on version for a spare computer that you reach from any browser), automatic updates, support, a license key, and every feature on this page, in every plan. Godmode Pro is $${monthly.price} a month, or $${yearly.price} a year ($${yearly.perMonth} a month), with every update while you’re subscribed.`,
-  },
-  {
-    key: 'technical',
-    q: 'Do I need to be technical?',
-    a: `No. If you can explain the task to a colleague, you can hand it to Godmode. You type or say what you need in plain words, and it does the clicking. Setup installs everything for you, and Founding members get a ${FOUNDING.setupMinutes}-minute setup call with the founder, so you leave with ${FOUNDING.setupAutomations} automations already running.`,
+    key: 'code',
+    q: 'Do I need to know how to code?',
+    a: 'No. If you can explain the task to a colleague, you can hand it to Godmode. You type or say what you need in plain words, and it does the clicking. Setup is a normal Mac app install and walks you through the rest.',
   },
   {
     key: 'chatgpt',
     q: 'How is this different from ChatGPT?',
-    a: `ChatGPT answers in a chat window, and then you do the work. Godmode does the work: it logs into the websites and programs you use, clicks through, finishes the task and hands you the result. It can also do it again by itself every week, or whenever an email arrives.`,
+    a: 'ChatGPT answers in a chat window, and then you do the work. Godmode does the work: it signs in to the websites and programs you use, clicks through, finishes the task and hands you the result. It can also do it again by itself every week, or whenever an email arrives.',
   },
   {
-    key: 'founding',
-    q: 'What is the Founding 100?',
-    a: `Our launch offer for the first ${FOUNDING.seats} customers, open until ${FOUNDING.endLabel}. You get Godmode Pro plus a ${FOUNDING.setupMinutes}-minute 1:1 setup call with the founder (you leave with ${FOUNDING.setupAutomations} automations running), the ready-made agents and playbook, a private founders group, and your price locked for as long as you stay subscribed. After the offer closes, Godmode Pro costs $${FOUNDING.listPrice.monthly} a month or $${FOUNDING.listPrice.yearly} a month billed yearly.`,
+    key: 'after',
+    q: `What happens after ${PRICING.freeDays} days?`,
+    a: `Godmode asks if you want to keep it. Pick monthly ($${monthly.price} a month) or yearly ($${yearly.perMonth} a month, billed $${yearly.price} once a year). If you don’t, nothing is charged, because you never gave us a card. Everything you set up stays on your Mac, so you can pick up where you left off.`,
   },
   {
-    key: 'trial',
-    q: 'Can I try it for free?',
-    a: `Yes, two ways. Download Godmode and use it free for 7 days: no card, no key, every feature. Or pick monthly or yearly and start your ${PRICING.trialDays}-day trial with a card, Apple Pay or Google Pay. Nothing is charged today. Cancel in the billing portal (one click from the app or your welcome page) before the ${PRICING.trialDays} days are up and you pay nothing. Otherwise your plan starts automatically when the trial ends: $${monthly.price} a month or $${yearly.price} a year, renewing until you cancel. Either way, everything you set up stays when you add your licence key.`,
+    key: 'card',
+    q: 'Do I need a credit card to try it?',
+    a: `No. Download it and use every feature free for ${PRICING.freeDays} days. No card, no account. You only enter payment details if you decide to keep it.`,
   },
   {
     key: 'claude',
-    q: 'Do I need a Claude subscription?',
-    a: `Yes. Godmode thinks with Claude, the AI from Anthropic (today Claude Opus 5.5, and every newer Claude the day you get access). You sign in with a Claude Pro or Max plan from claude.ai, or add an Anthropic API key. If Godmode works for you all day, Max or an API key fits better than Pro. Anthropic has changed how subscriptions cover this kind of use before; if it happens again, an API key keeps working.`,
+    q: 'Do I need a Claude plan?',
+    a: 'Yes. Godmode thinks with Claude, the AI from Anthropic. You sign in with your Claude Pro or Max plan once during setup. No plan yet? The setup shows you how to get one. If Godmode works for you all day, Max fits better than Pro. An Anthropic API key works too.',
   },
   {
-    key: 'passwords',
-    q: 'Is it really safe to give an AI my passwords?',
-    a: `Your passwords and 2FA codes live in a vault on your computer, encrypted (AES-256). Godmode types them into the login page itself, so the AI only learns that a password was filled, never what it is, and only on that login’s own website. Every use is logged. One honest exception: on a separate Mac of its own, Godmode controls the whole machine, so signing in there is best effort and off until you allow it.`,
+    key: 'safe',
+    q: 'Is my data safe? Does it see my passwords?',
+    a: 'Your passwords and 2FA codes live in an encrypted vault on your Mac. Godmode types them into the login page itself, so the AI only learns that a password was filled, never what it is, and only on that login’s own website. Your logins, notes and history stay on your computer, and the app sends nothing to us. The tasks you give and the pages it reads are processed by Claude under your own Claude account.',
   },
   {
-    key: 'connectors',
-    q: 'Do I need connectors or integrations for my apps?',
-    a: `No. Many AI assistants need a connector (an “MCP server” or an app integration) for each app before they can work in it. Godmode signs in the way you do, with your own username, password and 2FA code from its encrypted vault, and then works in the website itself. Your CRM, a supplier portal, your shop admin, your accounting tool: most sites that open in your browser work right away, with no connector to set up. Connecting an app is optional and only makes an automation start the moment something arrives, like a new email.`,
+    key: 'ask',
+    q: 'Will it do things without asking me?',
+    a: 'By default it asks you before important steps like sending an email, paying, deleting or posting. If your task already says to do that step (“send the reminders”), it goes ahead. You can watch every step live and take over with one click. When a website wants a code from your phone, it asks you for that too.',
   },
   {
-    key: 'data',
-    q: 'Where does my data go?',
-    a: `Your passwords, logins, AI coworkers, their notes and their history stay on your computer. The app has no tracking and sends nothing to us unless you link it to Godmode Cloud. The tasks you give and the pages Godmode reads are processed by Claude under your own Anthropic account, exactly as when you use Claude directly.`,
+    key: 'windows',
+    q: 'Does it work on Windows?',
+    a: 'Not yet. Godmode is for Mac for now, with Apple chip or Intel. Leave your email and we’ll tell you when the Windows version is ready.',
+    waitlist: true,
   },
   {
-    key: 'mouse',
-    q: 'Will it take over my mouse and keyboard?',
-    a: `Not when it works in a single program: Godmode clicks and types into that window in the background, even when it’s covered, and your mouse stays yours. If you let it use your whole screen it moves the real mouse (like a colleague on a screen share), and on a separate Mac of its own it works entirely in there.`,
+    key: 'team',
+    q: 'Can my team use it?',
+    a: `Yes. Each person installs Godmode on their own Mac and gets the same ${PRICING.freeDays} free days. For several people on one invoice, email ${SITE.email} and we’ll set it up with you.`,
   },
   {
-    key: 'mac',
-    q: 'Do I need a Mac?',
-    a: `No. The app runs on Mac, Windows and Linux. Only the “Mac of its own” needs a Mac with Apple silicon (Apple allows two at the same time). Everything else works on Windows too, and nearly all of it on Linux (using desktop programs there needs one extra component).`,
+    key: 'cancel',
+    q: 'How do I cancel?',
+    a: `In two clicks, in the billing portal (linked in the app and in your receipt), or by email. It keeps working until the end of the month or year you paid for. And if it’s not for you, email us within ${PRICING.guaranteeDays} days of your first payment and we refund it in full, no questions asked.`,
   },
   {
     key: 'offline',
-    q: 'Does it work when my computer is off?',
-    a: `Not on that computer: Godmode works on your machine, which is the point. To keep it working around the clock, install the always-on version on a spare Mac mini or PC (one copy-paste command, and we help Founding members set it up) and reach it from any browser, or from your phone.`,
+    q: 'Does it work when my Mac is off?',
+    a: 'It works while your Mac is on and awake. Want it working around the clock? Run it on a spare Mac that stays on, like a Mac mini, and reach it from your phone. Email us and we’ll help you set it up.',
   },
   {
     key: 'cant',
     q: 'What can’t it do?',
-    a: `Some CAPTCHAs: it solves the common ones once you connect a solving service such as 2Captcha; for the rest you click “Take control” and it carries on afterwards. Like any AI it can make mistakes, so check important work (payments, contracts, anything public) until you trust a routine. By default it asks before those steps, unless your task already told it to do them.`,
-  },
-  {
-    key: 'free',
-    q: 'Godmode is open source. Why pay?',
-    a: `You don’t have to, if you can build software yourself. The whole app is on GitHub under the MIT License, free to build and change, and your own build never asks for a key. Godmode Pro is for everyone else: the ready-to-install apps for Mac, Windows and Linux (free for 7 days, then with a Pro key), automatic updates, the always-on version, and help from the people who build it. Your subscription also pays for Godmode’s development.`,
-  },
-  {
-    key: 'cloud',
-    q: 'Why not ChatGPT Dots or Grok Bot?',
-    a: `Both run on the vendor’s cloud computer, so your logins live on their servers, behind plan limits they can change. Godmode runs on your own computer, signed in as you, and your price doesn’t change after you buy. The trade-off: cloud assistants keep going with your laptop closed; for that, run Godmode on an always-on computer.`,
-  },
-  {
-    key: 'refund',
-    q: 'What if it’s not for me?',
-    a: `During the trial, just cancel and you’re never charged. After your first payment, on any plan, email us within ${PRICING.guaranteeDays} days and we’ll refund it in full — no questions, no forms. Founding members get more: set up ${FOUNDING.setupAutomations} automations (we help), and if Godmode hasn’t saved you ${FOUNDING.outcomeHours} hours in your first ${FOUNDING.outcomeDays} paid days, we refund everything you paid. Subscriptions can be cancelled anytime and keep working until the end of the period you paid for.`,
+    a: 'Some websites block robots with puzzles (CAPTCHAs) or want a code from your phone. Then you click “Take control” for a moment and it carries on. Like any AI it can make mistakes, so check important work until you trust a routine.',
   },
   {
     key: 'invoice',
     q: 'Can I get an invoice for my company?',
-    a: `Yes. Add your company name and VAT ID at checkout and you’ll get a proper invoice by email. Payments are handled by Stripe; we never see your card.`,
+    a: 'Yes. Add your company name and VAT ID at checkout and you get a proper invoice by email. Payments are handled by Stripe; we never see your card.',
   },
 ];
 ---
 
-<section id="faq" class="relative py-20 sm:py-28" data-track-view="faq">
+<section id="faq" class="relative py-16 sm:py-24" data-track-view="faq">
   <div class="container-x grid gap-12 lg:grid-cols-[0.8fr_1.2fr]">
     <div class="lg:sticky lg:top-28 lg:self-start">
-      <p class="eyebrow" data-reveal><span class="n">12</span> FAQ</p>
-      <Words text="Questions, *answered straight.*" class="h-section mt-6" />
-      <p class="mt-6 max-w-[360px] text-[15px] leading-relaxed text-muted" data-reveal style="--d:200">
-        Something else? Email <a href={`mailto:${SITE.email}`} class="text-text underline decoration-line-3 underline-offset-2">{SITE.email}</a> —
-        a human answers, usually within a day.
+      <p class="eyebrow" data-reveal>Questions</p>
+      <Words text="Good questions. *Straight answers.*" class="h-section mt-4" />
+      <p class="mt-6 max-w-[360px] text-[16px] leading-relaxed text-muted" data-reveal style="--d:200">
+        Something else? Email <a href={`mailto:${SITE.email}`} class="font-medium text-text underline decoration-line-3 underline-offset-2">{SITE.email}</a>.
+        A human answers, usually within a day.
       </p>
     </div>
     <div class="divide-y divide-line border-y border-line">
       {
         faqs.map((f, i) => (
-          <details class="faq group" data-faq={f.key} data-reveal style={`--d:${Math.min(i, 6) * 40}`}>
-            <summary class="flex cursor-pointer items-center justify-between gap-6 py-6 text-[17px] font-medium tracking-[-0.015em] transition-colors hover:text-white">
+          <details class="faq group" id={`faq-${f.key}`} data-faq={f.key} data-reveal style={`--d:${Math.min(i, 6) * 40}`}>
+            <summary class="flex cursor-pointer items-center justify-between gap-6 py-6 text-[18px] font-semibold tracking-[-0.015em] transition-colors hover:text-brand">
               {f.q}
-              <span class="plus grid size-8 flex-none place-items-center rounded-full ring-1 ring-line-2 transition-colors group-hover:ring-line-3" aria-hidden="true">
-                <svg width="12" height="12" viewBox="0 0 12 12"><path d="M6 1v10M1 6h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" /></svg>
+              <span class="plus grid size-8 flex-none place-items-center rounded-full bg-surface ring-1 ring-line-2 transition-colors group-hover:ring-line-3" aria-hidden="true">
+                <svg width="12" height="12" viewBox="0 0 12 12"><path d="M6 1v10M1 6h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" /></svg>
               </span>
             </summary>
-            <p class="max-w-[640px] pb-7 text-[15px] leading-[1.7] text-muted">{f.a}</p>
+            <div class="max-w-[640px] pb-7">
+              <p class="text-[16px] leading-[1.7] text-muted">{f.a}</p>
+              {f.waitlist && <WaitlistForm source="windows" class="mt-5" />}
+            </div>
           </details>
         ))
       }
