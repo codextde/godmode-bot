@@ -11,7 +11,7 @@ import { all, get, run as exec } from "../db";
 import { bus } from "../events/bus";
 import { logger } from "../log";
 import { emitRoutine, getRoutine, patchTriggerState, readTriggerState, updateRoutine } from "../services/routines";
-import { sendMessage } from "../services/conversations";
+import { sendMessage, updateConversation } from "../services/conversations";
 import { notify } from "../services/notifications";
 import { redact } from "../vault/vault";
 import { INTERRUPTED } from "../runner/runner";
@@ -294,12 +294,31 @@ function finishEvents(run: Pick<Run, "id" | "status" | "result" | "error">) {
     return;
   }
   const result = run.result ?? "";
-  if (SKIPPED_REPLY.test(result)) setEventStatus(ids, "skipped", oneLine(result.replace(SKIPPED_REPLY, ""), 300) || "Didn't match the filter");
-  else setEventStatus(ids, "done", null);
+  if (SKIPPED_REPLY.test(result)) {
+    setEventStatus(ids, "skipped", oneLine(result.replace(SKIPPED_REPLY, ""), 300) || "Didn't match the filter");
+    archiveSkippedChat(run.id, rows[0]!.routine_id);
+  } else setEventStatus(ids, "done", null);
   const met = rows.filter((r) => r.source === "condition").at(-1);
   const observation = met ? parseJson<{ observation?: unknown }>(met.payload, {}).observation : undefined;
   if (met && typeof observation === "string" && taskFits(met.routine_id, run.id)) {
     if (patchTriggerState(met.routine_id, { observation, observedAt: now(), taskFailures: null })) emitRoutine(met.routine_id);
+  }
+}
+
+function archiveSkippedChat(runId: string, routineId: string) {
+  const chat = get<{ id: string }>(
+    `SELECT c.id FROM runs r JOIN conversations c ON c.id = r.conversation_id
+     WHERE r.id = ? AND c.origin = 'routine' AND c.archived = 0 AND c.pinned = 0
+       AND c.id IS NOT (SELECT conversation_id FROM routines WHERE id = ?)
+       AND NOT EXISTS (SELECT 1 FROM runs o WHERE o.conversation_id = c.id AND o.id != r.id)`,
+    runId,
+    routineId,
+  );
+  if (!chat) return;
+  try {
+    updateConversation(chat.id, { archived: true });
+  } catch (err) {
+    log.warn(`could not archive the skipped chat ${chat.id}`, err);
   }
 }
 
