@@ -77,6 +77,8 @@ import { standInHold } from "../remote/standIn";
 import { MAX_REWRITES, MAX_TIDY_CHANGES, RECENT_DAYS, applyTidy, canUndoWorkspace, undoWorkspace, workspaceChangedSince, workspaceInventory, type TidyOperation } from "./workspace";
 import { offerContext, offersOn, settleOffers } from "./offers";
 import { memoryEditsDigest, pruneMemoryEdits } from "./edits";
+import { notify } from "../services/notifications";
+import { PROFILE_FILE, PROFILE_MAX, isProfileKeeper, othersAboutHuman } from "./profile";
 
 
 const log = logger("dreaming");
@@ -95,6 +97,9 @@ export const MEMORY_LINE_MAX = 300;
 const MAX_DREAM_RETRIES = 3;
 const RETRY_GAP_MS = 15 * 60_000;
 const DEFERRED_KEY = "dreaming.deferred";
+const STALE_KEY = "dreaming.staleWarned";
+const STALE_MS = 3 * 86_400_000;
+const STALE_CHECK_MS = 3_600_000;
 const RETRIES_KEY = "dreaming.retries";
 /** Per-message limits: [prompt, automation prompt, answer], normal and compact. */
 const LIMITS = { full: [2_000, 600, 4_000], compact: [500, 200, 1_200] } as const;
@@ -447,6 +452,7 @@ export interface DreamPromptInput {
   remaining?: number;
   editsPath?: string | null;
   editRuns?: number;
+  profile?: { exists: boolean; teamPath: string | null } | null;
   exchanges: number;
   conversations: number;
   since: string | null;
@@ -554,6 +560,11 @@ export function buildDreamPrompt(input: DreamPromptInput): string {
           `   - It is too long now. Shorten it by moving, not by forgetting: the state of each project, histories, step-by-step procedures, ids and lists go into memory/<topic>.md (reuse the notes that exist), and MEMORY.md keeps one line with the gist and the link. Cut what is finished down to the fact that still matters. What stays in MEMORY.md itself: who ${human} is and how they want you to work, standing rules and limits, what is open right now, and the index of your notes.`,
         ]
       : []),
+    ...(input.profile
+      ? [
+          `   - Keep \`${PROFILE_FILE}\`: what every agent of the team should know about ${human}, loaded into all their tasks — who ${human} is, languages, time zone and where they live and work, how they want agents to work and answer, hard limits and rules for everyone. Under ${fmtChars(PROFILE_MAX)} characters; no secrets, no project, account or one-off details. ${input.profile.exists ? "Bring it up to date from the activity" : "It doesn't exist yet: create it from your memory and the activity"}${input.profile.teamPath ? `, and take over what your teammates noted about ${human} in \`${input.profile.teamPath}\` where it is lasting and well-founded` : ""}. MEMORY.md doesn't repeat it: one line pointing to the note is enough.`,
+        ]
+      : []),
     `   - Keep what ${human} wrote or explicitly asked you to remember, and every instruction on what to bring up or leave alone, unless newer activity clearly replaces it. Keep the language the memory is written in.`,
     ...(tidy ? [tidy] : []),
     ...(offerStep ? [offerStep] : []),
@@ -595,6 +606,10 @@ const DREAMS_TMP = "workspace/tmp/dreams";
 
 function digestRelPath(dreamId: string, part = 1): string {
   return `${DREAMS_TMP}/${dreamId}${part > 1 ? `-${part}` : ""}.md`;
+}
+
+function teamRelPath(dreamId: string): string {
+  return `${DREAMS_TMP}/${dreamId}-team.md`;
 }
 
 function editsRelPath(dreamId: string): string {
@@ -651,6 +666,10 @@ export async function startDream(agentId: string, reason: DreamReason = "manual"
     const edits = memoryEditsDigest(agentId, lastDream, now());
     const editsPath = edits.runs ? editsRelPath(dreamId) : null;
     if (editsPath) write(editsPath, edits.text);
+    const keeper = isProfileKeeper(agentId);
+    const team = keeper ? othersAboutHuman(agentId, listAgents({ workspaceId: "all" }), settings.general.userName.trim() || "the human") : "";
+    const teamPath = team ? teamRelPath(dreamId) : null;
+    if (teamPath) write(teamPath, team);
     const tidying = settings.memory.dreaming.tidyWorkspace;
     const inventory = tidying ? await workspaceInventory(agent) : null;
     const inventoryPath = inventory?.entries ? inventoryRelPath(dreamId) : null;
@@ -691,6 +710,7 @@ export async function startDream(agentId: string, reason: DreamReason = "manual"
       remaining: activity.remaining,
       editsPath,
       editRuns: edits.runs,
+      profile: keeper ? { exists: currentMemoryFile(agent.repoPath, PROFILE_FILE) !== null, teamPath } : null,
       exchanges: activity.exchanges,
       conversations: activity.conversations,
       since,
@@ -1169,6 +1189,44 @@ async function sweepOverflowing(at: Date): Promise<string[]> {
   return started;
 }
 
+let staleCheckedAt = -Infinity;
+
+export function staleDreamers(settings: Settings = getSettings(), at = new Date()): { agent: Agent; days: number; exchanges: number; lastError: string | null }[] {
+  if (!settings.memory.dreaming.enabled) return [];
+  const min = Math.max(1, Math.floor(settings.memory.dreaming.minNewExchanges));
+  const out: { agent: Agent; days: number; exchanges: number; lastError: string | null }[] = [];
+  for (const agent of listAgents({ workspaceId: "all" })) {
+    if (!agent.enabled) continue;
+    const pending = pendingActivity(agent.id);
+    if (pending.exchanges < min) continue;
+    const since = new Date(lastDreamAt(agent.id) ?? agent.createdAt).getTime();
+    if (at.getTime() - since < STALE_MS) continue;
+    const last = get<{ status: DreamStatus; error: string | null }>("SELECT status, error FROM dreams WHERE agent_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 1", agent.id);
+    out.push({ agent, days: Math.floor((at.getTime() - since) / 86_400_000), exchanges: pending.exchanges, lastError: last && last.status !== "succeeded" ? last.error : null });
+  }
+  return out;
+}
+
+function warnStaleDreams(at: Date) {
+  if (at.getTime() - staleCheckedAt < STALE_CHECK_MS) return;
+  staleCheckedAt = at.getTime();
+  if (licenseBlocks()) return;
+  const warned = metaMap(STALE_KEY);
+  let changed = false;
+  for (const { agent, days, exchanges, lastError } of staleDreamers(getSettings(), at)) {
+    if (at.getTime() - (warned.get(agent.id) ?? -Infinity) < STALE_MS) continue;
+    warned.set(agent.id, at.getTime());
+    changed = true;
+    notify(
+      "warning",
+      `${agent.name} hasn't consolidated its memory for ${days} days`,
+      `${exchanges} exchange(s) wait for a dream.${lastError ? ` The last one ended: ${truncate(lastError, 200)}` : ""} Open the Memory tab to start one.`,
+      `/agents/${agent.id}/memory`,
+    );
+  }
+  if (changed) saveMetaMap(STALE_KEY, warned);
+}
+
 /** Agents whose scheduled dream waits for them to be idle (diagnostics, tests). */
 export function deferredDreams(): string[] {
   return deferred.keys();
@@ -1188,6 +1246,11 @@ export async function dreamTick(at = new Date()): Promise<string[]> {
   if (!last) {
     setMeta(SWEEP_KEY, at.toISOString());
     return [];
+  }
+  try {
+    warnStaleDreams(at);
+  } catch (err) {
+    log.warn("could not check for agents that stopped dreaming", err);
   }
   const previous = cronOf(s.cron)?.previousRuns(1, at)[0];
   if (!previous || previous.getTime() <= new Date(last).getTime()) return [...(await retryDeferred(at)), ...(await sweepOverflowing(at))];
@@ -1320,5 +1383,6 @@ export function __resetDreamingForTests() {
   preempted.clear();
   sizeReminders.clear();
   earlyFailed.clear();
+  staleCheckedAt = -Infinity;
 }
 

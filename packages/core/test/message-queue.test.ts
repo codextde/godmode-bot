@@ -270,7 +270,7 @@ describe("message queue", () => {
     if (!("run" in outcome)) throw new Error("expected a run");
     expect(outcome.message.content).toBe("and this");
     expect((await waitForRun(outcome.run.id, 20_000)).status).toBe("succeeded");
-    expect(invocations(env).at(-1)!.prompt).toBe("from before the restart\n\nand this");
+    expect(invocations(env).at(-1)!.prompt.replace(/^<godmode-context>[^<]+<\/godmode-context>\n\n/, "")).toBe("from before the restart\n\nand this");
     expect(getConversation(conv.id).messages.map((m) => m.content)).toEqual(["from before the restart", "and this", "Hello, nice to meet you!"]);
   });
 

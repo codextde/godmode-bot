@@ -91,7 +91,7 @@ describe("runner end-to-end with fake claude", () => {
     sessionId = argValue(inv, "--session-id")!;
     expect(sessionId).toMatch(/^[0-9a-f-]{36}$/);
     expect(conv.claudeSessionId).toBe(sessionId);
-    expect(inv.prompt).toBe("Hello there\nsecond line");
+    expect(inv.prompt).toMatch(/^<godmode-context>Current date\/time: [^<\n]+<\/godmode-context>\n\nHello there\nsecond line$/);
     expect(realpathSync(inv.cwd)).toBe(realpathSync(agent.repoPath));
     expect(inv.env.GODMODE_TOKEN).toBeNull();
     expect(inv.env.CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS).toBe("0");
@@ -388,7 +388,7 @@ describe("runner end-to-end with fake claude", () => {
     expect(readFileSync(join(agent.repoPath, att.path), "utf8")).toBe("hello");
     await waitForRun(run.id, 20_000);
     const inv = invocations(env).at(-1)!;
-    expect(inv.prompt).toBe(`Summarize this\n\nAttached files: ${join(agent.repoPath, att.path)}`);
+    expect(inv.prompt.replace(/^<godmode-context>[^<]+<\/godmode-context>\n\n/, "")).toBe(`Summarize this\n\nAttached files: ${join(agent.repoPath, att.path)}`);
   });
 
   test("deleting a conversation cancels its run first", async () => {

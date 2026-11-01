@@ -159,7 +159,7 @@ describe("pausing a run", () => {
 
       continueConversation(second.conversation.id);
       expect((await waitForRun(second.run.id, 20_000)).status).toBe("succeeded");
-      expect(lastPrompt().prompt).toBe("the real question");
+      expect(lastPrompt().prompt.replace(/^<godmode-context>[^<]+<\/godmode-context>\n\n/, "")).toBe("the real question");
     } finally {
       updateSettings({ runner: { maxConcurrentRuns: 3 } });
     }

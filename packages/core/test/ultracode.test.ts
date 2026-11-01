@@ -323,7 +323,7 @@ describe("Ultracode in runs", () => {
       const check = await startRun({ agentId: agent.id, conversationId: checks.id, prompt: "Is the report there?", trigger: "check" });
       expect((await waitForRun(check.id, 20_000)).status).toBe("succeeded");
       let inv = invocations(env).at(-1)!;
-      expect(inv.prompt).toBe("Is the report there?");
+      expect(inv.prompt.replace(/^<godmode-context>[^<]+<\/godmode-context>\n\n/, "")).toBe("Is the report there?");
       expect(inv.settings).toBeNull();
       expect(inv.args).not.toContain("--settings");
       expect(allowedTools(inv)).not.toContain(WORKFLOW_TOOL);

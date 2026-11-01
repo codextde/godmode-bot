@@ -174,7 +174,7 @@ describe("slash commands in chat runs", () => {
     const next = await send(conversationId, "What were we doing?");
     expect(next.inv.args).not.toContain("--resume");
     expect(argValue(next.inv, "--session-id")).toMatch(/^[0-9a-f-]{36}$/);
-    expect(next.inv.prompt).toBe("What were we doing?");
+    expect(next.inv.prompt.replace(/^<godmode-context>[^<]+<\/godmode-context>\n\n/, "")).toBe("What were we doing?");
   });
 });
 

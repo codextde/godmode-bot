@@ -117,6 +117,7 @@ import { claudeMemEnv, claudeMemPluginDir, stopClaudeMemWorkers } from "../memor
 import { modsForRun, removeRunMods } from "../mods/service";
 import { memoryDigest, memoryForPrompt, snapshotMemory, type MemorySnapshot } from "../memory/files";
 import { recordMemoryEdits } from "../memory/edits";
+import { teamProfile } from "../memory/profile";
 import { applyZaiEnv, claudeEnv, killTree, resolveClaudeCommand, zaiKey } from "./claude";
 import { buildMcpConfig, gatewayUrl, removeMcpConfigFile, writeMcpConfigFile } from "./mcpConfig";
 import { effortFor, ultracodeFor } from "./models";
@@ -128,6 +129,7 @@ import {
   instructionsSection,
   lateAnswerContext,
   queuedMessagesContext,
+  firstTurnContext,
   resumeContextPrefix,
   stripNoteTags,
   type PromptApiTool,
@@ -2255,6 +2257,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
         standingInstructions: standing,
         // Condition checks run every few minutes and only look at the world: no memory needed.
         memory: settings.memory.injectMemory && job.trigger !== "check" ? memoryForPrompt(agent.repoPath, memoryBudget(settings.memory.dreaming.maxMemoryChars).limit) : null,
+        profile: settings.memory.injectMemory && job.trigger !== "check" ? teamProfile(agent) : null,
         followups: job.trigger !== "check" && job.trigger !== "delegation" && !job.private,
         privateChat: job.private,
         artifacts: artifactsHere,
@@ -2446,7 +2449,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
         ? resumeContextPrefix(folder, agent.repoPath, { instructions: restate ? standing : undefined, memoryChanged, vm: promptVm, sources: promptSources, followup, humanTasks, apiTools, ssh, android: phones }) +
           lateNote +
           body
-        : lateNote + body;
+        : (command || dreaming ? "" : firstTurnContext()) + lateNote + body;
     // What the run did before a pause, and what the chat's queue added to this stretch.
     const kept = job.acc.blocks.length;
     let attempt = await spawnClaude(job, cmd, [...baseArgs, ...sessionArgs, ...extraArgs], prompt, cwd, env, logSink);

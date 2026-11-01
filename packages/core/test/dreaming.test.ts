@@ -20,6 +20,7 @@ import {
   buildDreamPrompt,
   recoverDreams,
   collectActivity,
+  staleDreamers,
   deferredDreams,
   dreamDue,
   dreamOverview,
@@ -295,7 +296,7 @@ describe("dreams end to end (fake claude)", () => {
     expect(argValue(inv, "--append-system-prompt")).toContain("# Godmode runtime — dreaming");
     const report = dreamReport(dream);
     expect(report.servers).toEqual(["godmode"]);
-    expect(report.tools).toEqual(["memory_dream_report"]);
+    expect(report.tools).toEqual(["recall", "recall_read", "memory_dream_report"]);
     expect(report.forbidden).toEqual({ text: "The tool notify_user is not available while dreaming.", isError: true });
     expect(report.digest).toBe(true);
     expect(report.reports).toEqual([`Recorded. MEMORY.md is ${dream.fileChanges[0]!.after!.length} characters. End the dream now.`]);
@@ -631,7 +632,7 @@ describe("tidying the workspace", () => {
     ]);
     expect(dream.status).toBe("succeeded");
     const report = dreamReport(dream);
-    expect(report.tools).toEqual(["memory_dream_report", "workspace_tidy"]);
+    expect(report.tools).toEqual(["recall", "recall_read", "memory_dream_report", "workspace_tidy"]);
     expect(report.inventory).toContain("`task-27/` — folder, 2 files");
     expect(report.inventory).toContain("e.g. shot-1.png, shot-2.png");
     expect(report.inventory).toContain('named in the automation "Install" — stays');
@@ -784,7 +785,7 @@ describe("tidying the workspace", () => {
       entry(agent, "another.png");
       const plain = await tidyDream(agent, [{ action: "discard", path: "another.png" }], "REMEMBER: plain");
       const report = dreamReport(plain);
-      expect(report.tools).toEqual(["memory_dream_report"]);
+      expect(report.tools).toEqual(["recall", "recall_read", "memory_dream_report"]);
       expect(report.inventory).toBeNull();
       expect(getRun(plain.runId!).prompt).not.toContain("Tidy your workspace");
       expect(plain.workspace).toEqual([]);
@@ -1251,4 +1252,13 @@ describe("reliability", () => {
     expect((await dreamToEnd(again)).status).toBe("cancelled");
     expect(deferredDreams()).not.toContain(agent.id);
   }, 30_000);
+
+  test("agents with work waiting and no dream for three days are found", async () => {
+    const agent = await makeAgent({ name: "Insomniac" });
+    const c = conversationFor(agent);
+    for (const p of ["a", "b", "c"]) addExchange(agent, c, { prompt: p });
+    expect(staleDreamers(getSettings(), new Date()).some((s) => s.agent.id === agent.id)).toBe(false);
+    const later = staleDreamers(getSettings(), new Date(Date.now() + 4 * 86_400_000)).find((s) => s.agent.id === agent.id);
+    expect(later).toMatchObject({ days: 4, exchanges: 3, lastError: null });
+  });
 });
