@@ -1190,7 +1190,10 @@
       "runUsual": "Run your usual task now and tell me what you found",
       "learned": "What have you learned so far?"
     },
-    "yourAgent": "Your agent"
+    "yourAgent": "Your agent",
+    "noWorkspace": "No workspace",
+    "noWorkspaceHint": "Runs get only the global context from now on.",
+    "workspaceError": "Couldn't change the workspace"
   },
   "pullRequest": {
     "title": "Pull request",

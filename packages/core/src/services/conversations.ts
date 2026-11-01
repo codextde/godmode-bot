@@ -554,7 +554,11 @@ export function listConversations(
 
 export function updateConversation(id: string, patch: ConversationPatch): Conversation {
   const row = requireConversationRow(id);
-  const project = patch.projectId === undefined ? undefined : normalizeProject(getAgent(row.agent_id), patch.projectId);
+  const agent = getAgent(row.agent_id);
+  const project = patch.projectId === undefined ? undefined : normalizeProject(agent, patch.projectId);
+  const workspaceId = agent.workspaceId ? undefined : project ? project.workspaceId : patch.workspaceId === undefined ? undefined : normalizeWorkspaceId(agent, patch.workspaceId);
+  const projectWorkspace = project === undefined && row.project_id ? get<{ workspace_id: string }>("SELECT workspace_id FROM projects WHERE id = ?", row.project_id)?.workspace_id : undefined;
+  const dropProject = workspaceId !== undefined && projectWorkspace !== undefined && projectWorkspace !== workspaceId;
   const title = patch.title === undefined ? undefined : patch.title.trim().slice(0, 200);
   if (title !== undefined && !title) throw badRequest("Title must not be empty");
   update("conversations", id, {
@@ -571,15 +575,14 @@ export function updateConversation(id: string, patch: ConversationPatch): Conver
     ssh_server_ids: patch.sshServerIds === undefined ? undefined : JSON.stringify(normalizeSshServerIds(patch.sshServerIds)),
     android_device_ids: patch.androidDeviceIds === undefined ? undefined : JSON.stringify(normalizeAndroidDeviceIds(patch.androidDeviceIds)),
     instructions: patch.instructions?.trim(),
-    project_id: project === undefined ? undefined : (project?.id ?? null),
-    // A global agent's chat moves along to the project's workspace.
-    workspace_id: project && !get("SELECT 1 FROM agents WHERE id = ? AND workspace_id IS NOT NULL", row.agent_id) ? project.workspaceId : undefined,
+    project_id: dropProject ? null : project === undefined ? undefined : (project?.id ?? null),
+    workspace_id: workspaceId,
     updated_at: now(),
   });
   const conversation = getConversationSummary(id);
   bus.emit({ type: "conversation.updated", conversation });
   if (patch.vmId !== undefined) assignmentsChanged();
-  if (patch.browserProfileId !== undefined || project !== undefined) retryQueued();
+  if (patch.browserProfileId !== undefined || project !== undefined || workspaceId !== undefined) retryQueued();
   // Moved to another browser profile, or archived with nothing ahead: its tabs aren't needed where they are. An
   // archived chat that goes on later finds its pages as it left them.
   if (patch.browserProfileId !== undefined || (patch.archived && !continuesLater(id))) void closeChatTabs(id);

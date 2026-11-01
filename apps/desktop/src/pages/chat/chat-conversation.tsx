@@ -55,7 +55,7 @@ import { api, ApiRequestError, errorMessage, isLicenseRequired } from "@/lib/api
 import { newQueueId, pendingQueued, withPending } from "@/lib/pending-queue";
 import { qk } from "@/lib/queryKeys";
 import { useAllAgents, useBootstrap, useConversation, useRunners, useWorkspaces } from "@/lib/hooks";
-import { ProjectChip } from "@/components/projects/project-chip";
+import { ProjectChip, type PlacePick } from "@/components/projects/project-chip";
 import { effectiveProject, useProjectIndex } from "@/components/projects/project-utils";
 import { onServerEvent, settleRun, viewConversation } from "@/lib/realtime";
 import { speak, useVoiceSession } from "@/lib/voice";
@@ -359,15 +359,19 @@ function ConversationView({ conversationId }: { conversationId: string }) {
   });
 
   const setProject = useMutation({
-    mutationFn: (projectId: string | null) => api.conversations.update(conversationId, { projectId }),
-    onSuccess: (updated) => {
+    mutationFn: (pick: PlacePick) => api.conversations.update(conversationId, pick),
+    onSuccess: (updated, pick) => {
       qc.setQueryData<ConversationWithMessages>(key, (old) => (old ? { ...old, ...updated } : old));
       qc.invalidateQueries({ queryKey: qk.conversationsAll });
       const project = updated.projectId ? projectIndex.get(updated.projectId)?.project : undefined;
-      if (project) toast.success(t("conv.workingOn", { name: project.name }), { description: busyRef.current ? t("conv.projectNext") : t("conv.projectNow") });
+      const workspace = !project && pick.workspaceId !== undefined && !agent?.workspaceId ? workspaces.find((w) => w.id === updated.workspaceId) : undefined;
+      const description = busyRef.current ? t("conv.projectNext") : t("conv.projectNow");
+      if (project) toast.success(t("conv.workingOn", { name: project.name }), { description });
+      else if (workspace) toast.success(t("conv.workingIn", { name: workspace.name }), { description });
+      else if (pick.workspaceId === null && !agent?.workspaceId) toast.success(t("conv.noWorkspace"), { description: t("conv.noWorkspaceHint") });
       else toast.success(t("conv.backToDefault"), { description: t("conv.projectDefaultHint", { name: agent?.name ?? t("turnEnd.theAgent") }) });
     },
-    onError: (err) => toast.error(t("conv.projectError"), { description: errorMessage(err) }),
+    onError: (err, pick) => toast.error(pick.projectId ? t("conv.projectError") : t("conv.workspaceError"), { description: errorMessage(err) }),
   });
 
   const setBrowserProfile = useMutation({
@@ -739,8 +743,9 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                     )}
                     <ProjectChip
                       agent={agent}
+                      workspaceId={conv.workspaceId ?? null}
                       value={conv.projectId ?? null}
-                      onChange={(id) => setProject.mutateAsync(id).catch(() => undefined)}
+                      onChange={(pick) => setProject.mutateAsync(pick).catch(() => undefined)}
                       busy={setProject.isPending}
                     />
                     {!chatVm && (
@@ -786,12 +791,14 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                         busy={setVm.isPending}
                       />
                     )}
-                    <InstructionsChip
-                      value={conv.instructions ?? ""}
-                      agent={agent}
-                      onChange={(text) => setInstructions.mutateAsync(text)}
-                      busy={setInstructions.isPending}
-                    />
+                    {!!conv.instructions && (
+                      <InstructionsChip
+                        value={conv.instructions}
+                        agent={agent}
+                        onChange={(text) => setInstructions.mutateAsync(text)}
+                        busy={setInstructions.isPending}
+                      />
+                    )}
                   </>
                 }
                 sendHint={waiting ? t("question.sendAnswer") : paused ? (paused.reason === "limit" ? t("composer.queueMessage") : t("conv.sendAndContinue")) : undefined}

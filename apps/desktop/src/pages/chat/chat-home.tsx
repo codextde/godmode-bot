@@ -38,6 +38,7 @@ import { api, errorMessage, isLicenseRequired } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { useAllAgents, useBootstrap, useInScope, useRunners, useScopedConversations, useScopeProject, useScopeWorkspace, useWorkspaces } from "@/lib/hooks";
 import { ProjectChip } from "@/components/projects/project-chip";
+import { useProjectIndex } from "@/components/projects/project-utils";
 import { modKey } from "@/lib/desktop";
 import { useVoiceSession } from "@/lib/voice";
 import { useDraft } from "@/lib/drafts";
@@ -140,9 +141,15 @@ export default function ChatHome() {
   const { data: workspaces = [] } = useWorkspaces();
   const scopeWorkspaceId = useScopeWorkspace()?.id ?? null;
   const scopeProject = useScopeProject();
+  const projectIndex = useProjectIndex();
   /** Project picked for the new chat; undefined = the sidebar's (when the agent may work on it). */
   const [projectPick, setProjectPick] = useState<string | null | undefined>(undefined);
-  useEffect(() => setProjectPick(undefined), [scopeProject?.id]);
+  /** Workspace picked for a global agent's new chat; undefined = the sidebar's. */
+  const [workspacePick, setWorkspacePick] = useState<string | null | undefined>(undefined);
+  useEffect(() => {
+    setProjectPick(undefined);
+    setWorkspacePick(undefined);
+  }, [scopeProject?.id, scopeWorkspaceId]);
 
   const available = useMemo(() => agents.filter((a) => a.enabled), [agents]);
   const selected =
@@ -159,11 +166,16 @@ export default function ChatHome() {
   const resetSetup = () => {
     [agentDraft, choiceDraft, folderDraft, sharedDraft, instructionsDraft, vmDraft, browserDraft, sshDraft, androidDraft, runnerDraft].forEach((d) => d.discard());
     setProjectPick(undefined);
+    setWorkspacePick(undefined);
   };
   const sidebarProject = scopeProject && selected && (!selected.workspaceId || selected.workspaceId === scopeProject.workspaceId) ? scopeProject.id : null;
   // A pick made for another agent doesn't carry over.
-  useEffect(() => setProjectPick(undefined), [selected?.id]);
+  useEffect(() => {
+    setProjectPick(undefined);
+    setWorkspacePick(undefined);
+  }, [selected?.id]);
   const projectId = projectPick !== undefined ? projectPick : sidebarProject;
+  const chatWorkspaceId = workspacePick !== undefined ? workspacePick : scopeWorkspaceId;
 
   const runners = useRunners();
   const { group, hereId, placeOf } = usePlaces();
@@ -301,8 +313,17 @@ export default function ChatHome() {
                       onChange={setFolder}
                     />
                   )}
-                  <ProjectChip agent={selected} value={projectId} onChange={setProjectPick} />
-                  <BrowserProfileChip agent={selected} value={browserProfileId} workspaceId={scopeWorkspaceId} projectId={projectId} onChange={setBrowserProfileId} />
+                  <ProjectChip
+                    agent={selected}
+                    workspaceId={chatWorkspaceId}
+                    value={projectId}
+                    onChange={(p) => {
+                      setProjectPick(p.projectId);
+                      if (p.workspaceId !== undefined) setWorkspacePick(p.workspaceId);
+                      else if (p.projectId) setWorkspacePick(projectIndex.get(p.projectId)?.workspace.id ?? null);
+                    }}
+                  />
+                  <BrowserProfileChip agent={selected} value={browserProfileId} workspaceId={chatWorkspaceId} projectId={projectId} onChange={setBrowserProfileId} />
                   {!onRunner && <ComputerShareChip target={shared} agentName={selected?.name} onShare={setShared} />}
                   <SshChip agent={selected} value={sshServerIds} onChange={setSshServerIds} />
                   {!onRunner && <AndroidChip agent={selected} value={androidDeviceIds} onChange={setAndroidDeviceIds} />}
@@ -316,7 +337,7 @@ export default function ChatHome() {
                       onChange={setVmId}
                     />
                   )}
-                  <InstructionsChip value={instructions} agent={selected} onChange={setInstructions} />
+                  {instructions && <InstructionsChip value={instructions} agent={selected} onChange={setInstructions} />}
                 </>
               )
             }
@@ -330,7 +351,7 @@ export default function ChatHome() {
                 ...choice,
                 ...place(),
                 browserProfileId: browserProfileId ?? undefined,
-                workspaceId: scopeWorkspaceId ?? undefined,
+                workspaceId: chatWorkspaceId ?? undefined,
                 projectId: projectId ?? undefined,
                 sshServerIds: sshServerIds.length ? sshServerIds : undefined,
                 instructions: instructions || undefined,
@@ -433,7 +454,7 @@ export default function ChatHome() {
             voice: true,
             ...place(),
             browserProfileId: browserProfileId ?? undefined,
-            workspaceId: scopeWorkspaceId ?? undefined,
+            workspaceId: chatWorkspaceId ?? undefined,
             projectId: projectId ?? undefined,
             sshServerIds: sshServerIds.length ? sshServerIds : undefined,
             instructions: instructions || undefined,

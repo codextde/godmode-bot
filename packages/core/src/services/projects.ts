@@ -228,10 +228,19 @@ export function projectOfChat(conversationId: string | null | undefined, agent: 
   return null;
 }
 
+/** The workspace a chat's runs work in: the agent's, else its project's, else the one picked for the chat. */
+export function workspaceOfChat(conversationId: string | null | undefined, agent: Pick<Agent, "workspaceId">, project: RunProject | null): string | null {
+  if (agent.workspaceId) return agent.workspaceId;
+  if (project) return project.workspaceId;
+  if (!conversationId) return null;
+  const id = get<{ workspace_id: string | null }>("SELECT workspace_id FROM conversations WHERE id = ?", conversationId)?.workspace_id;
+  return id && get("SELECT 1 FROM workspaces WHERE id = ?", id) ? id : null;
+}
+
 /** Folders and repositories a chat's runs work with: its workspace's and its project's. */
 export function chatSources(conversationId: string | null | undefined, agent: Pick<Agent, "workspaceId" | "projectId">): WorkspaceSource[] {
   const project = projectOfChat(conversationId, agent);
-  const workspaceId = agent.workspaceId ?? project?.workspaceId ?? null;
+  const workspaceId = workspaceOfChat(conversationId, agent, project);
   return [...(workspaceId ? listSources(workspaceId) : []), ...(project ? listSources(project.workspaceId, project.id) : [])];
 }
 

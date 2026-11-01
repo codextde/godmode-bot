@@ -75,7 +75,7 @@ import { noteClaudeSignedOut, noteClaudeWorks } from "../services/claudeLogin";
 import { accountForRun, applyAccountEnv, noteAccountLimit, noteClaudeAccountSignedOut, type RunAccount } from "../services/claudeAccounts";
 import { isDirectory, workingDirectoryProblem } from "../services/folders";
 import { prepareSources, type RunSource } from "../services/workspaceSources";
-import { projectOfChat } from "../services/projects";
+import { projectOfChat, workspaceOfChat } from "../services/projects";
 import { getSettings } from "../services/settings";
 import { fullDiskAccess } from "../services/permissions";
 import { reportMissingLogin } from "../services/missingLogins";
@@ -2104,8 +2104,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   const project = dreaming ? null : projectOfChat(job.conversationId, agent);
   // The workspace's and the project's folders and repositories; a missing clone is cloned first. A dream only works on its memory.
   let sources: RunSource[] = [];
-  // A global agent working on a project works in the project's workspace.
-  const workspaceId = agent.workspaceId ?? project?.workspaceId ?? null;
+  const workspaceId = dreaming ? (agent.workspaceId ?? null) : workspaceOfChat(job.conversationId, agent, project);
   const owners = [
     ...(workspaceId ? [{ workspaceId, projectId: null }] : []),
     ...(project ? [{ workspaceId: project.workspaceId, projectId: project.id }] : []),

@@ -17,12 +17,6 @@ export function useProjectIndex(): Map<string, ProjectEntry> {
   }, [workspaces]);
 }
 
-/** Projects an agent may work on: its workspace's, or every workspace's for a global agent. */
-export function projectsFor(agent: Pick<Agent, "workspaceId"> | undefined, workspaces: Workspace[]): Workspace[] {
-  if (!agent) return [];
-  return workspaces.filter((w) => (w.projects?.length ?? 0) > 0 && (!agent.workspaceId || w.id === agent.workspaceId));
-}
-
 /** The project a chat works on: its own when the agent may work on it, else the agent's. */
 export function effectiveProject(
   agent: Pick<Agent, "workspaceId" | "projectId"> | undefined,
