@@ -88,6 +88,15 @@ export const knownKeys = (): KeyMeta[] => [
     icon: Boxes,
     managedIn: "composio",
   },
+  {
+    key: "composio_user_api_key",
+    label: t("integrations:apiKeys.keyLabel", { name: "Composio user" }),
+    description: t("integrations:apiKeys.descriptions.composioUser"),
+    icon: Boxes,
+    link: { href: "https://platform.composio.dev", label: "platform.composio.dev" },
+    placeholder: "uak_…",
+    optional: true,
+  },
 ];
 
 type SecretRow = { key: string; set: boolean; updatedAt: string | null };

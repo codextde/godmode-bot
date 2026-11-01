@@ -56,6 +56,7 @@ interface Call {
   method: string;
   url: URL;
   body: unknown;
+  headers: Headers;
 }
 type Handler = (call: Call) => Response | Promise<Response>;
 
@@ -71,7 +72,7 @@ function installFetchMock() {
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const req = new Request(input as RequestInfo, init);
     const text = req.method === "GET" || req.method === "DELETE" ? "" : await req.text();
-    const call: Call = { method: req.method, url: new URL(req.url), body: text ? JSON.parse(text) : undefined };
+    const call: Call = { method: req.method, url: new URL(req.url), body: text ? JSON.parse(text) : undefined, headers: req.headers };
     calls.push(call);
     const match = routes.find(
       (r) => r.method === call.method && (typeof r.path === "string" ? call.url.pathname === r.path : r.path.test(call.url.pathname)),
@@ -927,6 +928,37 @@ describe("app triggers (Composio)", () => {
     expect(FakeSocket.instances).toHaveLength(3); // and so does the realtime channel
     expect(FakeSocket.instances[1]!.closed).toBe(true);
     expect(readTriggerState(r.id).composioVerifiedAt).toBeDefined();
+  });
+
+  test("with a Composio user API key the listener uses the CLI realtime channel", async () => {
+    route("GET", "/api/v3.1/cli/realtime/credentials", { pusher_key: "pk_1", pusher_cluster: "eu", project_id: "pr_cli" });
+    route("POST", "/api/v3.1/cli/realtime/auth", { auth: "pk_1:cli-signature" });
+    const r = createRoutine({ agentId: agent.id, name: "Via CLI channel", trigger: gmailTrigger, prompt: "x" });
+    await syncAppTriggers();
+    expect(FakeSocket.instances).toHaveLength(1);
+
+    vault.setAppSecret(composio.COMPOSIO_USER_API_KEY_SECRET, "uak_test_0123456789");
+    await syncAppTriggers();
+    expect(FakeSocket.instances).toHaveLength(2);
+    expect(FakeSocket.instances[0]!.closed).toBe(true);
+    const socket = FakeSocket.instances[1]!;
+    socket.receive("pusher:connection_established", { socket_id: "7.8", activity_timeout: 120 });
+    await waitFor(() => socket.sent.some((m) => m.event === "pusher:subscribe"), "subscribe");
+    const auth = callsTo("POST", "/api/v3.1/cli/realtime/auth")[0]!;
+    expect(auth.body).toEqual({ socket_id: "7.8", channel_name: "private-cli-pr_cli" });
+    expect(auth.headers.get("x-user-api-key")).toBe("uak_test_0123456789");
+    expect(auth.headers.get("x-api-key")).toBeNull();
+    expect(socket.sent.find((m) => m.event === "pusher:subscribe")!.data).toEqual({ channel: "private-cli-pr_cli", auth: "pk_1:cli-signature" });
+    socket.receive("pusher_internal:subscription_succeeded", {}, "private-cli-pr_cli");
+    expect(getRoutine(r.id).triggerStatus.state).toBe("ok");
+
+    socket.receive("trigger_to_client", V3("ti_gmail", "msg_cli", { subject: "Hello" }), "private-cli-pr_cli");
+    await waitFor(() => sent.length === 1, "app run");
+
+    vault.setAppSecret(composio.COMPOSIO_USER_API_KEY_SECRET, null);
+    await syncAppTriggers();
+    expect(FakeSocket.instances).toHaveLength(3);
+    expect(socket.closed).toBe(true);
   });
 
   test("instances are re-verified hourly and re-enabled after a pause", async () => {

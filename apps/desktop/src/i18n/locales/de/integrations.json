@@ -318,7 +318,8 @@
       "elevenlabs": "Stimme: Premium-Stimmen für die Sprachausgabe, wenn ElevenLabs gewählt ist.",
       "browserUse": "Damit kann profile-use deine Chrome-Cookies mit einem browser-use-Cloud-Profil synchronisieren.",
       "captcha": "CAPTCHA-Lösung für Agenten. Mit einem gespeicherten Schlüssel wird dieser Dienst aktiviert, falls noch keiner gewählt ist (Einstellungen → Browser).",
-      "composio": "Verbindet Hunderte Apps über Composio."
+      "composio": "Verbindet Hunderte Apps über Composio.",
+      "composioUser": "Optional – damit App-Automationen Ereignisse empfangen, wenn Composio den normalen Ereigniskanal ablehnt (Fehler 4009). Dein persönlicher User-API-Schlüssel (uak_…) aus den Kontoeinstellungen von Composio."
     },
     "encryptedTitle": "Verschlüsselt, nur schreibbar",
     "encryptedDescription": "Schlüssel werden mit AES-256-GCM in deinem Tresor versiegelt und nie wieder angezeigt. Godmode setzt sie dort ein, wo sie gebraucht werden – Agenten sehen sie nicht.",

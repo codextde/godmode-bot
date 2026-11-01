@@ -181,6 +181,7 @@ describe("app secret routes", () => {
       "openai_api_key",
       "elevenlabs_api_key",
       "composio_api_key",
+      "composio_user_api_key",
       "browser_use_api_key",
       "twocaptcha_api_key",
       "capsolver_api_key",
