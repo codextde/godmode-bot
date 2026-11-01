@@ -1,0 +1,115 @@
+---
+import Base from '@/layouts/Base.astro';
+import Nav from '@/components/Nav.astro';
+import Footer from '@/components/Footer.astro';
+import { LEGAL, PRICING, SITE } from '@/config/site';
+import { href, langOf } from '@/i18n';
+
+const lang = langOf(Astro.url);
+const t = {
+  en: {
+    title: 'Support',
+    description: 'Help with Godmode and the Godmode phone app for iPhone, iPad and Android, and how to reach us.',
+  },
+  de: {
+    title: 'Support',
+    description: 'Hilfe zu Godmode und zur Godmode-Handy-App für iPhone, iPad und Android, und so erreichst du uns.',
+  },
+}[lang];
+const tel = `tel:${LEGAL.phone.replace(/\s/g, '')}`;
+const privacy = href(lang, '/legal/privacy');
+const faq = href(lang, '/#faq');
+const download = href(lang, '/download');
+---
+
+<Base title={t.title} description={t.description}>
+  <Nav home={false} />
+  <main class="pt-36 pb-16">
+    <article class="container-x max-w-[760px]">
+      <p class="eyebrow">Support</p>
+      <h1 class="h-section mt-5">Support</h1>
+      {
+        lang === 'de' ? (
+          <div class="prose-gm mt-10">
+            <p>
+              Eine Frage, ein Fehler oder du kommst nicht weiter? Schreib an <a href={`mailto:${SITE.email}`}>{SITE.email}</a> und erzähl uns, was du versucht hast und
+              was passiert ist. Ein Screenshot hilft. Du kannst uns auch anrufen unter <a href={tel}>{LEGAL.phone}</a>.
+            </p>
+
+            <h2>Die Godmode-Handy-App</h2>
+            <p>
+              Die App für iPhone, iPad und Android ist eine Fernbedienung für Godmode auf deinem Computer: Aufgaben
+              abgeben, Antworten live mitlesen, Läufe stoppen, Automationen starten und zuschauen, was ein Agent gerade
+              macht. Dafür muss Godmode auf deinem Computer laufen.
+            </p>
+            <h3>Handy verbinden</h3>
+            <ol>
+              <li>Installiere <a href="https://tailscale.com/download" rel="noopener">Tailscale</a> auf deinem Computer und deinem Handy und melde dich auf beiden mit demselben Konto an.</li>
+              <li>Öffne auf dem Computer Godmode → <strong>Einstellungen → Handy → Handy verbinden</strong>. Ein QR-Code erscheint.</li>
+              <li>Tippe in der App auf <strong>QR-Code scannen</strong> und halte die Kamera darauf. Die Kamera-App des Handys geht auch.</li>
+            </ol>
+            <h3>Wenn es sich nicht verbindet</h3>
+            <ul>
+              <li>Prüf, ob Tailscale auf beiden Geräten verbunden ist, mit demselben Konto.</li>
+              <li>Der Computer muss wach sein und Godmode muss laufen. Der Handyzugriff muss unter Einstellungen → Handy eingeschaltet bleiben.</li>
+              <li>Ein QR-Code funktioniert nur einmal und läuft nach fünf Minuten ab. Erstell einen neuen und scanne noch mal.</li>
+              <li>Klappt es immer noch nicht? Entferne das Handy auf dem Computer unter Einstellungen → Handy, trenne die Verbindung in den Einstellungen der App und kopple neu.</li>
+            </ul>
+            <h3>Deine Daten</h3>
+            <p>
+              Das Handy spricht nur mit deinem Computer, über dein eigenes Tailscale-Netzwerk. Logins, 2FA-Codes und
+              Einstellungen bleiben auf dem Computer, und die App schickt uns nichts. Du kannst ein Handy jederzeit unter
+              Einstellungen → Handy entfernen. Details findest du in unserer <a href={privacy}>Datenschutzerklärung</a>.
+            </p>
+
+            <h2>Godmode auf deinem Computer</h2>
+            <p>
+              Antworten auf häufige Fragen findest du in den <a href={faq}>FAQ</a>. Die neueste Version für Mac gibt es auf
+              der <a href={download}>Download-Seite</a>. Sie ist {PRICING.freeDays} Tage kostenlos, ohne Karte.
+            </p>
+          </div>
+        ) : (
+          <div class="prose-gm mt-10">
+            <p>
+              Questions, a bug, or stuck somewhere? Email <a href={`mailto:${SITE.email}`}>{SITE.email}</a> and tell us what you tried and what happened; a screenshot
+              helps. You can also call us at <a href={tel}>{LEGAL.phone}</a>.
+            </p>
+
+            <h2>The Godmode phone app</h2>
+            <p>
+              The app for iPhone, iPad and Android is a remote control for Godmode on your computer: hand over tasks, follow
+              answers as they're written, stop runs, run automations, and watch what an agent is doing, live. It needs
+              Godmode running on your computer.
+            </p>
+            <h3>Connect your phone</h3>
+            <ol>
+              <li>Install <a href="https://tailscale.com/download" rel="noopener">Tailscale</a> on your computer and your phone and sign in to the same account on both.</li>
+              <li>On the computer, open Godmode → <strong>Settings → Phone → Connect a phone</strong>. A QR code appears.</li>
+              <li>In the app, tap <strong>Scan QR code</strong> and point the camera at it. The phone's camera app works too.</li>
+            </ol>
+            <h3>If it doesn't connect</h3>
+            <ul>
+              <li>Check that Tailscale is connected on both devices, with the same account.</li>
+              <li>Make sure the computer is awake and Godmode is running. Phone access has to stay on in Settings → Phone.</li>
+              <li>A QR code works once and expires after five minutes. Create a new one and scan again.</li>
+              <li>Still stuck? Remove the phone in Settings → Phone on the computer, disconnect in the app's settings, and pair again.</li>
+            </ul>
+            <h3>Your data</h3>
+            <p>
+              The phone talks only to your computer, over your own Tailscale network. Logins, 2FA codes and settings stay on
+              the computer, and the app sends nothing to us. You can remove a phone at any time in Settings → Phone. Details
+              are in our <a href={privacy}>privacy policy</a>.
+            </p>
+
+            <h2>Godmode on your computer</h2>
+            <p>
+              Answers to common questions are in the <a href={faq}>FAQ</a>. Download the latest version for Mac from the
+              <a href={download}>download page</a>. It’s free for {PRICING.freeDays} days, no card needed.
+            </p>
+          </div>
+        )
+      }
+    </article>
+  </main>
+  <Footer />
+</Base>

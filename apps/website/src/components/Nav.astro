@@ -2,25 +2,55 @@
 import Logo from './ui/Logo.astro';
 import Icon from './ui/Icon.astro';
 import DownloadButton from './ui/DownloadButton.astro';
+import LangSwitch from './ui/LangSwitch.astro';
 import { PRICING } from '@/config/site';
+import { href, langOf } from '@/i18n';
 
 interface Props {
   home?: boolean;
 }
 const { home = true } = Astro.props;
-const base = home ? '' : '/';
-const links = [
-  { href: '#jobs', label: 'What it does' },
-  { href: '#how', label: 'How it works' },
-  { href: '#trust', label: 'Safety' },
-  { href: '#pricing', label: 'Pricing' },
-  { href: '#faq', label: 'FAQ' },
-];
+const lang = langOf(Astro.url);
+const t = {
+  en: {
+    links: [
+      ['#jobs', 'What it does'],
+      ['#how', 'How it works'],
+      ['#trust', 'Safety'],
+      ['#pricing', 'Pricing'],
+      ['/setup', 'Setup service'],
+      ['#faq', 'FAQ'],
+    ],
+    examples: 'Examples',
+    download: 'Download free',
+    home: 'Godmode home',
+    menu: 'Menu',
+    note: `Free for ${PRICING.freeDays} days · No card · No sign-up`,
+  },
+  de: {
+    links: [
+      ['#jobs', 'Was es kann'],
+      ['#how', 'So geht’s'],
+      ['#trust', 'Sicherheit'],
+      ['#pricing', 'Preise'],
+      ['/setup', 'Einrichtung'],
+      ['#faq', 'FAQ'],
+    ],
+    examples: 'Beispiele',
+    download: 'Kostenlos laden',
+    home: 'Godmode Startseite',
+    menu: 'Menü',
+    note: `${PRICING.freeDays} Tage kostenlos · Ohne Karte · Ohne Anmeldung`,
+  },
+}[lang];
+const homeHref = href(lang, '/');
+const to = (path: string) => (path.startsWith('/') ? href(lang, path) : home ? path : homeHref + path);
+const links = t.links.map(([path, label]) => ({ href: to(path), label }));
 ---
 
 <header data-nav class="nav fixed inset-x-0 top-0 z-50">
   <div class="container-x flex h-[68px] items-center justify-between gap-6">
-    <a href="/" class="group flex items-center gap-2.5" aria-label="Godmode home">
+    <a href={homeHref} class="group flex items-center gap-2.5" aria-label={t.home}>
       <Logo size={30} class="transition-transform duration-500 ease-[var(--ease-spring)] group-hover:rotate-[-8deg]" />
       <span class="text-[17px] font-semibold tracking-[-0.03em]">Godmode</span>
     </a>
@@ -28,7 +58,7 @@ const links = [
     <nav class="hidden items-center gap-1 lg:flex" aria-label="Main">
       {
         links.map((l) => (
-          <a href={base + l.href} data-nav-link class="nav-link">
+          <a href={l.href} data-nav-link class="nav-link">
             {l.label}
           </a>
         ))
@@ -36,15 +66,16 @@ const links = [
     </nav>
 
     <div class="flex items-center gap-2">
-      <a href="/use-cases" class="nav-link hidden md:inline-flex lg:hidden xl:inline-flex" data-track="nav_use_cases">Examples</a>
-      <DownloadButton source="nav" label="Download free" size="sm" class="hidden sm:inline-flex" />
+      <a href={href(lang, '/use-cases')} class="nav-link hidden md:inline-flex lg:hidden 2xl:inline-flex" data-track="nav_use_cases">{t.examples}</a>
+      <LangSwitch class="hidden sm:inline-flex" />
+      <DownloadButton source="nav" label={t.download} size="sm" class="hidden sm:inline-flex" />
       <button
         type="button"
         class="btn btn-ghost btn-sm !px-2.5 lg:hidden"
         data-menu-toggle
         aria-expanded="false"
         aria-controls="mobile-menu"
-        aria-label="Menu"
+        aria-label={t.menu}
       >
         <span class="menu-icon" aria-hidden="true"><i></i><i></i></span>
       </button>
@@ -54,9 +85,9 @@ const links = [
   <div id="mobile-menu" data-menu class="mobile-menu lg:hidden">
     <nav class="container-x flex flex-col py-4" aria-label="Mobile">
       {
-        [...links, { href: '/use-cases', label: 'Examples' }].map((l, i) => (
+        [...links, { href: href(lang, '/use-cases'), label: t.examples }].map((l, i) => (
           <a
-            href={l.href.startsWith('/') ? l.href : base + l.href}
+            href={l.href}
             class="flex items-center justify-between border-b border-line py-4 text-[22px] font-semibold tracking-tight"
             style={`--i:${i}`}
           >
@@ -66,8 +97,9 @@ const links = [
         ))
       }
       <div class="mt-6 grid gap-2">
-        <DownloadButton source="menu" label="Download free" size="lg" full />
-        <p class="mt-1 text-center text-[13.5px] text-muted">Free for {PRICING.freeDays} days · No card · No sign-up</p>
+        <DownloadButton source="menu" label={t.download} size="lg" full />
+        <p class="mt-1 text-center text-[13.5px] text-muted">{t.note}</p>
+        <LangSwitch class="mx-auto mt-3" />
       </div>
     </nav>
   </div>

@@ -1,13 +1,19 @@
 ---
 import DownloadButton from './ui/DownloadButton.astro';
 import { PRICING } from '@/config/site';
+import { langOf } from '@/i18n';
+const lang = langOf(Astro.url);
+const t = {
+  en: { free: `Free for ${PRICING.freeDays} days`, card: ' · No card', signup: ' · No sign-up', cta: 'Download free' },
+  de: { free: `${PRICING.freeDays} Tage kostenlos`, card: ' · Ohne Karte', signup: ' · Ohne Anmeldung', cta: 'Kostenlos laden' },
+}[lang];
 ---
 
 <div data-sticky-cta class="sticky-cta fixed inset-x-3 bottom-3 z-40 sm:left-1/2 sm:right-auto sm:bottom-5 sm:w-auto sm:-translate-x-1/2">
   <div class="flex items-center gap-3 rounded-full bg-surface py-1.5 pr-1.5 pl-5 ring-1 ring-line-2" style="box-shadow: var(--shadow-lg)">
     <span class="min-w-0 flex-1 truncate text-[14px] whitespace-nowrap text-text-2 sm:flex-none">
-      <span class="font-semibold text-text">Free for {PRICING.freeDays} days</span><span class="hidden min-[400px]:inline"> · No card</span><span class="hidden sm:inline"> · No sign-up</span>
+      <span class="font-semibold text-text">{t.free}</span><span class="hidden min-[400px]:inline">{t.card}</span><span class="hidden sm:inline">{t.signup}</span>
     </span>
-    <DownloadButton source="sticky" label="Download free" size="sm" />
+    <DownloadButton source="sticky" label={t.cta} size="sm" />
   </div>
 </div>

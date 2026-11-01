@@ -1,0 +1,174 @@
+---
+import Base from '@/layouts/Base.astro';
+import Nav from '@/components/Nav.astro';
+import Footer from '@/components/Footer.astro';
+import Icon from '@/components/ui/Icon.astro';
+import Words from '@/components/ui/Words.astro';
+import DownloadButton from '@/components/ui/DownloadButton.astro';
+import { PRICING } from '@/config/site';
+import { href, langOf } from '@/i18n';
+import { GROUPS, HOW, type How } from './use-cases-data';
+
+const lang = langOf(Astro.url);
+const total = GROUPS.reduce((n, g) => n + g.items.length, 0);
+const { freeDays } = PRICING;
+const { monthly, yearly } = PRICING.plans;
+
+const t = {
+  en: {
+    title: `${total} everyday jobs to hand to your AI coworker`,
+    description: `${total} everyday computer jobs Godmode does for you from one message: email, invoices, ad reports, social posts, online shop orders, customer emails, research and personal errands. In your own browser and apps, already signed in. No coding.`,
+    eyebrow: 'Example jobs',
+    h1: `${total} problems you solve *with one message.*`,
+    lead: 'Write it the way you’d ask a colleague. Godmode works out the clicks, signs in with your saved logins and does the whole job in your browser, your apps or on its own Mac. Every example below is a real message you can copy, change and send.',
+    filter: 'Filter use cases',
+    all: 'All',
+    copy: 'Copy',
+    grokEyebrow: 'Coming from Grok Bot?',
+    grokTitle: 'See how Godmode compares',
+    grokBody: 'Your own computer, your logins, 2FA filled for you.',
+    playbookEyebrow: 'Want it on autopilot?',
+    playbookTitle: '25 ready-made automations',
+    playbookBody: 'Tasks that run on a schedule. Copy, paste, done.',
+    ctaTitle: 'Which one is first for you?',
+    ctaBody: `Free for ${freeDays} days. No card, no sign-up. Then $${monthly.price}/month, or $${yearly.perMonth}/month billed yearly.`,
+  },
+  de: {
+    title: `${total} Alltagsaufgaben für deinen KI-Kollegen`,
+    description: `${total} alltägliche Computeraufgaben, die Godmode mit einer Nachricht für dich erledigt: E-Mails, Rechnungen, Werbe-Reports, Social-Media-Posts, Bestellungen im Onlineshop, Kunden-E-Mails, Recherche und private Erledigungen. In deinem eigenen Browser und deinen Apps, schon angemeldet. Ohne Programmieren.`,
+    eyebrow: 'Beispielaufgaben',
+    h1: `${total} Probleme, die du *mit einer Nachricht löst.*`,
+    lead: 'Schreib es so, wie du einen Kollegen fragen würdest. Godmode findet die Klicks selbst heraus, meldet sich mit deinen gespeicherten Logins an und erledigt die ganze Aufgabe in deinem Browser, in deinen Apps oder auf seinem eigenen Mac. Jedes Beispiel unten ist eine echte Nachricht, die du kopieren, anpassen und abschicken kannst.',
+    filter: 'Beispiele filtern',
+    all: 'Alle',
+    copy: 'Kopieren',
+    grokEyebrow: 'Du kommst von Grok Bot?',
+    grokTitle: 'So schneidet Godmode ab',
+    grokBody: 'Dein eigener Computer, deine Logins, 2FA wird für dich ausgefüllt.',
+    playbookEyebrow: 'Soll es von allein laufen?',
+    playbookTitle: '25 fertige Automationen',
+    playbookBody: 'Aufgaben, die nach Zeitplan laufen. Kopieren, einfügen, fertig.',
+    ctaTitle: 'Womit fängst du an?',
+    ctaBody: `${freeDays} Tage kostenlos. Ohne Karte, ohne Anmeldung. Danach $${monthly.price}/Monat oder $${yearly.perMonth}/Monat bei jährlicher Zahlung.`,
+  },
+}[lang];
+---
+
+<Base title={t.title} description={t.description}>
+  <Nav home={false} />
+  <main class="pt-36 pb-16" data-track-view="use_case_library">
+    <div class="container-x">
+      <div class="max-w-[860px]">
+        <p class="eyebrow" data-reveal>{t.eyebrow}</p>
+        <Words as="h1" text={t.h1} class="h-section mt-4" />
+        <p class="lead mt-6 max-w-[640px]" data-reveal style="--d:200">{t.lead}</p>
+      </div>
+
+      <div class="mt-10 flex flex-wrap gap-2" data-reveal style="--d:300">
+        {(Object.keys(HOW) as How[]).map((h) => (
+          <span class="chip"><Icon name={HOW[h].icon} size={11} /> {HOW[h].label[lang]}</span>
+        ))}
+      </div>
+
+      <div class="uc-filter sticky top-[68px] z-30 -mx-4 mt-10 px-4 py-3 sm:mx-0 sm:px-0" data-uc-filter>
+        <div role="toolbar" aria-label={t.filter} class="tablist flex gap-1.5 overflow-x-auto">
+          <button type="button" class="tab" aria-pressed="true" data-uc="all">{t.all} <span class="text-dim">{total}</span></button>
+          {GROUPS.map((g) => (
+            <button type="button" class="tab" aria-pressed="false" data-uc={g.key}>
+              <Icon name={g.icon} size={14} /> {g.name[lang]}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {
+        GROUPS.map((g) => (
+          <section class="mt-14 scroll-mt-40" id={g.key} data-uc-group={g.key}>
+            <h2 class="flex items-center gap-3 text-[22px] font-semibold tracking-[-0.03em]">
+              <span class="grid size-9 place-items-center rounded-lg bg-brand-soft text-brand">
+                <Icon name={g.icon} size={17} />
+              </span>
+              {g.name[lang]}
+            </h2>
+            <div class="mt-6 grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+              {g.items.map(({ how, [lang]: [problem, message, when] }) => (
+                <article class="card flex flex-col p-6">
+                  <p class="text-[16.5px] leading-snug font-medium tracking-[-0.015em]">{problem}</p>
+                  <p class="mt-4 flex-1 rounded-2xl bg-surface-2 p-4 text-[14px] leading-relaxed text-text-2 ring-1 ring-line">
+                    {message}
+                  </p>
+                  <div class="mt-4 flex flex-wrap items-center gap-1.5">
+                    <span class="chip chip-brand"><Icon name={HOW[how].icon} size={11} /> {HOW[how].label[lang]}</span>
+                    <span class="chip"><Icon name="repeat" size={11} /> {when}</span>
+                    <button type="button" class="btn btn-ghost btn-sm ml-auto !h-8 !px-3" data-copy={message} data-track={`uc_copy_${g.key}`}>
+                      <Icon name="copy" size={13} /> <span data-copy-label>{t.copy}</span>
+                    </button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </section>
+        ))
+      }
+
+      <div class="mt-24 grid gap-3 md:grid-cols-2">
+        <a href={href(lang, '/vs/grok-bot')} class="card group flex items-center justify-between gap-6 p-7 sm:p-9" data-track="uc_to_grok">
+          <div>
+            <p class="font-mono text-[11px] tracking-[0.12em] text-dim uppercase">{t.grokEyebrow}</p>
+            <p class="h-card mt-3 text-[22px]">{t.grokTitle}</p>
+            <p class="mt-2 text-[15px] text-muted">{t.grokBody}</p>
+          </div>
+          <Icon name="arrow-up-right" size={22} class="flex-none text-dim transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-brand" />
+        </a>
+        <a href={href(lang, '/playbook')} class="card group flex items-center justify-between gap-6 p-7 sm:p-9" data-track="uc_to_playbook">
+          <div>
+            <p class="font-mono text-[11px] tracking-[0.12em] text-dim uppercase">{t.playbookEyebrow}</p>
+            <p class="h-card mt-3 text-[22px]">{t.playbookTitle}</p>
+            <p class="mt-2 text-[15px] text-muted">{t.playbookBody}</p>
+          </div>
+          <Icon name="arrow-up-right" size={22} class="flex-none text-dim transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-brand" />
+        </a>
+      </div>
+
+      <div class="card mt-3 p-8 text-center sm:p-12" data-reveal>
+        <h2 class="text-[clamp(26px,3.4vw,40px)] font-semibold tracking-[-0.04em]">{t.ctaTitle}</h2>
+        <p class="mx-auto mt-3 max-w-[520px] text-muted">{t.ctaBody}</p>
+        <div class="mt-7 flex flex-col justify-center gap-3 sm:flex-row">
+          <DownloadButton source="use_cases" />
+        </div>
+      </div>
+    </div>
+  </main>
+  <Footer />
+</Base>
+
+<style>
+  .uc-filter {
+    background: linear-gradient(180deg, var(--bg) 70%, transparent);
+  }
+  .uc-filter .tab[aria-pressed="true"] {
+    color: var(--text);
+    background: var(--surface-2);
+    box-shadow: 0 0 0 1px var(--line-2) inset;
+  }
+</style>
+
+<script>
+  const root = document.querySelector<HTMLElement>('[data-uc-filter]');
+  const buttons = [...(root?.querySelectorAll<HTMLButtonElement>('[data-uc]') ?? [])];
+  const groups = [...document.querySelectorAll<HTMLElement>('[data-uc-group]')];
+  const show = (key: string) => {
+    buttons.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.uc === key)));
+    groups.forEach((g) => (g.hidden = key !== 'all' && g.dataset.ucGroup !== key));
+  };
+  buttons.forEach((b) =>
+    b.addEventListener('click', () => {
+      const key = b.dataset.uc ?? 'all';
+      show(key);
+      history.replaceState(null, '', key === 'all' ? location.pathname : `#${key}`);
+      root?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    }),
+  );
+  const initial = location.hash.slice(1);
+  if (groups.some((g) => g.dataset.ucGroup === initial)) show(initial);
+</script>
