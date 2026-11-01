@@ -140,6 +140,117 @@ modal?.addEventListener('click', (e) => {
 });
 modal?.addEventListener('close', () => modal.querySelector('video')?.pause());
 
+// Recordings gallery: plays the selected recording while in view and moves on to the next until the visitor
+// picks one or pauses. Clicks always play; blocked autoplay or reduced motion falls back to native controls.
+document.querySelectorAll<HTMLElement>('[data-recs]').forEach((root) => {
+  const tabs = [...root.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
+  const panels = [...root.querySelectorAll<HTMLElement>('[role="tabpanel"]')];
+  const videos = panels.map((p) => p.querySelector('video')!);
+  const toggle = root.querySelector<HTMLButtonElement>('[data-rec-toggle]');
+  let current = 0;
+  let visible = false;
+  let auto = !reduced;
+  let paused = false;
+  let raf = 0;
+
+  const showControls = (v: HTMLVideoElement) => {
+    v.controls = true;
+    if (v.preload === 'none') v.preload = 'metadata';
+  };
+  const setPaused = (p: boolean) => {
+    paused = p;
+    if (toggle) {
+      toggle.setAttribute('aria-pressed', String(p));
+      toggle.setAttribute('aria-label', (p ? toggle.dataset.labelPlay : toggle.dataset.labelPause) ?? '');
+    }
+  };
+  const tick = () => {
+    const v = videos[current];
+    if (v?.duration) tabs[current].style.setProperty('--p', String(v.currentTime / v.duration));
+    raf = v && !v.paused ? requestAnimationFrame(tick) : 0;
+  };
+  const play = (byUser = false) => {
+    const v = videos[current];
+    if (!v || (!byUser && (!visible || !auto || paused))) return;
+    if (v.preload === 'none') v.preload = 'auto';
+    v.play().then(
+      () => setPaused(false),
+      () => showControls(v),
+    );
+  };
+  const select = (i: number, byUser = false) => {
+    const next = (i + tabs.length) % tabs.length;
+    if (byUser) {
+      auto = false;
+      videos.forEach((v) => (v.loop = true));
+    }
+    if (next === current && byUser) return play(true);
+    videos[current]?.pause();
+    tabs[current]?.style.setProperty('--p', '0');
+    current = next;
+    tabs.forEach((t, j) => {
+      t.setAttribute('aria-selected', String(j === current));
+      t.tabIndex = j === current ? 0 : -1;
+    });
+    panels.forEach((p, j) => (p.hidden = j !== current));
+    const v = videos[current];
+    if (!v.poster && v.dataset.poster) v.poster = v.dataset.poster;
+    v.currentTime = 0;
+    if (reduced) showControls(v);
+    const list = tabs[current].parentElement!;
+    if (list.scrollWidth > list.clientWidth && !list.contains(document.activeElement)) {
+      const left = tabs[current].getBoundingClientRect().left - list.getBoundingClientRect().left + list.scrollLeft - 16;
+      list.scrollTo({ left, behavior: reduced ? 'auto' : 'smooth' });
+    }
+    if (byUser) play(true);
+    else play();
+  };
+
+  tabs.forEach((t, i) =>
+    t.addEventListener('click', () => {
+      select(i, true);
+      track('recording', t.dataset.key);
+    }),
+  );
+  root.querySelector('[role="tablist"]')?.addEventListener('keydown', (e) => {
+    const k = (e as KeyboardEvent).key;
+    const to = { ArrowDown: current + 1, ArrowRight: current + 1, ArrowUp: current - 1, ArrowLeft: current - 1, Home: 0, End: tabs.length - 1 }[k];
+    if (to === undefined) return;
+    e.preventDefault();
+    select(to, true);
+    tabs[current].focus();
+  });
+  toggle?.addEventListener('click', () => {
+    const v = videos[current];
+    if (v.paused) {
+      setPaused(false);
+      play(true);
+    } else {
+      auto = false;
+      v.pause();
+      setPaused(true);
+    }
+  });
+  videos.forEach((v, i) => {
+    v.addEventListener('play', () => {
+      if (i === current && !raf) raf = requestAnimationFrame(tick);
+    });
+    v.addEventListener('ended', () => {
+      if (auto) select(i + 1);
+    });
+  });
+  if (reduced) videos.forEach(showControls);
+  const stage = root.querySelector('[data-rec-stage]') ?? root;
+  new IntersectionObserver(
+    ([e]) => {
+      visible = e.isIntersecting;
+      if (visible) play();
+      else videos[current]?.pause();
+    },
+    { threshold: 0.4 },
+  ).observe(stage);
+});
+
 // Typewriter (used by use-case prompts) ----------------------------------------------------------
 async function typeInto(el: HTMLElement, text: string, signal: { cancelled: boolean }) {
   el.textContent = '';

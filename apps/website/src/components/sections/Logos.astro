@@ -1,0 +1,56 @@
+---
+import { TOOLS_OFFICE, TOOLS_BUSINESS, type Tool } from '@/config/tools';
+import { langOf } from '@/i18n';
+
+const lang = langOf(Astro.url);
+const t = {
+  en: {
+    h: 'Works in the tools you already use',
+    sub: 'It signs in with your own logins, like you would. No plugins, no setup per website, no coding.',
+    note: 'Logos are trademarks of their owners. Godmode is not affiliated with them.',
+    names: {} as Record<string, string>,
+  },
+  de: {
+    h: 'Arbeitet in den Tools, die du schon nutzt',
+    sub: 'Er meldet sich mit deinen eigenen Logins an, so wie du. Keine Plugins, keine Einrichtung pro Website, kein Programmieren.',
+    note: 'Die Logos sind Marken ihrer Inhaber. Godmode steht in keiner Verbindung zu ihnen.',
+    names: { globe: 'Jede Website' } as Record<string, string>,
+  },
+}[lang];
+
+const rows: { tools: Tool[]; dur: string; reverse?: boolean }[] = [
+  { tools: TOOLS_OFFICE, dur: '70s' },
+  { tools: TOOLS_BUSINESS, dur: '76s', reverse: true },
+];
+---
+
+<section class="relative pt-6 pb-16 sm:pb-24" aria-labelledby="tools-title" data-track-view="tools">
+  <div class="container-x text-center">
+    <h2 id="tools-title" class="text-[15px] font-semibold tracking-[-0.01em] text-text-2" data-reveal>
+      {t.h}
+    </h2>
+    <p class="mx-auto mt-1.5 max-w-[520px] text-[14px] text-muted" data-reveal style="--d:80">
+      {t.sub}
+    </p>
+  </div>
+
+  <div class="mt-8 grid gap-3" data-reveal style="--d:140">
+    {
+      rows.map((row) => (
+        <div class="marquee-wrap mask-x overflow-hidden py-1">
+          <ul class:list={['marquee gap-3', row.reverse && 'reverse']} style={`--dur:${row.dur}`}>
+            {[...row.tools, ...row.tools].map((tool, i) => (
+              <li class="logo-chip" aria-hidden={i >= row.tools.length ? 'true' : undefined}>
+                <img src={`/logos/${tool.slug}.svg`} alt="" width="22" height="22" loading="lazy" decoding="async" />
+                <span>{t.names[tool.slug] ?? tool.name}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))
+    }
+  </div>
+  <p class="container-x mt-6 text-center text-[12px] text-dim" data-reveal>
+    {t.note}
+  </p>
+</section>

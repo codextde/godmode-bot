@@ -117,9 +117,6 @@ const t = {
     result: 'Result: ',
     more: 'See 60 more jobs',
     note: 'Examples. Godmode works with the websites and accounts you give it.',
-    works: 'Works in the websites and programs you already use. It signs in with your own logins. No coding.',
-    anySite: 'any website',
-    bank: 'your bank',
   },
   de: {
     eyebrow: 'Was es kann',
@@ -128,16 +125,8 @@ const t = {
     result: 'Ergebnis: ',
     more: '60 weitere Aufgaben ansehen',
     note: 'Beispiele. Godmode arbeitet mit den Websites und Konten, die du ihm gibst.',
-    works: 'Funktioniert in den Websites und Programmen, die du schon nutzt. Er meldet sich mit deinen eigenen Logins an. Ohne Programmieren.',
-    anySite: 'jede Website',
-    bank: 'deine Bank',
   },
 }[lang];
-const tools = [
-  ...'Gmail · Outlook · Excel · Google Sheets · Word · WhatsApp Web · Slack · HubSpot · Shopify · Amazon · eBay · Etsy · Meta Ads · Google Ads · TikTok Ads · Canva · Instagram · LinkedIn · QuickBooks · DATEV · lexoffice · PayPal'.split(' · '),
-  t.bank,
-  t.anySite,
-];
 ---
 
 <section id="jobs" class="relative py-16 sm:py-24" data-track-view="jobs">
@@ -189,20 +178,4 @@ const tools = [
     </div>
   </div>
 
-  <div class="container-x mt-20">
-    <p class="text-center text-[14px] font-medium text-muted" data-reveal>
-      {t.works}
-    </p>
-  </div>
-  <div class="marquee-wrap mask-x mt-6 overflow-hidden" data-reveal style="--d:100">
-    <div class="marquee items-center gap-10" style="--dur:80s">
-      {
-        [...tools, ...tools].map((t, i) => (
-          <span class="marquee-tool" aria-hidden={i >= tools.length ? 'true' : undefined}>
-            {t}
-          </span>
-        ))
-      }
-    </div>
-  </div>
 </section>

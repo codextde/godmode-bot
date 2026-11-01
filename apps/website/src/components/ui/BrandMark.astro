@@ -1,0 +1,16 @@
+---
+import github from '@/assets/brand/github.svg?raw';
+import claude from '@/assets/brand/claude.svg?raw';
+
+const marks = { github, claude } as const;
+
+interface Props {
+  name: keyof typeof marks;
+  size?: number;
+  class?: string;
+}
+const { name, size = 16, class: className = '' } = Astro.props;
+const inner = marks[name].replace(/^[\s\S]*?<svg[^>]*>/, '').replace(/<\/svg>\s*$/, '');
+---
+
+<svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" class={className} set:html={inner} />

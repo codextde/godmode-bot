@@ -4,7 +4,8 @@ import Words from '../ui/Words.astro';
 import Icon from '../ui/Icon.astro';
 import Character from '../ui/Character.astro';
 import DownloadButton from '../ui/DownloadButton.astro';
-import { PRICING } from '@/config/site';
+import BrandMark from '../ui/BrandMark.astro';
+import { PRICING, SITE } from '@/config/site';
 import recording from '@/assets/shots/hero-recording.jpg';
 import { langOf } from "@/i18n";
 const lang = langOf(Astro.url);
@@ -21,6 +22,7 @@ const t = {
     card: 'No card',
     signup: 'No sign-up',
     mac: 'For Mac with Apple chip or Intel. No coding needed.',
+    trust: ['Notarized by Apple', 'Open source', 'Made in Germany by Codext GmbH', 'Runs on your Claude plan'],
     hiShort: 'Hi, I’m Godmode!',
     hiLong: 'Hi, I’m Godmode. Hand me the busywork.',
     rec: 'Real screen recording, sped up',
@@ -40,6 +42,7 @@ const t = {
     card: 'Ohne Karte',
     signup: 'Ohne Anmeldung',
     mac: 'Für Mac mit Apple-Chip oder Intel. Ohne Programmieren.',
+    trust: ['Von Apple notarisiert', 'Open Source', 'Made in Germany von der Codext GmbH', 'Läuft mit deinem Claude-Abo'],
     hiShort: 'Hi, ich bin Godmode!',
     hiLong: 'Hi, ich bin Godmode. Gib mir den Kleinkram.',
     rec: 'Echte Bildschirmaufnahme, beschleunigt',
@@ -87,6 +90,12 @@ const t = {
       <span><Icon name="check" size={15} class="text-brand" stroke={2.4} /> {t.signup}</span>
     </p>
     <p class="mt-2 text-[13px] text-dim" data-reveal style="--d:720">{t.mac}</p>
+    <div class="trust-row mt-7" data-reveal style="--d:780">
+      <span><Icon name="shield-check" size={15} class="text-text" /> {t.trust[0]}</span>
+      <a href={SITE.repo} target="_blank" rel="noopener" data-track="hero_github"><BrandMark name="github" size={15} class="text-text" /> {t.trust[1]}</a>
+      <a href="#proof" data-track="hero_proof"><Icon name="building-2" size={15} class="text-text" /> {t.trust[2]}</a>
+      <span><BrandMark name="claude" size={15} class="text-claude" /> {t.trust[3]}</span>
+    </div>
   </div>
 
   <div class="container-x relative mt-16 sm:mt-20" data-reveal="fade" style="--d:800">
