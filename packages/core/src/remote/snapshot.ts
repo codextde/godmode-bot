@@ -541,6 +541,8 @@ async function apply(s: ConfigSnapshot): Promise<{ digest: string; warnings: str
 
   if (dek != null) {
     await vault.adoptKey(dek, { kdf: kdf as string, wrappedDek: wrappedDek as string, canary: canary ?? null });
+  } else if (!kdf && !wrappedDek && config().role === "runner") {
+    await vault.forgetAdoptedKey();
   } else if (wrappedDek && wrappedDek !== getMeta("vault.wrapped_dek")) {
     warnings.push("The vault on the runner is from another setup — unlock the vault in Godmode and sync again.");
   }

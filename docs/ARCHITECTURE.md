@@ -1808,6 +1808,12 @@ headless Godmode that Godmode itself starts on an SSH server (like t3code's SSH 
   tools, SSH servers, browser profiles, VMs) empty, every `*_enc` column null and no vault meta or key; cookies are never
   copied. A lean runner bootstraps only Claude Code, starts no browser tools, reports the vault as "not here" in its
   health and tells its agents that logins and keys stay on the human's computer.
+* **Share logins** (`ssh_servers.share_logins`, migration 113, off by default; `SshServer.shareLogins`): the server's
+  runner gets the full snapshot (`snapshotKind`: not lean) with the vault key, like any runner. The digest is cached per
+  snapshot shape, and the change counts as a setup change (`ssh-servers`), so the runner gets the new copy right away.
+  Switching it off sends the lean copy again: the vault tables arrive empty and, with no vault meta in it, the runner
+  forgets the adopted key (`forgetAdoptedKey`). Health and the prompt then follow the runner's own vault state. The
+  runner stays lean otherwise (no browser, no cookies).
 * **Claude login** (`shareClaudeLogin`, `remote/claudeLogin.ts`, `POST /api/link/claude-login`): the controller sends
   its first-ranked Claude account's token (`shareableClaudeToken`, no usage bookkeeping), else this computer's Claude
   Code login (`systemClaudeLogin`): on connect, every 15 minutes where it changed, and before chats start or continue
@@ -1818,7 +1824,7 @@ headless Godmode that Godmode itself starts on an SSH server (like t3code's SSH 
 * **Install from the SSH page** (`installSshGodmode`, `GET /api/ssh/godmode`, `POST /api/ssh/servers/:id/godmode`):
   adding a server (checkbox, on by default) or the card's *Install* / *Try again* runs `ensureSshRunner` in the
   background. `ensureSshRunner` keeps installs in progress or failed in memory, whoever started them (the page or a
-  project's first chat), and announces them as `ssh-servers` changes. The card
+  project's first chat), and announces them as `ssh-godmode` changes. The card
   shows the runner's state and version and an *Update* button when it is behind (`POST /api/runners/:id/update`);
   `auto_update` is on, so it normally catches up by itself on connect and every 15 minutes.
 * **Removing** the runner (the card's *Remove*, the remote folder's *Stop Godmode on the server*, or deleting the server

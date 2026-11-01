@@ -112,6 +112,7 @@ export function ServerDialog({
   const [description, setDescription] = useState("");
   const [trustNewKey, setTrustNewKey] = useState(false);
   const [installGodmode, setInstallGodmode] = useState(true);
+  const [shareLogins, setShareLogins] = useState(false);
   const [testState, setTestState] = useState<TestState | null>(null);
   const [showErrors, setShowErrors] = useState(false);
 
@@ -133,6 +134,7 @@ export function ServerDialog({
     setDescription(server?.description ?? "");
     setTrustNewKey(false);
     setInstallGodmode(true);
+    setShareLogins(server?.shareLogins ?? false);
     setTestState(null);
     setShowErrors(false);
     // Only when the dialog opens: realtime list updates must not reset what the user typed.
@@ -198,6 +200,7 @@ export function ServerDialog({
     username: username.trim(),
     auth,
     description: description.trim(),
+    shareLogins,
     ...secrets(),
   });
 
@@ -253,6 +256,7 @@ export function ServerDialog({
     if (input.username !== server.username) patch.username = input.username;
     if (input.auth !== server.auth) patch.auth = input.auth;
     if (input.description !== server.description) patch.description = input.description;
+    if (input.shareLogins !== server.shareLogins) patch.shareLogins = input.shareLogins;
     Object.assign(patch, secrets());
     if (pinKey && (pinKey.fingerprint !== server.hostKey?.fingerprint || pinKey.type !== server.hostKey?.type)) patch.hostKey = pinKey;
   }
@@ -629,6 +633,14 @@ export function ServerDialog({
                 </span>
               </label>
             )}
+
+            <label htmlFor="ssh-share-logins" className="flex cursor-pointer items-start gap-2.5 text-[13px]">
+              <Checkbox id="ssh-share-logins" className="mt-0.5" checked={shareLogins} onCheckedChange={(v) => setShareLogins(v === true)} />
+              <span className="min-w-0">
+                <span className="block">{t("dialog.shareLogins")}</span>
+                <span className="block text-xs text-muted-foreground">{t("dialog.shareLoginsHint")}</span>
+              </span>
+            </label>
 
             <AnimatePresence initial={false}>
               {tested && (

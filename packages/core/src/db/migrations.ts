@@ -1890,4 +1890,11 @@ ALTER TABLE workspace_sources ADD COLUMN server_id TEXT;
 ALTER TABLE runners ADD COLUMN ssh_server_id TEXT;
 `,
   },
+  {
+    id: 113,
+    name: "ssh_share_logins",
+    sql: /* sql */ `
+ALTER TABLE ssh_servers ADD COLUMN share_logins INTEGER NOT NULL DEFAULT 0;
+`,
+  },
 ];

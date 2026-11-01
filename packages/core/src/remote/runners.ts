@@ -70,7 +70,7 @@ import { shareableClaudeToken } from "../services/claudeAccounts";
 import { claudeLoginUsable, type ForwardedClaudeLogin } from "./claudeLogin";
 import { systemClaudeLogin } from "../services/claudeUsage";
 import { isPrimary, isSecondary, primaryRunnerId } from "./group";
-import { onSshServerDeleting, getServer } from "../ssh/service";
+import { getServer, setSshServerHooks, sharesLogins } from "../ssh/service";
 import { assertServer, closeAllSshTunnels, expandHome, pairingCodeVia, remoteFolderFor, serverHome, sshLinkTarget, sshRunnerFor, stopSshRunner } from "./sshRunners";
 
 const log = logger("runners");
@@ -163,7 +163,7 @@ const syncing = new Set<string>();
 const chains = new Map<string, Promise<unknown>>();
 /** Live view subscriptions this computer holds on each runner, re-sent after a reconnect. */
 const subscriptions = new Map<string, Map<string, ClientEvent>>();
-const digestCache = new Map<RunnerKind, string>();
+const digestCache = new Map<string, string>();
 let syncTimer: ReturnType<typeof setTimeout> | null = null;
 let forceNextSync = false;
 let offBus: (() => void) | null = null;
@@ -189,9 +189,15 @@ function requireRow(id: string): RunnerRow {
 }
 
 /** The setup's digest as a runner (or a device) would report it after a sync; cached until the setup changes. */
-function currentDigest(kind: RunnerKind = "runner"): string {
-  let digest = digestCache.get(kind);
-  if (!digest) digestCache.set(kind, (digest = snapshotDigest({ device: kind === "device", lean: kind === "ssh" })));
+function snapshotKind(r: Pick<RunnerRow, "kind" | "ssh_server_id">): { device: boolean; lean: boolean } {
+  return { device: r.kind === "device", lean: r.kind === "ssh" && !(r.ssh_server_id && sharesLogins(r.ssh_server_id)) };
+}
+
+function currentDigest(r: Pick<RunnerRow, "kind" | "ssh_server_id">): string {
+  const opts = snapshotKind(r);
+  const key = `${opts.device}:${opts.lean}`;
+  let digest = digestCache.get(key);
+  if (!digest) digestCache.set(key, (digest = snapshotDigest(opts)));
   return digest;
 }
 
@@ -208,7 +214,7 @@ function toRunner(r: RunnerRow): RemoteRunner {
   const state: LinkState = links.get(r.id)?.state ?? { state: "offline", error: null, address: null, info: null, latencyMs: null };
   let digest: string | null = null;
   try {
-    digest = currentDigest(r.kind);
+    digest = currentDigest(r);
   } catch (err) {
     log.warn("could not compute the setup digest", err);
   }
@@ -626,7 +632,7 @@ function wireHub() {
 export function startRunners(): void {
   if (started) return;
   started = true;
-  onSshServerDeleting(forgetSshServer);
+  setSshServerHooks({ deleting: forgetSshServer });
   wireHub();
   setRunnerReachability((id) => links.get(id)?.state.state === "online");
   setUpdateHost({
@@ -675,7 +681,7 @@ export function startRunners(): void {
 
 export function stopRunners(): void {
   started = false;
-  onSshServerDeleting(null);
+  setSshServerHooks(null);
   setRunnerReachability(null);
   offBus?.();
   offBus = null;
@@ -779,15 +785,16 @@ export function syncRunner(id: string, opts: { agentId?: string; profileId?: str
     let memory = false;
     let cookies = false;
 
-    const digest = currentDigest(r.kind);
+    const digest = currentDigest(r);
+    const shape = snapshotKind(r);
     const info = infos.get(id);
     // The digest leaves the vault key out: a runner whose vault is still locked while this one's is open gets it now.
-    const needsKey = vault.isUnlocked() && !!info && !info.vault.unlocked;
+    const needsKey = !shape.lean && vault.isUnlocked() && !!info && !info.vault.unlocked;
     if (maySendSetup(r) && (opts.force || needsKey || r.sync_digest !== digest)) {
       syncing.add(id);
       emit(id);
       try {
-        const result = await l.json<{ digest: string; warnings: string[] }>("POST", "/api/link/sync", buildSnapshot({ device: r.kind === "device", lean: r.kind === "ssh" }), { timeoutMs: SYNC_TIMEOUT_MS });
+        const result = await l.json<{ digest: string; warnings: string[] }>("POST", "/api/link/sync", buildSnapshot(shape), { timeoutMs: SYNC_TIMEOUT_MS });
         for (const w of result.warnings ?? []) log.warn(`${r.name}: ${w}`);
         const complete = result.digest === digest;
         update("runners", id, {
@@ -1248,7 +1255,7 @@ export function ensureSshRunner(serverId: string): Promise<string> {
   const known = sshRunnerFor(serverId);
   if (known && links.get(known)?.state.state === "online") return Promise.resolve(known);
   sshInstalls.set(serverId, { state: "installing", error: null });
-  bus.changed("ssh-servers");
+  bus.changed("ssh-godmode");
   pending = (async () => {
     assertServer(serverId);
     let id = sshRunnerFor(serverId);
@@ -1279,7 +1286,7 @@ export function ensureSshRunner(serverId: string): Promise<string> {
     )
     .finally(() => {
       sshEnsuring.delete(serverId);
-      bus.changed("ssh-servers");
+      bus.changed("ssh-godmode");
     });
   sshEnsuring.set(serverId, pending);
   return pending;

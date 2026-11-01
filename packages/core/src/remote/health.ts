@@ -281,7 +281,7 @@ async function inspect(refresh: boolean): Promise<RunnerHealth> {
           ),
         ]
       : []),
-    lean ? make("vault", "access", "Vault", "ok", "Not on this server — logins and keys stay on your computer", false) : vaultCheck(),
+    lean && !deps.vault().initialized ? make("vault", "access", "Vault", "ok", "Not on this server — logins and keys stay on your computer", false) : vaultCheck(),
     make("config", "access", "Setup", configured ? "ok" : "fail", configured ? "Copied from Godmode" : "Nothing copied yet", true),
     ...(service ? [serviceCheck(service), keepAwakeCheck()] : []),
     ...(session ? [session] : []),

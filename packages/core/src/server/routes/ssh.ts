@@ -18,6 +18,7 @@ const fields = {
   privateKeyPath: z.string().max(4096).optional(),
   passphrase: z.string().max(1000).optional(),
   description: z.string().max(4000).optional(),
+  shareLogins: z.boolean().optional(),
   hostKey: hostKey.nullable().optional(),
 };
 

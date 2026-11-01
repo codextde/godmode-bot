@@ -88,7 +88,7 @@
     "remoteServer": "SSH server",
     "remoteServerPlaceholder": "Pick a server",
     "remotePath": "Folder on the server",
-    "remoteHint": "New chats here run on that server, in this folder: Godmode installs and starts a small Godmode there over SSH and opens no port. It gets your agents and instructions, and your Claude login, but no website logins, keys or cookies.",
+    "remoteHint": "New chats here run on that server, in this folder: Godmode installs and starts a small Godmode there over SSH and opens no port. It gets your agents and instructions, and your Claude login; website logins and API keys only when you share them in the server's settings.",
     "remoteNoServers": "Add the server on the SSH servers page first, then pick it here.",
     "remoteOnSave": "New chats run on the server once you save.",
     "remoteNotStarted": "Godmode starts on the server with the first chat.",

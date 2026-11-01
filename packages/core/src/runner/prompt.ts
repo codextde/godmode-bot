@@ -273,7 +273,11 @@ You are "${agent.name}", an autonomous AI coworker running inside Godmode Bot on
   }
 - ${userName ? `The human you work for: ${userName}` : "The human you work for has not set a name."}${
     leanRunner()
-      ? `\n- This Godmode runs on the server ${osHostname()}, started by ${human}'s Godmode over SSH. ${human}'s logins, 2FA codes, API keys and browser stay on their own computer and aren't here: when a task needs one of them, say so in your final answer.`
+      ? `\n- This Godmode runs on the server ${osHostname()}, started by ${human}'s Godmode over SSH. ${
+          ctx.vaultOpen
+            ? `${human} shared their logins, 2FA codes and API keys with it; their browser stays on their own computer.`
+            : `${human}'s logins, 2FA codes, API keys and browser stay on their own computer and aren't here: when a task needs one of them, say so in your final answer.`
+        }`
       : ""
   }
 ${workplace}`);

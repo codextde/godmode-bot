@@ -203,6 +203,7 @@ export type EntityName =
   | "computer"
   | "vms"
   | "ssh-servers"
+  | "ssh-godmode"
   /** Android phones: plugged in, unplugged, renamed, assigned. */
   | "android"
   /** Phone calls: placed, ringing, ended, summarised. */

@@ -347,6 +347,13 @@ export async function adoptKey(dekBase64: string, meta: { kdf: string; wrappedDe
   if (!remembered) await setRememberDevice(true);
 }
 
+export async function forgetAdoptedKey(): Promise<void> {
+  if (!isInitialized()) return;
+  await setRememberDevice(false);
+  for (const key of ["vault.kdf", "vault.wrapped_dek", "vault.canary"]) deleteMeta(key);
+  lock();
+}
+
 export function vaultMetaForBackup() {
   return {
     kdf: getMeta("vault.kdf"),

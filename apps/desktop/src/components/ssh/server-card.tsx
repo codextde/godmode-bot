@@ -212,6 +212,7 @@ function GodmodeOnServer({ server, actions }: { server: SshServer; actions: SshA
         <RunnerStateDot state={runner.state} />
         <span>{RUNNER_STATE_LABEL[runner.state]}</span>
         {runner.version && <span className="font-mono">· {runner.version}</span>}
+        <span>· {server.shareLogins ? t("godmode.loginsShared") : t("godmode.loginsHere")}</span>
         {updating && (
           <>
             <Spinner className="size-3" /> {t("godmode.updating")}

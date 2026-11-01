@@ -50,6 +50,7 @@ interface SshServerRow {
   os: string | null;
   last_connected_at: string | null;
   last_error: string | null;
+  share_logins: number;
   created_at: string;
   updated_at: string;
 }
@@ -75,6 +76,7 @@ function toServer(r: SshServerRow): SshServer {
     os: r.os,
     lastConnectedAt: r.last_connected_at,
     lastError: r.last_error,
+    shareLogins: r.share_logins === 1,
     assignments: sshAssignments(r.id),
     createdAt: r.created_at,
     updatedAt: r.updated_at,
@@ -220,6 +222,7 @@ export function createServer(input: SshServerInput): SshServer {
     ...fields,
     auth,
     description: (input.description ?? "").trim().slice(0, 4000),
+    share_logins: input.shareLogins ? 1 : 0,
     ...sealed(id, secrets),
     host_key_type: hostKey?.type ?? null,
     host_key_fingerprint: hostKey?.fingerprint ?? null,
@@ -251,6 +254,7 @@ export function updateServer(id: string, patch: SshServerPatch): SshServer {
     username: patch.username === undefined ? undefined : normalizeUsername(patch.username),
     auth,
     description: patch.description === undefined ? undefined : patch.description.trim().slice(0, 4000),
+    share_logins: patch.shareLogins === undefined ? undefined : patch.shareLogins ? 1 : 0,
     ...(secrets ? sealed(id, secrets) : {}),
     ...(hostKey === undefined ? {} : { host_key_type: hostKey?.type ?? null, host_key_fingerprint: hostKey?.fingerprint ?? null }),
     ...(moved || secrets ? { last_error: null } : {}),
@@ -264,20 +268,29 @@ export function updateServer(id: string, patch: SshServerPatch): SshServer {
     ...(moved ? { host: addressOf({ host, port }) } : {}),
     ...(secrets ? { secrets: true } : {}),
     ...(hostKey !== undefined ? { hostKey: hostKey?.fingerprint ?? null } : {}),
+    ...(patch.shareLogins !== undefined ? { shareLogins: patch.shareLogins } : {}),
   });
   bus.changed("ssh-servers");
   return getServer(id);
 }
 
-let deletingHook: ((id: string) => Promise<void>) | null = null;
+export function sharesLogins(id: string): boolean {
+  return row(id)?.share_logins === 1;
+}
 
-export function onSshServerDeleting(hook: ((id: string) => Promise<void>) | null): void {
-  deletingHook = hook;
+interface SshServerHooks {
+  deleting(id: string): Promise<void>;
+}
+
+let hooks: SshServerHooks | null = null;
+
+export function setSshServerHooks(next: SshServerHooks | null): void {
+  hooks = next;
 }
 
 export async function deleteServer(id: string): Promise<void> {
   const current = requireRow(id);
-  if (deletingHook) await deletingHook(id);
+  if (hooks) await hooks.deleting(id);
   const removed = tx(() => {
     run("DELETE FROM ssh_servers WHERE id = ?", id);
     return removeServerEverywhere(id);

@@ -161,7 +161,9 @@
     "saveChanges": "Save changes",
     "addServer": "Add server",
     "installGodmode": "Install Godmode on this server",
-    "installGodmodeHint": "Projects with a folder here run their chats on the server. Godmode installs itself in ~/.local/bin and keeps up with this computer."
+    "installGodmodeHint": "Projects with a folder here run their chats on the server. Godmode installs itself in ~/.local/bin and keeps up with this computer.",
+    "shareLogins": "Share logins with Godmode on this server",
+    "shareLoginsHint": "Copies the vault there: website logins, 2FA codes, API keys and app secrets, so agents on the server can use them. Off: they stay on this computer, and switching it off removes them from the server again."
   },
   "authorize": {
     "title": "Add the public key to the server before testing",
@@ -204,6 +206,8 @@
     "updateFailed": "Couldn't update Godmode on the server",
     "remove": "Remove",
     "removed": "Godmode on {{name}} was stopped and removed",
-    "removeFailed": "Couldn't remove Godmode from the server"
+    "removeFailed": "Couldn't remove Godmode from the server",
+    "loginsShared": "logins shared",
+    "loginsHere": "logins stay here"
   }
 }

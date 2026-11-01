@@ -161,7 +161,9 @@
     "saveChanges": "Änderungen speichern",
     "addServer": "Server hinzufügen",
     "installGodmode": "Godmode auf diesem Server installieren",
-    "installGodmodeHint": "Projekte mit einem Ordner hier führen ihre Chats auf dem Server aus. Godmode installiert sich in ~/.local/bin und hält mit diesem Computer Schritt."
+    "installGodmodeHint": "Projekte mit einem Ordner hier führen ihre Chats auf dem Server aus. Godmode installiert sich in ~/.local/bin und hält mit diesem Computer Schritt.",
+    "shareLogins": "Logins mit Godmode auf diesem Server teilen",
+    "shareLoginsHint": "Kopiert den Tresor dorthin: Website-Logins, 2FA-Codes, API-Schlüssel und App-Secrets, damit Agenten auf dem Server sie nutzen können. Aus: Sie bleiben auf diesem Computer, und beim Ausschalten werden sie vom Server wieder entfernt."
   },
   "authorize": {
     "title": "Füge den öffentlichen Schlüssel vor dem Test auf dem Server hinzu",
@@ -204,6 +206,8 @@
     "updateFailed": "Godmode konnte auf dem Server nicht aktualisiert werden",
     "remove": "Entfernen",
     "removed": "Godmode auf {{name}} wurde gestoppt und entfernt",
-    "removeFailed": "Godmode konnte nicht vom Server entfernt werden"
+    "removeFailed": "Godmode konnte nicht vom Server entfernt werden",
+    "loginsShared": "Logins geteilt",
+    "loginsHere": "Logins bleiben hier"
   }
 }

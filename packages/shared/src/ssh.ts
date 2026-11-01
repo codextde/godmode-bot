@@ -53,6 +53,8 @@ export interface SshServer {
   lastConnectedAt: ISODate | null;
   /** Why the last connection failed (cleared by the next successful one). */
   lastError: string | null;
+  /** The Godmode running on the server gets the vault too: logins, 2FA codes, API keys and app secrets. */
+  shareLogins: boolean;
   /** Agents and chats that use the server. */
   assignments: SshAssignment[];
   createdAt: ISODate;
@@ -75,6 +77,7 @@ export interface SshServerInput {
   /** Passphrase of an encrypted private key. undefined = keep, "" = none. */
   passphrase?: string;
   description?: string;
+  shareLogins?: boolean;
   /**
    * Pin this host key (as seen by a connection test); null = forget the pinned one, the next connection pins again.
    * undefined = keep it — unless the host or port changes, which forgets it.
