@@ -1312,6 +1312,7 @@ export function buildEnv(agent: Agent, inFolder = false, apiKeys = true): Record
   const env = claudeEnv();
   // Load CLAUDE.md files from --add-dir folders: the agent's repo when the cwd is an attached folder, and the workspace's folders.
   if (inFolder) env.CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD = "1";
+  env.CLAUDE_CODE_DISABLE_AUTO_MEMORY = "1";
   // `claude -p` stops background subagents still running 10 minutes after the main turn ended, and the agent never
   // hears back from them. The watchdog and the run timeout decide when a run has gone quiet for too long instead.
   env.CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS ??= "0";
@@ -2372,8 +2373,6 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   const extraArgs = (settings.runner.extraArgs ?? []).filter((a) => typeof a === "string" && a.length > 0);
 
   const env = buildEnv(agent, !!folder || sources.length > 0, toolKeysInEnv);
-  // Claude Code's own auto memory would keep what a private chat said.
-  if (job.private) env.CLAUDE_CODE_DISABLE_AUTO_MEMORY = "1";
   if (artifactsHere && !glm) env.CLAUDE_CODE_ENABLE_FINE_GRAINED_TOOL_STREAMING ??= "1";
   // Without it a headless Claude Code keeps a mod's failures to its debug log: a hook that throws, a module that
   // doesn't load. With it they reach the chat as notes from the mod. It also watches the folders — the run's own copies.
