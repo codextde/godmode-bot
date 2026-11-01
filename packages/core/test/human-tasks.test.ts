@@ -535,6 +535,16 @@ describe("questions and approvals have a ticket", () => {
     expect((await waitForRun(run.id, 10_000)).result).toBe("CONTINUED");
   }, 30_000);
 
+  test("a question parked in the backlog doesn't wait for you until it's back", async () => {
+    const { run, question, task } = await asking();
+    await api("PATCH", `/api/human-tasks/${task.id}`, { status: "backlog" });
+    expect(listAttention().some((i) => i.id === `question:${question.id}`)).toBe(false);
+    await api("PATCH", `/api/human-tasks/${task.id}`, { status: "open" });
+    expect(listAttention().some((i) => i.id === `question:${question.id}`)).toBe(true);
+    answerQuestion(question.id, { text: "Blue" }, { actor: "user", via: "app" });
+    await waitForRun(run.id, 10_000);
+  }, 30_000);
+
   test("answering the question closes its ticket", async () => {
     const { run, question, task } = await asking();
     answerQuestion(question.id, { text: "Green, like the logo" }, { actor: "user", via: "app" });

@@ -3,8 +3,8 @@ import { useSearchParams } from "react-router";
 import { AnimatePresence, motion } from "motion/react";
 import { useTranslation } from "react-i18next";
 import { Archive, CircleCheck, Inbox, List, PartyPopper, Plus, RefreshCw, SquareKanban } from "lucide-react";
-import type { Agent, AgentQuestion, HumanTask, MissingLogin, MissingLoginStatus } from "@godmode/shared";
-import { MASCOT_CHARACTER, MASCOT_COLOR, isHumanTaskWaiting } from "@godmode/shared";
+import type { Agent, AgentQuestion, AttentionKind, HumanTask, MissingLogin, MissingLoginStatus } from "@godmode/shared";
+import { ATTENTION_KINDS, MASCOT_CHARACTER, MASCOT_COLOR, isHumanTaskWaiting } from "@godmode/shared";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -19,7 +19,7 @@ import { useAllAgents, useAttention, useHumanTasks, useMissingLogins, useQuestio
 import { cn } from "@/lib/utils";
 import { useUi, type InboxView } from "@/stores/ui";
 import { useScopedAttention } from "@/components/workspaces/workspace-activity";
-import { AttentionList } from "@/components/attention/attention-list";
+import { ATTENTION_ICON, AttentionList } from "@/components/attention/attention-list";
 import { HumanTaskBoard } from "@/components/human-tasks/human-task-board";
 import { HumanTaskSheet } from "@/components/human-tasks/human-task-sheet";
 import { DirectionHint } from "@/components/layout/direction-hint";
@@ -118,8 +118,41 @@ export default function InboxPage() {
         }}
       />
       <DirectionHint direction="to-you" />
+      {view === "board" && <OffBoard tasks={tasks} onShow={() => setView("list")} />}
       {view === "board" ? <HumanTaskBoard adding={adding} onAdding={setAdding} onOpen={openTask} /> : <InboxList agentById={agentById} />}
       <HumanTaskSheet task={selected} agent={selected?.agentId ? agentById.get(selected.agentId) : undefined} focusNote={focusNote} onClose={closeTask} />
+    </div>
+  );
+}
+
+/** What the sidebar's count includes but the board has no card for (logins, tickets, chats), so the two always add up. */
+function OffBoard({ tasks, onShow }: { tasks: HumanTask[]; onShow: () => void }) {
+  const { t } = useTranslation("inbox");
+  const attention = useAttention();
+  const onBoard = new Set(tasks.map((h) => h.questionId).filter(Boolean));
+  const counts = new Map<AttentionKind, number>();
+  for (const i of attention.data ?? []) {
+    if (i.kind === "todo" || (i.kind === "question" && onBoard.has(i.question?.id ?? ""))) continue;
+    counts.set(i.kind, (counts.get(i.kind) ?? 0) + 1);
+  }
+  if (!counts.size) return null;
+  return (
+    <div className="px-5 @2xl:px-8">
+      <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border bg-card/60 py-2 pr-2 pl-3 text-sm">
+        <span className="text-muted-foreground">{t("board.offBoard.lead")}</span>
+        {ATTENTION_KINDS.filter((k) => counts.has(k)).map((k) => {
+          const Icon = ATTENTION_ICON[k];
+          return (
+            <span key={k} className="inline-flex items-center gap-1.5 text-foreground">
+              <Icon aria-hidden className="size-3.5 text-warning" />
+              {t(`board.offBoard.${k}`, { count: counts.get(k) })}
+            </span>
+          );
+        })}
+        <Button variant="ghost" size="sm" className="ml-auto" onClick={onShow}>
+          <List /> {t("board.offBoard.show")}
+        </Button>
+      </div>
     </div>
   );
 }

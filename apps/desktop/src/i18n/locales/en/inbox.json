@@ -21,7 +21,27 @@
     "inBacklog_other": "{{count}} in the backlog",
     "onlyBacklog_one": "Nothing to do right now · {{count}} in the backlog for later.",
     "onlyBacklog_other": "Nothing to do right now · {{count}} in the backlog for later.",
-    "empty": "Your to-dos as a board: what agents hand you and what you add for yourself. Drop one on Done and its agent picks up where it left off."
+    "empty": "Your to-dos as a board: what agents hand you and what you add for yourself. Drop one on Done and its agent picks up where it left off.",
+    "offBoard": {
+      "lead": "Also waiting, not on the board:",
+      "show": "Show in list",
+      "question_one": "{{count}} question",
+      "question_other": "{{count}} questions",
+      "login_one": "{{count}} login to add",
+      "login_other": "{{count}} logins to add",
+      "review_one": "{{count}} ticket to review",
+      "review_other": "{{count}} tickets to review",
+      "blocked_one": "{{count}} blocked ticket",
+      "blocked_other": "{{count}} blocked tickets",
+      "paused_one": "{{count}} paused chat",
+      "paused_other": "{{count}} paused chats",
+      "failed_one": "{{count}} chat that went wrong",
+      "failed_other": "{{count}} chats that went wrong",
+      "automation_one": "{{count}} broken automation",
+      "automation_other": "{{count}} broken automations",
+      "access_one": "{{count}} access request",
+      "access_other": "{{count}} access requests"
+    }
   },
   "list": {
     "title": "Needs your attention",
