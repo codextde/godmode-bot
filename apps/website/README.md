@@ -13,7 +13,7 @@ src/pages/admin           sales dashboard (HTTP Basic auth, password = ADMIN_PAS
 src/pages/api/license     license lookup for the desktop app: GET /api/license?key=GM-… (trial/renewal state)
 src/pages/api/portal      Stripe customer portal by welcome-page cookie or ?key=GM-…
 migrations/               D1 schema (orders, events, leads, stripe_events, emails, checkout_recovery)
-test/                     vitest: webhook and email rules on an in-memory D1 (`pnpm test`)
+test/                     bun test: license rules, the webhook and email rules on an in-memory D1 (`pnpm test`)
 scripts/stripe-setup.mjs  creates products/prices, webhook and customer portal (idempotent)
 video/                    HyperFrames sources for the site and ad videos → public/media/
 marketing/x-ads-plan.md   X Ads campaigns, targeting, copy and tracking setup

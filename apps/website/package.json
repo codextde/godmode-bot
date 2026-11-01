@@ -12,8 +12,7 @@
     "deploy": "pnpm build && wrangler deploy",
     "db:migrate": "wrangler d1 migrations apply godmode-site --remote",
     "db:migrate:local": "wrangler d1 migrations apply godmode-site --local",
-    "stripe:setup": "node scripts/stripe-setup.mjs",
-    "test": "vitest run"
+    "stripe:setup": "node scripts/stripe-setup.mjs"
   },
   "dependencies": {
     "@astrojs/cloudflare": "^14.4.3",
@@ -33,7 +32,6 @@
     "@cloudflare/workers-types": "^5.20261029.1",
     "lucide-static": "^1.63.0",
     "typescript": "^6.0.3",
-    "vitest": "^5.0.5",
     "wrangler": "^4.155.0"
   }
 }

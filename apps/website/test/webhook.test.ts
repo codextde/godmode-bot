@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'bun:test';
 import type Stripe from 'stripe';
 import { cryptoProvider, stripe } from '@/lib/stripe';
 import { POST } from '@/pages/api/stripe-webhook';
@@ -24,7 +24,7 @@ async function deliver(session: Stripe.Checkout.Session, type = 'checkout.sessio
 }
 
 const recovery = (id = 'cs_test_abandoned1') =>
-  db.sql.prepare('SELECT * FROM checkout_recovery WHERE session_id = ?').get(id) as Record<string, unknown> | undefined;
+  db.sql.query('SELECT * FROM checkout_recovery WHERE session_id = ?').get(id) as Record<string, unknown> | null;
 
 describe('checkout.session.expired', () => {
   it('stores email, plan, recovery link, consent and attribution', async () => {
@@ -41,7 +41,7 @@ describe('checkout.session.expired', () => {
       livemode: 0,
     });
     expect(recovery()!.expired_at).toEqual(expect.any(Number));
-    expect(db.sql.prepare("SELECT status FROM orders WHERE session_id = 'cs_test_abandoned1'").get()).toMatchObject({ status: 'expired' });
+    expect(db.sql.query("SELECT status FROM orders WHERE session_id = 'cs_test_abandoned1'").get()).toMatchObject({ status: 'expired' });
   });
 
   it('keeps sessions without email or consent, with consent left empty', async () => {
@@ -56,13 +56,13 @@ describe('checkout.session.expired', () => {
 
   it('ignores checkouts this site did not open', async () => {
     await deliver(expiredSession({ metadata: {} }));
-    expect(recovery()).toBeUndefined();
+    expect(recovery()).toBeNull();
   });
 
   it('processes a retried event once', async () => {
     const payload = expiredSession();
     await deliver(payload);
-    db.sql.exec("UPDATE checkout_recovery SET email = 'changed@example.com'");
+    db.sql.run("UPDATE checkout_recovery SET email = 'changed@example.com'");
     n--;
     const res = await deliver(payload);
     expect(await res.text()).toBe('ok (duplicate)');
@@ -70,7 +70,7 @@ describe('checkout.session.expired', () => {
   });
 
   it('keeps an opt-in given on /checkout/canceled', async () => {
-    db.sql.exec(`INSERT INTO checkout_recovery (session_id, created_at, plan, email, consent, consent_source, livemode)
+    db.sql.run(`INSERT INTO checkout_recovery (session_id, created_at, plan, email, consent, consent_source, livemode)
       VALUES ('cs_test_abandoned1', 1, 'yearly', 'site@example.com', 'opt_in', 'site', 0)`);
     await deliver(expiredSession({ customer_details: null, consent: null }));
     expect(recovery()).toMatchObject({

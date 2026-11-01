@@ -1,5 +1,4 @@
 import type Stripe from 'stripe';
-import { vi } from 'vitest';
 import { env } from 'cloudflare:workers';
 import { testDb } from './d1';
 
@@ -20,10 +19,10 @@ export function setupEnv() {
     SESSION_SECRET: 'test-session-secret',
     LIFECYCLE_EMAILS: 'on',
     EMAIL: {
-      send: vi.fn(async (m: Sent) => {
+      send: async (m: Sent) => {
         sent.push(m);
         return { messageId: `<m${sent.length}@usegodmode.com>` };
-      }),
+      },
     },
   });
   return { db, sent };

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'bun:test';
 import { recordExpiredCheckout, recordSiteOptIn } from '@/lib/db';
 import { runRecovery } from '@/lib/mail';
 import { composeRecovery, recoveryDue, type RecoveryRow } from '@/lib/recovery';
@@ -50,7 +50,7 @@ describe('runRecovery', () => {
 
   const expire = (over: Parameters<typeof expiredSession>[0] = {}) =>
     recordExpiredCheckout(expiredSession(over, T0), T0);
-  const kinds = () => db.sql.prepare('SELECT session_id, kind, message_id FROM emails').all().map((r) => ({ ...r }));
+  const kinds = () => db.sql.query('SELECT session_id, kind, message_id FROM emails').all();
 
   it('sends one recovery email a day after expiry and records it', async () => {
     await expire();
@@ -94,7 +94,7 @@ describe('runRecovery', () => {
 
   it('does not mail someone who bought in the meantime', async () => {
     await expire();
-    db.sql.exec(`INSERT INTO orders (session_id, created_at, plan, mode, status, email, livemode)
+    db.sql.run(`INSERT INTO orders (session_id, created_at, plan, mode, status, email, livemode)
       VALUES ('cs_test_paid', ${T0}, 'monthly', 'subscription', 'paid', 'ANN@example.com', 0)`);
     await runRecovery(T0 + DAY + HOUR);
     expect(sent).toHaveLength(0);
@@ -102,7 +102,7 @@ describe('runRecovery', () => {
 
   it('does not mail unsubscribed addresses', async () => {
     await expire();
-    db.sql.exec(`INSERT INTO unsubscribes (email, ts) VALUES ('ann@example.com', ${T0})`);
+    db.sql.run(`INSERT INTO unsubscribes (email, ts) VALUES ('ann@example.com', ${T0})`);
     await runRecovery(T0 + DAY + HOUR);
     expect(sent).toHaveLength(0);
   });
@@ -131,7 +131,7 @@ describe('runRecovery', () => {
   });
 
   it('mails an opt-in from /checkout/canceled once the checkout expired', async () => {
-    db.sql.exec(`INSERT INTO orders (session_id, created_at, plan, mode, status, livemode, utm_source)
+    db.sql.run(`INSERT INTO orders (session_id, created_at, plan, mode, status, livemode, utm_source)
       VALUES ('cs_test_abandoned1', ${T0 - DAY}, 'monthly', 'subscription', 'open', 0, 'google')`);
     expect(await recordSiteOptIn('cs_test_abandoned1', 'bob@example.com')).toBe(true);
     expect(await recordSiteOptIn('cs_test_unknown', 'bob@example.com')).toBe(false);
@@ -157,7 +157,8 @@ describe('composeRecovery', () => {
       'https://usegodmode.com/unsubscribe?t=abc',
     );
     expect(mail.text).toMatch(/^Hi,\n\nsaw you started the Godmode checkout/);
-    expect(mail.text).toContain('Pro Monthly, $39/month');
+    expect(mail.text).toContain('Pro Monthly, $39/month, cancel anytime, 14-day money-back guarantee');
+    expect(mail.text).toContain('free for 14 days:\nhttps://usegodmode.com/download');
     expect(mail.text).toContain('Unsubscribe: https://usegodmode.com/unsubscribe?t=abc');
     expect(mail.html).toContain('<a href="https://buy.stripe.com/r/x"');
     expect(mail.text).not.toMatch(/\p{Extended_Pictographic}/u);
