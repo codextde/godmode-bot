@@ -63,7 +63,7 @@ export interface LicenseUsage {
 }
 
 /**
- * - `active`, `trial`, `past_due` (Stripe still retries the payment): the key is good.
+ * - `active`, `trial`, `past_due` (Stripe retries the payment; the server accepts it for 7 days): the key is good.
  * - `grace`: the free trial: an install without a key runs free for `LICENSE_FREE_DAYS` from its first start.
  * - `unverified`: a key that could not be checked yet; accepted for 7 days after it was entered.
  * - `missing`, `invalid`, `expired`: new runs are refused (in release builds).
@@ -71,6 +71,9 @@ export interface LicenseUsage {
 export type LicenseStatus = "active" | "trial" | "past_due" | "grace" | "unverified" | "missing" | "invalid" | "expired";
 
 export type LicensePlan = "monthly" | "yearly" | "lifetime";
+
+/** Why an `expired` key stopped working: its trial ended, the subscription was cancelled, a payment failed for good, or it was refunded. */
+export type LicenseEndReason = "trial_ended" | "canceled" | "payment_failed" | "refunded";
 
 /** GET /api/license */
 export interface LicenseState {
@@ -81,6 +84,8 @@ export interface LicenseState {
   trialEndsAt: ISODate | null;
   renewsAt: ISODate | null;
   cancelAtPeriodEnd: boolean;
+  /** Set for `expired`: why the key stopped working (null from licence servers that don't say). */
+  endReason: LicenseEndReason | null;
   /** The end of the free trial of an install without a key (set once, never extended). */
   graceEndsAt: ISODate | null;
   /** The end of the window an unverified key is accepted for. */

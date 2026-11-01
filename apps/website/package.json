@@ -8,7 +8,7 @@
     "build": "cp ../../scripts/install.sh public/install.sh && cp ../../scripts/runner.sh public/runner.sh && astro build",
     "preview": "pnpm build && wrangler dev",
     "typecheck": "astro check",
-    "test": "bun test",
+    "test": "bun test test",
     "deploy": "pnpm build && wrangler deploy",
     "db:migrate": "wrangler d1 migrations apply godmode-site --remote",
     "db:migrate:local": "wrangler d1 migrations apply godmode-site --local",
