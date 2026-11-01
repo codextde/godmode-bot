@@ -263,7 +263,7 @@ export function AssistantMessage({ message, agent }: { message: Message; agent?:
         <MessageBlocks blocks={blocks} runId={message.runId ?? undefined} agent={agent} />
         <div className="mt-1.5 flex h-7 items-center gap-0.5 text-[11px] text-muted-foreground opacity-0 transition group-focus-within/msg:opacity-100 group-hover/msg:opacity-100 [@media(hover:none)]:opacity-100">
           {text && <CopyButton text={text} label={t("messages.copyReply")} />}
-          {text && speaker.supported && (
+          {text && speaker.supported && speaker.enabled && (
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button

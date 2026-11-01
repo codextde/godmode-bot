@@ -12,7 +12,6 @@ import {
   type ReactNode,
   type Ref,
 } from "react";
-import { useNavigate } from "react-router";
 import { AnimatePresence, motion } from "motion/react";
 import { ArrowUp, AudioLines, Loader2, Mic, Paperclip, SlidersHorizontal, SquareSlash } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -113,7 +112,6 @@ export function Composer({
 }: ComposerProps) {
   const reduce = useReduceAnimations();
   const { t } = useTranslation("chat");
-  const navigate = useNavigate();
   const easy = useEasyMode();
   const textKey = draftKey ? `chat:${draftKey}` : undefined;
   const filesKey = draftKey ? `chat:${draftKey}:files` : undefined;
@@ -320,10 +318,7 @@ export function Composer({
   };
 
   const toggleDictation = () => {
-    if (!voiceEnabled) {
-      navigate("/settings/voice");
-      return;
-    }
+    if (!voiceEnabled) return;
     if (!dictation.supported) {
       toast.error(t("composer.voiceUnsupported"));
       return;
@@ -338,10 +333,7 @@ export function Composer({
   };
 
   const openVoiceMode = () => {
-    if (!voiceEnabled) {
-      navigate("/settings/voice");
-      return;
-    }
+    if (!voiceEnabled) return;
     if (dictation.active) dictation.cancel();
     armVoice(true);
     setVoiceMode(true);
@@ -459,15 +451,17 @@ export function Composer({
           </ToolbarButton>
         )}
 
-        <ToolbarButton
-          label={!voiceEnabled ? t("composer.voiceOff") : dictation.active ? t("composer.stopDictation") : t("composer.dictate")}
-          onClick={toggleDictation}
-          active={dictation.active}
-          disabled={disabled && !dictation.active}
-          className={cn(dictation.active && "bg-destructive/10 text-destructive hover:bg-destructive/15 hover:text-destructive")}
-        >
-          {transcribing ? <Loader2 className="animate-spin" /> : listening ? <LevelBars levelRef={dictation.levelRef} /> : <Mic />}
-        </ToolbarButton>
+        {voiceEnabled && (
+          <ToolbarButton
+            label={dictation.active ? t("composer.stopDictation") : t("composer.dictate")}
+            onClick={toggleDictation}
+            active={dictation.active}
+            disabled={disabled && !dictation.active}
+            className={cn(dictation.active && "bg-destructive/10 text-destructive hover:bg-destructive/15 hover:text-destructive")}
+          >
+            {transcribing ? <Loader2 className="animate-spin" /> : listening ? <LevelBars levelRef={dictation.levelRef} /> : <Mic />}
+          </ToolbarButton>
+        )}
 
         <div className="ml-auto flex min-w-0 items-center gap-1.5">
           <AnimatePresence>
@@ -499,9 +493,11 @@ export function Composer({
           {status}
           {easy ? (options || trailing) && <OptionsButton>{options}{trailing}</OptionsButton> : trailing}
 
-          <ToolbarButton label={voiceEnabled ? t("header.voiceMode") : t("composer.voiceOff")} onClick={openVoiceMode} disabled={disabled}>
-            <AudioLines />
-          </ToolbarButton>
+          {voiceEnabled && (
+            <ToolbarButton label={t("header.voiceMode")} onClick={openVoiceMode} disabled={disabled}>
+              <AudioLines />
+            </ToolbarButton>
+          )}
 
           <Tooltip>
             <TooltipTrigger asChild>
