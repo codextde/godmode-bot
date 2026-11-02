@@ -1304,6 +1304,15 @@ export function maskSecretInChat(conversationId: string, secret: string, liveRun
     sql("UPDATE messages SET content = ?, blocks = ? WHERE id = ?", mask(m.content), mask(m.blocks), m.id);
     bus.emit({ type: "message.updated", message: getMessage(m.id) });
   }
+  // What the human answered with it: the question or task it closed, and the audit entry of that answer.
+  for (const m of all<{ id: string; answer: string }>("SELECT id, answer FROM questions WHERE conversation_id = ? AND instr(answer, ?) > 0", conversationId, secret)) {
+    sql("UPDATE questions SET answer = ? WHERE id = ?", mask(m.answer), m.id);
+    for (const a of all<{ id: string; details: string }>("SELECT id, details FROM audit_log WHERE target = ? AND instr(details, ?) > 0", m.id, escaped)) sql("UPDATE audit_log SET details = ? WHERE id = ?", mask(a.details), a.id);
+  }
+  for (const m of all<{ id: string; response: string }>("SELECT id, response FROM human_tasks WHERE conversation_id = ? AND instr(response, ?) > 0", conversationId, secret)) {
+    sql("UPDATE human_tasks SET response = ? WHERE id = ?", mask(m.response), m.id);
+    for (const a of all<{ id: string; details: string }>("SELECT id, details FROM audit_log WHERE target = ? AND instr(details, ?) > 0", m.id, escaped)) sql("UPDATE audit_log SET details = ? WHERE id = ?", mask(a.details), a.id);
+  }
   const titled = row.title.includes(secret);
   if (titled) {
     sql("UPDATE conversations SET title = ? WHERE id = ?", mask(row.title), conversationId);

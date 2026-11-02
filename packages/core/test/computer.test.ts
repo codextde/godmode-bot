@@ -9,7 +9,7 @@ import { KeyError, parseKeyCombo, parseKeySequence } from "../src/computer/keys"
 import { fitSize, frameToImage, imageToFrame, inImage, regionToFrame, unionRect } from "../src/computer/geometry";
 import { imageSize } from "../src/computer/image";
 import { normalizeAgentComputer, parseComputerTarget } from "../src/computer/targets";
-import { attachComputer, computerLockKey, detachAgentComputer, detachComputer, isGodmodeTab, isGodmodeWindow, runComputer, targetForView } from "../src/computer/service";
+import { attachComputer, claimComputer, computerLockKey, detachAgentComputer, detachComputer, holdsComputer, isGodmodeTab, isGodmodeWindow, runComputer, targetForView } from "../src/computer/service";
 import { config } from "../src/config";
 import { isGodmodeAppName } from "../src/computer/self";
 import { callTool } from "../src/mcp/tools";
@@ -582,6 +582,41 @@ describe("revoking access", () => {
     await detachComputer("run_share_src");
   });
 
+  test("a run on the agent's own access holds the computer from its first action", async () => {
+    const a = attachComputer("run_hold_a", agent.id, "c1", { kind: "desktop" }, "agent");
+    const b = attachComputer("run_hold_b", agent.id, "c2", { kind: "desktop" }, "agent");
+    const child = attachComputer("run_hold_child", agent.id, "c3", { kind: "desktop" }, "agent", ["run_hold_a"]);
+    try {
+      expect(holdsComputer("run_hold_a")).toBe(false);
+      expect(claimComputer(a)).toBeNull();
+      expect(holdsComputer("run_hold_a")).toBe(true);
+      expect(claimComputer(b)?.runId).toBe("run_hold_a");
+      expect(claimComputer(child)).toBeNull();
+      await detachComputer("run_hold_child");
+
+      a.heldAt = Date.now() - 6 * 60_000;
+      expect(holdsComputer("run_hold_a")).toBe(false);
+      expect(claimComputer(b)).toBeNull();
+      expect(claimComputer(a)?.runId).toBe("run_hold_b");
+
+      await detachComputer("run_hold_b");
+      expect(claimComputer(a)).toBeNull();
+    } finally {
+      for (const id of ["run_hold_a", "run_hold_b", "run_hold_child"]) await detachComputer(id);
+    }
+  });
+
+  test("a run sharing the desktop keeps it from the agent's own runs", async () => {
+    attachComputer("run_share_hold", agent.id, "c1", { kind: "desktop" }, "share");
+    const own = attachComputer("run_own_hold", agent.id, "c2", { kind: "desktop" }, "agent");
+    try {
+      expect(claimComputer(own)?.runId).toBe("run_share_hold");
+    } finally {
+      await detachComputer("run_share_hold");
+      await detachComputer("run_own_hold");
+    }
+  });
+
   test("Godmode's own windows and dashboard tabs are never shared", () => {
     expect(isGodmodeWindow({ pid: process.pid })).toBe(true);
     expect(isGodmodeWindow({ pid: process.ppid })).toBe(true);
@@ -630,12 +665,16 @@ describe("runner integration", () => {
     expect(summary.info).toContain("isn't open anymore");
     const inv = invocations(env).filter((i) => i.prompt.includes("CALL_COMPUTER")).pop()!;
     expect(argValue(inv, "--append-system-prompt")).toContain("### Computer");
+    expect(argValue(inv, "--append-system-prompt")).not.toContain("This run has no screen control");
   });
 
   test("nothing shared, computer off → no computer server", async () => {
     const conv = createConversation({ agentId: agent.id });
     const r1 = await waitForRun((await sendMessage(conv.id, { content: "CALL_COMPUTER" })).run.id, 20_000);
     expect(r1.result).toBe("no computer server");
+    const system = argValue(invocations(env).filter((i) => i.prompt.includes("CALL_COMPUTER")).pop()!, "--append-system-prompt")!;
+    expect(system).toContain("### Doing it yourself");
+    expect(system).toContain("This run has no screen control");
 
     updateConversation(conv.id, { computerTarget: { kind: "desktop" } });
     updateSettings({ computer: { enabled: false } });
@@ -647,7 +686,7 @@ describe("runner integration", () => {
     }
   });
 
-  test("agents allowed to use the computer get the desktop; desktop runs take turns", async () => {
+  test("agents allowed to use the computer get the desktop; their chats don't wait for each other", async () => {
     const worker = await makeAgent({ name: "Desktop Worker" });
     await updateAgent(worker.id, { computer: { enabled: true, target: null } });
     expect(getAgent(worker.id).computer).toEqual({ enabled: true, target: null });
@@ -657,10 +696,10 @@ describe("runner integration", () => {
     const first = await sendMessage(a.id, { content: "SLEEP" });
     await until(() => getRun(first.run.id).status === "running", 10_000, "first run to start");
     const second = await sendMessage(b.id, { content: "CALL_COMPUTER" });
-    await Bun.sleep(500);
-    expect(getRun(second.run.id).status).toBe("queued");
-    await cancelRun(first.run.id);
     const done = await waitForRun(second.run.id, 20_000);
+    expect(getRun(first.run.id).status).toBe("running");
+    await cancelRun(first.run.id);
+    await waitForRun(first.run.id, 20_000);
     expect(done.status).toBe("succeeded");
     const summary = JSON.parse(done.result!.replace(/^COMPUTER /, ""));
     expect(summary.tools).toEqual(["computer", "computer_info", "computer_windows", "computer_open_app"]);
