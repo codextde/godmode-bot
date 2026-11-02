@@ -1451,7 +1451,7 @@ export const CAPTCHA_SOLVERS = ["off", "2captcha", "capsolver", "anticaptcha"] a
 export type CaptchaSolver = (typeof CAPTCHA_SOLVERS)[number];
 
 export interface ComputerSettings {
-  /** Agents may see and control the computer when a screen, window or tab is shared with them. */
+  /** Agents may see and control the computer: what is shared with them, and on their own unless turned off for an agent. */
   enabled: boolean;
   /** Use Cua Driver (trycua/cua) for background control of single windows. Off = Godmode's built-in helper (macOS). */
   useCuaDriver: boolean;

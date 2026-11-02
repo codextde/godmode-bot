@@ -139,7 +139,7 @@ import {
 } from "./prompt";
 import { apiToolEnv, apiToolEnvOwners, apiToolsForAgent } from "../integrations/apiTools";
 import { elevenLabsKey } from "../calls/elevenlabs";
-import { attachComputer, computerLockKey, detachComputer, holdsComputer } from "../computer/service";
+import { attachComputer, computerLockKey, detachComputer, hasOwnDesktop, holdsComputer } from "../computer/service";
 import { attachVm, detachVm, type RunVm } from "../vm/service";
 import { CUA_HIDDEN_TOOLS, currentVmPage, prepareGuest, type GuestTools } from "../vm/guest";
 import { resolveVmId } from "../vm/assignments";
@@ -1254,7 +1254,7 @@ export function computerTargetOf(job: {
     if (getSettings().computer.enabled && job.trigger !== "dream" && !resolveVmId(job.conversationId, agent)) {
       const conv = get<{ computer_target: string | null }>("SELECT computer_target FROM conversations WHERE id = ?", job.conversationId);
       target = parseComputerTarget(parseJson<unknown>(conv?.computer_target, null));
-      if (!target && agent.computer.enabled) {
+      if (!target && agent.computer.enabled && job.trigger !== "check" && hasOwnDesktop()) {
         target = agent.computer.target ?? { kind: "desktop" };
         fromAgent = true;
       }
@@ -2262,6 +2262,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
         browserAvailable: "browser" in mcp.mcpServers,
         browserCdpEnv: !vm && "browser" in mcp.mcpServers ? RUN_CDP_ENV : null,
         computer,
+        computerOwn: !!job.computerFromAgent,
         vm: promptVm,
         ssh,
         android: phones,

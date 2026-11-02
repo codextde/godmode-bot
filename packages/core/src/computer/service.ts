@@ -37,6 +37,13 @@ export function computerEnabled(): boolean {
 /* Engines                                                              */
 /* ------------------------------------------------------------------ */
 
+/** A screen an agent can use without a share: not on a runner, a server or in a container without a display. */
+export function hasOwnDesktop(): boolean {
+  if (config().role === "runner") return false;
+  if (process.platform === "linux") return !!(process.env.DISPLAY || process.env.WAYLAND_DISPLAY);
+  return true;
+}
+
 /** `agent`: the engine a run acts through (window shares show the agent cursor for its input, not the human's). */
 export function createEngine(target: ComputerTarget, opts: { agent?: boolean } = {}): ComputerEngine {
   switch (target.kind) {
@@ -409,7 +416,7 @@ export function runComputer(runId: string): RunComputer | null {
 
 /** Runs currently controlling something (for the UI: "agent is working here"). */
 export function activeComputerRuns(): { runId: string; conversationId: string; target: ComputerTarget }[] {
-  return [...runs.values()].map((r) => ({ runId: r.runId, conversationId: r.conversationId, target: r.target }));
+  return [...runs.values()].filter(holding).map((r) => ({ runId: r.runId, conversationId: r.conversationId, target: r.target }));
 }
 
 /** The view a share opens on: its single view, or the primary display of a desktop. */

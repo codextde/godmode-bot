@@ -102,7 +102,7 @@ export type ComputerInputEvent =
 
 /** Agent-level computer access for work nobody shared a screen for (routines, delegated tasks). */
 export interface AgentComputerConfig {
-  /** The agent may control the computer without the human sharing it in the chat. */
+  /** The agent may control the computer without the human sharing it in the chat (on by default). */
   enabled: boolean;
   /** What it controls then; null = the whole desktop. */
   target: ComputerTarget | null;

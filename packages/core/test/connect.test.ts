@@ -200,9 +200,9 @@ describe("tools", () => {
     const out = JSON.parse(res.content[0]!.text);
     const agent = getAgent(out.created.id);
     expect(agent).toMatchObject({ name: "Price Scout", role: "Research analyst", reportsTo: null, workingDirectory: null });
-    // Secret access, management rights and this computer stay with the human.
+    // Secret access and management rights stay with the human; the computer only comes from a creator that has it.
     expect(agent.permissions).toMatchObject({ secretAccess: "fill", canManageAgents: false });
-    expect(agent.computer.enabled).toBe(false);
+    expect(agent.computer.enabled).toBe(true);
     expect(existsSync(join(agent.repoPath, "CLAUDE.md"))).toBe(true);
     expect(listRoutines({ agentId: agent.id }).map((r) => r.cron)).toEqual(["0 9 * * 1"]);
 

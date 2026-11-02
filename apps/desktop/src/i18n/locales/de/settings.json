@@ -1028,7 +1028,7 @@
       "title": "Computersteuerung",
       "liveView": "Live-Ansicht",
       "enabled": "Agenten geteilte Fenster und Bildschirme nutzen lassen",
-      "enabledDescription": "Agenten sehen nur, was du in einem Chat teilst (oder was du einem Agenten in seinen Einstellungen erlaubst), und nur, solange es geteilt ist.",
+      "enabledDescription": "Agenten nutzen den Computer selbst, wenn eine Aufgabe ihn braucht, außer du schaltest das für einen Agenten aus. Sonst sehen sie nur, was du in einem Chat teilst.",
       "foreground": "Geteiltes Fenster bei Bedarf nach vorn holen",
       "foregroundDescription": "Manche Apps ignorieren Eingaben im Hintergrund (z. B. Menükürzel). Erlaube Agenten, das geteilte Fenster kurz nach vorn zu holen – es nimmt dir kurz den Fokus."
     },

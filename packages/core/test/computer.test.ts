@@ -9,7 +9,7 @@ import { KeyError, parseKeyCombo, parseKeySequence } from "../src/computer/keys"
 import { fitSize, frameToImage, imageToFrame, inImage, regionToFrame, unionRect } from "../src/computer/geometry";
 import { imageSize } from "../src/computer/image";
 import { normalizeAgentComputer, parseComputerTarget } from "../src/computer/targets";
-import { attachComputer, claimComputer, computerLockKey, detachAgentComputer, detachComputer, holdsComputer, isGodmodeTab, isGodmodeWindow, runComputer, targetForView } from "../src/computer/service";
+import { activeComputerRuns, attachComputer, claimComputer, computerLockKey, detachAgentComputer, detachComputer, holdsComputer, isGodmodeTab, isGodmodeWindow, runComputer, targetForView } from "../src/computer/service";
 import { config } from "../src/config";
 import { isGodmodeAppName } from "../src/computer/self";
 import { callTool } from "../src/mcp/tools";
@@ -23,8 +23,10 @@ import type { KeyCombo } from "../src/computer/keys";
 import type { Point } from "../src/computer/geometry";
 import { issueRunToken } from "../src/mcp/tokens";
 import { createConversation, getConversationSummary, sendMessage, updateConversation } from "../src/services/conversations";
-import { getRun, waitForRun, cancelRun, activeRunForConversation } from "../src/runner/runner";
-import { getAgent, updateAgent } from "../src/agents/service";
+import { getRun, waitForRun, cancelRun, activeRunForConversation, computerTargetOf } from "../src/runner/runner";
+import { createAgent, getAgent, updateAgent } from "../src/agents/service";
+import { MIGRATIONS } from "../src/db/migrations";
+import { Database } from "bun:sqlite";
 import { getSettings, updateSettings } from "../src/services/settings";
 import { listAudit } from "../src/services/audit";
 
@@ -587,9 +589,11 @@ describe("revoking access", () => {
     const b = attachComputer("run_hold_b", agent.id, "c2", { kind: "desktop" }, "agent");
     const child = attachComputer("run_hold_child", agent.id, "c3", { kind: "desktop" }, "agent", ["run_hold_a"]);
     try {
+      expect(activeComputerRuns().some((r) => r.runId === "run_hold_a")).toBe(false);
       expect(holdsComputer("run_hold_a")).toBe(false);
       expect(claimComputer(a)).toBeNull();
       expect(holdsComputer("run_hold_a")).toBe(true);
+      expect(activeComputerRuns().some((r) => r.runId === "run_hold_a")).toBe(true);
       expect(claimComputer(b)?.runId).toBe("run_hold_a");
       expect(claimComputer(child)).toBeNull();
       await detachComputer("run_hold_child");
@@ -705,6 +709,38 @@ describe("runner integration", () => {
     const summary = JSON.parse(done.result!.replace(/^COMPUTER /, ""));
     expect(summary.tools).toEqual(["computer", "computer_info", "computer_windows", "computer_open_app"]);
     expect(activeRunForConversation(a.id)).toBeNull();
+  });
+
+  test("new agents use the computer by default; an agent can't give a new one more than it has", async () => {
+    const created = await createAgent({ name: "Fresh Hands", browser: { enabled: false } });
+    expect(created.computer).toEqual({ enabled: true, target: null });
+    const off = await makeAgent({ name: "Off Creator" });
+    const fromOff = await createAgent({ name: "From Off", browser: { enabled: false }, computer: { enabled: true } }, `agent:${off.id}`);
+    expect(fromOff.computer.enabled).toBe(false);
+    const fromOn = await createAgent({ name: "From On", browser: { enabled: false } }, `agent:${created.id}`);
+    expect(fromOn.computer.enabled).toBe(true);
+
+    const conv = createConversation({ agentId: created.id });
+    const done = await waitForRun((await sendMessage(conv.id, { content: "CALL_COMPUTER" })).run.id, 20_000);
+    expect(JSON.parse(done.result!.replace(/^COMPUTER /, "")).server).toBe("computer");
+    const system = argValue(invocations(env).filter((i) => i.prompt.includes("CALL_COMPUTER")).pop()!, "--append-system-prompt")!;
+    expect(system).toContain("without a share");
+    expect(system).not.toContain("shared their entire desktop");
+    expect(computerTargetOf({ agentId: created.id, conversationId: conv.id, trigger: "check" })).toBeNull();
+    expect(computerTargetOf({ agentId: created.id, conversationId: conv.id, trigger: "chat" })).toEqual({ kind: "desktop" });
+  });
+
+  test("the switch to the new default turned on what nobody chose and showed hidden project context again", () => {
+    const sqlOf = MIGRATIONS.find((m) => m.name === "agent_computer_on_by_default")!.sql;
+    const db = new Database(":memory:");
+    db.run("CREATE TABLE agents (id TEXT, computer TEXT); CREATE TABLE projects (id TEXT, off_computer INTEGER)");
+    db.run(`INSERT INTO agents VALUES ('a', '{"enabled":false,"target":null}'), ('b', '{}'), ('c', '{"enabled":false,"target":{"kind":"display","displayId":"2"}}')`);
+    db.run("INSERT INTO projects VALUES ('p', 1)");
+    db.run(sqlOf);
+    const rows = db.query("SELECT id, computer FROM agents ORDER BY id").all() as { id: string; computer: string }[];
+    expect(rows.map((r) => JSON.parse(r.computer).enabled)).toEqual([true, true, false]);
+    expect(db.query("SELECT off_computer AS o FROM projects").get()).toEqual({ o: 0 });
+    db.close();
   });
 
   test("agents can't grant themselves computer access", async () => {
