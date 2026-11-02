@@ -72,11 +72,21 @@ export interface TriggerState {
   observedAt?: string;
   /** Failed task runs in a row after the condition was met. */
   taskFailures?: number;
+  /** Waiting work (one item per line) that the last successful task run was started for. */
+  openItems?: string;
+  /** Task runs since then that left exactly these items waiting. */
+  openRepeats?: number;
+  /** When the last task run for `openItems` finished. */
+  openHandledAt?: string;
+  /** Out of retries: nothing runs until the waiting items change. */
+  openHeld?: boolean;
   checkConversationId?: string;
   checkRunId?: string;
   /** Too many runs in the last hour: events wait until then. */
   limitedUntil?: string;
 }
+
+export const OPEN_WORK_CLEARED = { openItems: null, openRepeats: null, openHandledAt: null, openHeld: null };
 
 export const TRIGGER_TYPES = ["schedule", "app", "condition", "webhook"] as const;
 /** Condition checks start an agent run: not more often than this. */
@@ -124,7 +134,9 @@ function triggerStatusOf(r: RoutineRow, trigger: RoutineTrigger, state: TriggerS
       return { ...base, ...health };
     }
     case "condition":
-      return state.error ? { ...base, state: "error", message: state.error } : { ...base, state: "ok", message: null };
+      if (state.error) return { ...base, state: "error", message: state.error };
+      if (state.openHeld) return { ...base, state: "error", message: "The task keeps leaving the same work open, so it waits until that changes or you check by hand" };
+      return { ...base, state: "ok", message: null };
     case "webhook":
       return r.webhook_token_hash
         ? { ...base, state: "ok", message: null }
@@ -650,6 +662,7 @@ export function updateRoutine(id: string, patch: Partial<RoutineInput>): Routine
       observation: null,
       observedAt: null,
       taskFailures: null,
+      ...OPEN_WORK_CLEARED,
       lastCheckAt: null,
       ...(agentChanged ? { checkConversationId: null } : {}),
     });
@@ -659,7 +672,7 @@ export function updateRoutine(id: string, patch: Partial<RoutineInput>): Routine
   if (patch.fillOnly !== undefined && patch.fillOnly !== current.fillOnly && agent.permissions.secretAccess === "reveal") {
     // Nothing a run noted while it had (or lacked) raw secrets goes on to runs of the other kind.
     run("UPDATE routines SET conversation_id = NULL WHERE id = ?", id);
-    patchTriggerState(id, { observation: null, observedAt: null, checkConversationId: null });
+    patchTriggerState(id, { observation: null, observedAt: null, ...OPEN_WORK_CLEARED, checkConversationId: null });
   }
   if (!enabled && current.enabled) cancelPendingEvents(id, "The automation was paused");
 

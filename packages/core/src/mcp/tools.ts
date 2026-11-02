@@ -821,7 +821,7 @@ const triggerSchema = z
         .string()
         .min(1)
         .max(2000)
-        .describe('Plain-language condition, checked on the cron schedule, e.g. "a competitor changes the price of their Pro plan". Each check automatically sees what the previous one observed.'),
+        .describe('Plain-language condition, checked on the cron schedule, e.g. "a competitor changes the price of their Pro plan" or "a job is waiting in the queue". Each check automatically sees what the previous one observed. Waiting work runs again until it is cleared.'),
       checkModel: z.string().nullable().optional().describe('Model for the checks, e.g. "haiku" for cheap checks; default: the agent\'s model'),
     }),
     z.object({ type: z.literal("webhook") }),
@@ -2780,11 +2780,12 @@ Polished, calm, real hierarchy, responsive from 360 px, light and dark; no emoji
   defineTool({
     name: "automation_check_result",
     description:
-      "Report the result of this automation condition check (call exactly once, at the end of the check). met: the condition is newly satisfied since the last check. observation: compact facts the next check compares against. summary: one sentence for the human.",
+      "Report the result of this automation condition check (call exactly once, at the end of the check). met: the condition is newly satisfied since the last check, or it is waiting work that is still there. observation: compact facts the next check compares against. summary: one sentence for the human. open: for waiting work, one stable label per waiting item.",
     schema: z.object({
       met: z.boolean(),
       observation: z.string().max(4000),
       summary: z.string().max(1000),
+      open: z.array(z.string().max(200)).max(200).optional(),
     }),
     when: (_agent, ctx) => isCheckRun(ctx),
     run: (result, { ctx }) => reportCheckResult(ctx.runId, result),
