@@ -332,7 +332,7 @@ No browser tools are attached to this run. If a task needs a website, say so in 
   if (ctx.android?.length) out.push(androidSection(ctx.android, human, !!ctx.androidVaultFill));
   const rawSecrets = perms.secretAccess === "reveal" && !ctx.fillOnly;
   if (ctx.computer) out.push(computerSection(ctx.computer, human, rawSecrets));
-  if (!ctx.check) out.push(ownHandsSection(agent.name, human, { asking: !!ctx.asking, screen: !ctx.computer && !ctx.vm && settings.computer.enabled, githubSignIn: !ctx.vm && agent.browser.enabled }));
+  if (!ctx.check) out.push(ownHandsSection(agent.name, human, { asking: !!ctx.asking, screen: !ctx.computer && !ctx.vm && settings.computer.enabled, githubSignIn: !ctx.vm && !!agent.browser?.enabled }));
 
   out.push(`### Logging in to websites
 Never ask ${human} for the password of a website login and never type a saved password or authenticator (TOTP) code yourself — Godmode fills secrets directly into the page so you never see them.
