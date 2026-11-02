@@ -525,6 +525,13 @@ function loadKnownSecrets() {
         }
       }
     }
+    for (const row of all<{ password_enc: string }>("SELECT password_enc FROM mac_password")) {
+      try {
+        rememberSecret(decrypt(dek, row.password_enc, "mac_password"));
+      } catch {
+        /* ignore */
+      }
+    }
     for (const row of all<{ id: string; secrets_enc: string | null }>("SELECT id, secrets_enc FROM messaging_connections")) {
       if (!row.secrets_enc) continue;
       try {

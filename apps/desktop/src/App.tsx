@@ -36,6 +36,7 @@ const LoginsPage = lazy(() => import("@/pages/vault/logins-page"));
 const TotpPage = lazy(() => import("@/pages/vault/totp-page"));
 const CardsPage = lazy(() => import("@/pages/vault/cards-page"));
 const PasskeysPage = lazy(() => import("@/pages/vault/passkeys-page"));
+const MacPasswordPage = lazy(() => import("@/pages/vault/mac-password-page"));
 const BrowserPage = lazy(() => import("@/pages/browser/browser-page"));
 const ComputerPage = lazy(() => import("@/pages/computer/computer-page"));
 const VmsPage = lazy(() => import("@/pages/vms/vms-page"));
@@ -244,6 +245,7 @@ export function App() {
           <Route path="/vault/2fa" element={<TotpPage />} />
           <Route path="/vault/cards" element={<FeaturePage on={b.settings.cards.enabled} section="cards"><CardsPage /></FeaturePage>} />
           <Route path="/vault/passkeys" element={<PasskeysPage />} />
+          <Route path="/vault/mac" element={<MacPasswordPage />} />
           <Route path="/integrations" element={<ToSettings section="integrations" />} />
           <Route path="/messaging" element={<ToSettings section="messaging" />} />
           <Route path="/browser" element={<BrowserPage />} />

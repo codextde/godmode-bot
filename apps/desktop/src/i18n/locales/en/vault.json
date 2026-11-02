@@ -17,7 +17,8 @@
     "description": "The logins, 2FA codes and passkeys your agents sign in with. Encrypted on this computer; agents never see the secrets.",
     "logins": "Logins",
     "codes": "2FA codes",
-    "passkeys": "Passkeys"
+    "passkeys": "Passkeys",
+    "macPassword": "Mac password"
   },
   "clipboard": {
     "accessFailed": "Could not access the clipboard",
@@ -750,5 +751,37 @@
       "auditedTitle": "Every use is audited",
       "auditedText": "See who used what in Settings → Security."
     }
+  },
+  "macPasswordPage": {
+    "title": "Mac password",
+    "intro": "Some jobs need your Mac password: installing software, changing a system setting, a macOS password dialog. Save it once. Godmode asks you every time before it uses it, then enters it and carries on.",
+    "label": "Password of {{user}}",
+    "labelGeneric": "Your Mac password",
+    "placeholder": "The password you unlock this Mac with",
+    "save": "Check and save",
+    "checking": "Checking with macOS…",
+    "change": "Change",
+    "cancel": "Cancel",
+    "remove": "Remove",
+    "saved": "Saved for {{user}}",
+    "savedToast": "Mac password saved",
+    "removedToast": "Mac password removed",
+    "saveFailed": "Could not save the password",
+    "removeFailed": "Could not remove the password",
+    "neverUsed": "Not used yet",
+    "lastUsed": "Last used {{when}}",
+    "removeTitle": "Remove the Mac password?",
+    "removeBody": "Agents then have to ask you to save it again the next time a job needs it.",
+    "approveTitle": "You approve every use",
+    "approveBody": "You see the exact command or dialog first. One approval covers one use.",
+    "hiddenTitle": "Agents never see it",
+    "hiddenBody": "Godmode enters it itself and masks it in every result.",
+    "localTitle": "It stays on this Mac",
+    "localBody": "Encrypted in the vault and never copied to your other computers.",
+    "recent": "Recent uses",
+    "filledDialog": "Filled a dialog in {{what}}",
+    "failed": "failed",
+    "unsupported": "This only works on a Mac.",
+    "locked": "Unlock the vault to save your Mac password."
   }
 }

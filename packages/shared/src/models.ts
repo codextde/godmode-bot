@@ -992,6 +992,26 @@ export interface TotpCode {
   period: number;
 }
 
+/** One use of the Mac password, as the Passwords page lists it. */
+export interface MacPasswordUse {
+  at: string;
+  kind: "run" | "fill";
+  /** The command, or the app whose dialog was filled. */
+  what: string;
+  agent: string;
+  ok: boolean;
+}
+
+export interface MacPasswordStatus {
+  /** This computer is a Mac that keeps its own password here. */
+  supported: boolean;
+  saved: boolean;
+  username: string | null;
+  savedAt: string | null;
+  lastUsedAt: string | null;
+  recent: MacPasswordUse[];
+}
+
 export interface VaultStatus {
   initialized: boolean;
   unlocked: boolean;

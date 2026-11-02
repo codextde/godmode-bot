@@ -64,6 +64,9 @@ const EXCLUDED_TABLES = new Set([
   "link_controllers",
   "runner_memory",
   "_migrations",
+  // One Mac's password: wrong on any other computer.
+  "mac_password",
+  "mac_password_grants",
   // What the computers of a device group exchanged: about this computer's link, never part of a backup.
   "replica_seq",
   "replica_ctx",

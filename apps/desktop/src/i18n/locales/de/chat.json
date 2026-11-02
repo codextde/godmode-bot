@@ -211,7 +211,8 @@
       "changedArtifact": "Ein Artefakt geändert",
       "readArtifact": "Ein Artefakt gelesen",
       "lookedAtArtifacts": "Seine Artefakte angesehen",
-      "reportedBlocked": "Gemeldet, was er braucht"
+      "reportedBlocked": "Gemeldet, was er braucht",
+      "macPassword": "Mac-Passwort"
     },
     "builtin": {
       "ranCommand": "Befehl ausgeführt",

@@ -1942,4 +1942,29 @@ CREATE TABLE artifact_files (
 );
 `,
   },
+  {
+    id: 117,
+    name: "mac_password",
+    sql: /* sql */ `
+-- This Mac's password, sealed with the vault key (services/macPassword.ts). One computer's own: never shared with a group.
+CREATE TABLE mac_password (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  username TEXT NOT NULL,
+  password_enc TEXT NOT NULL,
+  saved_at TEXT NOT NULL,
+  last_used_at TEXT
+);
+-- One approval (a question the human answers) for one use of it, for exactly this command or dialog.
+CREATE TABLE mac_password_grants (
+  question_id TEXT PRIMARY KEY,
+  conversation_id TEXT NOT NULL,
+  agent_id TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  subject TEXT NOT NULL,
+  used_at TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX idx_mac_password_grants_ask ON mac_password_grants(conversation_id, agent_id, kind, subject, created_at);
+`,
+  },
 ];

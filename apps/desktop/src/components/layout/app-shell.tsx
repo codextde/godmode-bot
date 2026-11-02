@@ -195,7 +195,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     { to: "/artifacts", label: t("nav.artifacts"), icon: <AppWindow /> },
     { to: "/automations", label: t("nav.automations"), icon: <Workflow />, badge: attention?.automation || undefined },
     { to: "/calls", label: t("nav.calls"), icon: <Phone /> },
-    { to: "/vault/logins", label: t("nav.passwords"), icon: <KeyRound />, also: ["/vault/2fa", "/vault/passkeys"] },
+    { to: "/vault/logins", label: t("nav.passwords"), icon: <KeyRound />, also: ["/vault/2fa", "/vault/passkeys", "/vault/mac"] },
     { to: "/vault/cards", label: t("nav.cards"), icon: <CreditCard /> },
   ];
   const machineNav: NavItem[] = [

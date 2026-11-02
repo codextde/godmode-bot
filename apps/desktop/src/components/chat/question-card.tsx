@@ -213,7 +213,7 @@ export function QuestionCard({
           {q.affects && (
             <>
               <dt className="text-muted-foreground">{t("question.affects")}</dt>
-              <dd className="min-w-0 break-words">{q.affects}</dd>
+              <dd className="min-w-0 break-words whitespace-pre-wrap">{q.affects}</dd>
             </>
           )}
         </dl>

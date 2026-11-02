@@ -1426,6 +1426,84 @@ func axScroll(pid: pid_t, at point: CGPoint, dx: Double, dy: Double) -> Bool {
   return false
 }
 
+// MARK: - Password dialogs
+
+func axValue(_ element: AXUIElement, _ name: String) -> CFTypeRef? {
+  var value: CFTypeRef?
+  return AXUIElementCopyAttributeValue(element, name as CFString, &value) == .success ? value : nil
+}
+
+func focusedElement(of pid: pid_t) -> AXUIElement? {
+  guard let value = axValue(AXUIElementCreateApplication(pid), kAXFocusedUIElementAttribute),
+    CFGetTypeID(value) == AXUIElementGetTypeID()
+  else { return nil }
+  let element = value as! AXUIElement
+  var owner: pid_t = 0
+  guard AXUIElementGetPid(element, &owner) == .success, owner == pid else { return nil }
+  return element
+}
+
+func isSecureField(_ element: AXUIElement) -> Bool {
+  (axValue(element, kAXSubroleAttribute) as? String) == (kAXSecureTextFieldSubrole as String)
+}
+
+/** The app at the front, whether a password field has the focus there, and what its window says. Never reads a field. */
+func passwordPrompt() throws -> [String: Any] {
+  try requireAccessibility()
+  guard let app = NSWorkspace.shared.frontmostApplication else { return ["secure": false] }
+  let pid = app.processIdentifier
+  var texts: [String] = []
+  var buttons: [String] = []
+  func walk(_ element: AXUIElement, _ depth: Int) {
+    guard depth < 8, texts.count + buttons.count < 40 else { return }
+    switch axValue(element, kAXRoleAttribute) as? String {
+    case kAXStaticTextRole as String:
+      if let text = axValue(element, kAXValueAttribute) as? String, !text.isEmpty { texts.append(text) }
+    case kAXButtonRole as String:
+      let name = (axValue(element, kAXTitleAttribute) as? String) ?? (axValue(element, kAXDescriptionAttribute) as? String)
+      if let name, !name.isEmpty { buttons.append(name) }
+    default: break
+    }
+    for child in (axValue(element, kAXChildrenAttribute) as? [AXUIElement]) ?? [] { walk(child, depth + 1) }
+  }
+  let secure = focusedElement(of: pid).map(isSecureField) ?? false
+  let window = axValue(AXUIElementCreateApplication(pid), kAXFocusedWindowAttribute) ?? axValue(AXUIElementCreateApplication(pid), kAXMainWindowAttribute)
+  let hasWindow = window.map { CFGetTypeID($0) == AXUIElementGetTypeID() } ?? false
+  if secure, hasWindow { walk(window as! AXUIElement, 0) }
+  return [
+    "pid": Int(pid),
+    "app": app.localizedName ?? "",
+    "path": app.executableURL?.path ?? "",
+    "secure": secure,
+    "window": hasWindow,
+    "texts": texts,
+    "buttons": buttons,
+  ]
+}
+
+/** Puts the password straight into the focused password field: key events reach these dialogs twice now and then. */
+func fillPassword(_ p: Params) throws -> [String: Any] {
+  try requireAccessibility()
+  let pid = pid_t(try p.requireInt("pid"))
+  guard let password = p.string("password"), !password.isEmpty else { throw HelperError("Missing \"password\"", code: "bad_request") }
+  guard NSWorkspace.shared.frontmostApplication?.processIdentifier == pid, let field = focusedElement(of: pid), isSecureField(field) else {
+    throw HelperError("The password field is not in focus anymore.", code: "refused")
+  }
+  guard AXUIElementSetAttributeValue(field, kAXValueAttribute as CFString, password as CFString) == .success else {
+    throw HelperError("macOS did not let Godmode fill this password field.", code: "failed")
+  }
+  usleep(100_000)
+  guard let filled = axValue(field, kAXValueAttribute) as? String, filled.count == password.count else {
+    AXUIElementSetAttributeValue(field, kAXValueAttribute as CFString, "" as CFString)
+    throw HelperError("The password did not arrive in the field.", code: "failed")
+  }
+  if p.bool("submit") == true {
+    keyEvent(kVK_Return, down: true, flags: [], pid: nil)
+    keyEvent(kVK_Return, down: false, flags: [], pid: nil)
+  }
+  return ["filled": true]
+}
+
 func requireAccessibility() throws {
   guard AXIsProcessTrusted() else {
     throw HelperError("Accessibility permission is missing. Allow Godmode in System Settings → Privacy & Security → Accessibility.", code: "permission_accessibility")
@@ -1824,6 +1902,8 @@ func handle(_ line: String) {
       case "type":
         try requireAccessibility()
         return try typeText(p)
+      case "passwordPrompt": return try passwordPrompt()
+      case "passwordFill": return try fillPassword(p)
       case "activate": return try activate(p)
       case "ensureKeyWindow": return try ensureKeyWindow(p)
       case "openApp": return try openApp(p)

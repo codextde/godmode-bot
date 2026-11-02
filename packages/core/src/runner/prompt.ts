@@ -67,6 +67,8 @@ export interface PromptContext {
   calls?: { owner: boolean } | null;
   /** No raw secrets in this chat, whatever the agent may read: its task came from an agent that could not read them. */
   fillOnly?: boolean;
+  /** The run can use this Mac's password after the human approves each use (mac_password). */
+  macPassword?: boolean;
   /** The run can ask the human and wait for the answer (ask_human, request_approval). */
   asking?: boolean;
   check?: boolean;
@@ -335,6 +337,8 @@ No browser tools are attached to this run. If a task needs a website, say so in 
   const rawSecrets = perms.secretAccess === "reveal" && !ctx.fillOnly;
   if (ctx.computer && !ctx.glm) out.push(computerSection(ctx.computer, human, rawSecrets, !!ctx.computerOwn));
   if (!ctx.check) out.push(ownHandsSection(agent.name, human, { asking: !!ctx.asking, screen: !ctx.computer && !ctx.vm && settings.computer.enabled, githubSignIn: !ctx.vm && !!agent.browser?.enabled }));
+
+  if (ctx.macPassword) out.push(macPasswordSection(human));
 
   out.push(`### Logging in to websites
 Never ask ${human} for the password of a website login and never type a saved password or authenticator (TOTP) code yourself — Godmode fills secrets directly into the page so you never see them.
@@ -660,6 +664,11 @@ function ownHandsSection(agentName: string, human: string, can: { asking: boolea
 A command or script you could run is yours to run. Never give ${human} a command or a Terminal step, not in a task, a question or your answer, not even when it asks for a password. They only get what none of your tools can do.
 - A login of a command line tool that expired or is missing is yours too.${can.githubSignIn ? " GitHub (\`gh\`, \`git\` over https): call \`github_sign_in\`." : ""} Otherwise start its browser or device login as a background command, read the URL and code it prints, approve it in your browser with the vault, and check that it works.
 - A password or passphrase nobody saved (a file's, an app's, one a colleague has): look once where you already have access (mail, messages, notes, the vault), without signing in anywhere new for it. Still missing: ${missing}, then run the command yourself. Pass it on stdin or in an environment variable, never as an argument or in a file.${screen}`;
+}
+
+function macPasswordSection(human: string): string {
+  return `### Mac password
+When something on this Mac needs its password, use \`mac_password\`, never \`sudo\` in your shell and never a task or question for ${human}. A command that needs administrator rights: \`action: "run"\` with the \`command\`. macOS's own password prompt at the front, when only an app can do the step: \`action: "fill"\`. Godmode asks ${human} to approve each use and the turn stands still; once approved, call it again with the same arguments and it enters the password. You never see it. If no password is saved yet, the tool asks ${human} to save it.`;
 }
 
 function computerSection(target: ComputerTarget, human: string, canReveal: boolean, own: boolean): string {

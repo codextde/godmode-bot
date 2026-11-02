@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { NavLink } from "react-router";
 import { useQuery } from "@tanstack/react-query";
-import { Fingerprint, KeyRound, ShieldCheck } from "lucide-react";
+import { Fingerprint, KeyRound, Laptop, ShieldCheck } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { PageHeader } from "@/components/common";
 import { api } from "@/lib/api";
@@ -16,10 +16,12 @@ export function PasswordsHeader({ actions }: { actions?: ReactNode }) {
   const logins = useQuery({ queryKey: qk.credentialList("all", ""), queryFn: () => api.credentials.list({ workspaceId: "all" }) });
   const codes = useQuery({ queryKey: qk.totpList("all"), queryFn: () => api.totp.list({ workspaceId: "all" }) });
   const passkeys = useQuery({ queryKey: qk.passkeyList("all"), queryFn: () => api.passkeys.list({ workspaceId: "all" }) });
+  const mac = useQuery({ queryKey: qk.macPassword, queryFn: api.macPassword.status });
   const tabs = [
     { to: PASSWORD_TABS[0], label: t("header.logins"), icon: <KeyRound />, count: logins.data?.length },
     { to: PASSWORD_TABS[1], label: t("header.codes"), icon: <ShieldCheck />, count: codes.data?.length },
     { to: PASSWORD_TABS[2], label: t("header.passkeys"), icon: <Fingerprint />, count: passkeys.data?.length },
+    ...(mac.data?.supported ? [{ to: "/vault/mac", label: t("header.macPassword"), icon: <Laptop />, count: undefined }] : []),
   ];
   return (
     <>

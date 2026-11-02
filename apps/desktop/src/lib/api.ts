@@ -13,6 +13,7 @@ import type { DeviceGroup, DeviceGroupPatch, DeviceInvite, HandoffInput, Handoff
   AndroidStatus,
   CardPurchase,
   CardPurchasePatch,
+  MacPasswordStatus,
   PaymentCard,
   PullRequestView,
   PullRequestAutoMergeInput,
@@ -493,6 +494,12 @@ export const api = {
       form.set("ids", JSON.stringify(ids));
       return request<PasswordImportResult>("POST", "/api/credentials/import", form, withGrant(grant));
     },
+  },
+
+  macPassword: {
+    status: () => get<MacPasswordStatus>("/api/vault/mac-password"),
+    save: (password: string) => request<MacPasswordStatus>("PUT", "/api/vault/mac-password", { password }),
+    remove: () => del<MacPasswordStatus>("/api/vault/mac-password"),
   },
 
   cards: {

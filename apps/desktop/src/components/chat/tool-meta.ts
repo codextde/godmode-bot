@@ -51,6 +51,7 @@ import {
   Search,
   Server,
   ShieldAlert,
+  Laptop,
   ShieldCheck,
   Smartphone,
   SquareKanban,
@@ -514,6 +515,7 @@ const GODMODE_TOOLS = new Set([
   "goal_clear",
   "ask_human",
   "request_approval",
+  "mac_password",
   "tasks_list",
   "task_get",
   "task_create",
@@ -751,6 +753,8 @@ function godmodeMeta(tool: string, input: Input, ctx: ToolContext): Omit<ToolMet
       return { kind: "agents", icon: MessageCircleQuestion, title: t("chat:tools.godmode.askedYou"), detail: truncate(str(input.question), 120) || undefined };
     case "request_approval":
       return { kind: "agents", icon: ShieldCheck, title: t("chat:tools.godmode.askedOk"), detail: truncate(str(input.action), 120) || undefined };
+    case "mac_password":
+      return { kind: "agents", icon: Laptop, title: t("chat:tools.godmode.macPassword"), detail: truncate(str(input.command) || str(input.reason), 120) || undefined };
     case "tasks_list":
       return { kind: "agents", icon: SquareKanban, title: t("chat:tools.godmode.lookedAtBoard") };
     case "task_get":
