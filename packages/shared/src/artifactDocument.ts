@@ -69,7 +69,7 @@ else if(m.type==="reply"&&w[m.id]){var p=w[m.id];delete w[m.id];if(m.ok)p[0](tru
 function open(u){try{u=new URL(String(u),document.baseURI).href;}catch(x){return;}var f=own(u);if(f)g.view(f);else if(/^(https?|mailto|tel):/i.test(u))post({type:"open",url:u});}
 window.open=function(u){open(u);return null;};
 function shown(t){return t&&t.tagName==="IMG"&&!(t.closest&&t.closest("a,button,[data-gm-noview]"))&&own(t.currentSrc||t.src);}
-document.addEventListener("click",function(e){var a=e.target&&e.target.closest&&e.target.closest("a[href]");if(!a||a.hasAttribute("download"))return;var h=a.getAttribute("href")||"";if(/^javascript:/i.test(h))return;e.preventDefault();if(h.charAt(0)==="#"){var to=h.length>1&&document.getElementById(decodeURIComponent(h.slice(1)));if(to)to.scrollIntoView({behavior:"smooth"});return;}open(a.href);},true);
+document.addEventListener("click",function(e){var a=e.target&&e.target.closest&&e.target.closest("a[href]");if(!a||a.hasAttribute("download"))return;var h=a.getAttribute("href")||"";if(/^javascript:/i.test(h))return;e.preventDefault();if(h.charAt(0)==="#"){if(h.length>1)location.hash=h;return;}open(a.href);},true);
 document.addEventListener("click",function(e){if(e.defaultPrevented)return;var f=shown(e.target);if(f)g.view(f);});
 document.addEventListener("load",function(e){if(shown(e.target))e.target.style.cursor="zoom-in";},true);
 document.addEventListener("error",function(e){var t=e.target;if(!t||t.tagName!=="IMG")return;var s=t.getAttribute("src")||"";if(!s||/^(https:|data:|blob:)/i.test(s)||bad[s])return;bad[s]=1;report("The image "+s+" didn't load"+(own(t.currentSrc||t.src)?"":": it isn't attached to the artifact"));},true);

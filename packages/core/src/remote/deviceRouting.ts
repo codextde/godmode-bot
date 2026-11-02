@@ -120,6 +120,22 @@ async function forward(c: Context, body?: Uint8Array | string): Promise<Response
   return new Response(res.status === 204 || res.status === 304 ? null : (res.body as Uint8Array<ArrayBuffer>), { status: res.status, headers: out });
 }
 
+/**
+ * An artifact's file a page asks this computer for, when it doesn't have it. That route answers before the login, so it
+ * isn't forwarded with the rest; files stay on the computer they were attached on, which is the primary here.
+ */
+export async function artifactFileFromPrimary(c: Context): Promise<Response | null> {
+  if (viaLink(c) || !isSecondary() || !forwarding()) return null;
+  const range = c.req.header("range");
+  try {
+    const res = await primary().request("GET", pathAndQuery(c), { headers: range ? { range } : {}, timeoutMs: 180_000 });
+    const out = new Headers(res.headers);
+    return new Response(res.body as Uint8Array<ArrayBuffer>, { status: res.status, headers: out });
+  } catch {
+    return null;
+  }
+}
+
 async function forwardJson<T>(c: Context, body?: string): Promise<{ status: number; data: T | null; raw: Response }> {
   const raw = await forward(c, body);
   const text = await raw.clone().text();

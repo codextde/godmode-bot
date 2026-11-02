@@ -65,6 +65,8 @@ interface Session {
   pending: number;
   /** Saves close together become one: the newest data, answered for all of them. */
   queued: { data: unknown; ids: number[]; timer: ReturnType<typeof setTimeout> } | null;
+  /** Counts what the page saved: a retry of older data must not land after newer data. */
+  saves: number;
 }
 
 export function ArtifactFrame({
@@ -102,11 +104,11 @@ export function ArtifactFrame({
   const [state, setState] = useState<{ key: string; phase: "loading" | "shown" | "stuck" }>({ key, phase: "loading" });
   const phase = state.key === key ? state.phase : "loading";
   // One token per loaded document; what it said it saved isn't sent back to it.
-  const session = useRef<Session>({ key: "", token: "", loaded: false, lastData: "", pending: 0, queued: null });
+  const session = useRef<Session>({ key: "", token: "", loaded: false, lastData: "", pending: 0, queued: null, saves: 0 });
   const latest = useRef({ html, data, theme: resolved, files });
   useLayoutEffect(() => {
     handlersRef.current = handlers;
-    if (session.current.key !== key) session.current = { key, token: randomToken(), loaded: false, lastData: JSON.stringify(data ?? null), pending: 0, queued: null };
+    if (session.current.key !== key) session.current = { key, token: randomToken(), loaded: false, lastData: JSON.stringify(data ?? null), pending: 0, queued: null, saves: 0 };
     latest.current = { html, data, theme: resolved, files };
   });
 
@@ -139,6 +141,7 @@ export function ArtifactFrame({
         if (!interactive || !h.onSetData) return reply(m.id, false, "This view can't save");
         s.lastData = JSON.stringify(m.data ?? null);
         s.pending++;
+        const saveNumber = ++s.saves;
         if (s.queued) clearTimeout(s.queued.timer);
         const ids = [...(s.queued?.ids ?? []), m.id ?? 0];
         const timer = setTimeout(() => {
@@ -151,7 +154,15 @@ export function ArtifactFrame({
           const save = () => (handlersRef.current.onSetData ?? (() => Promise.reject(new Error("This view can't save"))))(batch.data);
           // A core restarting drops a save for a moment; what the human entered shouldn't go with it.
           save()
-            .catch(() => new Promise<void>((resolve, reject) => setTimeout(() => save().then(resolve, reject), SAVE_RETRY_MS)))
+            .catch(
+              () =>
+                new Promise<void>((resolve, reject) =>
+                  setTimeout(() => {
+                    if (s.saves !== saveNumber) resolve();
+                    else save().then(resolve, reject);
+                  }, SAVE_RETRY_MS),
+                ),
+            )
             .then(
               () => done(true),
               (err: unknown) => {
@@ -191,7 +202,7 @@ export function ArtifactFrame({
 
   useEffect(() => {
     if (cloudContext) return;
-    const show = setTimeout(() => setState((now) => (now.key === key && now.phase === "loading" ? { key, phase: "shown" } : now)), SHOW_ANYWAY_MS);
+    const show = setTimeout(() => setState((now) => (now.key !== key || now.phase === "loading" ? { key, phase: "shown" } : now)), SHOW_ANYWAY_MS);
     const stuck = setTimeout(() => {
       if (!session.current.loaded) setState({ key, phase: "stuck" });
     }, STUCK_MS);

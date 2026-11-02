@@ -46,7 +46,7 @@ import { registerConnectorRoutes } from "./routes/connectors";
 import { registerRunnerRoutes } from "./routes/runners";
 import { registerLinkRoutes } from "./routes/link";
 import { forwardedRoute, remoteRouting } from "../remote/routing";
-import { deviceRouting } from "../remote/deviceRouting";
+import { artifactFileFromPrimary, deviceRouting } from "../remote/deviceRouting";
 import { registerDeviceRoutes } from "./routes/devices";
 import { registerCloudRoutes } from "./routes/cloud";
 import { registerLicenseRoutes } from "./routes/license";
@@ -166,9 +166,10 @@ export function createApp() {
   // The sandbox artifacts run in: a page without data, framed by the app.
   app.get("/api/artifacts/frame", serveArtifactFrame);
   // What the sandbox shows of an artifact's files: it has no login, the secret in the path is the credential.
-  app.get(`${ARTIFACT_FILES_PATH}/:key/:name`, (c) =>
-    serveArtifactFile(c.req.param("key"), c.req.param("name"), { range: c.req.header("range"), ifNoneMatch: c.req.header("if-none-match") }),
-  );
+  app.get(`${ARTIFACT_FILES_PATH}/:key/:name`, async (c) => {
+    const here = await serveArtifactFile(c.req.param("key"), c.req.param("name"), { range: c.req.header("range"), ifNoneMatch: c.req.header("if-none-match") });
+    return here.status === 404 ? ((await artifactFileFromPrimary(c)) ?? here) : here;
+  });
   registerAuthRoutes(app); // handles its own auth for protected auth endpoints
 
   // MCP gateway for agent runs and connected apps (authenticated by per-run tokens and app keys, not user auth)

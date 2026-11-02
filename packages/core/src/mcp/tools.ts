@@ -5,6 +5,7 @@
  * (connect/connectors.ts) calls as the built-in agent, and only the tools in CONNECTOR_TOOLS.
  */
 import { callOnPrimary, runsOnPrimary } from "../remote/deviceTools";
+import { forwarding } from "../remote/group";
 import { isAbsolute, join } from "node:path";
 import { z } from "zod";
 import type {
@@ -1037,10 +1038,12 @@ async function readAgentFile(path: string, max: number, what: string): Promise<s
   return file.text();
 }
 
+const FILES_ON_PRIMARY = "This computer is a secondary of a device group and shows its primary's artifacts, so files can't be attached here: attach them in a chat on the primary computer, or say so to the human.";
+
 /** What the agent hears about attached files: the names to use, and anything left out. */
-function attachedNote(prepared: PreparedFiles | null, artifactId: string): string {
+async function attachedNote(prepared: PreparedFiles | null, artifactId: string): Promise<string> {
   if (!prepared) return "";
-  const { attached, skipped } = attachArtifactFiles(artifactId, prepared);
+  const { attached, skipped } = await attachArtifactFiles(artifactId, prepared);
   const shown = attached.slice(0, 40).map((f) => f.name).join(", ");
   const lines = attached.length ? [`Attached ${attached.length} file${attached.length === 1 ? "" : "s"}: ${shown}${attached.length > 40 ? ", …" : ""}. Show them by name (\`<img src="name">\`, the image and gallery nodes).`] : [];
   if (skipped.length) lines.push(`Not attached: ${skipped.slice(0, 20).join("; ")}`);
@@ -2030,9 +2033,10 @@ Polished, calm, real hierarchy, responsive from 360 px, light and dark; no emoji
       const code = await artifactCode({ spec, html, htmlPath }, title);
       if (!code) return fail("Pass the artifact as spec, html or htmlPath.");
       const content = await artifactData(data, dataPath);
+      if (files?.length && forwarding()) return fail(FILES_ON_PRIMARY);
       const prepared = files?.length ? prepareArtifactFiles(files) : null;
       const a = createArtifact({ title, description, html: code, data: content, refreshPrompt }, { agentId: agent.id, conversationId: ctx.conversationId, workspaceId: ctx.workspaceId ?? agent.workspaceId }, `agent:${agent.id}`);
-      const note = attachedNote(prepared, a.id);
+      const note = await attachedNote(prepared, a.id);
       const done = `Created the artifact "${a.title}" (id ${a.id}, version 1). It opened next to this chat and is on the Artifacts page.${note ? `\n${note}` : ""}`;
       return withRenderCheck(done, getArtifact(a.id), check, "In your answer say in a line or two what it shows and what they can ask you to change; don't paste the code.");
     },
@@ -2069,11 +2073,12 @@ Polished, calm, real hierarchy, responsive from 360 px, light and dark; no emoji
       const before = getArtifact(id);
       const code = await artifactCode({ spec, html, htmlPath }, title ?? before.title);
       const content = await artifactData(data, dataPath);
+      if (files?.length && forwarding()) return fail(FILES_ON_PRIMARY);
       const prepared = files?.length ? prepareArtifactFiles(files) : null;
       const a = updateArtifact(id, { html: code ?? undefined, edits, data: content, title, description, refreshPrompt, note }, `agent:${agent.id}`);
       const codeChanged = a.version !== before.version;
       const missing = removeFiles?.length ? removeArtifactFiles(a.id, removeFiles) : [];
-      const attached = attachedNote(prepared, a.id);
+      const attached = await attachedNote(prepared, a.id);
       const parts = [codeChanged ? `the code is version ${a.version}` : null, content !== undefined ? "the data is saved" : null].filter(Boolean);
       const done = [
         `Updated "${a.title}"${parts.length ? `: ${parts.join(", ")}` : ""}. It reloads by itself where it is open.`,

@@ -3,7 +3,8 @@
  * can't read this computer, so they are copied next to the artifact (a cheap clone where the disk can) and served under
  * a secret per artifact, for that page and the app's viewer. Only file types that are made to be looked at get in.
  */
-import { constants, copyFileSync, existsSync, mkdirSync, readdirSync, renameSync, rmSync, statSync } from "node:fs";
+import { constants, existsSync, mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
+import { copyFile, rename, stat as statAsync } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
 import { homedir } from "node:os";
 import { basename, extname, isAbsolute, join } from "node:path";
@@ -128,24 +129,26 @@ function freeName(path: string, taken: Map<string, string>): string {
   const stem = ext ? clean.slice(0, -ext.length) : clean;
   for (let i = 1; ; i++) {
     const name = i === 1 ? clean : `${stem}-${i}${ext}`;
-    const owner = taken.get(name);
+    // Most Mac disks don't tell Hero.png from hero.png: two names like that would be one file.
+    const owner = taken.get(name.toLowerCase());
     if (owner === undefined || owner === path) return name;
   }
 }
 
 /** Copy prepared files in. The same source again replaces its copy, so an agent can fix an image and attach it again. */
-export function attachArtifactFiles(artifactId: string, prepared: PreparedFiles): { attached: ArtifactFile[]; skipped: string[] } {
+export async function attachArtifactFiles(artifactId: string, prepared: PreparedFiles): Promise<{ attached: ArtifactFile[]; skipped: string[] }> {
   const skipped = [...prepared.skipped];
   const rows = all<FileRow>("SELECT * FROM artifact_files WHERE artifact_id = ?", artifactId);
-  const taken = new Map(rows.map((r) => [r.name, r.source_path]));
-  const sizes = new Map(rows.map((r) => [r.name, r.size]));
+  const taken = new Map(rows.map((r) => [r.name.toLowerCase(), r.source_path]));
+  const sizes = new Map(rows.map((r) => [r.name.toLowerCase(), r.size]));
   const dir = dirOf(artifactId);
   mkdirSync(dir, { recursive: true });
   const attached: string[] = [];
   for (const file of prepared.found) {
     const name = freeName(file.path, taken);
-    const total = [...sizes.entries()].reduce((sum, [n, s]) => (n === name ? sum : sum + s), 0);
-    if (!sizes.has(name) && sizes.size >= MAX_ARTIFACT_FILES) {
+    const slot = name.toLowerCase();
+    const total = [...sizes.entries()].reduce((sum, [n, s]) => (n === slot ? sum : sum + s), 0);
+    if (!sizes.has(slot) && sizes.size >= MAX_ARTIFACT_FILES) {
       skipped.push(`${basename(file.path)}: an artifact holds at most ${MAX_ARTIFACT_FILES} files`);
       continue;
     }
@@ -155,9 +158,9 @@ export function attachArtifactFiles(artifactId: string, prepared: PreparedFiles)
     }
     const temp = join(dir, `.incoming-${randomBytes(6).toString("hex")}`);
     try {
-      copyFileSync(file.path, temp, constants.COPYFILE_FICLONE);
-      const { size } = statSync(temp);
-      renameSync(temp, join(dir, name));
+      await copyFile(file.path, temp, constants.COPYFILE_FICLONE);
+      const { size } = await statAsync(temp);
+      await rename(temp, join(dir, name));
       sql(
         `INSERT INTO artifact_files (artifact_id, name, mime, size, source_path, updated_at) VALUES (?, ?, ?, ?, ?, ?)
          ON CONFLICT (artifact_id, name) DO UPDATE SET mime = excluded.mime, size = excluded.size, source_path = excluded.source_path, updated_at = excluded.updated_at`,
@@ -168,8 +171,8 @@ export function attachArtifactFiles(artifactId: string, prepared: PreparedFiles)
         file.path,
         now(),
       );
-      taken.set(name, file.path);
-      sizes.set(name, size);
+      taken.set(slot, file.path);
+      sizes.set(slot, size);
       attached.push(name);
     } catch (err) {
       rmSync(temp, { force: true });

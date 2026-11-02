@@ -455,6 +455,7 @@ export function ArtifactView({
             </div>
           ) : (
             <ArtifactFrame
+              key={artifact.id}
               html={html}
               data={artifact.data}
               title={artifact.title}

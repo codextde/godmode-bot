@@ -446,6 +446,13 @@ describe("files on this computer", () => {
     expect((await served(a, "one.png")).status).toBe(404);
   });
 
+  test("names that differ only in case don't share a file", async () => {
+    const other = mkdtempSync(join(tmpdir(), "gm-artifact-files-"));
+    writeFileSync(join(other, "ONE.png"), png);
+    const id = idOf(await create([join(dir, "one.png"), join(other, "ONE.png")]));
+    expect(getArtifact(id).files.map((f) => f.name)).toEqual(["ONE-2.png", "one.png"]);
+  });
+
   test("the human opens a file in its app or in the file manager; only attached ones", async () => {
     const launched: string[][] = [];
     __setFileManagerForTests((command) => launched.push(command));
