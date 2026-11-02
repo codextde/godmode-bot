@@ -36,7 +36,7 @@ const ThemeContext = createContext<{
 const windowBg = (palette: Palette, theme: Resolved) => PALETTE_DEFS[palette][theme].background;
 
 /** Desktop: keep the native window (title bar, resize fill) in step with the app theme. Best effort. */
-function syncNativeWindow(theme: Resolved, background: string) {
+function syncNativeWindow(theme: Resolved | null, background: string) {
   if (!isTauri) return;
   void import("@tauri-apps/api/webviewWindow")
     .then(async ({ getCurrentWebviewWindow }) => {
@@ -90,7 +90,7 @@ function paletteStyle(): HTMLStyleElement {
 let target: { mode: Resolved; palette: Palette } = { mode: "light", palette: DEFAULT_PALETTE };
 
 /** Swaps the palette in one step: no half-faded controls, and a soft crossfade where the webview can do it. */
-function applyTheme(mode: Resolved, palette: Palette, animate: boolean) {
+function applyTheme(mode: Resolved, palette: Palette, followSystem: boolean, animate: boolean) {
   const root = document.documentElement;
   target = { mode, palette };
   const swap = () => {
@@ -112,7 +112,7 @@ function applyTheme(mode: Resolved, palette: Palette, animate: boolean) {
   const calm = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
   if (changed && animate && !calm && typeof document.startViewTransition === "function") document.startViewTransition(swap);
   else swap();
-  syncNativeWindow(mode, windowBg(palette, mode));
+  syncNativeWindow(followSystem ? null : mode, windowBg(palette, mode));
 }
 
 /** People the owner let into the cloud dashboard keep a theme of their own in their browser. */
@@ -200,9 +200,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    applyTheme(resolved, palette, painted.current);
+    applyTheme(resolved, palette, theme === "system", painted.current);
     painted.current = true;
-  }, [resolved, palette]);
+  }, [resolved, palette, theme]);
 
   const toggle = useCallback(() => setTheme(resolved === "dark" ? "light" : "dark"), [resolved, setTheme]);
 

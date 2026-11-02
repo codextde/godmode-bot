@@ -1,3 +1,4 @@
+import type { ComponentType } from "react";
 import { GATEWAY_DONE } from "@godmode/shared";
 import type { LucideIcon } from "lucide-react";
 import {
@@ -65,6 +66,7 @@ import {
   Zap,
 } from "lucide-react";
 import { intlLocale, t } from "@/i18n";
+import { serviceLogo } from "@/components/integrations/service-logo";
 
 export type ToolKind =
   | "browser"
@@ -83,7 +85,7 @@ export type ToolKind =
   | "other";
 
 export interface ToolMeta {
-  icon: LucideIcon;
+  icon: LucideIcon | ComponentType<{ className?: string }>;
   /** Short human sentence, e.g. "Opened github.com" */
   title: string;
   /** Optional secondary detail (path, query, …) */
@@ -860,7 +862,7 @@ export function describeTool(name: string, rawInput: unknown, ctx: ToolContext =
     if (m) return { ...m, server, tool };
     return { kind: "other", icon: Wrench, title: humanize(tool), server, tool };
   }
-  return { kind: "mcp", icon: Plug, title: humanize(tool), detail: server, server, tool };
+  return { kind: "mcp", icon: serviceLogo(server, tool) ?? Plug, title: humanize(tool), detail: server, server, tool };
 }
 
 /** Kinds whose secondary line is already plain language (a reason, a task title); the rest show paths, commands or ids. */
