@@ -14,6 +14,7 @@
     "windows": [
       {
         "label": "main",
+        "create": false,
         "title": "Godmode Bot",
         "width": 1320,
         "height": 860,

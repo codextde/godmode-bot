@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useRef } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import { Link } from "react-router";
 import { AnimatePresence, motion } from "motion/react";
 import { useTranslation } from "react-i18next";
@@ -10,6 +10,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useArtifact, useChatArtifacts } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
+import { useUi } from "@/stores/ui";
 import { PANEL, useReduceAnimations } from "@/lib/motion";
 import { artifactFrameFiles } from "./artifact-frame";
 import { ArtifactView, ago } from "./artifact-view";
@@ -17,21 +18,17 @@ import { LivePreview, hasLivePreview, type LiveInput } from "./live-preview";
 
 type ToolUseBlock = Extract<MessageBlock, { type: "tool_use" }>;
 
-/** Which artifact each chat shows beside it (not kept across restarts), and whether wide. */
+/** Which artifact each chat shows beside it (not kept across restarts). */
 interface PanelState {
   open: Record<string, string | null>;
-  wide: boolean;
   show: (conversationId: string, artifactId: string) => void;
   hide: (conversationId: string) => void;
-  setWide: (v: boolean) => void;
 }
 
 export const useArtifactPanel = create<PanelState>()((set) => ({
   open: {},
-  wide: false,
   show: (conversationId, artifactId) => set((s) => ({ open: { ...s.open, [conversationId]: artifactId } })),
   hide: (conversationId) => set((s) => ({ open: { ...s.open, [conversationId]: null } })),
-  setWide: (wide) => set({ wide }),
 }));
 
 /** Lets cards in a chat open the chat's side panel. Without it (a run log) a card links to the artifact's page. */
@@ -156,23 +153,88 @@ function truncate(text: string, max: number) {
 }
 
 /** The artifact beside a chat. */
+const PANEL_MIN = 360;
+const CHAT_MIN = 420;
+const panelMax = () => Math.max(PANEL_MIN, window.innerWidth - CHAT_MIN);
+const panelDefault = () => Math.min(Math.round(window.innerWidth * 0.48), 720);
+const clampPanel = (width: number) => Math.round(Math.min(panelMax(), Math.max(PANEL_MIN, width)));
+
 export function ArtifactPanel({ id, onHide, siblings, onSwitch }: { id: string; onHide: () => void; siblings?: ArtifactSummary[]; onSwitch?: (id: string) => void }) {
   const { t } = useTranslation("artifacts");
-  const wide = useArtifactPanel((s) => s.wide);
-  const setWide = useArtifactPanel((s) => s.setWide);
-  const width = wide ? "min(72vw, 1100px)" : "min(48vw, 720px)";
+  const stored = useUi((s) => s.artifactPanelWidth);
+  const setStored = useUi((s) => s.setArtifactPanelWidth);
+  const [resizing, setResizing] = useState(false);
+  const [, rerender] = useState(0);
+  useEffect(() => {
+    const onResize = () => rerender((n) => n + 1);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+  const width = clampPanel(stored ?? panelDefault());
+
+  const onPointerDown = (e: PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = width;
+    let dragged = false;
+    const move = (ev: globalThis.PointerEvent) => {
+      const dx = startX - ev.clientX;
+      if (!dragged && Math.abs(dx) < 3) return;
+      if (!dragged) {
+        dragged = true;
+        setResizing(true);
+      }
+      setStored(clampPanel(startWidth + dx));
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      setResizing(false);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  };
+
+  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    const step = e.shiftKey ? 96 : 32;
+    if (e.key === "ArrowLeft") setStored(clampPanel(width + step));
+    else if (e.key === "ArrowRight") setStored(clampPanel(width - step));
+    else return;
+    e.preventDefault();
+  };
+
   return (
     <motion.aside
       aria-label={t("card.artifact")}
       initial={{ width: 0, opacity: 0 }}
       animate={{ width, opacity: 1 }}
       exit={{ width: 0, opacity: 0 }}
-      transition={PANEL}
-      className="h-full shrink-0 overflow-hidden border-l bg-paper-2"
+      transition={resizing ? { duration: 0 } : PANEL}
+      className={cn("relative h-full shrink-0 border-l bg-paper-2", resizing && "select-none")}
     >
-      <div className="h-full" style={{ width }}>
-        <ArtifactView id={id} variant="panel" onClose={onHide} expanded={wide} onExpand={setWide} siblings={siblings} onSwitch={onSwitch} />
+      <div
+        role="separator"
+        aria-orientation="vertical"
+        aria-label={t("view.resize")}
+        aria-valuemin={PANEL_MIN}
+        aria-valuemax={panelMax()}
+        aria-valuenow={width}
+        tabIndex={0}
+        onPointerDown={onPointerDown}
+        onKeyDown={onKeyDown}
+        onDoubleClick={() => setStored(null)}
+        className={cn(
+          "absolute inset-y-0 -left-2 z-20 w-4 cursor-col-resize outline-none after:absolute after:inset-y-0 after:left-1/2 after:w-[2px] after:-translate-x-1/2 after:transition-colors hover:after:bg-border focus-visible:after:bg-ring",
+          resizing && "after:bg-border",
+        )}
+      />
+      <div className={cn("h-full overflow-hidden", resizing && "pointer-events-none")}>
+        <div className="h-full" style={{ width }}>
+          <ArtifactView id={id} variant="panel" onClose={onHide} siblings={siblings} onSwitch={onSwitch} />
+        </div>
       </div>
+      {resizing && <div className="fixed inset-0 z-50 cursor-col-resize" />}
     </motion.aside>
   );
 }

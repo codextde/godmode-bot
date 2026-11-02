@@ -103,8 +103,7 @@
     "updatedWithData": "Updated {{time}} · data {{data}}",
     "refreshData": "Refresh the data",
     "askFreshData": "Ask for fresh data",
-    "narrower": "Narrower",
-    "wider": "Wider",
+    "resize": "Drag to resize",
     "openFullScreen": "Open full screen",
     "howItRefreshesMenu": "How it refreshes…",
     "downloadHtml": "Download as HTML",
@@ -133,22 +132,12 @@
   "tabs": {
     "label": "View",
     "preview": "Preview",
-    "code": "Code",
-    "data": "Data",
     "files": "Files"
   },
   "versions": {
     "label": "Versions",
     "first": "First version",
     "changed": "Changed"
-  },
-  "source": {
-    "copyHtml": "Copy HTML",
-    "copyData": "Copy data",
-    "saved": "Saved {{time}}",
-    "noData": "No data saved yet",
-    "lines_one": "{{formatted}} line",
-    "lines_other": "{{formatted}} lines"
   },
   "files": {
     "open": "Open in its app",
