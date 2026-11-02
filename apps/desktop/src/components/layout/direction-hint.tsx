@@ -18,7 +18,7 @@ function Node({ icon, label, active }: { icon: React.ReactNode; label: string; a
     <span
       aria-label={label}
       className={cn(
-        "grid size-7 place-items-center rounded-full border [&_svg]:size-3.5",
+        "grid size-6 place-items-center rounded-full border [&_svg]:size-3",
         active ? "border-brand/30 bg-brand/10 text-brand" : "bg-card text-muted-foreground",
       )}
     >
@@ -53,7 +53,7 @@ export function DirectionHint({ direction, className }: { direction: Direction; 
           transition={{ duration: 0.18 }}
           className={cn("overflow-hidden px-5 @2xl:px-8", className)}
         >
-          <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border bg-card/60 py-2.5 pr-2 pl-3">
+          <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border bg-card/60 py-1.5 pr-1.5 pl-2">
             <div className="flex shrink-0 items-center gap-1" aria-hidden>
               {direction === "to-you" ? agents : you}
               <MoveRight className="size-3.5 text-muted-foreground/70" />

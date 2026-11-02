@@ -1,50 +1,23 @@
 {
   "header": {
     "title": "Needs you",
-    "descriptionCount_one": "{{count}} thing needs you — answer what your agents ask, do what they hand you, add the access they miss.",
-    "descriptionCount_other": "{{count}} things need you — answer what your agents ask, do what they hand you, add the access they miss.",
     "description": "What your agents need from you — questions, to-dos, approvals, missing logins, 2FA codes — plus updates from their work.",
-    "newTodo": "New to-do"
+    "newTodo": "New to-do",
+    "summary_one": "{{count}} thing waits for you",
+    "summary_other": "{{count}} things wait for you",
+    "onHold_one": "{{count}} agent on hold",
+    "onHold_other": "{{count}} agents on hold",
+    "oldest": "oldest {{age}}",
+    "elsewhere_one": "{{count}} more in other workspaces",
+    "elsewhere_other": "{{count}} more in other workspaces",
+    "showAll": "Show all"
   },
   "views": {
     "label": "View",
     "list": "List",
     "board": "Board"
   },
-  "board": {
-    "waiting": "{{facts}}. Drag to plan, drop on Done and its agent picks up where it left off.",
-    "toDo_one": "{{count}} to do",
-    "toDo_other": "{{count}} to do",
-    "onHold_one": "{{count}} agent on hold until you're done",
-    "onHold_other": "{{count}} agents on hold until you're done",
-    "inBacklog_one": "{{count}} in the backlog",
-    "inBacklog_other": "{{count}} in the backlog",
-    "onlyBacklog_one": "Nothing to do right now · {{count}} in the backlog for later.",
-    "onlyBacklog_other": "Nothing to do right now · {{count}} in the backlog for later.",
-    "empty": "Your to-dos as a board: what agents hand you and what you add for yourself. Drop one on Done and its agent picks up where it left off.",
-    "offBoard": {
-      "lead": "Also waiting, not on the board:",
-      "show": "Show in list",
-      "question_one": "{{count}} question",
-      "question_other": "{{count}} questions",
-      "login_one": "{{count}} login to add",
-      "login_other": "{{count}} logins to add",
-      "review_one": "{{count}} ticket to review",
-      "review_other": "{{count}} tickets to review",
-      "blocked_one": "{{count}} blocked ticket",
-      "blocked_other": "{{count}} blocked tickets",
-      "paused_one": "{{count}} paused chat",
-      "paused_other": "{{count}} paused chats",
-      "failed_one": "{{count}} chat that went wrong",
-      "failed_other": "{{count}} chats that went wrong",
-      "automation_one": "{{count}} broken automation",
-      "automation_other": "{{count}} broken automations",
-      "access_one": "{{count}} access request",
-      "access_other": "{{count}} access requests"
-    }
-  },
   "list": {
-    "title": "Needs your attention",
     "vaultLocked": "Vault is locked",
     "loadError": "Couldn't load requests"
   },
@@ -158,5 +131,59 @@
       "sameAccount": "Same account: it stays with {{owner}} ({{domain}}) and {{host}} is added to that login, so both sign-ins get the code.",
       "moves": "Moves it from {{from}} to {{who}}."
     }
-  }
+  },
+  "toolbar": {
+    "filterLabel": "Filter by type",
+    "all": "All",
+    "search": "Search",
+    "question": "Questions",
+    "todo": "To-dos",
+    "review": "To review",
+    "blocked": "Blocked",
+    "paused": "Paused",
+    "problems": "Went wrong",
+    "login": "Logins",
+    "access": "Access"
+  },
+  "sections": {
+    "question": "Waiting for your answer",
+    "todo": "Handed to you",
+    "review": "Ready for review",
+    "blocked": "Blocked",
+    "paused": "Paused",
+    "problems": "Went wrong",
+    "login": "Logins to add",
+    "access": "Asking for access"
+  },
+  "kinds": {
+    "question": "Question",
+    "todo": "To-do",
+    "review": "Review",
+    "blocked": "Blocked",
+    "paused": "Paused",
+    "failed": "Problem",
+    "automation": "Automation",
+    "login": "Login",
+    "access": "Access"
+  },
+  "actions": {
+    "review": "Review",
+    "answer": "Answer",
+    "open": "Open",
+    "addLogin": "Add login",
+    "updateLogin": "Update login",
+    "add2fa": "Add 2FA",
+    "continue": "Continue",
+    "openChat": "Open chat",
+    "decide": "Decide",
+    "approve": "Approve",
+    "approveMerge": "Approve and merge"
+  },
+  "noMatch": {
+    "title": "Nothing matches",
+    "description": "Try another word or clear the filter.",
+    "clear": "Clear filter"
+  },
+  "showMore_one": "Show {{count}} more",
+  "showMore_other": "Show {{count}} more"
 }

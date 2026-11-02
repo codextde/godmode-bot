@@ -34,16 +34,16 @@ import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, Sele
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ArchivedTasks } from "@/components/tasks/archived-tasks";
-import { useArchiveTasks } from "@/components/tasks/task-actions";
+import { useArchiveTasks, useApproveTask } from "@/components/tasks/task-actions";
 import { TaskBoard } from "@/components/tasks/task-board";
 import { TaskDialog } from "@/components/tasks/task-dialog";
 import { TaskSheet } from "@/components/tasks/task-sheet";
-import { APPROVE_KEY, PRIORITY_META, PriorityIcon, STATUS_META, isWorking, needsConfirm, workspaceRepos } from "@/components/tasks/task-meta";
+import { PRIORITY_META, PriorityIcon, STATUS_META, isWorking, needsConfirm, workspaceRepos } from "@/components/tasks/task-meta";
 import { followupWhen } from "@/components/chat/followup";
 import { toastApiError } from "@/components/vault/vault-utils";
 import { WorkspaceDialog } from "@/components/workspaces/workspace-dialog";
 import { ProjectDialog } from "@/components/projects/project-dialog";
-import { ApiRequestError, api, errorMessage } from "@/lib/api";
+import { api, errorMessage } from "@/lib/api";
 import { useAllAgents, useArchivedTasks, useGoals, useScopeProject, useTasks, useWorkspaces } from "@/lib/hooks";
 import { GoalsStrip } from "@/components/tasks/goals-strip";
 import { qk } from "@/lib/queryKeys";
@@ -229,29 +229,7 @@ export default function TasksPage() {
     },
   });
 
-  // Approving a ticket with an open pull request merges it: it moves to Done once that worked.
-  const approve = useMutation({
-    mutationKey: APPROVE_KEY,
-    mutationFn: (task: Task) => api.tasks.approve(task.id),
-    onSuccess: (updated, task) => {
-      upsertTask(qc, updated);
-      const pr = task.pullRequest?.number;
-      if (updated.pullRequest?.state === "merged") {
-        toast.success(t("page.mergedInto", { number: updated.number, branch: updated.baseBranch }), {
-          description: updated.status === "done" ? t("page.prMergedDone", { number: pr }) : t("page.prMerged", { number: pr }),
-        });
-      } else toast.info(t("page.queuedToMerge", { number: pr }), { description: t("page.queuedToMergeDescription") });
-    },
-    onError: (e, task) => {
-      void qc.invalidateQueries({ queryKey: qk.tasks });
-      if (!(e instanceof ApiRequestError && e.code === "merge_failed")) return toastApiError(e, t("page.approveError"), qc);
-      toast.error(t("page.mergeError", { number: task.pullRequest?.number }), {
-        description: e.message,
-        duration: 12_000,
-        action: { label: t("page.markDoneAnyway"), onClick: () => move.mutate({ task, status: "done", beforeId: null }) },
-      });
-    },
-  });
+  const approve = useApproveTask((task) => move.mutate({ task, status: "done", beforeId: null }));
 
   const requestMove = (task: Task, status: TaskStatus, beforeId: string | null = null, merge = false) => {
     if (merge && status === "done" && mergesOnApprove(task)) approve.mutate(task);

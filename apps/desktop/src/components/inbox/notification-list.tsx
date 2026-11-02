@@ -154,7 +154,7 @@ export function NotificationList({ className }: { className?: string }) {
           <p className="mt-1 max-w-xs text-xs text-muted-foreground">{t("notifications.emptyDescription")}</p>
         </div>
       ) : (
-        <ul className="divide-y">
+        <ul className="divide-y @5xl:max-h-[calc(100dvh-14rem)] @5xl:overflow-y-auto">
           <AnimatePresence initial={false}>
             {items.slice(0, limit).map((n, i) => (
               <motion.li
