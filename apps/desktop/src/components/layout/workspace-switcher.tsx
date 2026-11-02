@@ -3,7 +3,7 @@ import { useNavigate } from "react-router";
 import { Trans, useTranslation } from "react-i18next";
 import type { Project, Workspace } from "@godmode/shared";
 import { Check, ChevronRight, ChevronsUpDown, FolderPlus, Globe2, Layers, Plus, Settings2 } from "lucide-react";
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator } from "@/components/ui/command";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useSidebar } from "@/components/ui/sidebar";
@@ -137,7 +137,7 @@ export function WorkspaceSwitcher() {
       <PopoverContent align="start" sideOffset={6} className="w-80 overflow-hidden p-0">
         <Command loop filter={(_value, search, keywords) => (keywords?.join(" ").toLowerCase().includes(search.trim().toLowerCase()) ? 1 : 0)}>
           <CommandInput placeholder={t("workspaceSwitcher.find")} value={query} onValueChange={setQuery} className="h-10" />
-          <CommandList className="max-h-[min(62vh,440px)]">
+          <CommandList className="max-h-[min(62vh,440px)] scroll-pb-28">
             <CommandEmpty>{t("workspaceSwitcher.noMatch", { query })}</CommandEmpty>
             <CommandGroup>
               <ScopeRow
@@ -211,8 +211,7 @@ export function WorkspaceSwitcher() {
                 })}
               </CommandGroup>
             )}
-            <CommandSeparator />
-            <CommandGroup>
+            <CommandGroup className="sticky bottom-0 z-10 border-t bg-popover">
               <CommandItem value="new" keywords={["New workspace", "create", "add", t("workspaceSwitcher.newWorkspace")]} onSelect={() => go("/workspaces?new=1")} className="text-[13px]">
                 <Plus /> {t("workspaceSwitcher.newWorkspace")}
               </CommandItem>

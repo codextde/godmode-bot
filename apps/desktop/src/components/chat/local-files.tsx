@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import type { ChatFile } from "@godmode/shared";
 import { fileRefs } from "@godmode/shared";
 import { Button } from "@/components/ui/button";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuLabel, ContextMenuSeparator, ContextMenuTrigger } from "@/components/ui/context-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useDebouncedValue } from "@/components/vault/use-debounced-value";
 import { copyText } from "@/components/vault/clipboard";
@@ -176,36 +176,32 @@ function Reader({ files, path, onChange }: { files: MessageFiles; path: string |
   return <MarkdownReader file={file} open={!!current} onOpenChange={(open) => !open && onChange(null)} folderAction={showFor(file)} />;
 }
 
-/** A Markdown file: a click asks whether to read it here or show it in its folder. */
-function MarkdownLink({ file, className, children }: { file: ChatFile; className: string; children: ReactNode }) {
+/** A right click on a file that opens with a left click: the other things to do with it. */
+function FileMenu({ file, onPreview, children }: { file: ChatFile; onPreview: () => void; children: ReactNode }) {
   const { t } = useTranslation("chat");
-  const { read, local } = useContext(MessageScope);
+  const { local } = useContext(MessageScope);
   const { label, icon: ShowIcon, show } = useShowInFolder()(file);
   return (
-    <DropdownMenu modal={false}>
-      <DropdownMenuTrigger asChild>
-        <span role="button" tabIndex={0} title={file.path} className={className} onClick={(e) => e.stopPropagation()}>
-          {children}
-        </span>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-56" onClick={(e) => e.stopPropagation()}>
-        <DropdownMenuLabel className="truncate font-mono text-[11px] font-normal text-muted-foreground">{file.name}</DropdownMenuLabel>
-        <DropdownMenuItem onSelect={() => read(file.path)}>
+    <ContextMenu modal={false}>
+      <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
+      <ContextMenuContent className="w-56" onClick={(e) => e.stopPropagation()}>
+        <ContextMenuLabel className="truncate font-mono text-[11px] font-normal text-muted-foreground">{file.name}</ContextMenuLabel>
+        <ContextMenuItem onSelect={onPreview}>
           <BookOpen /> {t("files.openPreview")}
-        </DropdownMenuItem>
-        <DropdownMenuItem onSelect={show}>
+        </ContextMenuItem>
+        <ContextMenuItem onSelect={show}>
           <ShowIcon /> {label}
-        </DropdownMenuItem>
+        </ContextMenuItem>
         {local && !file.remote && (
           <>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={() => void copyText(file.path, t("folderPicker.pathCopied"))}>
+            <ContextMenuSeparator />
+            <ContextMenuItem onSelect={() => void copyText(file.path, t("folderPicker.pathCopied"))}>
               <Copy /> {t("folderPicker.copyPath")}
-            </DropdownMenuItem>
+            </ContextMenuItem>
           </>
         )}
-      </DropdownMenuContent>
-    </DropdownMenu>
+      </ContextMenuContent>
+    </ContextMenu>
   );
 }
 
@@ -215,7 +211,7 @@ export function FileLink({ file, chip, children }: { file: ChatFile; chip?: bool
   const side = useContext(SidePanelScope);
   const showSide = useChatSidePanel((s) => s.show);
   const { t } = useTranslation("chat");
-  const { local } = useContext(MessageScope);
+  const { local, read } = useContext(MessageScope);
   const Icon = file.kind === "folder" ? Folder : fileIcon(file.image ? "image/" : "", file.name);
   // The icon stays with the first letter: a long path wraps as a whole, and must not leave its icon behind.
   const start = typeof children === "string" ? [...children][0] : undefined;
@@ -241,31 +237,49 @@ export function FileLink({ file, chip, children }: { file: ChatFile; chip?: bool
   );
   if (file.text && side) {
     const current = side.current;
+    const preview = () => showSide(side.conversationId, { kind: "file", file, line: lineOf(file.ref), local });
     const open = (e: MouseEvent | KeyboardEvent) => {
       e.preventDefault();
       e.stopPropagation();
       if ("metaKey" in e && (e.metaKey || e.ctrlKey)) return show();
-      showSide(side.conversationId, { kind: "file", file, line: lineOf(file.ref), local });
+      preview();
     };
     return (
-      <span
-        role="button"
-        tabIndex={0}
-        title={t("files.sideHint", { action: label, path: file.path })}
-        aria-current={current?.kind === "file" && current.file.path === file.path ? "true" : undefined}
-        className={className}
-        onClick={open}
-        onKeyDown={(e: KeyboardEvent) => (e.key === "Enter" || e.key === " ") && open(e)}
-      >
-        {content}
-      </span>
+      <FileMenu file={file} onPreview={preview}>
+        <span
+          role="button"
+          tabIndex={0}
+          title={t("files.sideHint", { action: label, path: file.path })}
+          aria-current={current?.kind === "file" && current.file.path === file.path ? "true" : undefined}
+          className={className}
+          onClick={open}
+          onKeyDown={(e: KeyboardEvent) => (e.key === "Enter" || e.key === " ") && open(e)}
+        >
+          {content}
+        </span>
+      </FileMenu>
     );
   }
   if (file.markdown) {
+    const preview = () => read(file.path);
+    const open = (e: MouseEvent | KeyboardEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      preview();
+    };
     return (
-      <MarkdownLink file={file} className={className}>
-        {content}
-      </MarkdownLink>
+      <FileMenu file={file} onPreview={preview}>
+        <span
+          role="button"
+          tabIndex={0}
+          title={file.path}
+          className={className}
+          onClick={open}
+          onKeyDown={(e: KeyboardEvent) => (e.key === "Enter" || e.key === " ") && open(e)}
+        >
+          {content}
+        </span>
+      </FileMenu>
     );
   }
   return (
