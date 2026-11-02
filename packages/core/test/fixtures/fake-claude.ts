@@ -600,7 +600,7 @@ if (slash?.[1] === "clear") {
   result(text);
 } else if (prompt.includes("TASK_EDIT")) {
   out(init);
-  appendFileSync(join(process.cwd(), "TASK_CHANGE.md"), `${prompt.split("\n")[0]}\n`);
+  appendFileSync(join(process.cwd(), "TASK_CHANGE.md"), `${prompt.replace(/^<godmode-context>[^<]+<\/godmode-context>\n\n/, "").split("\n")[0]}\n`);
   const text = "Added TASK_CHANGE.md with the requested change.";
   textTurn(text);
   result(text);
