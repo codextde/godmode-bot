@@ -10,7 +10,7 @@ import type { AutomationEvent, AutomationEventSource, AutomationEventStatus, Rou
 import { all, get, run as exec } from "../db";
 import { bus } from "../events/bus";
 import { logger } from "../log";
-import { emitRoutine, getRoutine, patchTriggerState, readTriggerState, updateRoutine } from "../services/routines";
+import { OPEN_WORK_CLEARED, emitRoutine, getRoutine, patchTriggerState, readTriggerState, updateRoutine } from "../services/routines";
 import { sendMessage, updateConversation } from "../services/conversations";
 import { notify } from "../services/notifications";
 import { redact } from "../vault/vault";
@@ -357,10 +357,19 @@ function finishEvents(run: Pick<Run, "id" | "status" | "result" | "error">) {
     archiveSkippedChat(run.id, rows[0]!.routine_id);
   } else setEventStatus(ids, "done", null);
   const met = rows.filter((r) => r.source === "condition").at(-1);
-  const observation = met ? parseJson<{ observation?: unknown }>(met.payload, {}).observation : undefined;
-  if (met && typeof observation === "string" && taskFits(met.routine_id, run.id)) {
-    if (patchTriggerState(met.routine_id, { observation, observedAt: now(), taskFailures: null })) emitRoutine(met.routine_id);
+  const payload = met ? parseJson<{ observation?: unknown; open?: unknown }>(met.payload, {}) : {};
+  if (met && typeof payload.observation === "string" && taskFits(met.routine_id, run.id)) {
+    const handled = { observation: payload.observation, observedAt: now(), taskFailures: null, ...openWorkHandled(met.routine_id, payload.open) };
+    if (patchTriggerState(met.routine_id, handled)) emitRoutine(met.routine_id);
   }
+}
+
+/** A task run for waiting work ended: a run for the same items counts as a retry, the next check decides if it helped. */
+function openWorkHandled(routineId: string, open: unknown) {
+  if (typeof open !== "string") return OPEN_WORK_CLEARED;
+  const state = readTriggerState(routineId);
+  const openRepeats = state.openItems === open ? (state.openRepeats ?? 0) + 1 : 0;
+  return { openItems: open, openRepeats, openHandledAt: now() };
 }
 
 function archiveSkippedChat(runId: string, routineId: string) {

@@ -30,7 +30,7 @@ import {
   startAutomationEvents,
   stopAutomationEvents,
 } from "../src/automations/events";
-import { buildCheckPrompt, runConditionCheck } from "../src/automations/conditions";
+import { MAX_OPEN_RETRIES, OPEN_RETRY_BASE_MS, buildCheckPrompt, runConditionCheck } from "../src/automations/conditions";
 import { handleWebhook, rotateWebhookToken } from "../src/automations/webhooks";
 import {
   __setPusherForTests,
@@ -742,6 +742,117 @@ describe("condition checks", () => {
     finish(sent.find((x) => x.run.trigger === "routine")!.run, "failed", null, "Interrupted (Godmode restarted)");
     expect(readTriggerState(r.id).taskFailures).toBeUndefined();
     expect(getRoutine(r.id).enabled).toBe(true);
+  });
+
+  describe("waiting work", () => {
+    function queueRoutine(): Routine {
+      return createRoutine({
+        agentId: agent.id,
+        name: `Queue ${newId("t", 4)}`,
+        trigger: { type: "condition", condition: "at least one job is queued", checkModel: "haiku" },
+        cron: "*/5 * * * *",
+        prompt: "Work the queue, at most 8 jobs per run",
+      });
+    }
+    const taskRuns = () => sent.filter((x) => x.run.trigger === "routine").map((x) => x.run);
+    async function check(r: Routine, open: string[] | undefined, opts: { met?: boolean; manual?: boolean } = {}) {
+      const run = await runConditionCheck(r.id, { manual: opts.manual });
+      const res = await callTool(checkCtx(run), "automation_check_result", { met: opts.met ?? true, observation: `Queued: ${open?.join(", ") ?? "none"}`, summary: "Checked.", ...(open ? { open } : {}) });
+      finish(run);
+      return res.content[0]!.text;
+    }
+    async function checkAndWork(r: Routine, open: string[]) {
+      const before = taskRuns().length;
+      await check(r, open);
+      await waitFor(() => taskRuns().length === before + 1, "task");
+      finish(taskRuns().at(-1)!);
+    }
+    function age(r: Routine, ms: number) {
+      patchTriggerState(r.id, { openHandledAt: new Date(Date.now() - ms).toISOString() });
+    }
+
+    test("what a run left behind starts the task again right away", async () => {
+      const r = queueRoutine();
+      await checkAndWork(r, ["1", "2", "3", "4"]);
+      await checkAndWork(r, ["3", "4"]);
+      expect(taskRuns()).toHaveLength(2);
+      expect(readTriggerState(r.id)).toMatchObject({ openItems: "3\n4", openRepeats: 0 });
+      expect(await check(r, undefined, { met: false })).toContain("not met");
+      expect(readTriggerState(r.id).openItems).toBeUndefined();
+    });
+
+    test("the same work is retried with growing gaps, then held until it changes", async () => {
+      const r = queueRoutine();
+      await checkAndWork(r, ["7", "9"]);
+      for (let retry = 0; retry < MAX_OPEN_RETRIES; retry++) {
+        const gap = OPEN_RETRY_BASE_MS * 2 ** retry;
+        const before = taskRuns().length;
+        age(r, gap - 60_000);
+        expect(await check(r, ["9", "7"])).toContain("retries after");
+        expect(taskRuns()).toHaveLength(before);
+        age(r, gap + 1000);
+        await checkAndWork(r, ["9", "7"]);
+      }
+      expect(readTriggerState(r.id).openRepeats).toBe(MAX_OPEN_RETRIES);
+
+      const runs = taskRuns().length;
+      age(r, 30 * 24 * 3600_000);
+      expect(await check(r, ["7", "9"])).toContain("out of retries");
+      await check(r, ["7", "9"]);
+      expect(taskRuns()).toHaveLength(runs);
+      expect(getRoutine(r.id).enabled).toBe(true);
+      expect(getRoutine(r.id).triggerStatus.state).toBe("error");
+      const warned = all<{ title: string }>("SELECT title FROM notifications WHERE title = ?", `“${r.name}” keeps leaving the same work open`);
+      expect(warned).toHaveLength(1);
+
+      await checkAndWork(r, ["7", "9", "10"]);
+      expect(taskRuns()).toHaveLength(runs + 1);
+      expect(readTriggerState(r.id)).toMatchObject({ openItems: "10\n7\n9", openRepeats: 0 });
+      expect(readTriggerState(r.id).openHeld).toBeUndefined();
+      expect(getRoutine(r.id).triggerStatus.state).toBe("ok");
+    });
+
+    test("a check by hand doesn't wait", async () => {
+      const r = queueRoutine();
+      await checkAndWork(r, ["7"]);
+      await check(r, ["7"], { manual: true });
+      await waitFor(() => taskRuns().length === 2, "task");
+      finish(taskRuns()[1]!);
+      expect(readTriggerState(r.id).openRepeats).toBe(1);
+    });
+
+    test("a task that fails is no retry: the next check runs it, and repeated failures pause", async () => {
+      const r = queueRoutine();
+      for (let i = 0; i < 3; i++) {
+        await check(r, ["7"]);
+        await waitFor(() => taskRuns().length === i + 1, "task");
+        finish(taskRuns()[i]!, "failed", null, "boom");
+        expect(readTriggerState(r.id).openItems).toBeUndefined();
+      }
+      expect(getRoutine(r.id).enabled).toBe(false);
+    });
+
+    test("a one-off change runs once and leaves no waiting work behind", async () => {
+      const r = conditionRoutine();
+      patchTriggerState(r.id, { observation: "Pro: $49/mo", openItems: "stale", openRepeats: 2 });
+      const run = await runConditionCheck(r.id);
+      await callTool(checkCtx(run), "automation_check_result", { met: true, observation: "Pro: $59/mo", summary: "Up to $59." });
+      finish(run);
+      await waitFor(() => taskRuns().length === 1, "task");
+      finish(taskRuns()[0]!);
+      const state = readTriggerState(r.id);
+      expect(state.observation).toBe("Pro: $59/mo");
+      expect(state.openItems).toBeUndefined();
+      expect(await check(r, undefined, { met: false })).toContain("not met");
+      expect(taskRuns()).toHaveLength(1);
+    });
+
+    test("the prompt tells waiting work from one-off changes and shows the labels to reuse", () => {
+      const prompt = buildCheckPrompt(queueRoutine(), { observation: "3 queued", observedAt: "2026-11-02T08:00:00.000Z", openItems: "job-1\njob-2" });
+      expect(prompt).toContain("Waiting items: job-1, job-2");
+      expect(prompt).toContain("even if it is the same as at the last check");
+      expect(prompt).toContain("so the task doesn't run twice for the same thing");
+    });
   });
 
   test("a check that ends without a result or fails is flagged on the automation", async () => {
