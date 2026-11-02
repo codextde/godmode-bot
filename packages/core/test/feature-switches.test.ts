@@ -25,7 +25,7 @@ const api = (method: string, path: string, body?: unknown) =>
   });
 
 const switches = () => Object.fromEntries(FEATURES.map((f) => [f, getSettings()[f].enabled])) as Record<Feature, boolean>;
-const allOff = { artifacts: false, integrations: false, messaging: false, android: false };
+const defaults = { artifacts: true, integrations: false, messaging: false, android: false };
 
 /** Runs the migration again on whatever the tables hold now, the way an upgrade or a restore does. */
 function migrate(): Record<Feature, boolean> {
@@ -62,10 +62,10 @@ afterAll(async () => {
 });
 
 describe("new installs", () => {
-  test("start with every optional feature off", () => {
+  test("start with artifacts on and the other optional features off", () => {
     clear();
-    expect(switches()).toEqual(allOff);
-    expect(migrate()).toEqual(allOff);
+    expect(switches()).toEqual(defaults);
+    expect(migrate()).toEqual(defaults);
   });
 });
 
@@ -78,7 +78,7 @@ describe("existing installs", () => {
   test("keep artifacts on when there are artifacts", () => {
     clear();
     insert("artifacts", { id: "art_1", title: "Sales", html: "<p>hi</p>", created_at: now(), updated_at: now() });
-    expect(migrate()).toEqual({ ...allOff, artifacts: true });
+    expect(migrate()).toEqual({ ...defaults, artifacts: true });
   });
 
   test("keep integrations on for API tools, MCP servers, Composio apps or a Composio key", () => {
@@ -91,20 +91,20 @@ describe("existing installs", () => {
     for (const [what, seed] of cases) {
       clear();
       seed();
-      expect({ what, ...migrate() }).toEqual({ what, ...allOff, integrations: true });
+      expect({ what, ...migrate() }).toEqual({ what, ...defaults, integrations: true });
     }
   });
 
   test("keep messaging on when a bot is connected", () => {
     clear();
     insert("messaging_connections", { id: "msg_1", provider: "telegram", name: "Bot", created_at: now(), updated_at: now() });
-    expect(migrate()).toEqual({ ...allOff, messaging: true });
+    expect(migrate()).toEqual({ ...defaults, messaging: true });
   });
 
   test("keep Android on when a phone was seen", () => {
     clear();
     insert("android_devices", { id: "adr_1", serial: "R58M", name: "Pixel", created_at: now(), updated_at: now() });
-    expect(migrate()).toEqual({ ...allOff, android: true });
+    expect(migrate()).toEqual({ ...defaults, android: true });
     expect(getSettings().android.adbPath).toBe("");
   });
 
@@ -113,8 +113,8 @@ describe("existing installs", () => {
     insert("artifacts", { id: "art_1", title: "Sales", html: "<p>hi</p>", created_at: now(), updated_at: now() });
     insert("android_devices", { id: "adr_1", serial: "R58M", name: "Pixel", created_at: now(), updated_at: now() });
     updateSettings({ artifacts: { enabled: false }, android: { enabled: false, adbPath: "/opt/adb" } });
-    expect(migrate()).toEqual(allOff);
-    expect(migrate()).toEqual(allOff);
+    expect(migrate()).toEqual({ ...defaults, artifacts: false });
+    expect(migrate()).toEqual({ ...defaults, artifacts: false });
     expect(getSettings().android.adbPath).toBe("/opt/adb");
   });
 
@@ -132,6 +132,7 @@ describe("existing installs", () => {
 describe("agents only get a feature's tools while it is on", () => {
   test("artifacts", async () => {
     clear();
+    updateSettings({ artifacts: { enabled: false } });
     expect(toolNames(manager).filter((n) => n.startsWith("artifact_"))).toEqual([]);
     const refused = await callTool(chatRun(manager), "artifact_list", {});
     expect(refused.isError).toBe(true);
@@ -177,6 +178,7 @@ describe("the human switches them", () => {
 
   test("starting an artifact needs artifacts on", async () => {
     clear();
+    updateSettings({ artifacts: { enabled: false } });
     const off = await api("POST", "/api/artifacts/start", { prompt: "A sales dashboard" });
     expect(off.status).toBe(409);
     expect(((await off.json()) as { error: string }).error).toContain("Settings → Artifacts");

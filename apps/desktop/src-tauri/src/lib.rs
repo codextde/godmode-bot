@@ -6,6 +6,8 @@ mod clock;
 mod commands;
 mod core;
 mod deep_link;
+#[cfg(target_os = "macos")]
+mod frame_rate;
 mod ota;
 mod paths;
 mod tray;
@@ -19,7 +21,7 @@ use std::{
     time::Duration,
 };
 
-use tauri::{Manager, RunEvent, Window, WindowEvent};
+use tauri::{AppHandle, Manager, RunEvent, WebviewWindowBuilder, Window, WindowEvent};
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_window_state::StateFlags;
 
@@ -90,6 +92,7 @@ pub fn run() {
         ])
         .setup(|app| {
             let handle = app.handle();
+            build_main_window(handle)?;
             core::start(handle.clone());
             updater::start(handle.clone());
             tray::create(handle)?;
@@ -119,6 +122,19 @@ pub fn run() {
         RunEvent::Reopen { has_visible_windows: false, .. } => tray::show_main_window(app),
         _ => {}
     });
+}
+
+fn build_main_window(app: &AppHandle) -> tauri::Result<()> {
+    let config =
+        app.config().app.windows.iter().find(|w| w.label == tray::MAIN_WINDOW).expect("main window in tauri.conf.json");
+    let builder = WebviewWindowBuilder::from_config(app, config)?;
+    #[cfg(target_os = "macos")]
+    let builder = match objc2::MainThreadMarker::new() {
+        Some(mtm) => builder.with_webview_configuration(frame_rate::webview_configuration(mtm)),
+        None => builder,
+    };
+    builder.build()?;
+    Ok(())
 }
 
 fn hide_to_tray(window: &Window) {
