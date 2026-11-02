@@ -16,7 +16,7 @@ import type {
   ArtifactVersion,
   ArtifactVersionDetail,
 } from "@godmode/shared";
-import { MAX_ARTIFACT_DATA, MAX_ARTIFACT_HTML, MAX_ARTIFACT_VERSIONS } from "@godmode/shared";
+import { ARTIFACT_FILES_PATH, MAX_ARTIFACT_DATA, MAX_ARTIFACT_HTML, MAX_ARTIFACT_VERSIONS } from "@godmode/shared";
 import { all, get, insert, run as sql, tx } from "../db";
 import { bus } from "../events/bus";
 import { badRequest, conflict, newId, notFound, now, parseJson } from "../util";
@@ -26,6 +26,7 @@ import { getSettings } from "./settings";
 import { conversationExists, startChat } from "./conversations";
 import { hasQueued, submitMessage } from "./messageQueue";
 import { activeRunForConversation } from "../runner/runner";
+import { listArtifactFiles, removeArtifactFilesDir } from "./artifactFiles";
 
 interface Row {
   id: string;
@@ -33,6 +34,7 @@ interface Row {
   description: string;
   html: string;
   data: string;
+  files_key: string;
   version: number;
   refresh_prompt: string;
   pinned: number;
@@ -106,7 +108,14 @@ function rowOf(id: string): Row {
 
 export function getArtifact(id: string): Artifact {
   const r = rowOf(id);
-  return { ...toSummary(r), html: r.html, data: parseJson<unknown>(r.data, null) };
+  const files = listArtifactFiles(r.id);
+  return {
+    ...toSummary(r),
+    html: r.html,
+    data: parseJson<unknown>(r.data, null),
+    files,
+    filesBase: files.length && r.files_key ? `${ARTIFACT_FILES_PATH}/${r.files_key}/` : null,
+  };
 }
 
 export function artifactExists(id: string): boolean {
@@ -277,7 +286,7 @@ export function patchArtifact(id: string, patch: ArtifactPatch): ArtifactSummary
     audit("user", "artifact.patch", r.id, { fields: cols });
   }
   bus.changed("artifacts");
-  const { html: _html, data: _data, ...summary } = getArtifact(r.id);
+  const { html: _html, data: _data, files: _files, filesBase: _base, ...summary } = getArtifact(r.id);
   return summary;
 }
 
@@ -317,6 +326,7 @@ export function restoreArtifactVersion(id: string, version: number): Artifact {
 export function deleteArtifact(id: string): void {
   const r = rowOf(id);
   sql("DELETE FROM artifacts WHERE id = ?", r.id);
+  removeArtifactFilesDir(r.id);
   audit("user", "artifact.delete", r.id, { title: r.title });
   bus.changed("artifacts");
 }

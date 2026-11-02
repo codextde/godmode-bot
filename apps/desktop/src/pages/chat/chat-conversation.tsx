@@ -556,7 +556,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
           browserToggle={
             <>
             {chatArtifacts.length > 0 && !showArtifactPanel && wide && (
-              <ArtifactToggle count={chatArtifacts.length} onClick={() => showArtifact(conversationId, chatArtifacts[0]!.id)} />
+              <ArtifactToggle artifacts={chatArtifacts} onPick={(id) => showArtifact(conversationId, id)} />
             )}
             {chatVm ? (
               !showVmPanel && <VmToggle working={!!activeRunId} onClick={() => (wide ? setVmPanel(true) : setVmFocus(true))} />
@@ -597,7 +597,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
         />
 
         <ChatFilesScope conversationId={conversationId} runnerId={conv.runnerId}>
-          <ArtifactScopeProvider value={{ conversationId, openId: showArtifactPanel ? artifactId : null }}>
+          <ArtifactScopeProvider value={wide ? { conversationId, openId: showArtifactPanel ? artifactId : null } : null}>
           <SidePanelScopeProvider value={wide ? { conversationId, current: showSidePanel ? side : null } : null}>
           <QuestionScopeProvider value={{ conversationId, agentName: agent?.name ?? t("turnEnd.theAgent"), openId: waiting?.question?.id ?? null }}>
             <QuoteSelection onQuote={(text) => composerRef.current?.insert(text)} disabled={dreamLog || voiceMode}>
@@ -896,7 +896,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
             onHide={() => hideSide(conversationId)}
           />
         )}
-        {showArtifactPanel && <ArtifactPanel key={`artifact-${artifactId}`} id={artifactId!} onHide={() => hideArtifact(conversationId)} />}
+        {showArtifactPanel && <ArtifactPanel key="artifact" id={artifactId!} onHide={() => hideArtifact(conversationId)} siblings={chatArtifacts} onSwitch={(id) => showArtifact(conversationId, id)} />}
         {showVmPanel && (
           <VmPanel
             key="vm"

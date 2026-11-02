@@ -36,8 +36,8 @@
       "csp": {
         "default-src": "'self'",
         "connect-src": "'self' http://127.0.0.1:* ws://127.0.0.1:* http://localhost:* ws://localhost:* ipc: http://ipc.localhost https://api.openai.com https://api.elevenlabs.io",
-        "img-src": "'self' data: blob: https:",
-        "media-src": "'self' blob: data:",
+        "img-src": "'self' data: blob: https: http://127.0.0.1:*/api/artifact-files/ http://localhost:*/api/artifact-files/",
+        "media-src": "'self' blob: data: http://127.0.0.1:*/api/artifact-files/ http://localhost:*/api/artifact-files/",
         "style-src": "'self' 'unsafe-inline'",
         "font-src": "'self' data:",
         "script-src": "'self' 'wasm-unsafe-eval'",

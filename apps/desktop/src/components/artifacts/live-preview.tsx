@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { specDocument } from "@godmode/shared";
 import { cn } from "@/lib/utils";
 import { useReduceAnimations } from "@/lib/motion";
-import { ArtifactFrame } from "./artifact-frame";
+import { ArtifactFrame, type ArtifactFrameFiles } from "./artifact-frame";
 import { parsePartialJson, safePartialHtml } from "./partial";
 
 const RELOAD_MS = 700;
@@ -34,7 +34,7 @@ export function hasLivePreview(input: LiveInput | undefined): boolean {
   return (typeof input.html === "string" && input.html.trim() !== "") || !!input.specText?.trim() || (input.spec !== undefined && input.spec !== null);
 }
 
-export function LivePreview({ input, title, className }: { input: LiveInput; title: string; className?: string }) {
+export function LivePreview({ input, title, files, className }: { input: LiveInput; title: string; files?: ArtifactFrameFiles; className?: string }) {
   const reduce = useReduceAnimations();
   const specSource = input.spec !== undefined && typeof input.spec === "object" ? input.spec : input.specText;
   const [lastSpec, setLastSpec] = useState<{ source: unknown; spec: unknown }>({ source: undefined, spec: undefined });
@@ -102,6 +102,7 @@ export function LivePreview({ input, title, className }: { input: LiveInput; tit
             html={html}
             data={data}
             title={title}
+            files={files}
             interactive={false}
             onReady={() => {
               setTimeout(() => setFront(i), 60);

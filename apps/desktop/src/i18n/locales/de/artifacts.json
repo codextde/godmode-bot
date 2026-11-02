@@ -8,7 +8,10 @@
   "openChat": "Zugehörigen Chat öffnen",
   "frame": {
     "cloudTitle": "Öffne es auf deinem Computer",
-    "cloudDescription": "Artefakte laufen in der Godmode-App oder im Dashboard auf deinem Computer, nicht über Godmode Cloud."
+    "cloudDescription": "Artefakte laufen in der Godmode-App oder im Dashboard auf deinem Computer, nicht über Godmode Cloud.",
+    "stuckTitle": "Dieses Artefakt lädt nicht",
+    "stuckDescription": "Godmode antwortet nicht. Vielleicht startet es gerade neu.",
+    "retry": "Nochmal versuchen"
   },
   "page": {
     "back": "Artefakte",
@@ -26,19 +29,39 @@
     "failed": "Hat nicht geklappt",
     "building": "Wird erstellt…",
     "changing": "Wird geändert…",
-    "showing": "Angezeigt"
+    "showing": "Angezeigt",
+    "addedFiles_one": "{{count}} Datei hinzugefügt",
+    "addedFiles_other": "{{count}} Dateien hinzugefügt"
   },
   "toggle": {
     "showOne": "Artefakt anzeigen",
     "showMany": "Artefakte anzeigen ({{count}})"
   },
   "starters": {
-    "sales": { "title": "Sales-Dashboard", "blurb": "Umsatz, Bestellungen und Top-Produkte auf einen Blick" },
-    "kpi": { "title": "KPI-Tracker", "blurb": "Die paar Zahlen, die du jeden Morgen checkst" },
-    "pipeline": { "title": "Deal-Pipeline", "blurb": "Zieh Deals durch deine Vertriebsphasen" },
-    "budget": { "title": "Budgetplaner", "blurb": "Einnahmen, Kosten und was jeden Monat übrig bleibt" },
-    "content": { "title": "Content-Kalender", "blurb": "Plane Posts über all deine Kanäle" },
-    "calculator": { "title": "Preisrechner", "blurb": "Ein Angebots- oder Margenrechner für deine Angebote" }
+    "sales": {
+      "title": "Sales-Dashboard",
+      "blurb": "Umsatz, Bestellungen und Top-Produkte auf einen Blick"
+    },
+    "kpi": {
+      "title": "KPI-Tracker",
+      "blurb": "Die paar Zahlen, die du jeden Morgen checkst"
+    },
+    "pipeline": {
+      "title": "Deal-Pipeline",
+      "blurb": "Zieh Deals durch deine Vertriebsphasen"
+    },
+    "budget": {
+      "title": "Budgetplaner",
+      "blurb": "Einnahmen, Kosten und was jeden Monat übrig bleibt"
+    },
+    "content": {
+      "title": "Content-Kalender",
+      "blurb": "Plane Posts über all deine Kanäle"
+    },
+    "calculator": {
+      "title": "Preisrechner",
+      "blurb": "Ein Angebots- oder Margenrechner für deine Angebote"
+    }
   },
   "overview": {
     "title": "Artefakte",
@@ -67,7 +90,10 @@
     "deleted": "{{title}} gelöscht",
     "deletedFallback": "Artefakt gelöscht",
     "deleteError": "Konnte nicht gelöscht werden",
-    "saveError": "Konnte nicht gespeichert werden"
+    "saveError": "Konnte nicht gespeichert werden",
+    "alreadyWorking": "{{agent}} arbeitet schon daran",
+    "downloadLeftOut_one": "{{count}} Datei ist nicht im Download",
+    "downloadLeftOut_other": "{{count}} Dateien sind nicht im Download"
   },
   "view": {
     "goneTitle": "Dieses Artefakt gibt es nicht mehr",
@@ -89,7 +115,10 @@
     "notNow": "Nicht jetzt",
     "somethingBroke": "Etwas ist kaputtgegangen: {{failure}}",
     "dismiss": "Ausblenden",
-    "askToFix": "{{agent}} um Reparatur bitten"
+    "askToFix": "{{agent}} um Reparatur bitten",
+    "loadErrorTitle": "Konnte nicht geladen werden",
+    "rename": "Umbenennen",
+    "switch": "Artefakte in diesem Chat"
   },
   "refreshDialog": {
     "title": "So wird aktualisiert",
@@ -105,7 +134,8 @@
     "label": "Ansicht",
     "preview": "Vorschau",
     "code": "Code",
-    "data": "Daten"
+    "data": "Daten",
+    "files": "Dateien"
   },
   "versions": {
     "label": "Versionen",
@@ -119,5 +149,15 @@
     "noData": "Noch keine Daten gespeichert",
     "lines_one": "{{formatted}} Zeile",
     "lines_other": "{{formatted}} Zeilen"
+  },
+  "files": {
+    "open": "In der App öffnen",
+    "showInFinder": "Im Finder zeigen",
+    "showInFolder": "Im Ordner zeigen",
+    "download": "Herunterladen",
+    "previous": "Zurück",
+    "next": "Weiter",
+    "noPreview": "Für diesen Dateityp gibt es keine Vorschau",
+    "actionError": "Das hat nicht geklappt"
   }
 }

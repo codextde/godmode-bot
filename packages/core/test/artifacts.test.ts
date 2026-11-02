@@ -9,6 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { deleteConversation, getConversation, startChat } from "../src/services/conversations";
 import { applyEdits, getArtifact, listArtifacts, listArtifactVersions } from "../src/services/artifacts";
+import { __setFileManagerForTests } from "../src/services/chatFiles";
 import { listActiveRuns, listRuns, waitForRun } from "../src/runner/runner";
 import { getAccessToken } from "../src/server/auth";
 import { updateSettings } from "../src/services/settings";
@@ -345,5 +346,143 @@ describe("review fixes", () => {
     expect(versions).toHaveLength(50);
     expect(versions[0]!.version).toBe(53);
     expect(versions.at(-1)!.version).toBe(4);
+  });
+});
+
+describe("files on this computer", () => {
+  const dir = mkdtempSync(join(tmpdir(), "gm-artifact-files-"));
+  const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==", "base64");
+  writeFileSync(join(dir, "one.png"), png);
+  writeFileSync(join(dir, "two bild.png"), png);
+  writeFileSync(join(dir, "clip.mp4"), Buffer.alloc(1000, 7));
+  writeFileSync(join(dir, "drawing.svg"), `<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>`);
+  writeFileSync(join(dir, "run.command"), "echo no");
+  writeFileSync(join(dir, ".env.png"), "SECRET=1");
+
+  let conversationId = "";
+  beforeAll(async () => {
+    conversationId = await chat();
+  });
+  const call = async (name: string, input: Record<string, unknown>) => {
+    const out = await callTool(ctxFor(conversationId), name, input);
+    return { isError: out.isError, text: out.content.map((c) => ("text" in c ? c.text : "")).join("\n") };
+  };
+  const create = (files: string[]) => call("artifact_create", { title: "Approve these", html: `<img src="one.png">`, files });
+  const idOf = (out: { text: string }) => /\(id (art_[\w-]+)/.exec(out.text)![1]!;
+  const served = (a: Artifact, name: string, init?: RequestInit) => fetch(`${env.baseUrl}${a.filesBase}${encodeURIComponent(name)}`, init);
+
+  test("a folder is attached by name and the page's frame may load exactly those files", async () => {
+    const out = await create([dir]);
+    expect(out.isError).toBeFalsy();
+    expect(out.text).toContain("Attached 4 files");
+    const a = getArtifact(idOf(out));
+    expect(a.files.map((f) => f.name)).toEqual(["clip.mp4", "drawing.svg", "one.png", "two bild.png"]);
+    expect(a.files.find((f) => f.name === "one.png")!.kind).toBe("image");
+    expect(a.filesBase).toMatch(/^\/api\/artifact-files\/[0-9a-f]{48}\/$/);
+
+    const res = await served(a, "two bild.png");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("image/png");
+    expect(res.headers.get("x-frame-options")).toBeNull();
+    expect(Buffer.from(await res.arrayBuffer()).equals(png)).toBe(true);
+
+    const frame = await fetch(`${env.baseUrl}/api/artifacts/frame`);
+    const policy = frame.headers.get("content-security-policy")!;
+    expect(policy).toContain(`img-src https: data: blob: ${env.baseUrl}/api/artifact-files/`);
+    expect(policy).toContain("connect-src https: wss:");
+    expect(policy).not.toContain(`connect-src https: wss: ${env.baseUrl}`);
+  });
+
+  test("the secret in the URL is the credential, and nothing but attached files is served", async () => {
+    const a = getArtifact(idOf(await create([join(dir, "one.png")])));
+    expect((await fetch(`${env.baseUrl}/api/artifact-files/${"0".repeat(48)}/one.png`)).status).toBe(404);
+    expect((await served(a, "../../godmode.db")).status).toBe(404);
+    expect((await served(a, "two bild.png")).status).toBe(404);
+  });
+
+  test("an SVG can't run anything, a video answers range requests, an unchanged file isn't sent again", async () => {
+    const a = getArtifact(idOf(await create([dir])));
+    const svg = await served(a, "drawing.svg");
+    expect(svg.headers.get("content-security-policy")).toContain("sandbox");
+    expect(svg.headers.get("x-content-type-options")).toBe("nosniff");
+    const part = await served(a, "clip.mp4", { headers: { range: "bytes=10-19" } });
+    expect(part.status).toBe(206);
+    expect(part.headers.get("content-range")).toBe("bytes 10-19/1000");
+    expect((await part.arrayBuffer()).byteLength).toBe(10);
+    expect((await served(a, "clip.mp4", { headers: { range: "bytes=5000-" } })).status).toBe(416);
+    const first = await served(a, "one.png");
+    const again = await served(a, "one.png", { headers: { "if-none-match": first.headers.get("etag")! } });
+    expect(again.status).toBe(304);
+  });
+
+  test("programs and secrets stay out, a wrong path fails before anything is saved", async () => {
+    const before = listArtifacts().length;
+    const missing = await create([join(dir, "nope.png")]);
+    expect(missing.isError).toBe(true);
+    expect(missing.text).toContain("There is no file");
+    expect(listArtifacts().length).toBe(before);
+
+    const skipped = await create([join(dir, "one.png"), join(dir, "run.command"), join(dir, ".env.png")]);
+    expect(skipped.text).toContain("run.command: this file type can't be attached");
+    expect(skipped.text).toContain(".env.png: looks like a secret");
+    expect(getArtifact(idOf(skipped)).files.map((f) => f.name)).toEqual(["one.png"]);
+  });
+
+  test("the same source replaces its copy, another with the same name gets its own, and removing and deleting clean up", async () => {
+    const id = idOf(await create([join(dir, "one.png")]));
+    const other = mkdtempSync(join(tmpdir(), "gm-artifact-files-"));
+    writeFileSync(join(other, "one.png"), png);
+    const update = await call("artifact_update", { id, files: [join(dir, "one.png"), join(other, "one.png")] });
+    expect(update.isError).toBeFalsy();
+    expect(getArtifact(id).files.map((f) => f.name)).toEqual(["one-2.png", "one.png"]);
+
+    const removed = await call("artifact_update", { id, removeFiles: ["one-2.png", "ghost.png"] });
+    expect(removed.text).toContain("No attached file called ghost.png");
+    expect(getArtifact(id).files.map((f) => f.name)).toEqual(["one.png"]);
+
+    const a = getArtifact(id);
+    const headers = { authorization: `Bearer ${getAccessToken()}` };
+    expect((await fetch(`${env.baseUrl}/api/artifacts/${id}`, { method: "DELETE", headers })).status).toBe(200);
+    expect((await served(a, "one.png")).status).toBe(404);
+  });
+
+  test("names that differ only in case don't share a file", async () => {
+    const other = mkdtempSync(join(tmpdir(), "gm-artifact-files-"));
+    writeFileSync(join(other, "ONE.png"), png);
+    const id = idOf(await create([join(dir, "one.png"), join(other, "ONE.png")]));
+    expect(getArtifact(id).files.map((f) => f.name)).toEqual(["ONE-2.png", "one.png"]);
+  });
+
+  test("the human opens a file in its app or in the file manager; only attached ones", async () => {
+    const launched: string[][] = [];
+    __setFileManagerForTests((command) => launched.push(command));
+    try {
+      const id = idOf(await create([join(dir, "one.png")]));
+      const headers = { authorization: `Bearer ${getAccessToken()}` };
+      const post = (path: string) => fetch(`${env.baseUrl}/api/artifacts/${id}/files/${path}`, { method: "POST", headers });
+      expect((await post("one.png/open")).status).toBe(200);
+      expect(launched[0]!.at(-1)).toContain(join("artifact-files", id, "one.png"));
+      expect((await post("one.png/reveal")).status).toBe(200);
+      expect(launched[1]!.at(-1)).toBe(join(dir, "one.png"));
+      expect((await post(`${encodeURIComponent("../../godmode.db")}/open`)).status).toBe(404);
+      expect(launched.length).toBe(2);
+    } finally {
+      __setFileManagerForTests(null);
+    }
+  });
+
+  test("the render check gets the served files", async () => {
+    let seen: unknown;
+    __setArtifactCheckForTests(async (_h, _d, files) => {
+      seen = files;
+      return { image: null, errors: [], warnings: [], height: 400 };
+    });
+    try {
+      const a = getArtifact(idOf(await call("artifact_create", { title: "Checked", html: "<p>x</p>", files: [join(dir, "one.png")] })));
+      expect((seen as { base: string }).base).toContain(a.filesBase!);
+      expect((seen as { list: unknown[] }).list.length).toBe(1);
+    } finally {
+      __setArtifactCheckForTests(async () => ({ image: "aW1n", errors: [], warnings: [], height: 800 }));
+    }
   });
 });

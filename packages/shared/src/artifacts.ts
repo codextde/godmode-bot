@@ -14,6 +14,31 @@ export const MAX_ARTIFACT_HTML = 400_000;
 export const MAX_ARTIFACT_DATA = 1_000_000;
 /** Versions kept per artifact (older ones are dropped). */
 export const MAX_ARTIFACT_VERSIONS = 50;
+/** Files attached to one artifact (images to approve, videos, PDFs): at most this many, this big. */
+export const MAX_ARTIFACT_FILES = 500;
+export const MAX_ARTIFACT_FILE_BYTES = 200 * 1024 * 1024;
+export const MAX_ARTIFACT_FILES_BYTES = 2 * 1024 * 1024 * 1024;
+/** Where the core serves attached files; the frame loads them from `<path>/<key>/<name>` without the app's login. */
+export const ARTIFACT_FILES_PATH = "/api/artifact-files";
+
+export type ArtifactFileKind = "image" | "video" | "audio" | "pdf" | "file";
+
+/** A file copied into the artifact, so its pages can show it and the human can open it. */
+export interface ArtifactFile {
+  /** What the artifact's code calls it: `<img src="photo.png">`. */
+  name: string;
+  mime: string;
+  kind: ArtifactFileKind;
+  size: number;
+  updatedAt: ISODate;
+}
+
+export function artifactFileKind(mime: string): ArtifactFileKind {
+  if (mime.startsWith("image/")) return "image";
+  if (mime.startsWith("video/")) return "video";
+  if (mime.startsWith("audio/")) return "audio";
+  return mime === "application/pdf" ? "pdf" : "file";
+}
 
 export interface ArtifactSummary {
   id: ID;
@@ -39,6 +64,11 @@ export interface ArtifactSummary {
 export interface Artifact extends ArtifactSummary {
   html: string;
   data: unknown;
+  files: ArtifactFile[];
+  /** Where its files are served, ending in a slash; null without files. */
+  filesBase: string | null;
+  /** The app asking runs on the core's machine, so opening a file there is of use to it. */
+  filesLocal?: boolean;
 }
 
 export interface ArtifactVersion {
@@ -153,4 +183,5 @@ export const ARTIFACT_BRIDGE_DOC = `Inside the artifact, \`window.godmode\` is r
 - \`godmode.ask(text)\` — offer to send text to you in the chat (the human confirms), e.g. a "Ask for a chart" button.
 - \`godmode.refresh()\` — ask you to refresh the data (the human's Refresh button does the same).
 - \`godmode.theme\` ("light" | "dark") and \`godmode.onTheme(fn)\`; the CSS variables --gm-bg, --gm-card, --gm-fg, --gm-muted, --gm-border, --gm-accent, --gm-accent-fg, --gm-positive, --gm-negative and --gm-font follow the app's theme, and \`<html>\` gets class "dark" in dark mode.
-Scripts and styles may load from https CDNs (e.g. https://cdn.tailwindcss.com, https://cdn.jsdelivr.net/npm/chart.js); \`fetch\` may reach public https APIs only. Links open in the human's browser. No localStorage, cookies, alert, confirm or prompt: keep state in godmode.setData and build dialogs in the page.`;
+Scripts and styles may load from https CDNs (e.g. https://cdn.tailwindcss.com, https://cdn.jsdelivr.net/npm/chart.js); \`fetch\` may reach public https APIs only. Links open in the human's browser. No localStorage, cookies, alert, confirm or prompt: keep state in godmode.setData and build dialogs in the page.
+Files from this computer (images to approve, screenshots, videos, PDFs): pass their absolute paths or a folder as \`files\` on artifact_create or artifact_update; they are copied into the artifact. Refer to them by name: \`<img src="photo.png">\`, the kit's image and gallery nodes, \`godmode.file(name)\` for the URL, \`godmode.files\` for the list ({name, kind, mime, size, url}). A click on such an image opens it large in the app; \`godmode.view(name)\` does that for any file. file:// URLs and paths on disk never load in the sandbox.`;

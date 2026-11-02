@@ -1924,4 +1924,22 @@ UPDATE agents SET computer = '{"enabled":true,"target":null}' WHERE computer IN 
 UPDATE projects SET off_computer = 0;
 `,
   },
+  {
+    id: 116,
+    name: "artifact_files",
+    sql: /* sql */ `
+-- Files copied into an artifact (services/artifactFiles.ts). The key is the secret in their URL: the sandboxed page loads them without the app's login.
+ALTER TABLE artifacts ADD COLUMN files_key TEXT NOT NULL DEFAULT '';
+CREATE INDEX idx_artifacts_files_key ON artifacts(files_key) WHERE files_key != '';
+CREATE TABLE artifact_files (
+  artifact_id TEXT NOT NULL REFERENCES artifacts(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  mime TEXT NOT NULL,
+  size INTEGER NOT NULL,
+  source_path TEXT NOT NULL DEFAULT '',
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (artifact_id, name)
+);
+`,
+  },
 ];

@@ -8,7 +8,10 @@
   "openChat": "Open its chat",
   "frame": {
     "cloudTitle": "Open it on your computer",
-    "cloudDescription": "Artifacts run in the Godmode app or the dashboard on your computer, not through Godmode Cloud."
+    "cloudDescription": "Artifacts run in the Godmode app or the dashboard on your computer, not through Godmode Cloud.",
+    "stuckTitle": "This artifact didn't load",
+    "stuckDescription": "Godmode didn't answer. It may be restarting.",
+    "retry": "Try again"
   },
   "page": {
     "back": "Artifacts",
@@ -26,19 +29,39 @@
     "failed": "It didn't work",
     "building": "Building…",
     "changing": "Changing it…",
-    "showing": "Showing"
+    "showing": "Showing",
+    "addedFiles_one": "Added {{count}} file",
+    "addedFiles_other": "Added {{count}} files"
   },
   "toggle": {
     "showOne": "Show the artifact",
     "showMany": "Show the artifacts ({{count}})"
   },
   "starters": {
-    "sales": { "title": "Sales dashboard", "blurb": "Revenue, orders and top products at a glance" },
-    "kpi": { "title": "KPI tracker", "blurb": "A handful of numbers you check every morning" },
-    "pipeline": { "title": "Deal pipeline", "blurb": "Drag deals through your sales stages" },
-    "budget": { "title": "Budget planner", "blurb": "Income, costs and what's left each month" },
-    "content": { "title": "Content calendar", "blurb": "Plan posts across your channels" },
-    "calculator": { "title": "Price calculator", "blurb": "A quote or margin calculator for your offers" }
+    "sales": {
+      "title": "Sales dashboard",
+      "blurb": "Revenue, orders and top products at a glance"
+    },
+    "kpi": {
+      "title": "KPI tracker",
+      "blurb": "A handful of numbers you check every morning"
+    },
+    "pipeline": {
+      "title": "Deal pipeline",
+      "blurb": "Drag deals through your sales stages"
+    },
+    "budget": {
+      "title": "Budget planner",
+      "blurb": "Income, costs and what's left each month"
+    },
+    "content": {
+      "title": "Content calendar",
+      "blurb": "Plan posts across your channels"
+    },
+    "calculator": {
+      "title": "Price calculator",
+      "blurb": "A quote or margin calculator for your offers"
+    }
   },
   "overview": {
     "title": "Artifacts",
@@ -67,7 +90,10 @@
     "deleted": "Deleted {{title}}",
     "deletedFallback": "Deleted the artifact",
     "deleteError": "Couldn't delete it",
-    "saveError": "Couldn't save it"
+    "saveError": "Couldn't save it",
+    "alreadyWorking": "{{agent}} is already working on it",
+    "downloadLeftOut_one": "{{count}} file isn't in the download",
+    "downloadLeftOut_other": "{{count}} files aren't in the download"
   },
   "view": {
     "goneTitle": "This artifact is gone",
@@ -89,7 +115,10 @@
     "notNow": "Not now",
     "somethingBroke": "Something broke: {{failure}}",
     "dismiss": "Dismiss",
-    "askToFix": "Ask {{agent}} to fix it"
+    "askToFix": "Ask {{agent}} to fix it",
+    "loadErrorTitle": "Couldn't load it",
+    "rename": "Rename",
+    "switch": "Artifacts in this chat"
   },
   "refreshDialog": {
     "title": "How it refreshes",
@@ -105,7 +134,8 @@
     "label": "View",
     "preview": "Preview",
     "code": "Code",
-    "data": "Data"
+    "data": "Data",
+    "files": "Files"
   },
   "versions": {
     "label": "Versions",
@@ -119,5 +149,15 @@
     "noData": "No data saved yet",
     "lines_one": "{{formatted}} line",
     "lines_other": "{{formatted}} lines"
+  },
+  "files": {
+    "open": "Open in its app",
+    "showInFinder": "Show in Finder",
+    "showInFolder": "Show in folder",
+    "download": "Download",
+    "previous": "Previous",
+    "next": "Next",
+    "noPreview": "No preview for this file type",
+    "actionError": "That didn't work"
   }
 }

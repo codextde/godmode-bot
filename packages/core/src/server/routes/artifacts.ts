@@ -12,7 +12,9 @@ import {
   saveArtifactData,
   startArtifact,
 } from "../../services/artifacts";
-import { badRequest } from "../../util";
+import { openArtifactFile, revealArtifactFile } from "../../services/artifactFiles";
+import { HttpError, badRequest } from "../../util";
+import { isLocalRequest } from "../auth";
 import { body, z } from "../validate";
 
 const patchSchema = z.object({
@@ -50,7 +52,7 @@ export function registerArtifactRoutes(app: Hono): void {
 
   app.post("/api/artifacts/start", async (c) => c.json(await startArtifact(await body(c, startSchema)), 201));
 
-  app.get("/api/artifacts/:id", (c) => c.json(getArtifact(c.req.param("id"))));
+  app.get("/api/artifacts/:id", (c) => c.json({ ...getArtifact(c.req.param("id")), filesLocal: isLocalRequest(c) }));
 
   app.patch("/api/artifacts/:id", async (c) => c.json(patchArtifact(c.req.param("id"), await body(c, patchSchema))));
 
@@ -68,6 +70,19 @@ export function registerArtifactRoutes(app: Hono): void {
   });
 
   app.post("/api/artifacts/:id/refresh", async (c) => c.json(await refreshArtifact(c.req.param("id"))));
+
+  // These open something on the core's machine: no use, and nobody's business, from anywhere else.
+  app.post("/api/artifacts/:id/files/:name/open", (c) => {
+    if (!isLocalRequest(c)) throw new HttpError(403, "Files can only be opened on the computer Godmode runs on", "not_local");
+    openArtifactFile(c.req.param("id"), c.req.param("name"));
+    return c.json({ ok: true as const });
+  });
+
+  app.post("/api/artifacts/:id/files/:name/reveal", (c) => {
+    if (!isLocalRequest(c)) throw new HttpError(403, "Files can only be shown on the computer Godmode runs on", "not_local");
+    revealArtifactFile(c.req.param("id"), c.req.param("name"));
+    return c.json({ ok: true as const });
+  });
 
   app.delete("/api/artifacts/:id", (c) => {
     deleteArtifact(c.req.param("id"));

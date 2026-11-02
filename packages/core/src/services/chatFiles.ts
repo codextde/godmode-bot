@@ -231,6 +231,16 @@ export function fileManagerCommand(path: string, kind: Kind, platform: NodeJS.Pl
   return ["xdg-open", kind === "folder" ? path : dirname(path)];
 }
 
+/** Open a file in its default app on the machine the core runs on. Callers make sure it isn't a program. */
+export function openInDefaultApp(path: string): void {
+  const command = process.platform === "darwin" ? ["open", path] : process.platform === "win32" ? ["explorer.exe", path] : ["xdg-open", path];
+  try {
+    launch(command);
+  } catch {
+    throw new HttpError(500, "Couldn't open the file", "file_open");
+  }
+}
+
 /** Show a file or folder in the file manager of the machine the core runs on. */
 export function revealInFileManager(input: string): void {
   const path = absolute(input);
