@@ -392,7 +392,7 @@ export function ArtifactView({
         onOpenChange={setDeleting}
         onDeleted={() => {
           onClose?.();
-          if (variant === "page") actions.navigate("/settings/artifacts");
+          if (variant === "page") actions.navigate("/artifacts");
         }}
       />
     </div>

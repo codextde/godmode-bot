@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
+  AppWindow,
   ArrowLeft,
   Bot,
   Box,
@@ -191,6 +192,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     { to: "/inbox", label: t("nav.inbox"), icon: <Inbox />, badge: inboxCount || undefined },
     { to: "/tasks", label: t("nav.tasks"), icon: <SquareKanban />, badge: (attention?.review ?? 0) + (attention?.blocked ?? 0) || undefined },
     { to: "/agents", label: t("nav.agents"), icon: <Bot />, badge: runningCount || undefined },
+    { to: "/artifacts", label: t("nav.artifacts"), icon: <AppWindow /> },
     { to: "/automations", label: t("nav.automations"), icon: <Workflow />, badge: attention?.automation || undefined },
     { to: "/calls", label: t("nav.calls"), icon: <Phone /> },
     { to: "/vault/logins", label: t("nav.passwords"), icon: <KeyRound />, also: ["/vault/2fa", "/vault/passkeys"] },
@@ -209,9 +211,10 @@ export function AppShell({ children }: { children: ReactNode }) {
     easyItem("/inbox", t("nav.inbox")),
     easyItem("/agents", t("nav.agents")),
     easyItem("/automations", t("nav.automations")),
+    easyItem("/artifacts", t("system:easyPages.artifacts.title")),
     easyItem("/tasks", t("nav.tasks")),
     easyItem("/vault/logins", t("nav.passwords")),
-  ];
+  ].filter(shown);
   const easyMore: NavItem[] = [
     easyItem("/calls", t("system:easyPages.calls.title")),
     easyItem("/vault/cards", t("system:easyPages.cards.title")),
@@ -670,8 +673,8 @@ function CloudVersionNote({ coreVersion, uiVersion }: { coreVersion: string; uiV
   );
 }
 
-/** Settings pages, and the pages they open (an agent's files, a phone, an artifact). */
-const SETTINGS_PATHS = ["/settings", "/files", "/android/", "/artifacts/"];
+/** Settings pages, and the pages they open (an agent's files, a phone). */
+const SETTINGS_PATHS = ["/settings", "/files", "/android/"];
 
 function FooterBar() {
   const { t } = useTranslation(["layout", "common"]);

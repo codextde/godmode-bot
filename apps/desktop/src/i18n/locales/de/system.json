@@ -16,6 +16,9 @@
     "switchBackHint": "Du kannst jederzeit unter Einstellungen → Allgemein zurückwechseln."
   },
   "easyPages": {
+    "artifacts": {
+      "title": "Dashboards & Apps"
+    },
     "automations": {
       "description": "Lass deine Agenten von selbst loslegen: nach Zeitplan oder wenn in deinen Apps etwas passiert."
     },

@@ -41,6 +41,8 @@
     "calculator": { "title": "Preisrechner", "blurb": "Ein Angebots- oder Margenrechner für deine Angebote" }
   },
   "overview": {
+    "title": "Artefakte",
+    "description": "Dashboards und kleine Apps, die deine Agenten für dich bauen. Öffne eins, nutze es und bitte in einfachen Worten um Änderungen.",
     "emptyTitle": "Noch nichts gebaut",
     "emptyDescription": "Beschreib oben ein Dashboard oder ein Tool, oder wähl einen Startpunkt. Agenten bauen Artefakte auch, wenn du in einem beliebigen Chat danach fragst.",
     "yourArtifacts": "Deine Artefakte",

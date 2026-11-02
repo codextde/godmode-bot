@@ -30,6 +30,7 @@ export const FEATURE_SECTION: Record<Feature, string> = {
 
 /** Pages in the sidebar that belong to a feature: they leave it while the feature is off. */
 export const PAGE_FEATURE: Record<string, Feature> = {
+  "/artifacts": "artifacts",
   "/calls": "phone",
   "/vault/cards": "cards",
   "/vms": "vm",

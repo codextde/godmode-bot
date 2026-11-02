@@ -27,6 +27,7 @@ const AgentsPage = lazy(() => import("@/pages/agents/agents-page"));
 const AgentNewPage = lazy(() => import("@/pages/agents/agent-new"));
 const AgentDetailPage = lazy(() => import("@/pages/agents/agent-detail"));
 const FilesPage = lazy(() => import("@/pages/files/files-page"));
+const ArtifactsPage = lazy(() => import("@/pages/artifacts/artifacts-page"));
 const ArtifactPage = lazy(() => import("@/pages/artifacts/artifact-page"));
 const AutomationsPage = lazy(() => import("@/pages/automations/automations-page"));
 const WorkspacesPage = lazy(() => import("@/pages/workspaces/workspaces-page"));
@@ -226,7 +227,7 @@ export function App() {
           <Route path="/agents" element={<AgentsPage />} />
           <Route path="/agents/new" element={<AgentNewPage />} />
           <Route path="/agents/:agentId/*" element={<AgentDetailPage />} />
-          <Route path="/artifacts" element={<ToSettings section="artifacts" />} />
+          <Route path="/artifacts" element={<FeaturePage on={b.settings.artifacts.enabled} section="artifacts"><ArtifactsPage /></FeaturePage>} />
           <Route path="/artifacts/:artifactId" element={b.settings.artifacts.enabled ? <ArtifactPage /> : <ToSettings section="artifacts" />} />
           <Route path="/files" element={<Navigate to="/settings/files" replace />} />
           <Route path="/files/:agentId" element={<FilesPage />} />
