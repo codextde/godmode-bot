@@ -919,7 +919,10 @@ function easyMeta(meta: ToolMeta, input: Input, ctx: ToolContext): { title: stri
     if (/scroll/.test(action)) return { title: t("chat:tools.common.scrolled") };
     return null;
   }
-  if (kind === "shell") return { title: tool === "BashOutput" || tool === "Monitor" ? t("chat:tools.easy.checkedCommand") : t("chat:tools.builtin.ranCommand") };
+  if (kind === "shell") {
+    if (tool === "BashOutput" || tool === "Monitor") return { title: t("chat:tools.easy.checkedCommand") };
+    return { title: str(input.description) || t("chat:tools.builtin.ranCommand") };
+  }
   if (kind === "file") {
     if (/^(Read|read_file)$/.test(tool)) return { title: memory ? t("chat:tools.easy.checkedMemory") : t("chat:tools.common.readAFile") };
     if (/^(Write|write_file)$/.test(tool)) return { title: memory ? t("chat:tools.easy.updatedMemory") : t("chat:tools.easy.savedFile") };
