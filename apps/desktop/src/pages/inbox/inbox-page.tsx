@@ -140,7 +140,7 @@ function OffBoard({ tasks, onShow }: { tasks: HumanTask[]; onShow: () => void })
     <div className="px-5 @2xl:px-8">
       <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border bg-card/60 py-2 pr-2 pl-3 text-sm">
         <span className="text-muted-foreground">{t("board.offBoard.lead")}</span>
-        {ATTENTION_KINDS.filter((k) => counts.has(k)).map((k) => {
+        {ATTENTION_KINDS.filter((k): k is Exclude<AttentionKind, "todo"> => k !== "todo" && counts.has(k)).map((k) => {
           const Icon = ATTENTION_ICON[k];
           return (
             <span key={k} className="inline-flex items-center gap-1.5 text-foreground">
