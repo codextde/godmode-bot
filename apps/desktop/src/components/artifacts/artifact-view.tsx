@@ -5,15 +5,18 @@ import { AnimatePresence, motion } from "motion/react";
 import { Trans, useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { formatDistanceToNowStrict } from "date-fns";
-import type { Artifact } from "@godmode/shared";
+import type { Artifact, ArtifactSummary } from "@godmode/shared";
 import {
   ArrowUpRight,
   Check,
+  ChevronsUpDown,
   Code2,
   Download,
   Eye,
+  Images,
   History,
   Maximize2,
+  Pencil,
   MessageSquareText,
   Minimize2,
   MoreHorizontal,
@@ -51,19 +54,33 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { CopyButton } from "@/components/chat/copy-button";
 import { useTheme } from "@/components/theme-provider";
-import { api, errorMessage } from "@/lib/api";
+import { ApiRequestError, api, errorMessage } from "@/lib/api";
 import { saveBlob } from "@/lib/desktop";
 import { useArtifact } from "@/lib/hooks";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
 import { dateLocale, intlLocale } from "@/i18n";
 import { useConversationLiveRun } from "@/stores/live";
-import { ArtifactFrame, standaloneDocument } from "./artifact-frame";
+import { coreUrl } from "@/lib/core";
+import { ArtifactFrame, artifactFrameFiles, standaloneDocument } from "./artifact-frame";
+import { ArtifactFileViewer, ArtifactFilesPane } from "./artifact-files";
 
-type Tab = "preview" | "code" | "data";
+type Tab = "preview" | "files" | "code" | "data";
+
+/** A download stands alone: its pictures go inside, up to what a browser opens comfortably. */
+const MAX_INLINE_BYTES = 60 * 1024 * 1024;
+
+const asDataUrl = (blob: Blob) =>
+  new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
 
 export function ago(iso: string | null | undefined): string {
   if (!iso) return "";
@@ -133,6 +150,8 @@ export function ArtifactView({
   expanded,
   onExpand,
   footer,
+  siblings,
+  onSwitch,
 }: {
   id: string;
   /** `panel`: next to a chat · `page`: the whole screen. */
@@ -141,10 +160,15 @@ export function ArtifactView({
   expanded?: boolean;
   onExpand?: (v: boolean) => void;
   footer?: ReactNode;
+  /** The other artifacts of this chat, to switch between. */
+  siblings?: ArtifactSummary[];
+  onSwitch?: (id: string) => void;
 }) {
   const { t } = useTranslation(["artifacts", "common"]);
-  const { data: artifact, isLoading, error } = useArtifact(id);
+  const { data: artifact, isLoading, error, refetch } = useArtifact(id);
   const [tab, setTab] = useState<Tab>("preview");
+  const [viewingFile, setViewingFile] = useState<string | null>(null);
+  const [renaming, setRenaming] = useState(false);
   const [viewing, setViewing] = useState<number | null>(null);
   // What the artifact's code asks for waits for the human's click; one at a time, nothing while the agent works.
   const [request, setRequest] = useState<{ kind: "ask"; text: string } | { kind: "refresh" } | null>(null);
@@ -167,37 +191,94 @@ export function ArtifactView({
     setViewing(null);
     setFailure(null);
   }, [artifact?.version]);
+  useEffect(() => {
+    setTab("preview");
+    setViewing(null);
+    setFailure(null);
+    setRequest(null);
+    setViewingFile(null);
+  }, [id]);
 
   const html = viewing != null ? old.data?.html : artifact?.html;
   const dataText = useMemo(() => JSON.stringify(artifact?.data ?? null, null, 2), [artifact?.data]);
 
   if (isLoading) return <ViewSkeleton />;
   if (error || !artifact) {
+    const gone = !error || (error instanceof ApiRequestError && error.status === 404);
     return (
       <div className="grid h-full place-items-center p-8 text-center">
         <div className="space-y-2">
-          <p className="text-sm font-medium">{t("view.goneTitle")}</p>
-          <p className="text-xs text-muted-foreground">{t("view.goneDescription")}</p>
-          {onClose && (
-            <Button size="sm" variant="outline" onClick={onClose}>
-              {t("common:actions.close")}
-            </Button>
-          )}
+          <p className="text-sm font-medium">{gone ? t("view.goneTitle") : t("view.loadErrorTitle")}</p>
+          <p className="text-xs text-muted-foreground">{gone ? t("view.goneDescription") : errorMessage(error)}</p>
+          <div className="flex justify-center gap-2 pt-1">
+            {!gone && (
+              <Button size="sm" variant="outline" onClick={() => void refetch()}>
+                <RotateCcw /> {t("frame.retry")}
+              </Button>
+            )}
+            {onClose && (
+              <Button size="sm" variant="outline" onClick={onClose}>
+                {t("common:actions.close")}
+              </Button>
+            )}
+          </div>
         </div>
       </div>
     );
   }
 
   const agent = artifact.agentName ?? t("theAgent");
-  const download = () =>
-    saveBlob(new Blob([standaloneDocument(html ?? artifact.html, artifact.data, resolved)], { type: "text/html" }), `${slug(artifact.title)}.html`);
+  const hasFiles = artifact.files.length > 0;
+  const shownTab: Tab = tab === "files" && !hasFiles ? "preview" : tab;
+  const download = async () => {
+    const inline: Record<string, string> = {};
+    let room = MAX_INLINE_BYTES;
+    let left = 0;
+    for (const f of artifact.files) {
+      if (!artifact.filesBase || f.size > room || f.kind === "file" || f.kind === "pdf") {
+        left++;
+        continue;
+      }
+      try {
+        const res = await fetch(coreUrl(`${artifact.filesBase}${encodeURIComponent(f.name)}`));
+        if (!res.ok) throw new Error(res.statusText);
+        inline[f.name] = await asDataUrl(await res.blob());
+        room -= f.size;
+      } catch {
+        left++;
+      }
+    }
+    const files = hasFiles ? { base: null, list: artifact.files, inline } : undefined;
+    await saveBlob(new Blob([standaloneDocument(html ?? artifact.html, artifact.data, resolved, files)], { type: "text/html" }), `${slug(artifact.title)}.html`);
+    if (left) toast.info(t("toast.downloadLeftOut", { count: left }));
+  };
+  const others = (siblings ?? []).filter((a) => a.id !== artifact.id);
 
   return (
     <div className="@container flex h-full min-h-0 flex-col">
       <header data-titlebar data-tauri-drag-region className="flex h-14 shrink-0 items-center gap-2 border-b px-3">
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-center gap-1.5">
-            <h2 className="truncate text-sm font-medium tracking-[-0.01em]">{artifact.title}</h2>
+            {others.length > 0 && onSwitch ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button type="button" className="flex min-w-0 items-center gap-1 rounded-md outline-none hover:text-foreground/80 focus-visible:ring-[3px] focus-visible:ring-ring/50" aria-label={t("view.switch")}>
+                    <h2 className="truncate text-sm font-medium tracking-[-0.01em]">{artifact.title}</h2>
+                    <ChevronsUpDown className="size-3 shrink-0 text-muted-foreground" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="max-h-80 w-64 overflow-y-auto">
+                  <DropdownMenuLabel className="text-xs text-muted-foreground">{t("view.switch")}</DropdownMenuLabel>
+                  {others.map((a) => (
+                    <DropdownMenuItem key={a.id} onSelect={() => onSwitch(a.id)}>
+                      <span className="truncate">{a.title}</span>
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              <h2 className="truncate text-sm font-medium tracking-[-0.01em]">{artifact.title}</h2>
+            )}
             <VersionPicker
               current={artifact.version}
               viewing={viewing}
@@ -224,7 +305,7 @@ export function ArtifactView({
           </p>
         </div>
 
-        <Segmented value={tab} onChange={setTab} />
+        <Segmented value={shownTab} onChange={setTab} hasFiles={hasFiles} />
 
         <IconAction
           label={artifact.refreshPrompt ? t("view.refreshData") : t("view.askFreshData")}
@@ -261,6 +342,18 @@ export function ArtifactView({
             )}
             <DropdownMenuItem onSelect={() => actions.pin.mutate(!artifact.pinned)}>
               {artifact.pinned ? <PinOff /> : <Pin />} {artifact.pinned ? t("unpin") : t("pinToTop")}
+            </DropdownMenuItem>
+            <div className="@md:hidden">
+              {TABS.filter((x) => x.id !== "files" || hasFiles).map((x) => (
+                <DropdownMenuItem key={x.id} onSelect={() => setTab(x.id)}>
+                  {x.icon} {t(x.labelKey)}
+                  {shownTab === x.id && <Check className="ml-auto text-brand-strong" />}
+                </DropdownMenuItem>
+              ))}
+              <DropdownMenuSeparator />
+            </div>
+            <DropdownMenuItem onSelect={() => setRenaming(true)}>
+              <Pencil /> {t("view.rename")}
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => setEditingRefresh(true)}>
               <RefreshCw /> {t("view.howItRefreshesMenu")}
@@ -355,7 +448,7 @@ export function ArtifactView({
       </AnimatePresence>
 
       <div className="relative min-h-0 flex-1 bg-background">
-        {tab === "preview" &&
+        {shownTab === "preview" &&
           (html == null ? (
             <div className="grid h-full place-items-center">
               <Spinner className="text-muted-foreground" />
@@ -366,14 +459,22 @@ export function ArtifactView({
               data={artifact.data}
               title={artifact.title}
               className="h-full w-full"
+              status
+              files={artifactFrameFiles(artifact)}
               onSetData={viewing == null ? actions.saveData : undefined}
-              onAsk={(text) => !busy && setRequest((r) => r ?? { kind: "ask", text })}
-              onRefresh={() => !busy && !actions.refresh.isPending && setRequest((r) => r ?? { kind: "refresh" })}
+              onSaveError={(message) => toast.error(t("toast.saveError"), { description: message })}
+              onAsk={(text) => setRequest((r) => r ?? { kind: "ask", text })}
+              onRefresh={() => {
+                if (busy || actions.refresh.isPending) toast.info(t("toast.alreadyWorking", { agent }));
+                else setRequest((r) => r ?? { kind: "refresh" });
+              }}
               onError={setFailure}
+              onViewFile={(name) => artifact.files.some((f) => f.name === name) && setViewingFile(name)}
             />
           ))}
-        {tab === "code" && <Source text={html ?? ""} label="HTML" copyLabel={t("source.copyHtml")} />}
-        {tab === "data" && (
+        {shownTab === "files" && <ArtifactFilesPane artifact={artifact} onView={setViewingFile} />}
+        {shownTab === "code" && <Source text={html ?? ""} label="HTML" copyLabel={t("source.copyHtml")} />}
+        {shownTab === "data" && (
           <Source
             text={dataText}
             label={t("tabs.data")}
@@ -385,7 +486,9 @@ export function ArtifactView({
 
       {footer}
 
+      <ArtifactFileViewer artifact={artifact} name={viewingFile} onName={setViewingFile} />
       <RefreshDialog artifact={artifact} open={editingRefresh} onOpenChange={setEditingRefresh} />
+      <RenameDialog artifact={artifact} open={renaming} onOpenChange={setRenaming} />
       <DeleteArtifactDialog
         artifact={artifact}
         open={deleting}
@@ -442,6 +545,51 @@ function RefreshDialog({ artifact, open, onOpenChange }: { artifact: Artifact; o
   );
 }
 
+function RenameDialog({ artifact, open, onOpenChange }: { artifact: Artifact; open: boolean; onOpenChange: (v: boolean) => void }) {
+  const { t } = useTranslation(["artifacts", "common"]);
+  const qc = useQueryClient();
+  const [text, setText] = useState(artifact.title);
+  useEffect(() => {
+    if (open) setText(artifact.title);
+  }, [open, artifact.title]);
+  const save = useMutation({
+    mutationFn: () => api.artifacts.update(artifact.id, { title: text.trim() }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: qk.artifacts });
+      onOpenChange(false);
+    },
+    onError: (err) => toast.error(t("toast.saveError"), { description: errorMessage(err) }),
+  });
+  const can = !!text.trim() && text.trim() !== artifact.title && !save.isPending;
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>{t("view.rename")}</DialogTitle>
+          <DialogDescription className="sr-only">{artifact.title}</DialogDescription>
+        </DialogHeader>
+        <form
+          className="contents"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (can) save.mutate();
+          }}
+        >
+          <Input value={text} onChange={(e) => setText(e.target.value)} maxLength={120} autoFocus aria-label={t("view.rename")} />
+          <DialogFooter>
+            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
+              {t("common:actions.cancel")}
+            </Button>
+            <Button type="submit" disabled={!can}>
+              {save.isPending && <Spinner />} {t("common:actions.save")}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function DeleteArtifactDialog({
   artifact,
   open,
@@ -492,15 +640,16 @@ function IconAction({ label, onClick, disabled, children }: { label: string; onC
 
 const TABS = [
   { id: "preview", labelKey: "tabs.preview", icon: <Eye /> },
+  { id: "files", labelKey: "tabs.files", icon: <Images /> },
   { id: "code", labelKey: "tabs.code", icon: <Code2 /> },
   { id: "data", labelKey: "tabs.data", icon: <Table2 /> },
 ] as const satisfies { id: Tab; labelKey: string; icon: ReactNode }[];
 
-function Segmented({ value, onChange }: { value: Tab; onChange: (t: Tab) => void }) {
+function Segmented({ value, onChange, hasFiles }: { value: Tab; onChange: (t: Tab) => void; hasFiles: boolean }) {
   const { t: tr } = useTranslation("artifacts");
   return (
     <div role="tablist" aria-label={tr("tabs.label")} className="hidden items-center gap-0.5 rounded-lg border bg-card p-0.5 @md:flex">
-      {TABS.map((t) => (
+      {TABS.filter((t) => t.id !== "files" || hasFiles).map((t) => (
         <Tooltip key={t.id}>
           <TooltipTrigger asChild>
             <button
@@ -593,26 +742,26 @@ function Bar({ tone, children }: { tone: "muted" | "brand" | "warning"; children
 
 function Source({ text, label, copyLabel, hint }: { text: string; label: string; copyLabel: string; hint?: string }) {
   const { t } = useTranslation("artifacts");
-  const lines = useMemo(() => text.split("\n"), [text]);
+  // One text node per column, not one element per line: a big document stays smooth.
+  const count = useMemo(() => text.split("\n").length, [text]);
+  const gutter = useMemo(() => Array.from({ length: count }, (_, i) => i + 1).join("\n"), [count]);
   return (
     <div className="flex h-full flex-col">
       <div className="flex h-9 shrink-0 items-center gap-2 border-b bg-paper-2 px-3 text-[11.5px] text-muted-foreground">
         <span className="font-medium text-foreground">{label}</span>
         <span>
-          {t("source.lines", { count: lines.length, formatted: lines.length.toLocaleString(intlLocale()) })}
+          {t("source.lines", { count, formatted: count.toLocaleString(intlLocale()) })}
           {hint ? ` · ${hint}` : ""}
         </span>
         <CopyButton text={text} label={copyLabel} className="ml-auto" />
       </div>
       <div className="min-h-0 flex-1 overflow-auto">
-        <pre className="min-w-max py-2 font-mono text-[12px] leading-[1.6]">
-          {lines.map((line, i) => (
-            <div key={i} className="flex hover:bg-accent/40">
-              <span className="w-12 shrink-0 pr-3 text-right text-muted-foreground/50 tabular-nums select-none">{i + 1}</span>
-              <span className="pr-4 whitespace-pre">{line || " "}</span>
-            </div>
-          ))}
-        </pre>
+        <div className="flex min-w-max py-2 font-mono text-[12px] leading-[1.6]">
+          <pre aria-hidden className="sticky left-0 w-12 shrink-0 bg-background pr-3 text-right text-muted-foreground/50 tabular-nums select-none">
+            {gutter}
+          </pre>
+          <pre className="pr-4 whitespace-pre">{text}</pre>
+        </div>
       </div>
     </div>
   );

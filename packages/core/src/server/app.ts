@@ -19,6 +19,8 @@ import { registerQuestionRoutes } from "./routes/questions";
 import { registerHumanTaskRoutes } from "./routes/humanTasks";
 import { registerArtifactRoutes } from "./routes/artifacts";
 import { serveArtifactFrame } from "./artifactFrame";
+import { serveArtifactFile } from "../services/artifactFiles";
+import { ARTIFACT_FILES_PATH } from "@godmode/shared";
 import { registerIntegrationRoutes } from "./routes/integrations";
 import { registerBrowserRoutes } from "./routes/browser";
 import { registerBackupRoutes } from "./routes/backup";
@@ -114,6 +116,10 @@ export function createApp() {
     await next();
     c.res.headers.delete("X-Frame-Options");
   });
+  app.use(`${ARTIFACT_FILES_PATH}/*`, async (c, next) => {
+    await next();
+    c.res.headers.delete("X-Frame-Options");
+  });
   app.use(
     "*",
     secureHeaders({
@@ -159,6 +165,10 @@ export function createApp() {
   app.get("/api/health", (c) => c.json({ ok: true, name: "godmode-bot" }));
   // The sandbox artifacts run in: a page without data, framed by the app.
   app.get("/api/artifacts/frame", serveArtifactFrame);
+  // What the sandbox shows of an artifact's files: it has no login, the secret in the path is the credential.
+  app.get(`${ARTIFACT_FILES_PATH}/:key/:name`, (c) =>
+    serveArtifactFile(c.req.param("key"), c.req.param("name"), { range: c.req.header("range"), ifNoneMatch: c.req.header("if-none-match") }),
+  );
   registerAuthRoutes(app); // handles its own auth for protected auth endpoints
 
   // MCP gateway for agent runs and connected apps (authenticated by per-run tokens and app keys, not user auth)

@@ -3,13 +3,15 @@ import { Link } from "react-router";
 import { AnimatePresence, motion } from "motion/react";
 import { useTranslation } from "react-i18next";
 import { create } from "zustand";
-import type { MessageBlock } from "@godmode/shared";
+import type { ArtifactSummary, MessageBlock } from "@godmode/shared";
 import { AppWindow, ArrowUpRight, Loader2, PanelRightOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useArtifact, useChatArtifacts } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
 import { PANEL, useReduceAnimations } from "@/lib/motion";
+import { artifactFrameFiles } from "./artifact-frame";
 import { ArtifactView, ago } from "./artifact-view";
 import { LivePreview, hasLivePreview, type LiveInput } from "./live-preview";
 
@@ -50,18 +52,30 @@ export function ArtifactCard({ block, streaming }: { block: ToolUseBlock; stream
   const show = useArtifactPanel((s) => s.show);
   const id = artifactIdOf(block);
   const { data: artifact } = useArtifact(id);
-  const input = (block.input ?? {}) as { title?: string; note?: string; html?: string; edits?: unknown[]; data?: unknown };
+  const input = (block.input ?? {}) as {
+    title?: string;
+    note?: string;
+    html?: string;
+    spec?: unknown;
+    htmlPath?: string;
+    edits?: unknown[];
+    data?: unknown;
+    dataPath?: string;
+    files?: unknown[];
+  };
   const creating = block.name.endsWith("artifact_create");
   const pending = !block.result && streaming;
   const failed = !!block.isError;
   const title = artifact?.title ?? input.title ?? t("card.artifact");
   const what = creating
     ? t("card.built")
-    : input.html || input.edits
+    : input.html || input.spec || input.htmlPath || input.edits
       ? input.note || t("card.changedCode")
-      : input.data !== undefined
+      : input.data !== undefined || input.dataPath
         ? t("card.updatedData")
-        : t("card.updated");
+        : input.files?.length
+          ? t("card.addedFiles", { count: input.files.length })
+          : t("card.updated");
   const open = scope && id ? () => show(scope.conversationId, id) : null;
   const isOpen = !!scope && scope.openId === id;
   const live = pending && !failed && hasLivePreview(input as LiveInput);
@@ -129,7 +143,7 @@ export function ArtifactCard({ block, streaming }: { block: ToolUseBlock; stream
             exit={reduce ? { opacity: 0 } : { opacity: 0, height: 0 }}
             transition={{ duration: reduce ? 0 : 0.2 }}
           >
-            <LivePreview input={input as LiveInput} title={title} className="h-[360px]" />
+            <LivePreview input={input as LiveInput} title={title} files={artifactFrameFiles(artifact)} className="h-[360px]" />
           </motion.div>
         )}
       </AnimatePresence>
@@ -142,7 +156,7 @@ function truncate(text: string, max: number) {
 }
 
 /** The artifact beside a chat. */
-export function ArtifactPanel({ id, onHide }: { id: string; onHide: () => void }) {
+export function ArtifactPanel({ id, onHide, siblings, onSwitch }: { id: string; onHide: () => void; siblings?: ArtifactSummary[]; onSwitch?: (id: string) => void }) {
   const { t } = useTranslation("artifacts");
   const wide = useArtifactPanel((s) => s.wide);
   const setWide = useArtifactPanel((s) => s.setWide);
@@ -157,7 +171,7 @@ export function ArtifactPanel({ id, onHide }: { id: string; onHide: () => void }
       className="h-full shrink-0 overflow-hidden border-l bg-paper-2"
     >
       <div className="h-full" style={{ width }}>
-        <ArtifactView id={id} variant="panel" onClose={onHide} expanded={wide} onExpand={setWide} />
+        <ArtifactView id={id} variant="panel" onClose={onHide} expanded={wide} onExpand={setWide} siblings={siblings} onSwitch={onSwitch} />
       </div>
     </motion.aside>
   );
@@ -185,17 +199,35 @@ export function useAutoOpenArtifacts(conversationId: string, enabled: boolean) {
   return data ?? [];
 }
 
-export function ArtifactToggle({ count, onClick }: { count: number; onClick: () => void }) {
+export function ArtifactToggle({ artifacts, onPick }: { artifacts: ArtifactSummary[]; onPick: (id: string) => void }) {
   const { t } = useTranslation("artifacts");
+  if (artifacts.length > 1) {
+    return (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="sm" aria-label={t("toggle.showMany", { count: artifacts.length })} className="gap-1.5 px-2 text-muted-foreground">
+            <AppWindow />
+            <span className="text-xs tabular-nums">{artifacts.length}</span>
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="max-h-80 w-64 overflow-y-auto">
+          {artifacts.map((a) => (
+            <DropdownMenuItem key={a.id} onSelect={() => onPick(a.id)}>
+              <AppWindow /> <span className="truncate">{a.title}</span>
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    );
+  }
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Button variant="ghost" size="sm" aria-label={t("toggle.showOne")} onClick={onClick} className="gap-1.5 px-2 text-muted-foreground">
+        <Button variant="ghost" size="sm" aria-label={t("toggle.showOne")} onClick={() => artifacts[0] && onPick(artifacts[0].id)} className="gap-1.5 px-2 text-muted-foreground">
           <AppWindow />
-          {count > 1 && <span className="text-xs tabular-nums">{count}</span>}
         </Button>
       </TooltipTrigger>
-      <TooltipContent>{count > 1 ? t("toggle.showMany", { count }) : t("toggle.showOne")}</TooltipContent>
+      <TooltipContent>{t("toggle.showOne")}</TooltipContent>
     </Tooltip>
   );
 }

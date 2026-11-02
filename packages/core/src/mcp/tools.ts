@@ -8,6 +8,7 @@ import { callOnPrimary, runsOnPrimary } from "../remote/deviceTools";
 import { isAbsolute, join } from "node:path";
 import { z } from "zod";
 import type {
+  Artifact,
   Agent,
   ApiTool,
   ConnectorAccess,
@@ -31,6 +32,7 @@ import {
   ARTIFACT_BRIDGE_DOC,
   ARTIFACT_KIT_DOC,
   MAX_ARTIFACT_DATA,
+  MAX_ARTIFACT_FILES,
   SECRET_MASK,
   MAX_ARTIFACT_HTML,
   checkSpec,
@@ -163,6 +165,7 @@ import { zaiKey } from "../runner/claude";
 import { summarizeNotification, wantsSummary } from "../runner/notificationSummary";
 import { artifactExists, createArtifact, getArtifact, listArtifacts, updateArtifact } from "../services/artifacts";
 import { checkArtifactRender } from "../services/artifactCheck";
+import { attachArtifactFiles, prepareArtifactFiles, removeArtifactFiles, type PreparedFiles } from "../services/artifactFiles";
 import { NOTE_MAX, cancelFollowup, followupsAllowed, getFollowup, inWords, parseDueAt, scheduleFollowup } from "../services/followups";
 import { autoRetryOf, continueCutOffRun, latestContinuation } from "../services/resume";
 import { askQuestion, listQuestions } from "../services/questions";
@@ -1034,10 +1037,21 @@ async function readAgentFile(path: string, max: number, what: string): Promise<s
   return file.text();
 }
 
-async function withRenderCheck(done: string, html: string, data: unknown, check: boolean | undefined, tail = ""): Promise<ToolOutput> {
+/** What the agent hears about attached files: the names to use, and anything left out. */
+function attachedNote(prepared: PreparedFiles | null, artifactId: string): string {
+  if (!prepared) return "";
+  const { attached, skipped } = attachArtifactFiles(artifactId, prepared);
+  const shown = attached.slice(0, 40).map((f) => f.name).join(", ");
+  const lines = attached.length ? [`Attached ${attached.length} file${attached.length === 1 ? "" : "s"}: ${shown}${attached.length > 40 ? ", …" : ""}. Show them by name (\`<img src="name">\`, the image and gallery nodes).`] : [];
+  if (skipped.length) lines.push(`Not attached: ${skipped.slice(0, 20).join("; ")}`);
+  return lines.join("\n");
+}
+
+async function withRenderCheck(done: string, artifact: Artifact, check: boolean | undefined, tail = ""): Promise<ToolOutput> {
   const end = tail ? `\n\n${tail}` : "";
   if (check === false) return `${done}${end}`;
-  const seen = await checkArtifactRender(html, data);
+  const files = artifact.filesBase ? { base: `http://127.0.0.1:${config().port}${artifact.filesBase}`, list: artifact.files } : undefined;
+  const seen = await checkArtifactRender(artifact.html, artifact.data, files);
   if (!seen) return `${done}\n\n(No render check: no Chrome or Chromium to render it here.)${end}`;
   const lines = [done, "", seen.errors.length ? `The page reported ${seen.errors.length} error${seen.errors.length === 1 ? "" : "s"} — fix them with artifact_update:` : "The page rendered without errors."];
   for (const e of seen.errors) lines.push(`- ${e}`);
@@ -1995,7 +2009,7 @@ const TOOLS: ToolDef[] = [
     alwaysLoad: true,
     description: `Build an artifact: a small web app the human opens right in Godmode — a sales dashboard, a KPI tracker, a deal board, a calculator, a planner. Use it whenever they ask for a dashboard, a tracker, a tool or a page to look at or work with (not for a one-off answer or a file they asked for). It shows next to this chat and on the Artifacts page; they change it by chatting with you, and every code change is a version they can go back to. The human watches it appear while you type it.
 Write it straight into this call — no draft file, no preview of your own: the result shows you a screenshot of the rendered page and the errors it threw. Fix what looks wrong with artifact_update.
-Pass exactly one of: \`spec\` (a component tree the built-in kit renders — the fastest way and the default for dashboards, reports and KPI pages), \`html\` (a whole document, for interactive tools: forms, boards, calculators; it can use the kit's classes and helpers) or \`htmlPath\` (an HTML file you already wrote). Numbers and records go into \`data\` (or \`dataPath\`, a JSON file you already have), not into the code: a refresh then only rewrites the data. Give it a \`refreshPrompt\` when the data comes from somewhere you can fetch again.
+Pass exactly one of: \`spec\` (a component tree the built-in kit renders — the fastest way and the default for dashboards, reports and KPI pages), \`html\` (a whole document, for interactive tools: forms, boards, calculators; it can use the kit's classes and helpers) or \`htmlPath\` (an HTML file you already wrote). Numbers and records go into \`data\` (or \`dataPath\`, a JSON file you already have), not into the code: a refresh then only rewrites the data. Files on this computer go into \`files\`, and the page shows them right there. Give it a \`refreshPrompt\` when the data comes from somewhere you can fetch again.
 ${ARTIFACT_KIT_DOC}
 ${ARTIFACT_BRIDGE_DOC}
 Polished, calm, real hierarchy, responsive from 360 px, light and dark; no emojis as icons, no lorem ipsum. Sample data only when real data isn't reachable — say so in the app and in your answer.`,
@@ -2007,24 +2021,27 @@ Polished, calm, real hierarchy, responsive from 360 px, light and dark; no emoji
       htmlPath: z.string().min(1).max(4096).optional().describe("Absolute path of an HTML file you already wrote, instead of html"),
       data: z.unknown().optional().describe("The artifact's data as JSON (an object); the app reads it as godmode.data"),
       dataPath: z.string().min(1).max(4096).optional().describe("Absolute path of a JSON file with the data, instead of data"),
+      files: z.array(z.string().min(1).max(4096)).max(MAX_ARTIFACT_FILES).optional().describe("Absolute paths of files or folders on this computer to attach (images to approve, screenshots, videos, PDFs); the page shows them by name"),
       refreshPrompt: z.string().max(4000).optional().describe("How to get fresh data when the human presses Refresh: where from and what to update"),
       check: z.boolean().optional().describe("Render it and return a screenshot and its errors (default true)"),
     }),
     when: canArtifact,
-    run: async ({ title, description, spec, html, htmlPath, data, dataPath, refreshPrompt, check }, { agent, ctx }) => {
+    run: async ({ title, description, spec, html, htmlPath, data, dataPath, files, refreshPrompt, check }, { agent, ctx }) => {
       const code = await artifactCode({ spec, html, htmlPath }, title);
       if (!code) return fail("Pass the artifact as spec, html or htmlPath.");
       const content = await artifactData(data, dataPath);
+      const prepared = files?.length ? prepareArtifactFiles(files) : null;
       const a = createArtifact({ title, description, html: code, data: content, refreshPrompt }, { agentId: agent.id, conversationId: ctx.conversationId, workspaceId: ctx.workspaceId ?? agent.workspaceId }, `agent:${agent.id}`);
-      const done = `Created the artifact "${a.title}" (id ${a.id}, version 1). It opened next to this chat and is on the Artifacts page.`;
-      return withRenderCheck(done, a.html, a.data, check, "In your answer say in a line or two what it shows and what they can ask you to change; don't paste the code.");
+      const note = attachedNote(prepared, a.id);
+      const done = `Created the artifact "${a.title}" (id ${a.id}, version 1). It opened next to this chat and is on the Artifacts page.${note ? `\n${note}` : ""}`;
+      return withRenderCheck(done, getArtifact(a.id), check, "In your answer say in a line or two what it shows and what they can ask you to change; don't paste the code.");
     },
   }),
 
   defineTool({
     name: "artifact_update",
     alwaysLoad: true,
-    description: `Change an artifact you made: its code, its data, its title or how it refreshes. For a small code change pass \`edits\` (each \`find\` copied exactly from the current code — read it with artifact_get — and its \`replace\`; a spec artifact keeps its spec as indented JSON in the code, so edits can change single props); for a big one the whole new \`spec\`, \`html\` or \`htmlPath\`. A code change is a new version (say what changed in \`note\`) and comes back with a screenshot and the page's errors. \`data\` (or \`dataPath\`) replaces the whole data (read it first: the app may have saved entries the human made). After a refresh, pass only \`data\`.`,
+    description: `Change an artifact you made: its code, its data, its title or how it refreshes. For a small code change pass \`edits\` (each \`find\` copied exactly from the current code — read it with artifact_get — and its \`replace\`; a spec artifact keeps its spec as indented JSON in the code, so edits can change single props); for a big one the whole new \`spec\`, \`html\` or \`htmlPath\`. \`files\` attaches more files from this computer (the same path again replaces its copy), \`removeFiles\` takes some out by name. A code change is a new version (say what changed in \`note\`) and comes back with a screenshot and the page's errors. \`data\` (or \`dataPath\`) replaces the whole data (read it first: the app may have saved entries the human made). After a refresh, pass only \`data\`.`,
     schema: z.object({
       id: z.string().min(1).max(100).describe("The artifact's id"),
       spec: z.record(z.string(), z.unknown()).optional().describe("The whole new component tree (replaces the code)"),
@@ -2037,6 +2054,8 @@ Polished, calm, real hierarchy, responsive from 360 px, light and dark; no emoji
         .describe("Text replacements in the current code, applied in order"),
       data: z.unknown().optional().describe("The new data (replaces all of it)"),
       dataPath: z.string().min(1).max(4096).optional().describe("Absolute path of a JSON file with the new data"),
+      files: z.array(z.string().min(1).max(4096)).max(MAX_ARTIFACT_FILES).optional().describe("Absolute paths of files or folders on this computer to attach (images to approve, screenshots, videos, PDFs); the page shows them by name"),
+      removeFiles: z.array(z.string().min(1).max(300)).max(MAX_ARTIFACT_FILES).optional().describe("Names of attached files to take out"),
       title: z.string().min(1).max(120).optional(),
       description: z.string().max(1000).optional(),
       refreshPrompt: z.string().max(4000).optional(),
@@ -2044,17 +2063,24 @@ Polished, calm, real hierarchy, responsive from 360 px, light and dark; no emoji
       check: z.boolean().optional().describe("After a code change: render it and return a screenshot and its errors (default true)"),
     }),
     when: canArtifact,
-    run: async ({ id, spec, html, htmlPath, edits, data, dataPath, title, description, refreshPrompt, note, check }, { agent }) => {
+    run: async ({ id, spec, html, htmlPath, edits, data, dataPath, files, removeFiles, title, description, refreshPrompt, note, check }, { agent }) => {
       const refused = artifactRefusal(agent, id);
       if (refused) return fail(refused);
       const before = getArtifact(id);
       const code = await artifactCode({ spec, html, htmlPath }, title ?? before.title);
       const content = await artifactData(data, dataPath);
+      const prepared = files?.length ? prepareArtifactFiles(files) : null;
       const a = updateArtifact(id, { html: code ?? undefined, edits, data: content, title, description, refreshPrompt, note }, `agent:${agent.id}`);
       const codeChanged = a.version !== before.version;
+      const missing = removeFiles?.length ? removeArtifactFiles(a.id, removeFiles) : [];
+      const attached = attachedNote(prepared, a.id);
       const parts = [codeChanged ? `the code is version ${a.version}` : null, content !== undefined ? "the data is saved" : null].filter(Boolean);
-      const done = `Updated "${a.title}"${parts.length ? `: ${parts.join(", ")}` : ""}. It reloads by itself where it is open.`;
-      return codeChanged ? withRenderCheck(done, a.html, a.data, check) : done;
+      const done = [
+        `Updated "${a.title}"${parts.length ? `: ${parts.join(", ")}` : ""}. It reloads by itself where it is open.`,
+        attached,
+        missing.length ? `No attached file called ${missing.join(", ")}.` : "",
+      ].filter(Boolean).join("\n");
+      return codeChanged || prepared || removeFiles?.length ? withRenderCheck(done, getArtifact(a.id), check) : done;
     },
   }),
 
@@ -2070,7 +2096,15 @@ Polished, calm, real hierarchy, responsive from 360 px, light and dark; no emoji
       const refused = artifactRefusal(agent, id);
       if (refused) return fail(refused);
       const a = getArtifact(id);
-      const head = { id: a.id, title: a.title, description: a.description, version: a.version, refreshPrompt: a.refreshPrompt || undefined, dataUpdatedAt: a.dataUpdatedAt };
+      const head = {
+        id: a.id,
+        title: a.title,
+        description: a.description,
+        version: a.version,
+        refreshPrompt: a.refreshPrompt || undefined,
+        dataUpdatedAt: a.dataUpdatedAt,
+        files: a.files.length ? a.files.map((f) => f.name) : undefined,
+      };
       if (part === "data") return json({ ...head, data: a.data });
       if (part === "html") return `${json(head)}\n\nHTML:\n${a.html}`;
       return `${json({ ...head, data: a.data })}\n\nHTML:\n${a.html}`;

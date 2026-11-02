@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { rmSync } from "node:fs";
-import { standaloneDocument } from "@godmode/shared";
+import { standaloneDocument, type ArtifactDocumentFiles } from "@godmode/shared";
 import { config, ensureDir } from "../config";
 import { logger } from "../log";
 import { sleep } from "../util";
@@ -103,7 +103,7 @@ async function settle(page: PageSession, inflight: () => number) {
   await page.evaluate("new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))", { timeoutMs: 2000 }).catch(() => undefined);
 }
 
-async function render(html: string, data: unknown): Promise<RenderCheck> {
+async function render(html: string, data: unknown, files?: ArtifactDocumentFiles): Promise<RenderCheck> {
   const b = await getBrowser();
   if (b.idle) clearTimeout(b.idle);
   const { targetId } = await b.client.send<{ targetId: string }>("Target.createTarget", { url: "about:blank" });
@@ -142,7 +142,7 @@ async function render(html: string, data: unknown): Promise<RenderCheck> {
     await Promise.all(["Page.enable", "Runtime.enable", "Log.enable", "Network.enable"].map((m) => page.send(m)));
     await page.send("Emulation.setDeviceMetricsOverride", { width: WIDTH, height: 900, deviceScaleFactor: 1, mobile: false });
     const { frameTree } = await page.send<{ frameTree: { frame: { id: string } } }>("Page.getFrameTree");
-    await page.send("Page.setDocumentContent", { frameId: frameTree.frame.id, html: standaloneDocument(html, data, "light") });
+    await page.send("Page.setDocumentContent", { frameId: frameTree.frame.id, html: standaloneDocument(html, data, "light", files) });
     await settle(page, () => pending.size);
     const facts = await page.evaluate<{ height: number; text: number; nodes: number; kitErrors: string[] }>(
       `({height: Math.ceil(document.documentElement.scrollHeight), text: (document.body && document.body.innerText || "").trim().length,
@@ -155,6 +155,23 @@ async function render(html: string, data: unknown): Promise<RenderCheck> {
     const height = Math.max(400, Math.min(facts.height, MAX_HEIGHT));
     await page.send("Emulation.setDeviceMetricsOverride", { width: WIDTH, height, deviceScaleFactor: 1, mobile: false });
     await sleep(150);
+    const broken = await page
+      .evaluate<string[]>(
+        `(async () => {
+          const images = Array.from(document.images);
+          images.forEach((i) => { i.loading = "eager"; });
+          await Promise.race([
+            Promise.all(images.filter((i) => !i.complete).map((i) => new Promise((r) => { i.addEventListener("load", r); i.addEventListener("error", r); }))),
+            new Promise((r) => setTimeout(r, 4000)),
+          ]);
+          return images.filter((i) => i.complete && !i.naturalWidth).slice(0, 8).map((i) => i.getAttribute("src") || "");
+        })()`,
+        { timeoutMs: 6000 },
+      )
+      .catch(() => [] as string[]);
+    for (const src of broken) {
+      add(/^https:|^data:|^blob:/i.test(src) ? `The image ${src.slice(0, 200)} didn't load.` : `The image ${src.slice(0, 200)} didn't load: pass the file in \`files\` and use its name as the src (file:// URLs and paths on disk never load).`);
+    }
     const { data: image } = await page.send<{ data: string }>("Page.captureScreenshot", { format: "jpeg", quality: 70 });
     if (facts.height > MAX_HEIGHT) warnings.push(`The page is ${facts.height}px tall; the screenshot shows the first ${MAX_HEIGHT}px.`);
     await page.send("Emulation.setDeviceMetricsOverride", { width: PHONE_WIDTH, height: 800, deviceScaleFactor: 1, mobile: false });
@@ -169,10 +186,10 @@ async function render(html: string, data: unknown): Promise<RenderCheck> {
   }
 }
 
-export function checkArtifactRender(html: string, data: unknown): Promise<RenderCheck | null> {
-  if (testCheck) return testCheck(html, data);
+export function checkArtifactRender(html: string, data: unknown, files?: ArtifactDocumentFiles): Promise<RenderCheck | null> {
+  if (testCheck) return testCheck(html, data, files);
   const next = queue.then(() =>
-    render(html, data).catch((err) => {
+    render(html, data, files).catch((err) => {
       log.warn("artifact render check failed", err);
       void stopArtifactCheck();
       return null;
@@ -182,7 +199,7 @@ export function checkArtifactRender(html: string, data: unknown): Promise<Render
   return next;
 }
 
-let testCheck: ((html: string, data: unknown) => Promise<RenderCheck | null>) | null = null;
+let testCheck: ((html: string, data: unknown, files?: ArtifactDocumentFiles) => Promise<RenderCheck | null>) | null = null;
 
 export function __setArtifactCheckForTests(fn: typeof testCheck) {
   testCheck = fn;

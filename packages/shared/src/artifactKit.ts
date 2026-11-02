@@ -64,6 +64,21 @@ export const ARTIFACT_KIT_CSS = String.raw`:root{--gm-s1:#2a78d6;--gm-s2:#eb6834
 .gm-donut-legend b{font-weight:600;font-variant-numeric:tabular-nums}
 .gm-error{border:1px dashed var(--gm-negative);color:var(--gm-negative);padding:8px 10px;border-radius:8px;font-size:12px}
 .gm-hidden{display:none!important}
+.gm-figure{margin:0;min-width:0}.gm-figure figcaption{color:var(--gm-muted);font-size:12.5px;margin-top:6px}
+.gm-img{display:block;max-width:100%;height:auto;border-radius:10px}
+.gm-gallery{display:grid;gap:12px;align-items:start;grid-template-columns:repeat(auto-fill,minmax(min(var(--gm-min,220px),100%),1fr))}
+.gm-tile{display:flex;flex-direction:column;min-width:0;background:var(--gm-card);border:1px solid var(--gm-border);border-radius:12px;overflow:hidden;transition:border-color .12s}
+.gm-tile[data-status=approved]{border-color:var(--gm-positive)}.gm-tile[data-status=changes]{border-color:var(--gm-warning)}
+.gm-tile-media{display:block;position:relative;overflow:hidden;width:100%;aspect-ratio:var(--gm-ratio,4/3);padding:0;border:0;background:color-mix(in oklab,var(--gm-fg) 5%,transparent);cursor:zoom-in;color:var(--gm-muted);font:inherit;font-size:12.5px}
+.gm-tile-media img,.gm-tile-media video{position:absolute;inset:0;display:block;width:100%;height:100%;object-fit:contain}
+.gm-tile-media:focus-visible,.gm-btn:focus-visible{outline:2px solid var(--gm-accent);outline-offset:-2px}
+.gm-tile-body{display:flex;flex-direction:column;gap:8px;padding:10px 12px}
+.gm-tile-name{font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gm-tile-actions{display:flex;gap:6px}.gm-tile-actions .gm-btn{flex:1;padding:5px 8px;font-size:12.5px}
+.gm-btn[aria-pressed=true]{background:var(--gm-fg);color:var(--gm-bg);border-color:transparent}
+.gm-note{width:100%;box-sizing:border-box;min-height:56px;resize:vertical;border:1px solid var(--gm-border);border-radius:8px;background:var(--gm-bg);color:var(--gm-fg);font:inherit;font-size:12.5px;padding:6px 8px}
+.gm-review-bar{position:sticky;top:0;z-index:5;display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;margin-bottom:12px;padding:8px 12px;background:var(--gm-card);border:1px solid var(--gm-border);border-radius:10px;font-size:13px}
+.gm-review-bar>span{flex:1;min-width:140px;font-variant-numeric:tabular-nums}
 @media (max-width:600px){.gm-page{padding:16px 12px 32px}.gm-kpi-value{font-size:26px}.gm-title{font-size:19px}.gm-bars-row{grid-template-columns:minmax(80px,120px) 1fr minmax(32px,auto)}.gm-stack-row{grid-template-columns:1fr}}`;
 
 export const ARTIFACT_KIT_JS = String.raw`(function(){"use strict";
@@ -190,11 +205,43 @@ list:function(b){return boxed(b,el("ul",{class:"gm-list"},(b.items||[]).map(func
 callout:function(b){return el("div",{class:"gm-callout gm-tone-"+(b.tone||"info"),html:(b.title?"<b>"+esc(b.title)+"</b><br>":"")+rich(b.text)});},
 badge:function(b){return el("span",{class:"gm-badge gm-tone-"+(b.tone||"info")},b.text);},
 html:function(b){return el("div",{html:b.html||""});},
+image:function(b){var f=b.file||b.src;if(!f)return errBox("image: pass file (an attached file's name) or src");var cap=b.caption;return el("figure",{class:"gm-figure"},el("img",{class:"gm-img",src:fileUrl(f),alt:b.alt||cap||String(f),loading:"lazy",decoding:"async",style:b.height?{maxHeight:b.height+"px",width:"auto"}:null}),cap?el("figcaption",null,cap):null);},
+gallery:function(b){return boxed(b,gallery(b));},
 tabs:function(b,d,raw){var i=raw._tab||0,tabs=b.tabs||[],body=el("div"),bar=el("div",{class:"gm-seg",role:"tablist"},tabs.map(function(t,k){return el("button",{type:"button","aria-pressed":String(k===i),onclick:function(){raw._tab=k;[].forEach.call(bar.children,function(x,j){x.setAttribute("aria-pressed",String(j===k));});show(k);}},bind(t.label,d));}));function show(k){body.innerHTML="";add(body,el("div",{class:"gm-vstack"},kids(tabs[k]||{},d)));}show(i);return el("div",{class:"gm-tabs"},el("div",null,bar),body);}};
+function fileUrl(f){f=String(f);return /^(https?:|data:|blob:)/i.test(f)||!window.godmode||!godmode.file?f:godmode.file(f);}
+var LABELS={en:{approve:"Approve",changes:"Change",approveAll:"Approve all",note:"What should change?",send:"Send to the agent",open:"Open",approved:"approved",toChange:"to change",pending:"open",sent:"I reviewed the files in this artifact: {a} approved, {c} to change, {o} open. The decisions and notes are in its data under review."},de:{approve:"Freigeben",changes:"Ändern",approveAll:"Alle freigeben",note:"Was soll anders sein?",send:"An den Agent senden",open:"Öffnen",approved:"freigegeben",toChange:"zu ändern",pending:"offen",sent:"Ich habe die Dateien in diesem Artefakt geprüft: {a} freigegeben, {c} zu ändern, {o} offen. Die Entscheidungen und Notizen stehen in den Daten unter review."}};
+var quiet=false;
+function gallery(b){
+var g=window.godmode,L=Object.assign({},LABELS[String(navigator.language||"").slice(0,2)==="de"?"de":"en"],b.labels||{});
+var byName={};((g&&g.files)||[]).forEach(function(f){byName[f.name]=f;});
+var raw=Array.isArray(b.items)?b.items:((g&&g.files)||[]).filter(function(f){return f.kind==="image"||f.kind==="video";});
+var its=raw.map(function(x){if(typeof x==="string")return {id:x,caption:x};var id=x.file||x.name||x.src;return {id:id,caption:x.caption||x.title||x.name||x.file||x.src,sub:x.note};}).filter(function(x){return x.id;});
+if(!its.length)return el("div",{class:"gm-muted"},b.empty||"No files yet.");
+function kind(id){var f=byName[id];if(f)return f.kind;return /\.(mp4|m4v|mov|webm)(\?|$)/i.test(id)?"video":/\.(pdf|docx?|xlsx?|pptx?|csv|txt|md|zip|mp3|m4a|wav)(\?|$)/i.test(id)?"file":"image";}
+function view(id){if(g&&byName[id])g.view(id);else if(/^https?:/i.test(id))window.open(id);}
+function states(){var d=g&&g.data;return d&&typeof d==="object"&&!Array.isArray(d)&&d.review||{};}
+function save(id,patch){var d=g.data&&typeof g.data==="object"&&!Array.isArray(g.data)?g.data:{},rev=Object.assign({},d.review||{});(Array.isArray(id)?id:[id]).forEach(function(k){rev[k]=Object.assign({},rev[k]||{},patch);});quiet=true;var p=g.setData(Object.assign({},d,{review:rev}));quiet=false;if(p&&p.catch)p.catch(function(){});}
+var paints=[],count=b.review?el("span"):null;
+function paint(){paints.forEach(function(f){f();});if(!count)return;var s=states(),a=0,c=0;its.forEach(function(x){var v=(s[x.id]||{}).status;if(v==="approved")a++;else if(v==="changes")c++;});count.textContent=a+" "+L.approved+" · "+c+" "+L.toChange+" · "+(its.length-a-c)+" "+L.pending;send.className="gm-btn"+(a+c===its.length?" gm-btn-primary":"");}
+var send=b.review?el("button",{class:"gm-btn",type:"button",onclick:function(){var s=states(),a=0,c=0;its.forEach(function(x){var v=(s[x.id]||{}).status;if(v==="approved")a++;else if(v==="changes")c++;});g.ask(L.sent.replace("{a}",a).replace("{c}",c).replace("{o}",its.length-a-c));}},L.send):null;
+var grid=el("div",{class:"gm-gallery",style:{"--gm-min":(b.min||220)+"px","--gm-ratio":b.ratio||"4/3"}},its.map(function(x){
+var id=x.id,k=kind(id),url=fileUrl(id),media;
+if(k==="image")media=el("button",{class:"gm-tile-media",type:"button","aria-label":x.caption,onclick:function(){view(id);}},el("img",{src:url,alt:x.caption,loading:"lazy",decoding:"async"}));
+else if(k==="video")media=el("div",{class:"gm-tile-media",style:{cursor:"default"}},el("video",{src:url,controls:true,preload:"metadata"}));
+else media=el("button",{class:"gm-tile-media",type:"button",onclick:function(){view(id);}},L.open+" "+x.caption);
+var tile=el("div",{class:"gm-tile"},media),body=el("div",{class:"gm-tile-body"},el("div",{class:"gm-tile-name",title:x.caption},x.caption),x.sub?el("div",{class:"gm-muted",style:{fontSize:"12px"}},x.sub):null);
+if(b.review&&g){var ok=el("button",{class:"gm-btn",type:"button",onclick:function(){var cur=(states()[id]||{}).status;save(id,{status:cur==="approved"?null:"approved"});paint();}},L.approve),ch=el("button",{class:"gm-btn",type:"button",onclick:function(){var cur=(states()[id]||{}).status;save(id,{status:cur==="changes"?null:"changes"});paint();if((states()[id]||{}).status==="changes")note.focus();}},L.changes),note=el("textarea",{class:"gm-note",placeholder:L.note,"aria-label":L.note,onchange:function(){save(id,{note:note.value});}});
+add(body,el("div",{class:"gm-tile-actions"},ok,ch));add(body,note);
+paints.push(function(){var r=states()[id]||{};tile.setAttribute("data-status",r.status||"open");ok.setAttribute("aria-pressed",String(r.status==="approved"));ch.setAttribute("aria-pressed",String(r.status==="changes"));note.className="gm-note"+(r.status==="changes"?"":" gm-hidden");if(document.activeElement!==note)note.value=r.note||"";});}
+add(tile,body);return tile;}));
+if(!b.review||!g)return grid;
+var all=el("button",{class:"gm-btn",type:"button",onclick:function(){var s=states();save(its.filter(function(x){return !(s[x.id]||{}).status;}).map(function(x){return x.id;}),{status:"approved"});paint();}},L.approveAll);
+paint();return el("div",null,el("div",{class:"gm-review-bar"},count,all,send),grid);
+}
 function kids(b,d){return (b.children||[]).map(function(c){return node(c,d);});}
 function node(n,d){if(n==null)return null;if(typeof n==="string")return el("div",{class:"gm-text",html:rich(bind(n,d))});if(Array.isArray(n))return n.map(function(c){return node(c,d);});if(typeof n!=="object"||!n.type)return errBox("Each node needs a type");var f=R[n.type];if(!f)return errBox('Unknown node type "'+n.type+'"');try{return f(bind(n,d),d,n);}catch(e){return errBox(n.type+": "+(e&&e.message||e));}}
 function render(spec,data){return node(spec,data==null?{}:data);}
-function mount(root,spec){root=host(root);function draw(d){root.innerHTML="";add(root,render(spec,d));}if(window.godmode&&godmode.onData)godmode.onData(draw);else draw(spec&&spec.data||{});}
+function mount(root,spec){root=host(root);function draw(d){if(quiet)return;root.innerHTML="";add(root,render(spec,d));}if(window.godmode&&godmode.onData)godmode.onData(draw);else draw(spec&&spec.data||{});}
 window.gm={fmt:fmt,format:format,el:el,svg:sv,color:color,path:path,bind:bind,kpi:function(t,o){var h=host(t);h.innerHTML="";h.appendChild(kpi(o));return h;},table:table,bars:bars,chart:chart,stack:function(t,o){var h=host(t);h.innerHTML="";h.appendChild(R.stack(o));return h;},render:render,mount:mount,types:Object.keys(R)};
 })();`;
 
@@ -207,6 +254,7 @@ Nodes:
 - chart {kind: "bar"|"stackedBar"|"line"|"area"|"hbar"|"donut", data: "$.rows", x: "day", series: [{key, label}], format, xFormat, height, share, toggle (share/count switch), tableToggle, stacked (area), zero: false (line), title, subtitle}. Donut: x = label key, one series.
 - table {rows, columns: [{key, label, format, align}], sortable, limit, title} · bars {items: [{label, value, group, color}], format, title} (ranked horizontal bars, grouped)
 - stack {items: [{label, value}]} or {data, x, series, note} (100% bars per row; in note "{{$.field}}" reads the row) · text {text} (**bold**, newlines) · list {items, title} · callout {title, text, tone: info|good|warning|critical} · badge {text, tone} · tabs {tabs: [{label, children}]} · html {html}
+- image {file, caption, height} (a file attached with \`files\`, or src: an https URL) · gallery {items?: "$.images", min, ratio, review, labels, title} (a grid of attached images and videos; without items all of them, each item a name or {file, caption, note}; a click opens it large). gallery {review: true} is the way to let the human approve images: Approve and Change buttons with a note, Approve all and a button that tells you; decisions land in data.review as {"photo.png": {status: "approved"|"changes", note}} (read them with artifact_get, keep them when you save data).
 Formats: num, num:1, pct (0..1), pct:1, pct100, money:EUR, compact, date, day, datetime, text; prefix "+" shows the sign.
 Series colours come from a fixed, colour-blind-checked palette (--gm-s1…--gm-s8); keep ≤ 8 series and give each a label.
 Example: {"type":"page","title":"Sales","children":[{"type":"row","children":[{"type":"kpi","label":"Revenue","value":"$.revenue","format":"money:EUR","delta":"$.revenueDelta","deltaFormat":"pct"}]},{"type":"chart","kind":"line","title":"Revenue per day","data":"$.daily","x":"day","series":[{"key":"revenue","label":"Revenue"}],"format":"money:EUR"}]}
@@ -231,6 +279,8 @@ export const ARTIFACT_SPEC_TYPES = [
   "badge",
   "html",
   "tabs",
+  "image",
+  "gallery",
 ] as const;
 
 const SPEC_TYPES = new Set<string>(ARTIFACT_SPEC_TYPES);

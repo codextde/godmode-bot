@@ -957,6 +957,8 @@ export const api = {
     refresh: (id: string) => post<ArtifactMessageResult>(`/api/artifacts/${id}/refresh`),
     start: (input: ArtifactStartInput) => post<ArtifactStartResult>("/api/artifacts/start", input),
     delete: (id: string) => del<{ ok: true }>(`/api/artifacts/${id}`),
+    openFile: (id: string, name: string) => post<{ ok: true }>(`/api/artifacts/${id}/files/${encodeURIComponent(name)}/open`),
+    revealFile: (id: string, name: string) => post<{ ok: true }>(`/api/artifacts/${id}/files/${encodeURIComponent(name)}/reveal`),
   },
 
   offers: {

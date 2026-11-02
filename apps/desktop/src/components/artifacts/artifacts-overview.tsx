@@ -16,7 +16,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { AgentPicker } from "@/components/chat/agent-picker";
-import { ArtifactThumb } from "@/components/artifacts/artifact-frame";
+import { ArtifactThumb, artifactFrameFiles } from "@/components/artifacts/artifact-frame";
 import { DeleteArtifactDialog, ago, useArtifactActions, useArtifactBusy } from "@/components/artifacts/artifact-view";
 import { api, errorMessage } from "@/lib/api";
 import { useAgents, useArtifact, useArtifacts } from "@/lib/hooks";
@@ -191,7 +191,7 @@ function ArtifactTile({ artifact, index }: { artifact: ArtifactSummary; index: n
       <Link to={`/artifacts/${artifact.id}`} className="block outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
         <div ref={box} className="relative aspect-[16/10] border-b bg-background">
           {full ? (
-            <ArtifactThumb html={full.html} data={full.data} title={artifact.title} className="absolute inset-0" />
+            <ArtifactThumb html={full.html} data={full.data} title={artifact.title} files={artifactFrameFiles(full)} className="absolute inset-0" />
           ) : (
             <Skeleton className="absolute inset-0 rounded-none" />
           )}
