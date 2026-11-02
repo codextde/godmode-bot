@@ -203,6 +203,22 @@ describe("an agent gives the human a task", () => {
     expect(getHumanTask(second.task.id).status).toBe("withdrawn");
   }, 30_000);
 
+  test("a command isn't a task for the human: the agent runs it itself", async () => {
+    const { conversationId, run } = await chatWithTask();
+    const ctx = { runId: run.id, agentId: agent.id, conversationId, workspaceId: null, depth: 0 };
+    const refused = await callTool(ctx, "human_task_create", {
+      title: "Datenbank entschlüsseln",
+      instructions: "Führe im Terminal diesen Befehl aus und gib das Passwort ein:\n\n```\nopenssl enc -d -in secrets.enc\n```",
+    });
+    expect(refused.isError).toBe(true);
+    expect(refused.content[0]!.text).toContain("Run it yourself");
+    expect(listHumanTasks({ conversationId }).length).toBe(1);
+
+    expect((await callTool(ctx, "human_task_create", { title: "Pay at the shop", instructions: "Use the card terminal at the counter" })).isError).toBeUndefined();
+    expect((await callTool(ctx, "human_task_create", { title: "Scan the voucher", instructions: "Scan this code:\n\n```\nABC-123\n```" })).isError).toBeUndefined();
+    for (const t of listHumanTasks({ conversationId })) await callTool(ctx, "human_task_cancel", { id: t.id });
+  });
+
   test("at most five open tasks per chat; deleting the chat withdraws them", async () => {
     const { conversationId, run } = await chatWithTask();
     const ctx = { runId: run.id, agentId: agent.id, conversationId, workspaceId: null, depth: 0 };

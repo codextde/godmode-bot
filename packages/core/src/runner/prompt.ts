@@ -332,9 +332,10 @@ No browser tools are attached to this run. If a task needs a website, say so in 
   if (ctx.android?.length) out.push(androidSection(ctx.android, human, !!ctx.androidVaultFill));
   const rawSecrets = perms.secretAccess === "reveal" && !ctx.fillOnly;
   if (ctx.computer) out.push(computerSection(ctx.computer, human, rawSecrets));
+  if (!ctx.check) out.push(ownHandsSection(agent.name, human, { asking: !!ctx.asking, screen: !ctx.computer && !ctx.vm && settings.computer.enabled }));
 
   out.push(`### Logging in to websites
-Never ask ${human} for a password and never type a saved password or authenticator (TOTP) code yourself — Godmode fills secrets directly into the page so you never see them.
+Never ask ${human} for the password of a website login and never type a saved password or authenticator (TOTP) code yourself — Godmode fills secrets directly into the page so you never see them.
 1. Open the site's login page with the browser tools.
 2. Call \`vault_list_logins({ domain })\` to find the saved login for that site.
 3. Focus/click the username (or email) field, then call \`vault_fill_login({ credentialId, field: "username" })\`.
@@ -645,6 +646,18 @@ ${devices.map(androidLine).join("\n")}
 - ${vaultFill ? "Signing in inside an app: find the login with `vault_list_logins`, tap the field, then call `fill_login({ credentialId, field })` or `fill_totp({ credentialId })` — Godmode types the value and you never see it; passwords only go into password fields. Only fill a login in its own app or site." : `Godmode doesn't type saved logins or 2FA codes into phones for you. If a task needs a sign-in on the phone, ask ${human} to sign in there (they can do it in the live view); apps stay signed in.`} Never type a saved password or authenticator code with \`type_text\` (a code sent to you by email or SMS you type yourself).`;
 }
 
+function ownHandsSection(agentName: string, human: string, can: { asking: boolean; screen: boolean }): string {
+  const missing = can.asking
+    ? `ask for only that with \`ask_human\`, save it right away with \`vault_save_login\` under the site it belongs to (Godmode then masks it everywhere in this chat)`
+    : `say in your final answer which one you need, and stop there. Once you have it, save it right away with \`vault_save_login\` under the site it belongs to (Godmode then masks it everywhere in this chat)`;
+  const screen = can.screen
+    ? `\n- A step only an app's window can do: try the shell first (\`open\`, AppleScript, the app's CLI or files). This run has no screen control. If you really need it, tell ${human} to share the screen in this chat or to turn on Computer for you (Agents → ${agentName}), and carry on once they did: the switch is theirs, the step stays yours.`
+    : "";
+  return `### Doing it yourself
+A command or script you could run is yours to run. Never give ${human} a command or a Terminal step, not in a task, a question or your answer, not even when it asks for a password. They only get what none of your tools can do.
+- A password or passphrase nobody saved (a file's, an app's, one a colleague has): look once where you already have access (mail, messages, notes, the vault), without signing in anywhere new for it. Still missing: ${missing}, then run the command yourself. Pass it on stdin or in an environment variable, never as an argument or in a file.${screen}`;
+}
+
 function computerSection(target: ComputerTarget, human: string, canReveal: boolean): string {
   const what = computerTargetLabel(target);
   const scope =
@@ -658,6 +671,7 @@ function computerSection(target: ComputerTarget, human: string, canReveal: boole
   return `### Computer
 ${scope}
 - Use the \`computer\` MCP tools: start with \`{action: "screenshot"}\`; coordinates are pixels of your latest screenshot and every action returns a fresh screenshot. Zoom in on small text instead of guessing.
+- Use the screen for what the shell and your other tools can't do.
 - Work step by step and verify each step on the screenshot. If something unexpected appears (a dialog, a permission prompt, a payment or delete confirmation), stop and ask ${human}.
 - Never type saved passwords or authenticator codes into the computer${canReveal ? " unless the task requires it and you got them from the vault" : ""} — for websites use the vault tools in the browser; for apps, ask ${human} to log in.
 - If the shared window was closed or you can't reach what you need, say so in your final answer instead of working around it.`;

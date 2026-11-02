@@ -17,7 +17,7 @@ import type { RunContext } from "../types";
 import { EngineError, errorMessage, type Capture, type PointerOptions } from "./engine";
 import { frameToImage, imageToFrame, inImage, regionToFrame, relativeInFrame, type Point, type Shot } from "./geometry";
 import { KeyError, normalizeModifier, parseKeyCombo, parseKeySequence, type Modifier } from "./keys";
-import { assertActive, isGodmodeWindow, RevokedError, runComputer, type RunComputer } from "./service";
+import { assertActive, claimComputer, isGodmodeWindow, RevokedError, runComputer, type RunComputer } from "./service";
 import { sleepFor } from "./engine";
 import { isGodmodeAppName } from "./self";
 
@@ -509,6 +509,9 @@ export async function callComputerTool(ctx: RunContext, name: string, args: unkn
     try {
       assertActive(rc);
       const parsed = tool.schema.parse(args ?? {});
+      if (name !== "computer_info" && claimComputer(rc)) {
+        return text("Another run is using the computer right now. Go on with what doesn't need the screen and try again in a minute.", true);
+      }
       if (!audited.has(rc.runId)) {
         audited.add(rc.runId);
         setTimeout(() => audited.delete(rc.runId), 6 * 3600_000).unref?.();

@@ -311,6 +311,10 @@ export interface RunComputer {
   queue: Promise<unknown>;
   /** Where the target came from: shared in the chat, or the agent's own unattended access. */
   source: "share" | "agent";
+  /** Runs whose hold on the same target this run doesn't wait for: the ones that handed it its work. */
+  ancestors: string[];
+  /** A run on the agent's own access: its last action, while it holds the target (see `claimComputer`). */
+  heldAt: number | null;
   /** Set when the human stops sharing (or access is turned off): nothing may act anymore. */
   revoked: boolean;
   /** Aborts long actions (typing, waiting, held keys) when access is revoked. */
@@ -326,8 +330,43 @@ export function assertActive(rc: RunComputer) {
 
 const runs = new Map<string, RunComputer>();
 
+/** An agent's own run that stopped acting lets others have the target after this long. */
+const COMPUTER_HOLD_MS = 5 * 60_000;
+
+function holding(rc: RunComputer): boolean {
+  return rc.source === "share" || (rc.heldAt !== null && Date.now() - rc.heldAt < COMPUTER_HOLD_MS);
+}
+
+/** Holds the target right now: a shared one from its start, an agent's own from its first action. */
+export function holdsComputer(runId: string): boolean {
+  const rc = runs.get(runId);
+  return !!rc && holding(rc);
+}
+
+/**
+ * A run on the agent's own access only takes the target when it acts, so an agent that may use the computer doesn't
+ * make all its chats wait for each other. Returns the run in the way, or null once this run holds it.
+ */
+export function claimComputer(rc: RunComputer): RunComputer | null {
+  if (rc.source === "agent") {
+    const key = computerLockKey(rc.target);
+    for (const other of runs.values()) {
+      if (other !== rc && computerLockKey(other.target) === key && holding(other) && !rc.ancestors.includes(other.runId)) return other;
+    }
+    rc.heldAt = Date.now();
+  }
+  return null;
+}
+
 /** Give a run access to a shared target (called by the runner before Claude starts). */
-export function attachComputer(runId: string, agentId: string, conversationId: string, target: ComputerTarget, source: RunComputer["source"] = "share"): RunComputer {
+export function attachComputer(
+  runId: string,
+  agentId: string,
+  conversationId: string,
+  target: ComputerTarget,
+  source: RunComputer["source"] = "share",
+  ancestors: string[] = [],
+): RunComputer {
   const existing = runs.get(runId);
   if (existing) return existing;
   const rc: RunComputer = {
@@ -340,6 +379,8 @@ export function attachComputer(runId: string, agentId: string, conversationId: s
     view: null,
     queue: Promise.resolve(),
     source,
+    ancestors,
+    heldAt: null,
     revoked: false,
     abort: new AbortController(),
   };

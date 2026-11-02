@@ -8,7 +8,7 @@ import { argValue, fillFailure, fills, invocations, otpPages, makeAgent, setupEn
 import * as vault from "../src/vault/vault";
 import { createCredential, deleteCredential, getCredential, listCredentials } from "../src/vault/credentials";
 import { createTotp, deleteTotp, getTotp } from "../src/vault/totp";
-import { listAudit } from "../src/services/audit";
+import { audit, listAudit } from "../src/services/audit";
 import { listMissingLogins } from "../src/services/missingLogins";
 import { listNotifications } from "../src/services/notifications";
 import { addMessage, chatFillOnly, createConversation, getConversation, sendMessage, startChat, transcriptPath } from "../src/services/conversations";
@@ -16,7 +16,8 @@ import { issueRunToken, resolveRunToken, revokeRunToken } from "../src/mcp/token
 import { cancelRun, findRunLog, getRun, listRuns, waitForRun } from "../src/runner/runner";
 import { redactBlock } from "../src/runner/stream";
 import { createProfile, getProfile, listProfiles } from "../src/browser/manager";
-import { update } from "../src/db";
+import { all, run as sql, update } from "../src/db";
+import { now } from "../src/util";
 import { ensureDefaultAgent, getAgent, listAgents, updateAgent } from "../src/agents/service";
 import { createRoutine, getRoutine, listRoutines, updateRoutine } from "../src/services/routines";
 import { automationConversation } from "../src/automations/conversation";
@@ -442,6 +443,27 @@ describe("vault_save_login", () => {
     const chat = createConversation({ agentId: worker.id, title: `GitHub octo ${pasted}` });
     addMessage({ conversationId: chat.id, role: "user", content: `My GitHub login: octo / ${pasted}` });
     addMessage({ conversationId: chat.id, role: "assistant", runId: "run_earlier", content: "", blocks: [{ type: "text", text: `Got "${pasted}"` }] });
+    const question = "qst_masked_answer";
+    const humanTask = "htk_masked_answer";
+    sql(
+      "INSERT INTO questions (id, kind, agent_id, run_id, conversation_id, message_id, title, status, answer, created_at, updated_at) VALUES (?, 'question', ?, 'run_earlier', ?, 'msg_earlier', 'The passphrase?', 'answered', ?, ?, ?)",
+      question,
+      worker.id,
+      chat.id,
+      pasted,
+      now(),
+      now(),
+    );
+    sql(
+      "INSERT INTO human_tasks (id, number, title, status, agent_id, conversation_id, response, created_at, updated_at) VALUES (?, 99991, 'Get it', 'done', ?, ?, ?, ?, ?)",
+      humanTask,
+      worker.id,
+      chat.id,
+      pasted,
+      now(),
+      now(),
+    );
+    audit("user", "question.answer", question, { answer: pasted });
     const token = issueRunToken({ runId: "run_save_paste", agentId: worker.id, conversationId: chat.id, workspaceId: null, depth: 0 });
     try {
       const r = await call(token, "vault_save_login", { url: "https://github.com/login", username: "octo", password: pasted });
@@ -460,6 +482,9 @@ describe("vault_save_login", () => {
       expect(JSON.stringify(after.messages)).not.toContain(pasted);
       expect(after.messages[0]!.content).toBe("My GitHub login: octo / ••••••••");
       expect(after.title).toBe("GitHub octo ••••••••");
+      expect(all<{ answer: string }>("SELECT answer FROM questions WHERE id = ?", question)[0]!.answer).toBe("••••••••");
+      expect(JSON.stringify(listAudit(200, "question.answer").filter((a) => a.target === question))).not.toContain(pasted);
+      expect(all<{ response: string }>("SELECT response FROM human_tasks WHERE id = ?", humanTask)[0]!.response).toBe("••••••••");
 
       const found = await call(tokens[worker.id]!, "vault_list_logins", { domain: "github.com" });
       expect(found.content[0]!.text).toContain(login!.id);

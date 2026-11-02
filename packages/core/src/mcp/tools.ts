@@ -438,6 +438,11 @@ function requireReachable(agent: Agent, targetId: string): Agent {
 
 const ASK_HUMAN = "ask the human to change this in Settings";
 
+/** A task that tells the human to run something in a terminal: the agent has a shell of its own. */
+export function handsOverCommand(text: string): boolean {
+  return /\b(?:im|ins|in the|in your|in deinem|open|open the|öffne|öffne das|öffne dein)\s+terminal\b/i.test(text) || (/```/.test(text) && /\b(?:terminal|befehl|kommando|command)\b/i.test(text));
+}
+
 /** The VM this run works in when it is kept off the human's computer (settings.vm.isolateHostShell), else null. */
 function lockedVm(ctx: RunContext): string | null {
   const vmId = vmOfRun(ctx.runId);
@@ -1359,7 +1364,7 @@ const TOOLS: ToolDef[] = [
   defineTool({
     name: "vault_save_login",
     description:
-      "Save a website login to the Godmode vault: when the human gives you a username and password in the chat, or you signed up for an account. Do it right away, without asking. Godmode masks the password in this chat from then on — never repeat it in your answer, files or memory. A saved login for the same site and username (or the one you pass as credentialId, for its own site) gets the new username/password instead of being added twice; its old password stays in the login's notes, its name and site never change. To sign up somewhere, pass generatePassword: true instead of a password: Godmode makes a strong one you never see, and you fill it into the form with vault_fill_login.",
+      "Save a website login to the Godmode vault: when the human gives you a username and password in the chat, a password or passphrase you asked them for, or you signed up for an account. Do it right away, without asking. Godmode masks the password in this chat from then on — never repeat it in your answer, files or memory. A saved login for the same site and username (or the one you pass as credentialId, for its own site) gets the new username/password instead of being added twice; its old password stays in the login's notes, its name and site never change. To sign up somewhere, pass generatePassword: true instead of a password: Godmode makes a strong one you never see, and you fill it into the form with vault_fill_login.",
     schema: z.object({
       url: z.string().min(1).describe('Login page or site, e.g. "https://github.com/login" or "github.com"'),
       username: z.string().max(500).optional().describe("Username or email"),
@@ -1715,7 +1720,7 @@ const TOOLS: ToolDef[] = [
   defineTool({
     name: "ask_human",
     description:
-      "Ask the human a question and wait for the answer. Use it for a decision that is genuinely theirs — a preference, a priority or a trade-off you can't settle yourself — when guessing wrong would waste real work or be hard to undo. Otherwise decide yourself, say what you assumed and carry on. Give one self-contained question, the context needed to decide, and 2–4 suggested answers when you can name them (mark at most one as recommended); the human can always answer in their own words. Godmode shows the question in the chat, the inbox and a notification, and this turn stands still — possibly for hours — until they answer; then it continues right here with the answer. Finish everything that doesn't depend on the answer before you ask. One question at a time. After calling it, don't call other tools and don't write an answer: the turn stops here.",
+      "Ask the human a question and wait for the answer. Use it for a decision that is genuinely theirs — a preference, a priority or a trade-off you can't settle yourself — when guessing wrong would waste real work or be hard to undo, or for a password or passphrase only a person has (save it with vault_save_login as soon as you have it). Otherwise decide yourself, say what you assumed and carry on. Give one self-contained question, the context needed to decide, and 2–4 suggested answers when you can name them (mark at most one as recommended); the human can always answer in their own words. Godmode shows the question in the chat, the inbox and a notification, and this turn stands still — possibly for hours — until they answer; then it continues right here with the answer. Finish everything that doesn't depend on the answer before you ask. One question at a time. After calling it, don't call other tools and don't write an answer: the turn stops here.",
     schema: z.object({
       question: z.string().min(1).max(300).describe("The question in one sentence, self-contained — it is also shown in a notification, without the chat"),
       context: z.string().max(2000).optional().describe("What the human needs to know to decide: what you found, what depends on the answer. Markdown, short."),
@@ -1777,7 +1782,7 @@ const TOOLS: ToolDef[] = [
 
   defineTool({
     name: "human_task_create",
-    description: `Give the human a task: something you can't do yourself and they have to — solve a CAPTCHA, log in where only they can, confirm on their phone, sign or upload a document, pay, call someone, change a setting only they reach, give you access. It goes onto their Needs you page as a to-do with a notification. Write \`title\` as an imperative ("Confirm the Google Ads sign-in on your phone"), \`instructions\` as exact steps plus what you need back, and link the page where they do it. Finish what doesn't depend on it, then end your turn with a short summary of what you're waiting for: when they mark it done (or say they can't), this chat continues by itself with their note — don't poll and don't schedule a follow-up for it. On a board task the ticket waits in Blocked until then. One task per thing to do (at most ${MAX_OPEN_PER_CHAT} open per chat). Godmode refuses a task the human's list already holds (from any agent or chat) and names it: then work with that one instead of rephrasing it into a new one. For a decision or an OK use ask_human / request_approval instead.`,
+    description: `Give the human a task: something you can't do yourself and they have to — solve a CAPTCHA, log in where only they can, confirm on their phone, sign or upload a document, pay, call someone, change a setting only they reach, give you access. Never a command for them to run: commands are yours, and a password one needs you get with ask_human. It goes onto their Needs you page as a to-do with a notification. Write \`title\` as an imperative ("Confirm the Google Ads sign-in on your phone"), \`instructions\` as exact steps plus what you need back, and link the page where they do it. Finish what doesn't depend on it, then end your turn with a short summary of what you're waiting for: when they mark it done (or say they can't), this chat continues by itself with their note — don't poll and don't schedule a follow-up for it. On a board task the ticket waits in Blocked until then. One task per thing to do (at most ${MAX_OPEN_PER_CHAT} open per chat). Godmode refuses a task the human's list already holds (from any agent or chat) and names it: then work with that one instead of rephrasing it into a new one. For a decision or an OK use ask_human / request_approval instead.`,
     schema: z.object({
       title: z.string().min(1).max(200).describe("What to do, as an imperative, self-contained — also shown in a notification"),
       instructions: z.string().max(6000).optional().describe("How: exact steps, where, what you found, and what you need back. Markdown, short."),
@@ -1786,6 +1791,9 @@ const TOOLS: ToolDef[] = [
     }),
     when: (agent, ctx) => canAsk(agent, ctx) && followupsAllowed(ctx.conversationId),
     run: ({ title, instructions, url, priority }, { agent, ctx }) => {
+      if (handsOverCommand(`${title}\n${instructions ?? ""}`)) {
+        return fail("This hands the human a command. Run it yourself. If it needs a password or passphrase only a person has, ask for just that with ask_human, save it with vault_save_login and pass it on stdin. Give them a task only for what none of your tools can do.");
+      }
       const t = createAgentHumanTask(
         { agentId: agent.id, conversationId: ctx.conversationId, runId: ctx.runId, workspaceId: ctx.workspaceId },
         { title, body: instructions, url, priority },

@@ -138,7 +138,7 @@ import {
 } from "./prompt";
 import { apiToolEnv, apiToolEnvOwners, apiToolsForAgent } from "../integrations/apiTools";
 import { elevenLabsKey } from "../calls/elevenlabs";
-import { attachComputer, computerLockKey, detachComputer } from "../computer/service";
+import { attachComputer, computerLockKey, detachComputer, holdsComputer } from "../computer/service";
 import { attachVm, detachVm, type RunVm } from "../vm/service";
 import { CUA_HIDDEN_TOOLS, currentVmPage, prepareGuest, type GuestTools } from "../vm/guest";
 import { resolveVmId } from "../vm/assignments";
@@ -1208,6 +1208,16 @@ export function retryQueued(): void {
   pump();
 }
 
+function ancestorsOf(job: Job): string[] {
+  const out: string[] = [];
+  let parentId = job.parentRunId;
+  for (let hops = 0; parentId && hops < 16; hops++) {
+    out.push(parentId);
+    parentId = jobs.get(parentId)?.parentRunId ?? null;
+  }
+  return out;
+}
+
 function isAncestor(candidate: Job, job: Job): boolean {
   let parentId = job.parentRunId;
   for (let hops = 0; parentId && hops < 16; hops++) {
@@ -1251,15 +1261,22 @@ export function computerTargetOf(job: {
   return target;
 }
 
+let agentRunsTakeTurns = false;
+/** Tests: an agent's own runs hold the computer from their start, which makes one run wait behind another. */
+export function __setAgentRunsTakeTurnsForTests(on: boolean): void {
+  agentRunsTakeTurns = on;
+}
+
 /** The running job controlling the same screen/window/tab as `job` (excluding its own ancestors), if any. */
 function computerHolder(job: Job): Job | null {
   const target = computerTargetOf(job);
-  if (!target) return null;
+  // A run on the agent's own access takes the target at its first action (claimComputer), not at its start.
+  if (!target || (job.computerFromAgent && !agentRunsTakeTurns)) return null;
   const key = computerLockKey(target);
   for (const other of jobs.values()) {
     if (other === job || other.status !== "running") continue;
     const t = computerTargetOf(other);
-    if (t && computerLockKey(t) === key && !isAncestor(other, job)) return other;
+    if (t && computerLockKey(t) === key && !isAncestor(other, job) && (!other.computerFromAgent || agentRunsTakeTurns || holdsComputer(other.runId))) return other;
   }
   return null;
 }
@@ -2041,7 +2058,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   const fresh = computerTargetOf(job);
   const computer = fresh && decided && computerLockKey(fresh) === computerLockKey(decided) ? fresh : null;
   if (decided && !computer && fresh) job.acc.addNotice("info", "What you share changed while this message started — it applies from your next message.");
-  if (computer) attachComputer(job.runId, agent.id, job.conversationId, computer, job.computerFromAgent ? "agent" : "share");
+  if (computer) attachComputer(job.runId, agent.id, job.conversationId, computer, job.computerFromAgent ? "agent" : "share", ancestorsOf(job));
   // The macOS VM this run works in (the chat's, the agent's or the workspace's), booted when needed. Work meant for a
   // VM never falls back to this computer: a VM that can't be used fails the run, and its browser and computer use run
   // inside the VM (tools that can't be set up there are left out, not replaced by this computer's).

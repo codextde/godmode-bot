@@ -19,7 +19,7 @@ import { resetSettingsCache, updateSettings } from "../../src/services/settings"
 import { createApp } from "../../src/server/app";
 import { createAgent, updateAgent } from "../../src/agents/service";
 import { bus } from "../../src/events/bus";
-import { __setClaudeBinaryForTests, cancelRun, listActiveRuns, waitForRun } from "../../src/runner/runner";
+import { __setAgentRunsTakeTurnsForTests, __setClaudeBinaryForTests, cancelRun, listActiveRuns, waitForRun } from "../../src/runner/runner";
 import { __setTaskRetryDelaysForTests } from "../../src/tasks/service";
 
 type BrowserModule = typeof browserManager;
@@ -205,7 +205,9 @@ export async function until(cond: () => boolean, timeoutMs = 10_000, what = "con
 /** Runs of these agents take turns on the computer until the returned function is called: how a test keeps a run queued. */
 export async function takeTurns(...agentIds: string[]): Promise<() => Promise<void>> {
   for (const id of agentIds) await updateAgent(id, { computer: { enabled: true, target: null } });
+  __setAgentRunsTakeTurnsForTests(true);
   return async () => {
+    __setAgentRunsTakeTurnsForTests(false);
     for (const id of agentIds) await updateAgent(id, { computer: { enabled: false, target: null } });
   };
 }
