@@ -521,7 +521,7 @@ describe("dreams end to end (fake claude)", () => {
 
     // Not idle right after the chat; ten minutes later the tick retries it.
     expect(agentIdle(agent.id)).toBe(false);
-    setMeta("dreaming.lastSweepAt", new Date().toISOString());
+    setMeta("dreaming.lastSweepAt", new Date(Date.now() + 3_600_000).toISOString());
     expect(await dreamTick(new Date(Date.now() + 60_000))).toEqual([]);
     const retried = await dreamTick(new Date(Date.now() + 11 * 60_000));
     expect(retried).toEqual([agent.id]);
@@ -1018,7 +1018,7 @@ describe("schedule", () => {
     addExchange(agent, c, { prompt: "x", result: "REMEMBER: brevity DREAM_SLEEP" });
     const long = `# Memory\n${"- a line of memory\n".repeat(700)}`;
     writeFileSync(join(agent.repoPath, "MEMORY.md"), long);
-    setMeta("dreaming.lastSweepAt", new Date().toISOString());
+    setMeta("dreaming.lastSweepAt", new Date(Date.now() + 3_600_000).toISOString());
     expect(await dreamTick(new Date(Date.now() + 60_000))).toEqual([agent.id]);
     const early = dreamOverview(agent.id).active!;
     expect(early.reason).toBe("size");
@@ -1032,7 +1032,7 @@ describe("schedule", () => {
     expect(readRepo(agent, "MEMORY.md")).toBe(long);
     expect((await waitForRun(run.id, 20_000)).status).toBe("succeeded");
     expect(deferredDreams()).not.toContain(agent.id);
-    setMeta("dreaming.lastSweepAt", new Date().toISOString());
+    setMeta("dreaming.lastSweepAt", new Date(Date.now() + 3_600_000).toISOString());
     expect(await dreamTick(new Date(Date.now() + 15 * 60_000))).toEqual([]);
     expect(memoryOverflowing(agent, getSettings(), new Date(Date.now() + 7 * 3_600_000))).toBe(false);
     expect(dreamDue(agent)).toBe(true);
@@ -1242,7 +1242,7 @@ describe("reliability", () => {
     expect(ended.error).toContain("tried again once the agent is idle");
     expect(deferredDreams()).toContain(agent.id);
     expect(JSON.parse(getMeta("dreaming.deferred") ?? "{}")).toHaveProperty(agent.id);
-    setMeta("dreaming.lastSweepAt", new Date().toISOString());
+    setMeta("dreaming.lastSweepAt", new Date(Date.now() + 3_600_000).toISOString());
     expect(await dreamTick(new Date(Date.now() + 5 * 60_000))).not.toContain(agent.id);
     const retried = await dreamTick(new Date(Date.now() + 20 * 60_000));
     expect(retried).toContain(agent.id);
