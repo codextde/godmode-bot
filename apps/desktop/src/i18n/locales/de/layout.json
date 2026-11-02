@@ -211,7 +211,7 @@
     "you": "Du",
     "toYou": {
       "title": "Von deinen Agenten an dich.",
-      "body": "Fragen, Freigaben, fehlende Logins und To-dos, die dir deine Agenten geben. Antworte oder hak eins ab, und der Agent macht weiter.",
+      "body": "Antworte oder hak eins ab, und der Agent macht weiter.",
       "lead": "Arbeit, die du Agenten gibst:"
     },
     "toAgents": {
@@ -334,7 +334,14 @@
     "running_one": "{{count}} läuft",
     "running_other": "{{count}} laufen",
     "markAllRead": "Alle als gelesen markieren",
-    "menu": { "markRead": "Als gelesen markieren", "markUnread": "Als ungelesen markieren", "pin": "Anheften", "unpin": "Lösen", "failed": "Der Chat konnte nicht geändert werden", "nothingNew": "In diesem Chat gibt es noch keine Antwort zum Markieren" },
+    "menu": {
+      "markRead": "Als gelesen markieren",
+      "markUnread": "Als ungelesen markieren",
+      "pin": "Anheften",
+      "unpin": "Lösen",
+      "failed": "Der Chat konnte nicht geändert werden",
+      "nothingNew": "In diesem Chat gibt es noch keine Antwort zum Markieren"
+    },
     "failedHere": "Hier ist etwas schiefgelaufen",
     "newReply": "Neue Antwort",
     "archiveLabel": "„{{title}}“ archivieren",
@@ -355,10 +362,22 @@
     },
     "sourcesLabel": "Wer die Chats gestartet hat",
     "sources": {
-      "mine": { "label": "Meine", "hint": "Chats, die du gestartet hast" },
-      "automations": { "label": "Automationen", "hint": "Von einer Automation oder der API gestartet" },
-      "agents": { "label": "Agenten", "hint": "Von einem Agenten gestartet: Übergaben, Board-Aufgaben, Heartbeats" },
-      "all": { "label": "Alle", "hint": "Jeder Chat" }
+      "mine": {
+        "label": "Meine",
+        "hint": "Chats, die du gestartet hast"
+      },
+      "automations": {
+        "label": "Automationen",
+        "hint": "Von einer Automation oder der API gestartet"
+      },
+      "agents": {
+        "label": "Agenten",
+        "hint": "Von einem Agenten gestartet: Übergaben, Board-Aufgaben, Heartbeats"
+      },
+      "all": {
+        "label": "Alle",
+        "hint": "Jeder Chat"
+      }
     },
     "waitingForYou": "Wartet auf dich",
     "newReplies": "Neue Antworten",
@@ -368,21 +387,54 @@
     "hintUnread_other": "{{hint}} · {{count}} ungelesen",
     "tabsLabel": "Letzte Chats filtern",
     "tabs": {
-      "all": { "label": "Alle", "hint": "Jeder letzte Chat" },
-      "running": { "label": "Aktiv", "hint": "Arbeitet, wartet in der Schlange oder auf dich" },
-      "scheduled": { "label": "Geplant", "hint": "Machen später von selbst weiter" },
-      "done": { "label": "Fertig", "hint": "Abgeschlossene Chats" }
+      "all": {
+        "label": "Alle",
+        "hint": "Jeder letzte Chat"
+      },
+      "running": {
+        "label": "Aktiv",
+        "hint": "Arbeitet, wartet in der Schlange oder auf dich"
+      },
+      "scheduled": {
+        "label": "Geplant",
+        "hint": "Machen später von selbst weiter"
+      },
+      "done": {
+        "label": "Fertig",
+        "hint": "Abgeschlossene Chats"
+      }
     },
     "empty": {
-      "all": { "title": "Noch keine Chats", "text": "Deine archivierten Chats findest du unten." },
-      "running": { "title": "Nichts aktiv", "text": "Chats, die arbeiten oder auf dich warten, erscheinen hier." },
-      "scheduled": { "title": "Nichts geplant", "text": "Wenn ein Agent später nachsehen will, wartet der Chat hier." },
-      "done": { "title": "Noch nichts fertig", "text": "Abgeschlossene Chats landen hier." }
+      "all": {
+        "title": "Noch keine Chats",
+        "text": "Deine archivierten Chats findest du unten."
+      },
+      "running": {
+        "title": "Nichts aktiv",
+        "text": "Chats, die arbeiten oder auf dich warten, erscheinen hier."
+      },
+      "scheduled": {
+        "title": "Nichts geplant",
+        "text": "Wenn ein Agent später nachsehen will, wartet der Chat hier."
+      },
+      "done": {
+        "title": "Noch nichts fertig",
+        "text": "Abgeschlossene Chats landen hier."
+      }
     },
     "emptySource": {
-      "mine": { "title": "Noch keine Chats von dir", "text": "Chats, die du startest, erscheinen hier. Automationen und Agenten haben eigene Tabs." },
-      "automations": { "title": "Keine Automations-Chats", "text": "Wenn eine Automation läuft, landet ihr Chat hier." },
-      "agents": { "title": "Keine Agenten-Chats", "text": "Übergaben, Board-Aufgaben und Heartbeats, die Agenten selbst starten, landen hier." }
+      "mine": {
+        "title": "Noch keine Chats von dir",
+        "text": "Chats, die du startest, erscheinen hier. Automationen und Agenten haben eigene Tabs."
+      },
+      "automations": {
+        "title": "Keine Automations-Chats",
+        "text": "Wenn eine Automation läuft, landet ihr Chat hier."
+      },
+      "agents": {
+        "title": "Keine Agenten-Chats",
+        "text": "Übergaben, Board-Aufgaben und Heartbeats, die Agenten selbst starten, landen hier."
+      }
     },
     "emptyScope": {
       "title": "Noch keine Chats in {{name}}",

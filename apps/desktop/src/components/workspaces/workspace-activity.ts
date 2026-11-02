@@ -99,7 +99,9 @@ export function useWorkspaceActivity(): { of: (scope: string | null) => Workspac
   return useMemo(() => ({ of: (scope: string | null) => map.get(scope ?? "global") ?? EMPTY, total }), [map, total]);
 }
 
-function workspaceOfItem(item: AttentionItem, chatWs: Map<string, string | null>, agentWs: Map<string, string | null>): string | null {
+type Scoped = Pick<AttentionItem, "agentId" | "conversationId" | "task">;
+
+function workspaceOfItem(item: Scoped, chatWs: Map<string, string | null>, agentWs: Map<string, string | null>): string | null {
   if (item.task) return item.task.workspaceId ?? null;
   if (item.conversationId && chatWs.has(item.conversationId)) return chatWs.get(item.conversationId) ?? null;
   return item.agentId ? (agentWs.get(item.agentId) ?? null) : null;
@@ -115,15 +117,16 @@ export function useScopedAttention() {
   return useMemo(() => {
     const agentWs = new Map((agents ?? []).map((a) => [a.id, a.workspaceId ?? null]));
     const chatWs = new Map((conversations ?? []).map((c) => [c.id, c.workspaceId ?? agentWs.get(c.agentId) ?? null]));
-    const workspaceOf = (item: AttentionItem) => workspaceOfItem(item, chatWs, agentWs);
-    const projectOf = (item: AttentionItem): string | null => {
+    const workspaceOf = (item: Scoped) => workspaceOfItem(item, chatWs, agentWs);
+    const projectOf = (item: Scoped): string | null => {
       if (item.task) return item.task.projectId ?? null;
       const chat = item.conversationId ? conversations?.find((c) => c.id === item.conversationId) : undefined;
       if (chat) return chatProject(chat, agents);
       return item.agentId ? (agents?.find((a) => a.id === item.agentId)?.projectId ?? null) : null;
     };
     const target = scope === "global" ? null : scope;
-    const items = scope === "all" ? attention : attention.filter((i) => workspaceOf(i) === target && (!project || projectOf(i) === project.id));
-    return { items, elsewhere: attention.length - items.length, workspaceOf };
+    const inScope = (i: Scoped) => scope === "all" || (workspaceOf(i) === target && (!project || projectOf(i) === project.id));
+    const items = attention.filter(inScope);
+    return { items, elsewhere: attention.length - items.length, workspaceOf, inScope };
   }, [scope, project, agents, conversations, attention]);
 }

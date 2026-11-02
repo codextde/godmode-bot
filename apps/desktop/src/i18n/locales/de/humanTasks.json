@@ -58,7 +58,6 @@
   },
   "board": {
     "addError": "To-do konnte nicht hinzugefügt werden",
-    "search": "To-dos durchsuchen",
     "refreshError": "Liste konnte nicht aktualisiert werden",
     "loadError": "Deine To-dos konnten nicht geladen werden",
     "emptyTitle": "Nichts wartet auf dich",

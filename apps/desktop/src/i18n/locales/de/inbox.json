@@ -1,50 +1,23 @@
 {
   "header": {
     "title": "Braucht dich",
-    "descriptionCount_one": "{{count}} Sache braucht dich: Beantworte, was deine Agenten fragen, erledige, was sie dir geben, und ergänze fehlende Zugänge.",
-    "descriptionCount_other": "{{count}} Sachen brauchen dich: Beantworte, was deine Agenten fragen, erledige, was sie dir geben, und ergänze fehlende Zugänge.",
     "description": "Was deine Agenten von dir brauchen – Fragen, To-dos, Freigaben, fehlende Logins, 2FA-Codes – plus Updates aus ihrer Arbeit.",
-    "newTodo": "Neues To-do"
+    "newTodo": "Neues To-do",
+    "summary_one": "{{count}} Sache wartet auf dich",
+    "summary_other": "{{count}} Sachen warten auf dich",
+    "onHold_one": "{{count}} Agent angehalten",
+    "onHold_other": "{{count}} Agenten angehalten",
+    "oldest": "älteste {{age}}",
+    "elsewhere_one": "{{count}} weitere in anderen Workspaces",
+    "elsewhere_other": "{{count}} weitere in anderen Workspaces",
+    "showAll": "Alle zeigen"
   },
   "views": {
     "label": "Ansicht",
     "list": "Liste",
     "board": "Board"
   },
-  "board": {
-    "waiting": "{{facts}}. Zum Planen ziehen; leg ein To-do auf „Erledigt“ und sein Agent macht dort weiter, wo er aufgehört hat.",
-    "toDo_one": "{{count}} offen",
-    "toDo_other": "{{count}} offen",
-    "onHold_one": "{{count}} Agent wartet auf dich",
-    "onHold_other": "{{count}} Agenten warten auf dich",
-    "inBacklog_one": "{{count}} im Backlog",
-    "inBacklog_other": "{{count}} im Backlog",
-    "onlyBacklog_one": "Gerade nichts zu tun · {{count}} im Backlog für später.",
-    "onlyBacklog_other": "Gerade nichts zu tun · {{count}} im Backlog für später.",
-    "empty": "Deine To-dos als Board: was Agenten dir übergeben und was du dir selbst notierst. Leg eins auf „Erledigt“ und sein Agent macht dort weiter, wo er aufgehört hat.",
-    "offBoard": {
-      "lead": "Wartet auch, nicht auf dem Board:",
-      "show": "In der Liste zeigen",
-      "question_one": "{{count}} Frage",
-      "question_other": "{{count}} Fragen",
-      "login_one": "{{count}} Login fehlt",
-      "login_other": "{{count}} Logins fehlen",
-      "review_one": "{{count}} Ticket zum Prüfen",
-      "review_other": "{{count}} Tickets zum Prüfen",
-      "blocked_one": "{{count}} blockiertes Ticket",
-      "blocked_other": "{{count}} blockierte Tickets",
-      "paused_one": "{{count}} pausierter Chat",
-      "paused_other": "{{count}} pausierte Chats",
-      "failed_one": "{{count}} Chat mit Fehler",
-      "failed_other": "{{count}} Chats mit Fehler",
-      "automation_one": "{{count}} kaputte Automation",
-      "automation_other": "{{count}} kaputte Automationen",
-      "access_one": "{{count}} Zugriffsanfrage",
-      "access_other": "{{count}} Zugriffsanfragen"
-    }
-  },
   "list": {
-    "title": "Braucht deine Aufmerksamkeit",
     "vaultLocked": "Tresor ist gesperrt",
     "loadError": "Anfragen konnten nicht geladen werden"
   },
@@ -158,5 +131,59 @@
       "sameAccount": "Gleiches Konto: Er bleibt bei {{owner}} ({{domain}}) und {{host}} wird zu diesem Login hinzugefügt, damit beide Anmeldungen den Code bekommen.",
       "moves": "Verschiebt ihn von {{from}} zu {{who}}."
     }
-  }
+  },
+  "toolbar": {
+    "filterLabel": "Nach Art filtern",
+    "all": "Alle",
+    "search": "Suchen",
+    "question": "Fragen",
+    "todo": "To-dos",
+    "review": "Zu prüfen",
+    "blocked": "Blockiert",
+    "paused": "Pausiert",
+    "problems": "Fehlgeschlagen",
+    "login": "Logins",
+    "access": "Zugang"
+  },
+  "sections": {
+    "question": "Warten auf deine Antwort",
+    "todo": "An dich übergeben",
+    "review": "Bereit zur Prüfung",
+    "blocked": "Blockiert",
+    "paused": "Pausiert",
+    "problems": "Fehlgeschlagen",
+    "login": "Fehlende Logins",
+    "access": "Bitten um Zugang"
+  },
+  "kinds": {
+    "question": "Frage",
+    "todo": "To-do",
+    "review": "Prüfen",
+    "blocked": "Blockiert",
+    "paused": "Pausiert",
+    "failed": "Problem",
+    "automation": "Automation",
+    "login": "Login",
+    "access": "Zugang"
+  },
+  "actions": {
+    "review": "Prüfen",
+    "answer": "Antworten",
+    "open": "Öffnen",
+    "addLogin": "Login hinzufügen",
+    "updateLogin": "Login ändern",
+    "add2fa": "2FA hinzufügen",
+    "continue": "Fortsetzen",
+    "openChat": "Chat öffnen",
+    "decide": "Entscheiden",
+    "approve": "Freigeben",
+    "approveMerge": "Freigeben und mergen"
+  },
+  "noMatch": {
+    "title": "Nichts gefunden",
+    "description": "Versuch ein anderes Wort oder setz den Filter zurück.",
+    "clear": "Filter zurücksetzen"
+  },
+  "showMore_one": "{{count}} weitere zeigen",
+  "showMore_other": "{{count}} weitere zeigen"
 }
