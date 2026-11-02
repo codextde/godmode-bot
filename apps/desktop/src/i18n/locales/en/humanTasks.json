@@ -58,7 +58,6 @@
   },
   "board": {
     "addError": "Couldn't add the task",
-    "search": "Search tasks",
     "refreshError": "Couldn't refresh the list",
     "loadError": "Couldn't load your tasks",
     "emptyTitle": "Nothing waits for you",

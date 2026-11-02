@@ -16,16 +16,17 @@ import {
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useTranslation } from "react-i18next";
-import { Circle, CircleCheck, CircleDashed, ListTodo, Plus, Search, Timer } from "lucide-react";
-import type { Agent, HumanTask, HumanTaskLane } from "@godmode/shared";
+import { Circle, CircleCheck, CircleDashed, ListTodo, Plus, SearchX, Timer } from "lucide-react";
+import type { Agent, AttentionItem, HumanTask, HumanTaskLane, MissingLogin, Workspace } from "@godmode/shared";
 import { MASCOT_CHARACTER, MASCOT_COLOR, isHumanTaskActive } from "@godmode/shared";
 import { EmptyState } from "@/components/common";
 import { Character } from "@/components/character";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { AttentionCard } from "@/components/attention/attention-card";
+import { INBOX_SECTIONS, loginIdOf, sectionOf } from "@/components/inbox/inbox-model";
 import { HumanTaskCard } from "@/components/human-tasks/human-task-card";
 import { useHumanTaskActions } from "@/components/human-tasks/human-task-sheet";
 import { toastApiError } from "@/components/vault/vault-utils";
@@ -65,31 +66,41 @@ function columnOf(id: string, cols: Columns): ColumnId | null {
   return (Object.keys(cols) as ColumnId[]).find((c) => cols[c].includes(id)) ?? null;
 }
 
-/** My tasks as a board (Backlog, To do, Doing, Done): the Inbox's Board view. Opening a card is up to the page (it holds the sheet). */
+/**
+ * What waits for the human as a board. Their to-dos move between the columns; the rest (tickets to review, logins, problems)
+ * sits in To do as cards that open instead of drag. Opening a card is up to the page (it holds the sheets).
+ */
 export function HumanTaskBoard({
   adding,
   onAdding,
   onOpen,
+  matches,
+  attention,
+  loginById,
+  workspaceOf,
+  onOpenAttention,
+  onClearFilters,
 }: {
   adding: "backlog" | "open" | null;
   onAdding: (to: "backlog" | "open" | null) => void;
   onOpen: (t: HumanTask, focusNote?: boolean) => void;
+  matches: (t: HumanTask) => boolean;
+  attention: AttentionItem[];
+  loginById: Map<string, MissingLogin>;
+  workspaceOf?: (item: AttentionItem) => Workspace | undefined;
+  onOpenAttention: (item: AttentionItem) => void;
+  /** A search or filter is on. */
+  onClearFilters?: () => void;
 }) {
-  const { t } = useTranslation(["humanTasks", "common"]);
+  const { t } = useTranslation(["humanTasks", "common", "inbox"]);
   const qc = useQueryClient();
   const tasksQ = useHumanTasks();
   const { data = [] } = tasksQ;
   const { data: boot } = useBootstrap();
   const { data: agents = [] } = useAllAgents();
   const agentById = useMemo(() => new Map(agents.map((a) => [a.id, a])), [agents]);
-  const [search, setSearch] = useState("");
   const { update } = useHumanTaskActions();
-
-  const tasks = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return data;
-    return data.filter((t) => `H-${t.number} ${t.title} ${t.body} ${t.agentName ?? ""} ${t.conversationTitle ?? ""}`.toLowerCase().includes(q));
-  }, [data, search]);
+  const tasks = data.filter(matches);
 
   const create = useMutation({
     mutationFn: ({ title, status }: { title: string; status: "backlog" | "open" }) => api.humanTasks.create({ title, status }),
@@ -99,20 +110,14 @@ export function HumanTaskBoard({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex flex-wrap items-center gap-2 px-5 pb-4 @2xl:px-8">
-        <div className="relative w-64">
-          <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
-          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t("board.search")} className="h-8 pl-8 text-[13px]" aria-label={t("board.search")} />
-        </div>
-        {tasksQ.isError && tasksQ.data && (
-          <p className="text-xs text-muted-foreground" role="status">
-            {t("board.refreshError")} ·{" "}
-            <button type="button" className="text-foreground underline-offset-2 hover:underline" onClick={() => tasksQ.refetch()}>
-              {t("common:actions.tryAgain")}
-            </button>
-          </p>
-        )}
-      </div>
+      {tasksQ.isError && tasksQ.data && (
+        <p className="px-5 pb-3 text-xs text-muted-foreground @2xl:px-8" role="status">
+          {t("board.refreshError")} ·{" "}
+          <button type="button" className="text-foreground underline-offset-2 hover:underline" onClick={() => tasksQ.refetch()}>
+            {t("common:actions.tryAgain")}
+          </button>
+        </p>
+      )}
 
       {tasksQ.isError && !tasksQ.data ? (
         <div className="px-5 @2xl:px-8">
@@ -127,7 +132,20 @@ export function HumanTaskBoard({
             }
           />
         </div>
-      ) : tasksQ.data && data.length === 0 && !adding ? (
+      ) : onClearFilters && tasksQ.data && !tasks.length && !attention.length && !adding ? (
+        <div className="px-5 @2xl:px-8">
+          <EmptyState
+            icon={<SearchX />}
+            title={t("inbox:noMatch.title")}
+            description={t("inbox:noMatch.description")}
+            action={
+              <Button variant="outline" onClick={onClearFilters}>
+                {t("inbox:noMatch.clear")}
+              </Button>
+            }
+          />
+        </div>
+      ) : tasksQ.data && data.length === 0 && !attention.length && !adding ? (
         <div className="px-5 @2xl:px-8">
           <EmptyState
             art={<Character character={MASCOT_CHARACTER} color={MASCOT_COLOR} size={72} follow />}
@@ -144,6 +162,12 @@ export function HumanTaskBoard({
         <Board
           tasks={tasks}
           agents={agentById}
+          toDoExtras={
+            attention.length ? (
+              <AttentionCards items={attention} agents={agentById} loginById={loginById} workspaceOf={workspaceOf} onOpen={onOpenAttention} />
+            ) : undefined
+          }
+          extraCount={attention.length}
           loading={tasksQ.isPending ? { backlog: 0, open: Math.min(boot?.counts.attention?.todo ?? 2, 4), doing: 0, closed: 2 } : undefined}
           adding={adding}
           onAdding={onAdding}
@@ -157,9 +181,50 @@ export function HumanTaskBoard({
   );
 }
 
+/** To do's cards that open instead of drag, under a small heading per kind so a long column stays readable. */
+function AttentionCards({
+  items,
+  agents,
+  loginById,
+  workspaceOf,
+  onOpen,
+}: {
+  items: AttentionItem[];
+  agents: Map<string, Agent>;
+  loginById: Map<string, MissingLogin>;
+  workspaceOf?: (item: AttentionItem) => Workspace | undefined;
+  onOpen: (item: AttentionItem) => void;
+}) {
+  const { t } = useTranslation("inbox");
+  return INBOX_SECTIONS.map((section) => {
+    const rows = items.filter((i) => sectionOf(i.kind) === section.id);
+    if (!rows.length) return null;
+    return (
+      <div key={section.id} className="flex flex-col gap-2">
+        <h3 className="flex items-center gap-1.5 px-1 pt-1.5 text-[11.5px] font-medium text-muted-foreground">
+          {t(`sections.${section.id}`)}
+          <span className="font-mono text-[11px] font-normal tabular-nums">{rows.length}</span>
+        </h3>
+        {rows.map((item) => (
+          <AttentionCard
+            key={item.id}
+            item={item}
+            agent={item.agentId ? agents.get(item.agentId) : undefined}
+            login={loginById.get(loginIdOf(item) ?? "")}
+            workspace={workspaceOf?.(item)}
+            onOpen={() => onOpen(item)}
+          />
+        ))}
+      </div>
+    );
+  });
+}
+
 function Board({
   tasks,
   agents,
+  toDoExtras,
+  extraCount,
   loading,
   adding,
   onAdding,
@@ -170,6 +235,8 @@ function Board({
 }: {
   tasks: HumanTask[];
   agents: Map<string, Agent>;
+  toDoExtras?: ReactNode;
+  extraCount: number;
   /** The list isn't here yet: placeholder cards per column (as many to do as the sidebar counts). */
   loading?: Record<ColumnId, number>;
   adding: "backlog" | "open" | null;
@@ -242,6 +309,8 @@ function Board({
             ids={columns[col.id]}
             byId={byId}
             agents={agents}
+            extras={col.id === "open" ? toDoExtras : undefined}
+            extraCount={col.id === "open" ? extraCount : 0}
             placeholders={loading?.[col.id]}
             dragging={!!drag}
             activeId={drag?.id ?? null}
@@ -264,6 +333,8 @@ function Column({
   ids,
   byId,
   agents,
+  extras,
+  extraCount,
   placeholders,
   dragging,
   activeId,
@@ -276,6 +347,8 @@ function Column({
   ids: string[];
   byId: Map<string, HumanTask>;
   agents: Map<string, Agent>;
+  extras?: ReactNode;
+  extraCount: number;
   placeholders?: number;
   dragging: boolean;
   activeId: string | null;
@@ -304,7 +377,7 @@ function Column({
             <h2 className="flex min-w-0 cursor-default items-center gap-2 text-[13px] font-medium">
               {column.icon}
               <span className="truncate">{t(`columns.${column.id}.label`)}</span>
-              {!loading && <span className="font-mono text-[11.5px] font-normal text-muted-foreground tabular-nums">{tasks.length}</span>}
+              {!loading && <span className="font-mono text-[11.5px] font-normal text-muted-foreground tabular-nums">{tasks.length + extraCount}</span>}
             </h2>
           </TooltipTrigger>
           <TooltipContent side="bottom" className="max-w-60">
@@ -329,8 +402,9 @@ function Column({
             ))}
           </SortableContext>
         )}
+        {extras}
         {loading && Array.from({ length: placeholders }, (_, i) => <CardSkeleton key={i} />)}
-        {!loading && !tasks.length && !adding && (
+        {!loading && !tasks.length && !extras && !adding && (
           <p className={cn("m-1 rounded-lg border border-dashed px-3 py-5 text-center text-xs text-muted-foreground/80", dragging && "border-foreground/20")}>
             {dragging ? (closed ? t("board.dropDone") : t("board.dropHere")) : t(`columns.${column.id}.hint`)}
           </p>

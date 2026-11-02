@@ -43,6 +43,7 @@ interface UiState {
   agentsView: AgentsView;
   /** The Inbox shows what waits as a list or the to-dos as a board. */
   inboxView: InboxView;
+  collapsedInboxSections: string[];
   /** Workspace groups folded on the Agents page ("global" or a workspace id). */
   collapsedAgentGroups: string[];
   /** Which chats the sidebar's Recent list shows. */
@@ -82,6 +83,7 @@ interface UiState {
   toggleColumn: (status: string) => void;
   setAgentsView: (v: AgentsView) => void;
   setInboxView: (v: InboxView) => void;
+  toggleInboxSection: (id: string) => void;
   toggleAgentGroup: (key: string) => void;
   setRecentTab: (tab: RecentTab) => void;
   setRecentSource: (source: RecentSource) => void;
@@ -115,6 +117,7 @@ export const useUi = create<UiState>()(
       collapsedColumns: ["cancelled"],
       agentsView: "grid",
       inboxView: "list",
+      collapsedInboxSections: [],
       collapsedAgentGroups: [],
       recentTab: "all",
       recentSource: "mine",
@@ -151,6 +154,8 @@ export const useUi = create<UiState>()(
         })),
       setAgentsView: (agentsView) => set({ agentsView }),
       setInboxView: (inboxView) => set({ inboxView }),
+      toggleInboxSection: (id) =>
+        set((s) => ({ collapsedInboxSections: s.collapsedInboxSections.includes(id) ? s.collapsedInboxSections.filter((x) => x !== id) : [...s.collapsedInboxSections, id] })),
       toggleAgentGroup: (key) =>
         set((s) => ({
           collapsedAgentGroups: s.collapsedAgentGroups.includes(key) ? s.collapsedAgentGroups.filter((k) => k !== key) : [...s.collapsedAgentGroups, key],
@@ -187,6 +192,7 @@ export const useUi = create<UiState>()(
         collapsedColumns: s.collapsedColumns,
         agentsView: s.agentsView,
         inboxView: s.inboxView,
+        collapsedInboxSections: s.collapsedInboxSections,
         collapsedAgentGroups: s.collapsedAgentGroups,
         recentTab: s.recentTab,
         recentSource: s.recentSource,

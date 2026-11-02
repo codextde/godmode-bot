@@ -211,7 +211,7 @@
     "you": "You",
     "toYou": {
       "title": "From your agents to you.",
-      "body": "Questions, approvals, missing logins and to-dos your agents hand you. Answer or mark one done and the agent carries on.",
+      "body": "Answer or finish one and the agent carries on.",
       "lead": "Work you hand to agents:"
     },
     "toAgents": {
@@ -334,7 +334,14 @@
     "running_one": "{{count}} running",
     "running_other": "{{count}} running",
     "markAllRead": "Mark all read",
-    "menu": { "markRead": "Mark as read", "markUnread": "Mark as unread", "pin": "Pin", "unpin": "Unpin", "failed": "Couldn't change the chat", "nothingNew": "This chat has no reply to mark unread yet" },
+    "menu": {
+      "markRead": "Mark as read",
+      "markUnread": "Mark as unread",
+      "pin": "Pin",
+      "unpin": "Unpin",
+      "failed": "Couldn't change the chat",
+      "nothingNew": "This chat has no reply to mark unread yet"
+    },
     "failedHere": "Something went wrong here",
     "newReply": "New reply",
     "archiveLabel": "Archive “{{title}}”",
@@ -355,10 +362,22 @@
     },
     "sourcesLabel": "Who started the chats",
     "sources": {
-      "mine": { "label": "Mine", "hint": "Chats you started" },
-      "automations": { "label": "Automations", "hint": "Started by an automation or the API" },
-      "agents": { "label": "Agents", "hint": "Started by an agent: handovers, board tasks, heartbeats" },
-      "all": { "label": "All", "hint": "Every chat" }
+      "mine": {
+        "label": "Mine",
+        "hint": "Chats you started"
+      },
+      "automations": {
+        "label": "Automations",
+        "hint": "Started by an automation or the API"
+      },
+      "agents": {
+        "label": "Agents",
+        "hint": "Started by an agent: handovers, board tasks, heartbeats"
+      },
+      "all": {
+        "label": "All",
+        "hint": "Every chat"
+      }
     },
     "waitingForYou": "Waiting for you",
     "newReplies": "New replies",
@@ -368,21 +387,54 @@
     "hintUnread_other": "{{hint}} · {{count}} unread",
     "tabsLabel": "Filter recent chats",
     "tabs": {
-      "all": { "label": "All", "hint": "Every recent chat" },
-      "running": { "label": "Running", "hint": "Working, queued or waiting for you" },
-      "scheduled": { "label": "Scheduled", "hint": "Continue on their own later" },
-      "done": { "label": "Done", "hint": "Finished chats" }
+      "all": {
+        "label": "All",
+        "hint": "Every recent chat"
+      },
+      "running": {
+        "label": "Running",
+        "hint": "Working, queued or waiting for you"
+      },
+      "scheduled": {
+        "label": "Scheduled",
+        "hint": "Continue on their own later"
+      },
+      "done": {
+        "label": "Done",
+        "hint": "Finished chats"
+      }
     },
     "empty": {
-      "all": { "title": "No chats yet", "text": "Your archived chats are below." },
-      "running": { "title": "Nothing running", "text": "Chats that work or wait for you show up here." },
-      "scheduled": { "title": "Nothing scheduled", "text": "When an agent plans to check back later, the chat waits here." },
-      "done": { "title": "Nothing finished yet", "text": "Finished chats land here." }
+      "all": {
+        "title": "No chats yet",
+        "text": "Your archived chats are below."
+      },
+      "running": {
+        "title": "Nothing running",
+        "text": "Chats that work or wait for you show up here."
+      },
+      "scheduled": {
+        "title": "Nothing scheduled",
+        "text": "When an agent plans to check back later, the chat waits here."
+      },
+      "done": {
+        "title": "Nothing finished yet",
+        "text": "Finished chats land here."
+      }
     },
     "emptySource": {
-      "mine": { "title": "No chats from you yet", "text": "Chats you start show up here. Automations and agents have their own tabs." },
-      "automations": { "title": "No automation chats", "text": "When an automation runs, its chat lands here." },
-      "agents": { "title": "No agent chats", "text": "Handovers, board tasks and heartbeats agents start themselves land here." }
+      "mine": {
+        "title": "No chats from you yet",
+        "text": "Chats you start show up here. Automations and agents have their own tabs."
+      },
+      "automations": {
+        "title": "No automation chats",
+        "text": "When an automation runs, its chat lands here."
+      },
+      "agents": {
+        "title": "No agent chats",
+        "text": "Handovers, board tasks and heartbeats agents start themselves land here."
+      }
     },
     "emptyScope": {
       "title": "No chats in {{name}} yet",

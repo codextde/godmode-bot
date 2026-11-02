@@ -5,7 +5,7 @@ import { formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
 import { Trans, useTranslation } from "react-i18next";
 import { Archive, CircleAlert, Check, ExternalLink, KeyRound, RotateCcw, ShieldAlert, ShieldPlus, UserX, X } from "lucide-react";
-import type { Agent, MissingLogin, MissingLoginKind, MissingLoginStatus } from "@godmode/shared";
+import type { Agent, AttentionItem, MissingLogin, MissingLoginKind, MissingLoginStatus } from "@godmode/shared";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -38,6 +38,7 @@ export function useMissingLoginStatus(currentStatus: MissingLoginStatus) {
       await qc.cancelQueries({ queryKey: listKey });
       const previous = qc.getQueryData<MissingLogin[]>(listKey);
       qc.setQueryData<MissingLogin[]>(listKey, (items) => items?.filter((m) => m.id !== id));
+      qc.setQueryData<AttentionItem[]>(qk.attention, (items) => items?.filter((i) => i.id !== `login:${id}`));
       return { previous };
     },
     onSuccess: (_res, { status }) => {
@@ -50,9 +51,16 @@ export function useMissingLoginStatus(currentStatus: MissingLoginStatus) {
     },
     onSettled: () => {
       void qc.invalidateQueries({ queryKey: qk.missingLogins });
+      void qc.invalidateQueries({ queryKey: qk.attention });
       void qc.invalidateQueries({ queryKey: qk.bootstrap });
     },
   });
+}
+
+/** Where a login gets added: the vault's form, filled in from the report. */
+export function addLoginPath(item: MissingLogin) {
+  const q = new URLSearchParams({ new: "1", domain: domainFromUrl(item.url), service: item.service, missingLoginId: item.id });
+  return `/vault/logins?${q.toString()}`;
 }
 
 function isHttp(url: string) {
@@ -87,10 +95,7 @@ export function MissingLoginCard({
     }
   })();
 
-  const addLogin = () => {
-    const q = new URLSearchParams({ new: "1", domain, service: item.service, missingLoginId: item.id });
-    navigate(`/vault/logins?${q.toString()}`);
-  };
+  const addLogin = () => void navigate(addLoginPath(item));
 
   const open = item.status === "open";
   const failed = item.kind === "invalid_credential";
@@ -157,7 +162,7 @@ export function MissingLoginCard({
             )}
 
             {open ? (
-              <>
+              <div className="flex flex-wrap items-center gap-2">
                 <Button size="sm" variant="ghost" className="text-muted-foreground" onClick={() => onStatus("dismissed")} disabled={pending}>
                   <X /> {t("missingLogin.dismiss")}
                 </Button>
@@ -173,7 +178,7 @@ export function MissingLoginCard({
                     <KeyRound /> {item.kind === "invalid_credential" ? t("missingLogin.updateLogin") : t("missingLogin.addLogin")}
                   </Button>
                 )}
-              </>
+              </div>
             ) : (
               <>
                 <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
