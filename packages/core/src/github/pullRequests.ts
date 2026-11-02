@@ -126,6 +126,11 @@ async function lookupToken(): Promise<string | null> {
   return /^[A-Za-z0-9_]{20,255}$/.test(token) ? token : null;
 }
 
+/** The next call asks gh again: its login just changed. */
+export function forgetGithubToken() {
+  heldToken = null;
+}
+
 async function credential(): Promise<Credential> {
   const now = clock();
   if (!heldToken || heldToken.until <= now) {

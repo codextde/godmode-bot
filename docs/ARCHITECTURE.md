@@ -616,6 +616,7 @@ the core, the desktop and the phone alike.
 | `vault_list_logins({ domain? })` | Logins available to this agent (no secrets) |
 | `vault_fill_login({ credentialId, field: "username"\|"password", selector? })` | Type a secret into the browser page |
 | `vault_fill_totp({ credentialId? , totpId?, selector? })` | Type the current 2FA code into the page |
+| `github_sign_in()` | Renew this computer's `gh` and `git` login: runs the device sign-in and approves it in the agent's browser |
 | `vault_save_login({ url, username?, password?, generatePassword?, name?, notes?, credentialId? })` | Save a login the human gave in the chat (or a new account) to the vault; updates the same site + username instead of duplicating, keeps the old password in its notes, masks the password in the chat, run logs and transcript. Not on runners or condition checks |
 | `vault_get_login({ credentialId })` | Reveal username/password — only when `secretAccess = "reveal"` |
 | `vault_get_totp({ totpId })` | Reveal current code — only in reveal mode |
