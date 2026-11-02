@@ -335,6 +335,7 @@ async function serve(values: Record<string, unknown>, role?: CoreConfig["role"])
     startCloudLink({ app, websocket: websocketHandler });
     // Where `godmode mcp` and `godmode call` find this core.
     writeCoreFile(cfg);
+    void import("./services/artifactFiles").then(({ attachFilesOfOldArtifacts }) => attachFilesOfOldArtifacts()).catch(() => undefined);
   }
 
   const displayHost = isLoopbackHost(cfg.host) ? "127.0.0.1" : cfg.host;

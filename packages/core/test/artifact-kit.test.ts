@@ -28,6 +28,15 @@ describe("artifact kit", () => {
     expect(() => new Function(ARTIFACT_KIT_JS)).not.toThrow();
   });
 
+  test("the bridge's own script compiles, with and without files", () => {
+    const list = [{ name: "a.png", mime: "image/png", kind: "image" as const, size: 1, updatedAt: "", source: "/x/a.png" }];
+    for (const doc of [standaloneDocument("<p>x</p>", null, "light"), standaloneDocument("<p>x</p>", null, "light", { base: "http://127.0.0.1:4000/f/k/", list })]) {
+      const scripts = [...doc.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]!);
+      expect(scripts.length).toBeGreaterThan(1);
+      for (const code of scripts) expect(() => new Function(code)).not.toThrow();
+    }
+  });
+
   test("checkSpec names what is wrong", () => {
     expect(checkSpec({ type: "page", children: [] })).toBeNull();
     expect(checkSpec("page")).not.toBeNull();

@@ -31,6 +31,8 @@ export interface ArtifactFile {
   kind: ArtifactFileKind;
   size: number;
   updatedAt: ISODate;
+  /** Where it came from: code that still names this path gets the attached copy. */
+  source?: string;
 }
 
 export function artifactFileKind(mime: string): ArtifactFileKind {
@@ -184,4 +186,4 @@ export const ARTIFACT_BRIDGE_DOC = `Inside the artifact, \`window.godmode\` is r
 - \`godmode.refresh()\` — ask you to refresh the data (the human's Refresh button does the same).
 - \`godmode.theme\` ("light" | "dark") and \`godmode.onTheme(fn)\`; the CSS variables --gm-bg, --gm-card, --gm-fg, --gm-muted, --gm-border, --gm-accent, --gm-accent-fg, --gm-positive, --gm-negative and --gm-font follow the app's theme, and \`<html>\` gets class "dark" in dark mode.
 Scripts and styles may load from https CDNs (e.g. https://cdn.tailwindcss.com, https://cdn.jsdelivr.net/npm/chart.js); \`fetch\` may reach public https APIs only. Links open in the human's browser. No localStorage, cookies, alert, confirm or prompt: keep state in godmode.setData and build dialogs in the page.
-Files from this computer (images to approve, screenshots, videos, PDFs): pass their absolute paths or a folder as \`files\` on artifact_create or artifact_update; they are copied into the artifact. Refer to them by name: \`<img src="photo.png">\`, the kit's image and gallery nodes, \`godmode.file(name)\` for the URL, \`godmode.files\` for the list ({name, kind, mime, size, url}). A click on such an image opens it large in the app; \`godmode.view(name)\` does that for any file. file:// URLs and paths on disk never load in the sandbox.`;
+Files from this computer (images to approve, screenshots, videos, PDFs) just work: use their path or name in the code or the data (\`<img src="/path/photo.png">\`, the kit's image and gallery nodes) and they are attached by themselves; \`files\` takes a whole folder or anything no code names. \`godmode.files\` lists them ({name, kind, mime, size, url}), \`godmode.file(name)\` gives the URL. A click on such an image opens it large in the app; \`godmode.view(name)\` does that for any file. Never build a button that asks you to open a file or Finder.`;

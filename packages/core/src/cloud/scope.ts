@@ -372,6 +372,7 @@ const RULES: [methods: string, path: string, rule: Rule][] = [
   ["POST", "/api/artifacts/:id/restore", A],
   ["POST", "/api/artifacts/:id/message", A],
   ["POST", "/api/artifacts/:id/refresh", A],
+  ["POST", "/api/artifacts/:id/review-done", A],
   ["POST", "/api/tasks/archive", A],
   ["POST", "/api/tasks/attachments", A],
   ["GET", "/api/tasks/attachments/:id/:name", A],

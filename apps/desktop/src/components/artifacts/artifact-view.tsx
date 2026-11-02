@@ -105,6 +105,13 @@ export function useArtifactActions(artifact: Pick<Artifact, "id" | "title" | "ag
     onSuccess: (r) => toast.success(r.queued ? t("toast.queued", { agent }) : t("toast.onIt", { agent }), { description: t("toast.updatesItself") }),
     onError: (err) => toast.error(t("toast.sendError"), { description: errorMessage(err) }),
   });
+  const reviewDone = useMutation({
+    mutationFn: () => api.artifacts.reviewDone(id),
+    onSuccess: (r) => {
+      if (r.conversationId) toast.success(r.queued ? t("toast.queued", { agent }) : t("toast.onIt", { agent }));
+    },
+    onError: (err) => toast.error(t("toast.sendError"), { description: errorMessage(err) }),
+  });
   const refresh = useMutation({
     mutationFn: () => api.artifacts.refresh(id),
     onSuccess: () => toast.success(t("toast.refreshing", { agent })),
@@ -135,7 +142,7 @@ export function useArtifactActions(artifact: Pick<Artifact, "id" | "title" | "ag
     await api.artifacts.saveData(id, { data });
     qc.setQueryData<Artifact>(qk.artifact(id), (old) => (old ? { ...old, data, dataUpdatedAt: new Date().toISOString() } : old));
   };
-  return { message, refresh, pin, restore, remove, saveData, navigate };
+  return { message, reviewDone, refresh, pin, restore, remove, saveData, navigate };
 }
 
 /** The artifact's chat has a run working: the agent is changing it or fetching data. */
@@ -470,6 +477,7 @@ export function ArtifactView({
                 else setRequest((r) => r ?? { kind: "refresh" });
               }}
               onError={setFailure}
+              onReviewDone={() => actions.reviewDone.mutate()}
               onViewFile={(name) => artifact.files.some((f) => f.name === name) && setViewingFile(name)}
             />
           ))}
