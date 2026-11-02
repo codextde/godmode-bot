@@ -243,9 +243,6 @@ export function AiSection({ settings }: { settings: Settings }) {
       </SettingsGroup>
 
       <SettingsGroup title={t("ai.limits.title")} icon={<Gauge />} description={t("ai.limits.description")}>
-        <SettingRow label={t("ai.limits.parallel")} htmlFor="max-runs" description={t("ai.limits.parallelDescription")}>
-          <NumberField id="max-runs" min={1} max={32} value={r.maxConcurrentRuns} onCommit={(v) => v !== null && patch({ runner: { maxConcurrentRuns: v } })} />
-        </SettingRow>
         <SettingRow label={t("ai.limits.timeout")} htmlFor="timeout" description={t("ai.limits.timeoutDescription")}>
           <NumberField id="timeout" min={1} max={1440} suffix={t("ai.limits.minutes")} value={r.runTimeoutMinutes} onCommit={(v) => v !== null && patch({ runner: { runTimeoutMinutes: v } })} />
         </SettingRow>

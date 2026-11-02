@@ -255,7 +255,7 @@
     "waitsFor": "Wartet auf {{tickets}}",
     "partsDone": "{{done}}/{{total}} Teile",
     "unassigned": "Nicht zugewiesen",
-    "queued": "In der Warteschlange – wartet auf einen freien Platz",
+    "queued": "In der Warteschlange – wartet, bis es weitergeht",
     "working": "Arbeitet…"
   },
   "runRow": {
@@ -427,7 +427,7 @@
       "delegation": "Übergeben",
       "heartbeat": "Heartbeat"
     },
-    "queued": "In der Warteschlange – wartet auf einen freien Platz",
+    "queued": "In der Warteschlange – wartet, bis es weitergeht",
     "needsOk": "Braucht dein OK",
     "needsAnswer": "Braucht deine Antwort",
     "paused": "Pausiert",

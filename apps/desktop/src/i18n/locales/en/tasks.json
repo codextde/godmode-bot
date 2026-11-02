@@ -149,7 +149,7 @@
     "restoreError": "Could not restore"
   },
   "card": {
-    "queued": "Queued — waiting for a free slot",
+    "queued": "Queued — waiting its turn",
     "working": "Working…",
     "overdueDays": "Overdue · {{n}}d",
     "aria": {

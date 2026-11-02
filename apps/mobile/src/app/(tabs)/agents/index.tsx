@@ -38,7 +38,7 @@ export default function Agents() {
   const { t } = useTranslation(["tabs", "common"]);
   const agents = useAgents();
   const { id: workspaceId, projectId } = useWorkspace();
-  // Working means running; a run waiting for a free slot is only queued.
+  // Working means running; a run waiting its turn is only queued.
   const counts = useRunCounts();
   const routines = useQuery({ queryKey: qk.allRoutines, queryFn: () => api.routines.list() });
   const missing = useQuery({ queryKey: qk.missingLogins, queryFn: api.missingLogins.open });

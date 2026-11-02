@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import type { Agent, Task } from "@godmode/shared";
 import { taskEventText } from "@godmode/shared";
-import { captureEvents, invocations, makeAgent, setupEnv, until, type TestEnv } from "./fixtures/runner-harness";
+import { captureEvents, invocations, makeAgent, setupEnv, takeTurns, until, type TestEnv } from "./fixtures/runner-harness";
 import { get, insert, run as sql } from "../src/db";
 import { getAccessToken } from "../src/server/auth";
 import { deviceMayCall } from "../src/mobile/scope";
@@ -252,10 +252,10 @@ describe("what a ticket cost", () => {
 
 describe("start order", () => {
   test("queued tickets start by priority, then due date; a chat keeps its place", async () => {
-    updateSettings({ runner: { maxConcurrentRuns: 1 } });
+    const restore = await takeTurns(agent.id);
     try {
-      const hold = createTask({ title: "WAIT_TO_FINISH holding the slot", agentId: agent.id });
-      await until(() => getTask(hold.id).runStatus === "running", 10_000, "the slot to be taken");
+      const hold = createTask({ title: "WAIT_TO_FINISH holding the computer", agentId: agent.id });
+      await until(() => getTask(hold.id).runStatus === "running", 10_000, "the computer to be taken");
       const low = createTask({ title: "Low one", agentId: agent.id, priority: "low" });
       const urgent = createTask({ title: "Urgent one", agentId: agent.id, priority: "urgent" });
       const none = createTask({ title: "No priority", agentId: agent.id });
@@ -267,11 +267,11 @@ describe("start order", () => {
       const order = invocations(env)
         .slice(before)
         .map((i) => /# (.+)/.exec(i.prompt)?.[1])
-        .filter((t): t is string => !!t && t !== "WAIT_TO_FINISH holding the slot");
+        .filter((t): t is string => !!t && t !== "WAIT_TO_FINISH holding the computer");
       expect(order).toEqual(["Urgent one", "High one", "No priority", "Low one"]);
     } finally {
-      updateSettings({ runner: { maxConcurrentRuns: 3 } });
-      sql("DELETE FROM tasks WHERE title = 'WAIT_TO_FINISH holding the slot'");
+      await restore();
+      sql("DELETE FROM tasks WHERE title = 'WAIT_TO_FINISH holding the computer'");
     }
   }, 60_000);
 });

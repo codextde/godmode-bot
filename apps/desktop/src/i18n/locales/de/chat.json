@@ -323,7 +323,7 @@
   },
   "status": {
     "working": "Arbeitet…",
-    "queuedWaiting": "In der Warteschlange – wartet auf einen freien Platz",
+    "queuedWaiting": "In der Warteschlange – wartet, bis es weitergeht",
     "needsOk": "Braucht dein OK",
     "needsAnswer": "Braucht deine Antwort",
     "paused": "Pausiert",

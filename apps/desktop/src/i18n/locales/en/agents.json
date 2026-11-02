@@ -1143,7 +1143,7 @@
     "andMore_one": "and {{count}} more",
     "andMore_other": "and {{count}} more",
     "working": "Working…",
-    "queued": "Queued — waiting for a free slot",
+    "queued": "Queued — waiting its turn",
     "watch": "Watch",
     "stopLabel": "Stop: {{title}}",
     "waitingForAnswer": "Waiting for your answer",

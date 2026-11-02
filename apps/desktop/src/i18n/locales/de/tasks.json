@@ -149,7 +149,7 @@
     "restoreError": "Wiederherstellen fehlgeschlagen"
   },
   "card": {
-    "queued": "In der Warteschlange – wartet auf einen freien Platz",
+    "queued": "In der Warteschlange – wartet, bis es weitergeht",
     "working": "Arbeitet…",
     "overdueDays": "Überfällig · {{n}} T.",
     "aria": {

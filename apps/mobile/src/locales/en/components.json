@@ -255,7 +255,7 @@
     "waitsFor": "Waits for {{tickets}}",
     "partsDone": "{{done}}/{{total}} parts",
     "unassigned": "Unassigned",
-    "queued": "Queued — waiting for a free slot",
+    "queued": "Queued — waiting its turn",
     "working": "Working…"
   },
   "runRow": {
@@ -427,7 +427,7 @@
       "delegation": "Handed over",
       "heartbeat": "Heartbeat"
     },
-    "queued": "Queued — waiting for a free slot",
+    "queued": "Queued — waiting its turn",
     "needsOk": "Needs your OK",
     "needsAnswer": "Needs your answer",
     "paused": "Paused",

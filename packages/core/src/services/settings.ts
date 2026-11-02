@@ -27,7 +27,6 @@ export const DEFAULT_SETTINGS: Settings = {
     effort: "medium",
     ultracode: false,
     bypassPermissions: true,
-    maxConcurrentRuns: 3,
     runTimeoutMinutes: 60,
     autoContinueOnLimit: true,
     accountAutoSwitch: true,

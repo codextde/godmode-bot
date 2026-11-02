@@ -201,20 +201,13 @@ describe("runner end-to-end with fake claude", () => {
     expect(msgs[3]!.content).toBe("Hello, nice to meet you!");
   });
 
-  test("maxConcurrentRuns queues runs of other conversations", async () => {
-    updateSettings({ runner: { maxConcurrentRuns: 1 } });
-    try {
-      const a = await startChat({ agentId: agent.id, content: "SLEEP a" });
-      const b = await startChat({ agentId: agent.id, content: "hello b" });
-      await until(() => getRun(a.run.id).status === "running", 10_000, "run a");
-      await new Promise((r) => setTimeout(r, 200));
-      expect(getRun(b.run.id).status).toBe("queued");
-      expect(listActiveRuns().map((r) => r.runId).sort()).toEqual([a.run.id, b.run.id].sort());
-      await cancelRun(a.run.id);
-      expect((await waitForRun(b.run.id, 20_000)).status).toBe("succeeded");
-    } finally {
-      updateSettings({ runner: { maxConcurrentRuns: 3 } });
-    }
+  test("runs of other conversations never wait for each other", async () => {
+    const chats = await Promise.all(Array.from({ length: 8 }, (_, i) => startChat({ agentId: agent.id, content: `SLEEP ${i}` })));
+    const ids = chats.map((c) => c.run.id);
+    await until(() => ids.every((id) => getRun(id).status === "running"), 20_000, "every run to work");
+    expect(listActiveRuns().map((r) => r.runId).sort()).toEqual([...ids].sort());
+    await Promise.all(ids.map((id) => cancelRun(id)));
+    await Promise.all(ids.map((id) => waitForRun(id, 20_000)));
   });
 
   test("runs sharing a browser profile run at the same time — every chat works in its own tabs", async () => {

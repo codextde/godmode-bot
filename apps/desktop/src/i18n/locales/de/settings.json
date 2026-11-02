@@ -250,8 +250,6 @@
     "limits": {
       "title": "Grenzen",
       "description": "Leitplanken für ausufernde Aufgaben.",
-      "parallel": "Parallele Läufe",
-      "parallelDescription": "Wie viele Agenten-Läufe gleichzeitig laufen dürfen. Weitere Läufe warten in einer Warteschlange.",
       "timeout": "Zeitlimit pro Lauf",
       "timeoutDescription": "Nach dieser Zeit wird ein Lauf gestoppt.",
       "minutes": "Min.",

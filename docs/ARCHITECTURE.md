@@ -286,8 +286,8 @@ Claude Code reports a run's cost as the total of its whole Claude session, so on
 runs are in it: the run stores that total minus what the session had counted before
 (`conversations.claude_session_cost_usd`; stored only, see Costs). A process can end more than once (a background task that finishes wakes it
 for another turn); time, turns and tokens of the endings add up.
-Concurrency is limited by `settings.runner.maxConcurrentRuns` (queue). A per-conversation lock prevents
-two concurrent turns in the same conversation. Runs sharing a browser profile don't wait for each other: every chat
+Any number of runs work at once; there is no limit to wait for. A per-conversation lock prevents
+two concurrent turns in the same conversation, and a run still queues for a shared VM, the computer or its agent's dream. Runs sharing a browser profile don't wait for each other: every chat
 works in its own tabs (see Browser).
 
 The watchdog (`runner/watchdog.ts`) looks at every running run twice a minute and stops one that shows no sign of life
