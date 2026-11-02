@@ -333,6 +333,14 @@ function defaultPermissions(settings: Settings): AgentPermissions {
 /** Changes made by an agent (MCP tools, actor "agent:<id>") rather than the human. */
 const isAgentActor = (actor: string) => actor.startsWith("agent:");
 
+function creatorHasComputer(actor: string): boolean {
+  try {
+    return getAgent(actor.slice("agent:".length)).computer.enabled;
+  } catch {
+    return false;
+  }
+}
+
 /** A job title as stored; one written by an agent can't carry a saved secret into its teammates' prompts. */
 function roleFrom(value: string | null | undefined, actor: string): string {
   const role = normalizeRole(value);
@@ -607,8 +615,8 @@ async function createAgentRecord(input: AgentInput, isDefault: boolean, actor: s
     status: enabled ? "idle" : "disabled",
     permissions,
     browser,
-    // Human-only: unattended control of the human's computer.
-    computer: isAgentActor(actor) ? { ...DEFAULT_AGENT_COMPUTER } : normalizeAgentComputer({ ...DEFAULT_AGENT_COMPUTER, ...input.computer }),
+    // Agents can't widen it: a new agent gets the computer only when the agent creating it has it.
+    computer: isAgentActor(actor) ? { enabled: creatorHasComputer(actor), target: null } : normalizeAgentComputer({ ...DEFAULT_AGENT_COMPUTER, ...input.computer }),
     mcpServerIds: existingMcpServerIds(stringList(input.mcpServerIds ?? [])),
     inheritMcp: input.inheritMcp !== false,
     subagents: normalizeSubagents(input.subagents ?? []),

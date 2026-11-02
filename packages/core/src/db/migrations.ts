@@ -1914,4 +1914,14 @@ CREATE TABLE IF NOT EXISTS memory_edits (
 CREATE INDEX IF NOT EXISTS memory_edits_agent ON memory_edits(agent_id, created_at);
 `,
   },
+  {
+    id: 115,
+    name: "agent_computer_on_by_default",
+    sql: /* sql */ `
+-- Agents use the computer on their own by default. A switched-off agent with a chosen display was turned off on purpose.
+UPDATE agents SET computer = '{"enabled":true,"target":null}' WHERE computer IN ('{}', '{"enabled":false,"target":null}');
+-- Writers without computer access are gone with that, so their project context reaches agents again.
+UPDATE projects SET off_computer = 0;
+`,
+  },
 ];

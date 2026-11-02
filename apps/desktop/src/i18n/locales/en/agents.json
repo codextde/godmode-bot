@@ -265,9 +265,9 @@
     },
     "computer": {
       "title": "Computer",
-      "description": "In chats you share a window or screen yourself. Here you can let this agent use the computer on its own — for automations and delegated tasks.",
+      "description": "In chats you can also share a single window or screen. By default this agent uses the computer on its own whenever a task needs the screen.",
       "unattended": "Use the computer without a share",
-      "unattendedDescription": "Controls the real mouse and keyboard when it runs on its own. Only turn this on for agents you trust with your desktop.",
+      "unattendedDescription": "Controls the real mouse and keyboard when no other tool can do the step. Turn it off for agents that should stay off your desktop.",
       "screen": "Screen",
       "entireDesktop": "Entire desktop",
       "entireDesktopCount_one": "Entire desktop ({{count}} display)",

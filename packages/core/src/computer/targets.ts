@@ -46,7 +46,7 @@ export function parseComputerTarget(v: unknown): ComputerTarget | null {
   }
 }
 
-export const DEFAULT_AGENT_COMPUTER: AgentComputerConfig = { enabled: false, target: null };
+export const DEFAULT_AGENT_COMPUTER: AgentComputerConfig = { enabled: true, target: null };
 
 /** Agent-level access (routines, delegated tasks) is for the whole desktop or one display — windows come and go. */
 export function normalizeAgentComputer(v: unknown): AgentComputerConfig {

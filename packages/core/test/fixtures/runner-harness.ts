@@ -142,7 +142,7 @@ export async function setupEnv(prefix = "godmode-runner-"): Promise<TestEnv> {
 }
 
 export async function makeAgent(input: Partial<AgentInput> & { name: string }): Promise<Agent> {
-  const agent = await createAgent({ ...input, browser: { enabled: false, ...input.browser } });
+  const agent = await createAgent({ computer: { enabled: false, target: null }, ...input, browser: { enabled: false, ...input.browser } });
   testAgentIds.add(agent.id);
   return agent;
 }

@@ -28,6 +28,8 @@ export interface PromptContext {
   browserCdpEnv?: string | null;
   /** Screen, window or browser tab this run may see and control (computer MCP tools). */
   computer?: ComputerTarget | null;
+  /** The computer is this agent's own access, nobody shared it in the chat. */
+  computerOwn?: boolean;
   /** macOS VM this run works in (vm MCP tools). */
   vm?: PromptVm | null;
   /** SSH servers this run may use (ssh MCP tools). */
@@ -331,7 +333,7 @@ No browser tools are attached to this run. If a task needs a website, say so in 
   if (ctx.ssh?.length) out.push(sshSection(ctx.ssh, human));
   if (ctx.android?.length) out.push(androidSection(ctx.android, human, !!ctx.androidVaultFill));
   const rawSecrets = perms.secretAccess === "reveal" && !ctx.fillOnly;
-  if (ctx.computer) out.push(computerSection(ctx.computer, human, rawSecrets));
+  if (ctx.computer && !ctx.glm) out.push(computerSection(ctx.computer, human, rawSecrets, !!ctx.computerOwn));
   if (!ctx.check) out.push(ownHandsSection(agent.name, human, { asking: !!ctx.asking, screen: !ctx.computer && !ctx.vm && settings.computer.enabled, githubSignIn: !ctx.vm && !!agent.browser?.enabled }));
 
   out.push(`### Logging in to websites
@@ -659,10 +661,11 @@ A command or script you could run is yours to run. Never give ${human} a command
 - A password or passphrase nobody saved (a file's, an app's, one a colleague has): look once where you already have access (mail, messages, notes, the vault), without signing in anywhere new for it. Still missing: ${missing}, then run the command yourself. Pass it on stdin or in an environment variable, never as an argument or in a file.${screen}`;
 }
 
-function computerSection(target: ComputerTarget, human: string, canReveal: boolean): string {
+function computerSection(target: ComputerTarget, human: string, canReveal: boolean, own: boolean): string {
   const what = computerTargetLabel(target);
-  const scope =
-    target.kind === "window"
+  const scope = own
+    ? `You may use ${target.kind === "display" ? `the display **${what}**` : "the whole desktop"} of this computer without a share, with the real mouse and keyboard. ${human} may be working at it right now and sees what you do, so only use it for a step your shell, browser and other tools can't do, then get out of the way.${target.kind === "desktop" ? " Check `computer_info` for the displays and pick one with `display`." : ""} One run uses it at a time: when another holds it, carry on with the rest and try again later.`
+    : target.kind === "window"
       ? `${human} shared one app window with you: **${what}**. You control it in the background — your clicks and keystrokes go only to this window, ${human} keeps using their mouse and keyboard, and every other app is off limits. Prefer \`computer_ui\` elements (accessibility) for buttons, menus and fields: they work even when the window is covered. Keyboard shortcuts with cmd/ctrl may not reach a background window; use menus or elements instead.`
       : target.kind === "tab"
         ? `${human} shared one browser tab with you: **${what}**. Control it with the \`computer\` tools (screenshot, click, type) in the background; the \`browser\` tools may still be used for other pages.`
@@ -675,7 +678,7 @@ ${scope}
 - Use the screen for what the shell and your other tools can't do.
 - Work step by step and verify each step on the screenshot. If something unexpected appears (a dialog, a permission prompt, a payment or delete confirmation), stop and ask ${human}.
 - Never type saved passwords or authenticator codes into the computer${canReveal ? " unless the task requires it and you got them from the vault" : ""} — for websites use the vault tools in the browser; for apps, ask ${human} to log in.
-- If the shared window was closed or you can't reach what you need, say so in your final answer instead of working around it.`;
+- If what you were given was closed or you can't reach what you need, say so in your final answer instead of working around it.`;
 }
 
 /**

@@ -265,9 +265,9 @@
     },
     "computer": {
       "title": "Computer",
-      "description": "In Chats teilst du ein Fenster oder den Bildschirm selbst. Hier kannst du diesem Agenten erlauben, den Computer eigenständig zu nutzen – für Automationen und delegierte Aufgaben.",
+      "description": "In Chats kannst du auch ein einzelnes Fenster oder den Bildschirm teilen. Standardmäßig nutzt dieser Agent den Computer selbst, wenn eine Aufgabe den Bildschirm braucht.",
       "unattended": "Computer ohne Freigabe nutzen",
-      "unattendedDescription": "Steuert echte Maus und Tastatur, wenn er eigenständig läuft. Schalte das nur für Agenten ein, denen du deinen Desktop anvertraust.",
+      "unattendedDescription": "Steuert echte Maus und Tastatur, wenn kein anderes Tool den Schritt schafft. Schalte das für Agenten aus, die nicht an deinen Desktop sollen.",
       "screen": "Bildschirm",
       "entireDesktop": "Gesamter Desktop",
       "entireDesktopCount_one": "Gesamter Desktop ({{count}} Display)",

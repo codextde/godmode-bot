@@ -1028,7 +1028,7 @@
       "title": "Computer use",
       "liveView": "Live view",
       "enabled": "Let agents use shared windows and screens",
-      "enabledDescription": "Agents only see what you share in a chat (or what you allow an agent in its settings), and only while it's shared.",
+      "enabledDescription": "Agents use the computer on their own when a task needs it, unless you turn it off for an agent. Otherwise they only see what you share in a chat.",
       "foreground": "Bring a shared window to the front when needed",
       "foregroundDescription": "Some apps ignore input in the background (e.g. menu shortcuts). Allow agents to bring the shared window forward for a moment — it steals focus briefly."
     },

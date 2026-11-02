@@ -150,7 +150,7 @@ export function agentToValues(
     browserEnabled: source?.browser?.enabled ?? true,
     browserProfileId: source?.browser?.profileId ?? null,
     headless: source?.browser?.headless ?? null,
-    computerEnabled: source?.computer?.enabled ?? false,
+    computerEnabled: source?.computer?.enabled ?? true,
     computerDisplayId: source?.computer?.target?.kind === "display" ? source.computer.target.displayId : null,
     inheritMcp: source?.inheritMcp ?? true,
     mcpServerIds: source?.mcpServerIds ?? [],
