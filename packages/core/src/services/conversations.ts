@@ -1050,6 +1050,8 @@ export async function sendMessage(
     files?: Attachment[];
     /** Who wrote it when it wasn't the human: an automation, an agent handing work over, the task board. */
     source?: MessageSource;
+    /** Written in a chat by someone other than the human this Godmode works for (an approved messenger contact). */
+    fromOther?: boolean;
   },
 ): Promise<SendMessageResult> {
   const { conv, agent } = messageTarget(conversationId, input.trigger);
@@ -1073,6 +1075,7 @@ export async function sendMessage(
       conversationId,
       prompt,
       trigger: input.trigger ?? "chat",
+      humanTyped: (input.trigger ?? "chat") === "chat" && !input.marker && !input.source && !input.fromOther,
       routineId: input.routineId ?? null,
       parentRunId: input.parentRunId ?? null,
       depth: input.depth ?? 0,
