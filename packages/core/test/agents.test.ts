@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, spyOn, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, truncateSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Agent, ServerEvent } from "@godmode/shared";
@@ -431,7 +431,7 @@ describe("gitignore", () => {
     writeFileSync(join(agent.repoPath, ".omc", "state", "sessions", "s1.json"), "{}");
     mkdirSync(join(agent.repoPath, ".omc", "skills"), { recursive: true });
     writeFileSync(join(agent.repoPath, ".omc", "skills", "deploy.md"), "# Deploy");
-    for (const pkg of ["workspace/check/node_modules/left-pad", "workspace/check/node_modules/.bin", "workspace/tool/.venv/lib"]) {
+    for (const pkg of ["workspace/check/node_modules/left-pad", "workspace/check/node_modules/.bin", "workspace/tool/.venv/lib", "workspace/tool/dd/Build/Intermediates.noindex/App.build"]) {
       mkdirSync(join(agent.repoPath, pkg), { recursive: true });
       writeFileSync(join(agent.repoPath, pkg, "index.js"), "1");
     }
@@ -443,7 +443,7 @@ describe("gitignore", () => {
 
     await ensureAgentRepo(agent);
     const gitignore = readFileSync(join(agent.repoPath, ".gitignore"), "utf8");
-    expect(gitignore).toContain("build/\n# Added by Godmode Bot\nworkspace/uploads/\n/runs/\n.omc/state/\n.DS_Store\nnode_modules/\n.venv/\n__pycache__/\n");
+    expect(gitignore).toContain("build/\n# Added by Godmode Bot\nworkspace/uploads/\n/runs/\n.omc/state/\n.DS_Store\nnode_modules/\n.venv/\n__pycache__/\nDerivedData/\nIntermediates.noindex/\nModuleCache.noindex/\nIndex.noindex/\n");
     const files = await headFiles(agent.repoPath);
     expect(files).not.toContain("workspace/uploads/old.pdf");
     expect(files.filter((f) => f.startsWith("runs/"))).toEqual([]);
@@ -543,6 +543,33 @@ describe("git helpers", () => {
     expect(vanished).toBe(1);
     const git = (await import("isomorphic-git")).default;
     expect(await git.listFiles({ fs, dir, ref: "HEAD" })).toEqual(["notes.md"]);
+    expect(await repo.commitAll(dir, "clean")).toBeNull();
+  });
+
+  test("commitAll adds large changes in batches instead of reading them all at once", async () => {
+    const dir = join(dataDir, "batched-add-repo");
+    await repo.initRepo(dir);
+    const MB = 1024 * 1024;
+    for (const [name, size] of [["a.bin", 40 * MB], ["b.bin", 40 * MB], ["c.bin", 40 * MB], ["huge.bin", 80 * MB]] as const) {
+      writeFileSync(join(dir, name), "");
+      truncateSync(join(dir, name), size);
+    }
+    mkdirSync(join(dir, "many"));
+    for (let i = 0; i < 501; i++) writeFileSync(join(dir, "many", `${i}.txt`), String(i));
+    const git = (await import("isomorphic-git")).default;
+    const add = spyOn(git, "add");
+    try {
+      expect(await repo.commitAll(dir, "large")).not.toBeNull();
+      const batches = add.mock.calls.map(([args]) => [args.filepath].flat() as string[]);
+      const bigTogether = batches.filter((b) => b.filter((f) => f.endsWith(".bin")).length > 1);
+      expect(bigTogether).toEqual([]);
+      expect(Math.max(...batches.map((b) => b.length))).toBeLessThanOrEqual(500);
+    } finally {
+      add.mockRestore();
+    }
+    const files = await git.listFiles({ fs: await import("node:fs"), dir, ref: "HEAD" });
+    expect(files).toEqual(expect.arrayContaining(["a.bin", "b.bin", "c.bin", "huge.bin", "many/0.txt", "many/500.txt"]));
+    expect(files.length).toBe(505);
     expect(await repo.commitAll(dir, "clean")).toBeNull();
   });
 

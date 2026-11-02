@@ -16,6 +16,8 @@ import { HttpError, badRequest, forbidden, notFound } from "../util";
 
 export const GIT_AUTHOR = { name: "Godmode Bot", email: "bot@godmode.local" };
 export const MAX_FILE_BYTES = 2 * 1024 * 1024;
+const ADD_BATCH_BYTES = 64 * 1024 * 1024;
+const ADD_BATCH_FILES = 500;
 
 /* ------------------------------------------------------------------ */
 /* Per-repository mutex                                                */
@@ -117,6 +119,26 @@ export async function commitAllInLock(dir: string, message: string): Promise<str
   }
 }
 
+/**
+ * git.add reads and compresses everything it is given at once: a build folder of 3 GB took 12 GB of memory and held the
+ * event loop for 4 s. Small batches keep both down; each batch rewrites the index, so they aren't smaller than needed.
+ */
+async function addInBatches(dir: string, files: string[], cache: object): Promise<void> {
+  let batch: string[] = [];
+  let bytes = 0;
+  for (const filepath of files) {
+    const size = (await lstat(join(dir, filepath)).catch(() => null))?.size ?? 0;
+    if (batch.length && (bytes + size > ADD_BATCH_BYTES || batch.length >= ADD_BATCH_FILES)) {
+      await git.add({ fs, dir, filepath: batch, cache });
+      batch = [];
+      bytes = 0;
+    }
+    batch.push(filepath);
+    bytes += size;
+  }
+  if (batch.length) await git.add({ fs, dir, filepath: batch, cache });
+}
+
 async function stageAndCommit(dir: string, message: string): Promise<string | null> {
   const cache = {};
   const indexSecond = await stat(join(dir, ".git", "index")).then(
@@ -138,7 +160,7 @@ async function stageAndCommit(dir: string, message: string): Promise<string | nu
     else toAdd.push(filepath);
   }
   for (const filepath of toRemove) await git.remove({ fs, dir, filepath, cache });
-  if (toAdd.length) await git.add({ fs, dir, filepath: toAdd, cache });
+  await addInBatches(dir, toAdd, cache);
   if (!changed) return null;
   return git.commit({ fs, dir, message: message.trim() || "Update", author: GIT_AUTHOR, cache });
 }
@@ -186,7 +208,7 @@ async function recheckRacyFiles(dir: string, matrix: StatusRow[], indexSecond: n
     if (s && Math.floor(s.mtimeMs / 1000) >= indexSecond) racy.push(filepath);
   }
   if (!racy.length) return matrix;
-  await git.add({ fs, dir, filepath: racy, cache });
+  await addInBatches(dir, racy, cache);
   const fresh = new Map((await git.statusMatrix({ fs, dir, filepaths: racy, cache })).map((row) => [row[0], row]));
   return matrix.map((row) => fresh.get(row[0]) ?? row);
 }

@@ -14,16 +14,16 @@ export interface ClaudeMdContext {
   workspace: { name: string; description: string } | null;
 }
 
-/** Folders of installed packages an agent may create anywhere in its workspace. */
-export const INSTALLED_FOLDERS = ["node_modules", ".venv", "__pycache__"] as const;
+/** Folders of installed packages and Xcode build caches an agent may create anywhere in its workspace. */
+export const INSTALLED_FOLDERS = ["node_modules", ".venv", "__pycache__", "DerivedData", "Intermediates.noindex", "ModuleCache.noindex", "Index.noindex"] as const;
 
 /**
  * Rules every agent repository's .gitignore must contain (re-added to existing repos when missing).
  * `workspace/uploads/` holds files the human attaches — possibly large or sensitive, so they stay out of git. `runs/`
  * holds raw run logs (screenshots and all): versioned they would fill the history for good, so they only live on disk
  * until the cleanup removes old ones. `.omc/state/` is a Claude Code plugin's session state and lock files, which come and
- * go while a commit reads the tree. Installed packages (INSTALLED_FOLDERS, at any depth) can be installed again; every
- * commit would have to look at their thousands of files.
+ * go while a commit reads the tree. Installed packages and build caches (INSTALLED_FOLDERS, at any depth) can be made
+ * again; every commit would have to look at their thousands of files, and a rebuild would version gigabytes anew.
  */
 export const AGENT_GITIGNORE_RULES = [
   "workspace/tmp/",
