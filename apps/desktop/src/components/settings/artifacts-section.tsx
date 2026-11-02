@@ -1,7 +1,6 @@
 import { AppWindow, History, LayoutDashboard, PanelRight, Zap } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { Settings } from "@godmode/shared";
-import { ArtifactsOverview } from "@/components/artifacts/artifacts-overview";
 import { useEasyMode } from "@/lib/mode";
 import { FeatureSection } from "./feature-section";
 import { ModelSelect } from "./ai-section";
@@ -24,20 +23,17 @@ export function ArtifactsSection({ settings }: { settings: Settings }) {
         { icon: <History />, text: t("artifacts.pointVersions") },
       ]}
     >
-      <div className="space-y-6">
-        <SettingsGroup title={t("artifacts.speed.title")} icon={<Zap />}>
-          <SettingRow label={t("artifacts.speed.builder")} htmlFor="artifact-builder-model" description={t("artifacts.speed.builderDescription")}>
-            <ModelSelect
-              id="artifact-builder-model"
-              allowNone
-              noneLabel={t("artifacts.speed.builderOff")}
-              value={settings.artifacts.builderModel ?? ""}
-              onChange={(builderModel) => patch({ artifacts: { builderModel } })}
-            />
-          </SettingRow>
-        </SettingsGroup>
-        <ArtifactsOverview />
-      </div>
+      <SettingsGroup title={t("artifacts.speed.title")} icon={<Zap />}>
+        <SettingRow label={t("artifacts.speed.builder")} htmlFor="artifact-builder-model" description={t("artifacts.speed.builderDescription")}>
+          <ModelSelect
+            id="artifact-builder-model"
+            allowNone
+            noneLabel={t("artifacts.speed.builderOff")}
+            value={settings.artifacts.builderModel ?? ""}
+            onChange={(builderModel) => patch({ artifacts: { builderModel } })}
+          />
+        </SettingRow>
+      </SettingsGroup>
     </FeatureSection>
   );
 }

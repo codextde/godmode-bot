@@ -41,6 +41,8 @@
     "calculator": { "title": "Price calculator", "blurb": "A quote or margin calculator for your offers" }
   },
   "overview": {
+    "title": "Artifacts",
+    "description": "Dashboards and small apps your agents build for you. Open one, use it, and ask for changes in plain words.",
     "emptyTitle": "Nothing built yet",
     "emptyDescription": "Describe a dashboard or a tool above, or pick a starting point. Agents also build artifacts when you ask for one in any chat.",
     "yourArtifacts": "Your artifacts",

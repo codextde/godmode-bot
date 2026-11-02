@@ -436,7 +436,7 @@ export function CommandPalette() {
             </CommandItem>
           )}
           {on?.artifacts.enabled && (
-            <CommandItem value={`artifacts dashboards apps trackers ${t("palette.artifacts")}`} keywords={mode === "easy" ? [t("palette.artifactsEasy")] : undefined} onSelect={() => go("/settings/artifacts")}>
+            <CommandItem value={`artifacts dashboards apps trackers ${t("palette.artifacts")}`} keywords={mode === "easy" ? [t("palette.artifactsEasy")] : undefined} onSelect={() => go("/artifacts")}>
               <AppWindow /> {mode === "easy" ? t("palette.artifactsEasy") : t("palette.artifacts")}
             </CommandItem>
           )}

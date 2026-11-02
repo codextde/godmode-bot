@@ -16,6 +16,9 @@
     "switchBackHint": "Switch back any time in Settings → General."
   },
   "easyPages": {
+    "artifacts": {
+      "title": "Dashboards & apps"
+    },
     "automations": {
       "description": "Let your agents start work by themselves: on a schedule, or when something happens in your apps."
     },

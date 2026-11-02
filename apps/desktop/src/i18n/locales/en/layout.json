@@ -26,6 +26,7 @@
     "tasks": "Agent tasks",
     "agents": "Agents",
     "automations": "Automations",
+    "artifacts": "Artifacts",
     "activity": "Activity",
     "calls": "Calls",
     "passwords": "Passwords",
