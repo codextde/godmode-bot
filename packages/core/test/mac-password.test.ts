@@ -137,7 +137,7 @@ describe("the script", () => {
     }
   });
 
-  test("the password goes over stdin, never as an argument", async () => {
+  test.skipIf(!onMac)("the password goes over stdin, never as an argument", async () => {
     const res = await runAsAdmin(PASSWORD, "echo hello; exit 3", { username: "dana", timeoutMs: 10_000 });
     expect(res).toEqual({ status: "done", exitCode: 3, output: "hello" });
     const [call] = calls();
@@ -145,7 +145,7 @@ describe("the script", () => {
     expect(call!.source).toContain("password");
   });
 
-  test("runs in the folder asked for, with stderr in the output", async () => {
+  test.skipIf(!onMac)("runs in the folder asked for, with stderr in the output", async () => {
     const res = await runAsAdmin(PASSWORD, "pwd; echo oops >&2", { username: "dana", cwd: "/tmp", timeoutMs: 10_000 });
     expect(res.status).toBe("done");
     if (res.status === "done") expect(res.output).toMatch(/\/tmp\noops$/);
