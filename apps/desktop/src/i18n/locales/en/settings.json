@@ -58,7 +58,9 @@
       "launchAtLoginDescription": "Start Godmode in the background when you sign in, so automations keep running.",
       "desktopOnly": "Desktop app only.",
       "tray": "Keep running in the menu bar",
-      "trayDescription": "Closing the window hides Godmode to the tray instead of quitting — agents and automations keep working."
+      "trayDescription": "Closing the window hides Godmode to the tray instead of quitting — agents and automations keep working.",
+      "fpsMeter": "FPS meter",
+      "fpsMeterDescription": "Shows the frame rate and the slowest frame on top of the window, to spot when the app stutters."
     },
     "notifications": {
       "title": "Notifications",

@@ -34,6 +34,8 @@ export function GeneralSection({ settings }: { settings: Settings }) {
   const setReduceAnimations = useUi((s) => s.setReduceAnimations);
   const toolCallView = useUi((s) => s.toolCallView);
   const setToolCallView = useUi((s) => s.setToolCallView);
+  const fpsMeter = useUi((s) => s.fpsMeter);
+  const setFpsMeter = useUi((s) => s.setFpsMeter);
 
   const [autostart, setAutostart] = useState<boolean | null>(null);
   const [autostartBusy, setAutostartBusy] = useState(false);
@@ -201,6 +203,14 @@ export function GeneralSection({ settings }: { settings: Settings }) {
             disabled={!isTauri}
             onCheckedChange={(minimizeToTray) => patch({ general: { minimizeToTray } })}
           />
+        </SettingRow>
+        <SettingRow
+          label={t("general.desktop.fpsMeter")}
+          htmlFor="fps-meter"
+          disabled={!isTauri}
+          description={isTauri ? t("general.desktop.fpsMeterDescription") : t("general.desktop.desktopOnly")}
+        >
+          <Switch id="fps-meter" checked={isTauri && fpsMeter} disabled={!isTauri} onCheckedChange={setFpsMeter} />
         </SettingRow>
       </SettingsGroup>
 
