@@ -58,7 +58,9 @@
       "launchAtLoginDescription": "Godmode startet im Hintergrund, wenn du dich anmeldest, damit Automationen weiterlaufen.",
       "desktopOnly": "Nur in der Desktop-App.",
       "tray": "In der Menüleiste weiterlaufen",
-      "trayDescription": "Beim Schließen des Fensters wandert Godmode in die Menüleiste, statt sich zu beenden — Agenten und Automationen arbeiten weiter."
+      "trayDescription": "Beim Schließen des Fensters wandert Godmode in die Menüleiste, statt sich zu beenden — Agenten und Automationen arbeiten weiter.",
+      "fpsMeter": "FPS-Anzeige",
+      "fpsMeterDescription": "Zeigt die Bildrate und das langsamste Bild oben im Fenster, um Ruckler in der App zu erkennen."
     },
     "notifications": {
       "title": "Mitteilungen",

@@ -8,6 +8,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/theme-provider";
 import { LanguageProvider } from "@/i18n/language";
+import { FpsMeter } from "@/components/layout/fps-meter";
 import { VaultGrantDialog } from "@/components/vault/grant";
 import { MacPermissionsGuide } from "@/components/permissions/mac-permissions";
 import { isCloudError } from "@/lib/api";
@@ -61,6 +62,7 @@ createRoot(document.getElementById("root")!, reactRootErrorHandlers).render(
               <Toaster richColors position="bottom-right" />
               <VaultGrantDialog />
               <MacPermissionsGuide />
+              <FpsMeter />
             </TooltipProvider>
           </LanguageProvider>
         </ThemeProvider>
