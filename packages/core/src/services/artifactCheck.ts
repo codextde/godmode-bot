@@ -111,6 +111,8 @@ async function render(html: string, data: unknown, files?: ArtifactDocumentFiles
   const errors: string[] = [];
   const pending = new Set<string>();
   const add = (line: string) => {
+    // A local path is put right by the page; what really stays broken is reported from the images below.
+    if (/^Not allowed to load local resource|^Loading the (image|media) /.test(line)) return;
     if (line && !errors.includes(line)) errors.push(line);
   };
   const offs = [
@@ -170,7 +172,7 @@ async function render(html: string, data: unknown, files?: ArtifactDocumentFiles
       )
       .catch(() => [] as string[]);
     for (const src of broken) {
-      add(/^https:|^data:|^blob:/i.test(src) ? `The image ${src.slice(0, 200)} didn't load.` : `The image ${src.slice(0, 200)} didn't load: pass the file in \`files\` and use its name as the src (file:// URLs and paths on disk never load).`);
+      add(/^https:|^data:|^blob:/i.test(src) ? `The image ${src.slice(0, 200)} didn't load.` : `The image ${src.slice(0, 200)} didn't load: there is no such file on this computer.`);
     }
     const { data: image } = await page.send<{ data: string }>("Page.captureScreenshot", { format: "jpeg", quality: 70 });
     if (facts.height > MAX_HEIGHT) warnings.push(`The page is ${facts.height}px tall; the screenshot shows the first ${MAX_HEIGHT}px.`);

@@ -962,6 +962,7 @@ export const api = {
     /** The human's words for its agent, sent to the artifact's chat. */
     message: (id: string, content: string, source: "human" | "app" = "human") => post<ArtifactMessageResult>(`/api/artifacts/${id}/message`, { content, source }),
     refresh: (id: string) => post<ArtifactMessageResult>(`/api/artifacts/${id}/refresh`),
+    reviewDone: (id: string) => post<ArtifactMessageResult | { conversationId: null; queued: false }>(`/api/artifacts/${id}/review-done`),
     start: (input: ArtifactStartInput) => post<ArtifactStartResult>("/api/artifacts/start", input),
     delete: (id: string) => del<{ ok: true }>(`/api/artifacts/${id}`),
     openFile: (id: string, name: string) => post<{ ok: true }>(`/api/artifacts/${id}/files/${encodeURIComponent(name)}/open`),

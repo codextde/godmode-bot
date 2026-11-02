@@ -166,7 +166,7 @@ import { zaiKey } from "../runner/claude";
 import { summarizeNotification, wantsSummary } from "../runner/notificationSummary";
 import { artifactExists, createArtifact, getArtifact, listArtifacts, updateArtifact } from "../services/artifacts";
 import { checkArtifactRender } from "../services/artifactCheck";
-import { attachArtifactFiles, prepareArtifactFiles, removeArtifactFiles, type PreparedFiles } from "../services/artifactFiles";
+import { attachArtifactFiles, findMentionedFiles, prepareArtifactFiles, removeArtifactFiles, type PreparedFiles } from "../services/artifactFiles";
 import { NOTE_MAX, cancelFollowup, followupsAllowed, getFollowup, inWords, parseDueAt, scheduleFollowup } from "../services/followups";
 import { autoRetryOf, continueCutOffRun, latestContinuation } from "../services/resume";
 import { askQuestion, listQuestions } from "../services/questions";
@@ -1042,11 +1042,15 @@ async function readAgentFile(path: string, max: number, what: string): Promise<s
 const FILES_ON_PRIMARY = "This computer is a secondary of a device group and shows its primary's artifacts, so files can't be attached here: attach them in a chat on the primary computer, or say so to the human.";
 
 /** What the agent hears about attached files: the names to use, and anything left out. */
-async function attachedNote(prepared: PreparedFiles | null, artifactId: string): Promise<string> {
-  if (!prepared) return "";
-  const { attached, skipped } = await attachArtifactFiles(artifactId, prepared);
+async function attachedNote(prepared: PreparedFiles | null, artifact: Artifact, agent: Agent, lookForMore = true): Promise<string> {
+  // On a secondary the app shows the primary's artifact: a copy here would never be seen (explicit files were refused already).
+  const mentioned = lookForMore && !forwarding() ? findMentionedFiles(artifact.html, artifact.data, agent.repoPath ?? null) : { found: [], skipped: [] };
+  const known = new Set((prepared?.found ?? []).map((f) => f.path));
+  const all = { found: [...(prepared?.found ?? []), ...mentioned.found.filter((f) => !known.has(f.path))], skipped: prepared?.skipped ?? [] };
+  if (!all.found.length && !all.skipped.length) return "";
+  const { attached, skipped } = await attachArtifactFiles(artifact.id, all);
   const shown = attached.slice(0, 40).map((f) => f.name).join(", ");
-  const lines = attached.length ? [`Attached ${attached.length} file${attached.length === 1 ? "" : "s"}: ${shown}${attached.length > 40 ? ", …" : ""}. Show them by name (\`<img src="name">\`, the image and gallery nodes).`] : [];
+  const lines = attached.length ? [`Attached ${attached.length} file${attached.length === 1 ? "" : "s"}: ${shown}${attached.length > 40 ? ", …" : ""}. They show wherever the code or data names them, and in the image and gallery nodes.`] : [];
   if (skipped.length) lines.push(`Not attached: ${skipped.slice(0, 20).join("; ")}`);
   return lines.join("\n");
 }
@@ -2029,9 +2033,9 @@ const TOOLS: ToolDef[] = [
   defineTool({
     name: "artifact_create",
     alwaysLoad: true,
-    description: `Build an artifact: a small web app the human opens right in Godmode — a sales dashboard, a KPI tracker, a deal board, a calculator, a planner. Use it whenever they ask for a dashboard, a tracker, a tool or a page to look at or work with (not for a one-off answer or a file they asked for). It shows next to this chat and on the Artifacts page; they change it by chatting with you, and every code change is a version they can go back to. The human watches it appear while you type it.
+    description: `Build an artifact: a small web app the human opens right in Godmode — a sales dashboard, a KPI tracker, a deal board, a calculator, a planner. Use it whenever they ask for a dashboard, a tracker, a tool or a page to look at or work with (not for a one-off answer or one file they asked for). Also build one on your own, unasked, when you have images, videos or PDFs on this computer for them to look at, approve or choose from: a page with \`gallery {review: true}\`. It shows next to this chat and on the Artifacts page; they change it by chatting with you, and every code change is a version they can go back to. The human watches it appear while you type it.
 Write it straight into this call — no draft file, no preview of your own: the result shows you a screenshot of the rendered page and the errors it threw. Fix what looks wrong with artifact_update.
-Pass exactly one of: \`spec\` (a component tree the built-in kit renders — the fastest way and the default for dashboards, reports and KPI pages), \`html\` (a whole document, for interactive tools: forms, boards, calculators; it can use the kit's classes and helpers) or \`htmlPath\` (an HTML file you already wrote). Numbers and records go into \`data\` (or \`dataPath\`, a JSON file you already have), not into the code: a refresh then only rewrites the data. Files on this computer go into \`files\`, and the page shows them right there. Give it a \`refreshPrompt\` when the data comes from somewhere you can fetch again.
+Pass exactly one of: \`spec\` (a component tree the built-in kit renders — the fastest way and the default for dashboards, reports and KPI pages), \`html\` (a whole document, for interactive tools: forms, boards, calculators; it can use the kit's classes and helpers) or \`htmlPath\` (an HTML file you already wrote). Numbers and records go into \`data\` (or \`dataPath\`, a JSON file you already have), not into the code: a refresh then only rewrites the data. Files on this computer just work: name them in the code or data and the page shows them. Give it a \`refreshPrompt\` when the data comes from somewhere you can fetch again.
 ${ARTIFACT_KIT_DOC}
 ${ARTIFACT_BRIDGE_DOC}
 Polished, calm, real hierarchy, responsive from 360 px, light and dark; no emojis as icons, no lorem ipsum. Sample data only when real data isn't reachable — say so in the app and in your answer.`,
@@ -2043,7 +2047,7 @@ Polished, calm, real hierarchy, responsive from 360 px, light and dark; no emoji
       htmlPath: z.string().min(1).max(4096).optional().describe("Absolute path of an HTML file you already wrote, instead of html"),
       data: z.unknown().optional().describe("The artifact's data as JSON (an object); the app reads it as godmode.data"),
       dataPath: z.string().min(1).max(4096).optional().describe("Absolute path of a JSON file with the data, instead of data"),
-      files: z.array(z.string().min(1).max(4096)).max(MAX_ARTIFACT_FILES).optional().describe("Absolute paths of files or folders on this computer to attach (images to approve, screenshots, videos, PDFs); the page shows them by name"),
+      files: z.array(z.string().min(1).max(4096)).max(MAX_ARTIFACT_FILES).optional().describe("Absolute paths of folders or files on this computer to attach. Files the code or data name by path are attached by themselves"),
       refreshPrompt: z.string().max(4000).optional().describe("How to get fresh data when the human presses Refresh: where from and what to update"),
       check: z.boolean().optional().describe("Render it and return a screenshot and its errors (default true)"),
     }),
@@ -2055,7 +2059,7 @@ Polished, calm, real hierarchy, responsive from 360 px, light and dark; no emoji
       if (files?.length && forwarding()) return fail(FILES_ON_PRIMARY);
       const prepared = files?.length ? prepareArtifactFiles(files) : null;
       const a = createArtifact({ title, description, html: code, data: content, refreshPrompt }, { agentId: agent.id, conversationId: ctx.conversationId, workspaceId: ctx.workspaceId ?? agent.workspaceId }, `agent:${agent.id}`);
-      const note = await attachedNote(prepared, a.id);
+      const note = await attachedNote(prepared, a, agent);
       const done = `Created the artifact "${a.title}" (id ${a.id}, version 1). It opened next to this chat and is on the Artifacts page.${note ? `\n${note}` : ""}`;
       return withRenderCheck(done, getArtifact(a.id), check, "In your answer say in a line or two what it shows and what they can ask you to change; don't paste the code.");
     },
@@ -2097,14 +2101,14 @@ Polished, calm, real hierarchy, responsive from 360 px, light and dark; no emoji
       const a = updateArtifact(id, { html: code ?? undefined, edits, data: content, title, description, refreshPrompt, note }, `agent:${agent.id}`);
       const codeChanged = a.version !== before.version;
       const missing = removeFiles?.length ? removeArtifactFiles(a.id, removeFiles) : [];
-      const attached = await attachedNote(prepared, a.id);
+      const attached = await attachedNote(prepared, a, agent, !removeFiles?.length);
       const parts = [codeChanged ? `the code is version ${a.version}` : null, content !== undefined ? "the data is saved" : null].filter(Boolean);
       const done = [
         `Updated "${a.title}"${parts.length ? `: ${parts.join(", ")}` : ""}. It reloads by itself where it is open.`,
         attached,
         missing.length ? `No attached file called ${missing.join(", ")}.` : "",
       ].filter(Boolean).join("\n");
-      return codeChanged || prepared || removeFiles?.length ? withRenderCheck(done, getArtifact(a.id), check) : done;
+      return codeChanged || prepared || removeFiles?.length || attached ? withRenderCheck(done, getArtifact(a.id), check) : done;
     },
   }),
 

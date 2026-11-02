@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
@@ -10,15 +10,12 @@ import {
   ArrowUpRight,
   Check,
   ChevronsUpDown,
-  Code2,
   Download,
   Eye,
   Images,
   History,
-  Maximize2,
   Pencil,
   MessageSquareText,
-  Minimize2,
   MoreHorizontal,
   PanelRightClose,
   Pin,
@@ -26,7 +23,6 @@ import {
   RefreshCw,
   RotateCcw,
   Send,
-  Table2,
   Trash2,
   TriangleAlert,
   X,
@@ -56,20 +52,19 @@ import {
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { CopyButton } from "@/components/chat/copy-button";
 import { useTheme } from "@/components/theme-provider";
 import { ApiRequestError, api, errorMessage } from "@/lib/api";
 import { saveBlob } from "@/lib/desktop";
 import { useArtifact } from "@/lib/hooks";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
-import { dateLocale, intlLocale } from "@/i18n";
+import { dateLocale } from "@/i18n";
 import { useConversationLiveRun } from "@/stores/live";
 import { coreUrl } from "@/lib/core";
 import { ArtifactFrame, artifactFrameFiles, standaloneDocument } from "./artifact-frame";
 import { ArtifactFileViewer, ArtifactFilesPane } from "./artifact-files";
 
-type Tab = "preview" | "files" | "code" | "data";
+type Tab = "preview" | "files";
 
 /** A download stands alone: its pictures go inside, up to what a browser opens comfortably. */
 const MAX_INLINE_BYTES = 60 * 1024 * 1024;
@@ -105,6 +100,13 @@ export function useArtifactActions(artifact: Pick<Artifact, "id" | "title" | "ag
     onSuccess: (r) => toast.success(r.queued ? t("toast.queued", { agent }) : t("toast.onIt", { agent }), { description: t("toast.updatesItself") }),
     onError: (err) => toast.error(t("toast.sendError"), { description: errorMessage(err) }),
   });
+  const reviewDone = useMutation({
+    mutationFn: () => api.artifacts.reviewDone(id),
+    onSuccess: (r) => {
+      if (r.conversationId) toast.success(r.queued ? t("toast.queued", { agent }) : t("toast.onIt", { agent }));
+    },
+    onError: (err) => toast.error(t("toast.sendError"), { description: errorMessage(err) }),
+  });
   const refresh = useMutation({
     mutationFn: () => api.artifacts.refresh(id),
     onSuccess: () => toast.success(t("toast.refreshing", { agent })),
@@ -135,7 +137,7 @@ export function useArtifactActions(artifact: Pick<Artifact, "id" | "title" | "ag
     await api.artifacts.saveData(id, { data });
     qc.setQueryData<Artifact>(qk.artifact(id), (old) => (old ? { ...old, data, dataUpdatedAt: new Date().toISOString() } : old));
   };
-  return { message, refresh, pin, restore, remove, saveData, navigate };
+  return { message, reviewDone, refresh, pin, restore, remove, saveData, navigate };
 }
 
 /** The artifact's chat has a run working: the agent is changing it or fetching data. */
@@ -147,8 +149,6 @@ export function ArtifactView({
   id,
   variant,
   onClose,
-  expanded,
-  onExpand,
   footer,
   siblings,
   onSwitch,
@@ -157,8 +157,6 @@ export function ArtifactView({
   /** `panel`: next to a chat · `page`: the whole screen. */
   variant: "panel" | "page";
   onClose?: () => void;
-  expanded?: boolean;
-  onExpand?: (v: boolean) => void;
   footer?: ReactNode;
   /** The other artifacts of this chat, to switch between. */
   siblings?: ArtifactSummary[];
@@ -200,7 +198,6 @@ export function ArtifactView({
   }, [id]);
 
   const html = viewing != null ? old.data?.html : artifact?.html;
-  const dataText = useMemo(() => JSON.stringify(artifact?.data ?? null, null, 2), [artifact?.data]);
 
   if (isLoading) return <ViewSkeleton />;
   if (error || !artifact) {
@@ -305,7 +302,7 @@ export function ArtifactView({
           </p>
         </div>
 
-        <Segmented value={shownTab} onChange={setTab} hasFiles={hasFiles} />
+        {hasFiles && <Segmented value={shownTab} onChange={setTab} />}
 
         <IconAction
           label={artifact.refreshPrompt ? t("view.refreshData") : t("view.askFreshData")}
@@ -314,11 +311,6 @@ export function ArtifactView({
         >
           <RefreshCw className={cn((actions.refresh.isPending || busy) && "animate-spin [animation-duration:1.6s]")} />
         </IconAction>
-        {onExpand && (
-          <IconAction label={expanded ? t("view.narrower") : t("view.wider")} onClick={() => onExpand(!expanded)}>
-            {expanded ? <Minimize2 /> : <Maximize2 />}
-          </IconAction>
-        )}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon" className="size-8 text-muted-foreground" aria-label={t("more")}>
@@ -343,8 +335,9 @@ export function ArtifactView({
             <DropdownMenuItem onSelect={() => actions.pin.mutate(!artifact.pinned)}>
               {artifact.pinned ? <PinOff /> : <Pin />} {artifact.pinned ? t("unpin") : t("pinToTop")}
             </DropdownMenuItem>
+            {hasFiles && (
             <div className="@md:hidden">
-              {TABS.filter((x) => x.id !== "files" || hasFiles).map((x) => (
+              {TABS.map((x) => (
                 <DropdownMenuItem key={x.id} onSelect={() => setTab(x.id)}>
                   {x.icon} {t(x.labelKey)}
                   {shownTab === x.id && <Check className="ml-auto text-brand-strong" />}
@@ -352,6 +345,7 @@ export function ArtifactView({
               ))}
               <DropdownMenuSeparator />
             </div>
+            )}
             <DropdownMenuItem onSelect={() => setRenaming(true)}>
               <Pencil /> {t("view.rename")}
             </DropdownMenuItem>
@@ -470,19 +464,11 @@ export function ArtifactView({
                 else setRequest((r) => r ?? { kind: "refresh" });
               }}
               onError={setFailure}
+              onReviewDone={() => actions.reviewDone.mutate()}
               onViewFile={(name) => artifact.files.some((f) => f.name === name) && setViewingFile(name)}
             />
           ))}
         {shownTab === "files" && <ArtifactFilesPane artifact={artifact} onView={setViewingFile} />}
-        {shownTab === "code" && <Source text={html ?? ""} label="HTML" copyLabel={t("source.copyHtml")} />}
-        {shownTab === "data" && (
-          <Source
-            text={dataText}
-            label={t("tabs.data")}
-            copyLabel={t("source.copyData")}
-            hint={artifact.dataUpdatedAt ? t("source.saved", { time: ago(artifact.dataUpdatedAt) }) : t("source.noData")}
-          />
-        )}
       </div>
 
       {footer}
@@ -642,15 +628,13 @@ function IconAction({ label, onClick, disabled, children }: { label: string; onC
 const TABS = [
   { id: "preview", labelKey: "tabs.preview", icon: <Eye /> },
   { id: "files", labelKey: "tabs.files", icon: <Images /> },
-  { id: "code", labelKey: "tabs.code", icon: <Code2 /> },
-  { id: "data", labelKey: "tabs.data", icon: <Table2 /> },
 ] as const satisfies { id: Tab; labelKey: string; icon: ReactNode }[];
 
-function Segmented({ value, onChange, hasFiles }: { value: Tab; onChange: (t: Tab) => void; hasFiles: boolean }) {
+function Segmented({ value, onChange }: { value: Tab; onChange: (t: Tab) => void }) {
   const { t: tr } = useTranslation("artifacts");
   return (
     <div role="tablist" aria-label={tr("tabs.label")} className="hidden items-center gap-0.5 rounded-lg border bg-card p-0.5 @md:flex">
-      {TABS.filter((t) => t.id !== "files" || hasFiles).map((t) => (
+      {TABS.map((t) => (
         <Tooltip key={t.id}>
           <TooltipTrigger asChild>
             <button
@@ -738,33 +722,6 @@ function Bar({ tone, children }: { tone: "muted" | "brand" | "warning"; children
         {children}
       </div>
     </motion.div>
-  );
-}
-
-function Source({ text, label, copyLabel, hint }: { text: string; label: string; copyLabel: string; hint?: string }) {
-  const { t } = useTranslation("artifacts");
-  // One text node per column, not one element per line: a big document stays smooth.
-  const count = useMemo(() => text.split("\n").length, [text]);
-  const gutter = useMemo(() => Array.from({ length: count }, (_, i) => i + 1).join("\n"), [count]);
-  return (
-    <div className="flex h-full flex-col">
-      <div className="flex h-9 shrink-0 items-center gap-2 border-b bg-paper-2 px-3 text-[11.5px] text-muted-foreground">
-        <span className="font-medium text-foreground">{label}</span>
-        <span>
-          {t("source.lines", { count, formatted: count.toLocaleString(intlLocale()) })}
-          {hint ? ` · ${hint}` : ""}
-        </span>
-        <CopyButton text={text} label={copyLabel} className="ml-auto" />
-      </div>
-      <div className="min-h-0 flex-1 overflow-auto">
-        <div className="flex min-w-max py-2 font-mono text-[12px] leading-[1.6]">
-          <pre aria-hidden className="sticky left-0 w-12 shrink-0 bg-background pr-3 text-right text-muted-foreground/50 tabular-nums select-none">
-            {gutter}
-          </pre>
-          <pre className="pr-4 whitespace-pre">{text}</pre>
-        </div>
-      </div>
-    </div>
   );
 }
 

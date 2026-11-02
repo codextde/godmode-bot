@@ -103,8 +103,7 @@
     "updatedWithData": "Aktualisiert {{time}} · Daten {{data}}",
     "refreshData": "Daten aktualisieren",
     "askFreshData": "Frische Daten anfragen",
-    "narrower": "Schmaler",
-    "wider": "Breiter",
+    "resize": "Ziehen, um die Breite zu ändern",
     "openFullScreen": "Im Vollbild öffnen",
     "howItRefreshesMenu": "So wird aktualisiert…",
     "downloadHtml": "Als HTML herunterladen",
@@ -133,22 +132,12 @@
   "tabs": {
     "label": "Ansicht",
     "preview": "Vorschau",
-    "code": "Code",
-    "data": "Daten",
     "files": "Dateien"
   },
   "versions": {
     "label": "Versionen",
     "first": "Erste Version",
     "changed": "Geändert"
-  },
-  "source": {
-    "copyHtml": "HTML kopieren",
-    "copyData": "Daten kopieren",
-    "saved": "Gespeichert {{time}}",
-    "noData": "Noch keine Daten gespeichert",
-    "lines_one": "{{formatted}} Zeile",
-    "lines_other": "{{formatted}} Zeilen"
   },
   "files": {
     "open": "In der App öffnen",

@@ -59,8 +59,11 @@ interface UiState {
   /** The "Try something like" suggestions on Home were closed. */
   hideSuggestions: boolean;
   sidebarWidth: number | null;
+  artifactPanelWidth: number | null;
   reduceAnimations: boolean;
   toolCallView: ToolCallView;
+  /** Show the frame rate meter on top of the window. */
+  fpsMeter: boolean;
   /** Sidebar sections open by default that the human folded. */
   collapsedNav: string[];
   /** Pages the human took out of the sidebar's Work section. */
@@ -96,8 +99,10 @@ interface UiState {
   setAway: (away: { since: string; until: string } | null) => void;
   setHideSuggestions: (v: boolean) => void;
   setSidebarWidth: (width: number | null) => void;
+  setArtifactPanelWidth: (width: number | null) => void;
   setReduceAnimations: (v: boolean) => void;
   setToolCallView: (v: ToolCallView) => void;
+  setFpsMeter: (v: boolean) => void;
 }
 
 export const useUi = create<UiState>()(
@@ -131,8 +136,10 @@ export const useUi = create<UiState>()(
       away: null,
       hideSuggestions: false,
       sidebarWidth: null,
+      artifactPanelWidth: null,
       reduceAnimations: false,
       toolCallView: "cards",
+      fpsMeter: false,
       setWorkspace: (workspace, project = null) =>
         set((s) => ({
           workspace,
@@ -173,8 +180,10 @@ export const useUi = create<UiState>()(
       setAway: (away) => set({ away }),
       setHideSuggestions: (hideSuggestions) => set({ hideSuggestions }),
       setSidebarWidth: (sidebarWidth) => set({ sidebarWidth }),
+      setArtifactPanelWidth: (artifactPanelWidth) => set({ artifactPanelWidth }),
       setReduceAnimations: (reduceAnimations) => set({ reduceAnimations }),
       setToolCallView: (toolCallView) => set({ toolCallView }),
+      setFpsMeter: (fpsMeter) => set({ fpsMeter }),
     }),
     {
       // Per computer in cloud mode: the selected workspace id belongs to one computer.
@@ -205,8 +214,10 @@ export const useUi = create<UiState>()(
         workspacesSort: s.workspacesSort,
         hideSuggestions: s.hideSuggestions,
         sidebarWidth: s.sidebarWidth,
+        artifactPanelWidth: s.artifactPanelWidth,
         reduceAnimations: s.reduceAnimations,
         toolCallView: s.toolCallView,
+        fpsMeter: s.fpsMeter,
       }),
     },
   ),
