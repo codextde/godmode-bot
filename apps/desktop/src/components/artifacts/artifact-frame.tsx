@@ -33,6 +33,8 @@ export interface ArtifactFrameHandlers {
   onError?: (message: string) => void;
   /** Saving failed for good, after a retry. */
   onSaveError?: (message: string) => void;
+  /** A review gallery's Send: called once what the page saved is saved. */
+  onReviewDone?: () => void;
   /** The page wants a file shown large. */
   onViewFile?: (name: string) => void;
   /** Its document is there and parsed. */
@@ -179,7 +181,10 @@ export function ArtifactFrame({
       if (m.type === "ask" && m.text?.trim()) h.onAsk?.(m.text.trim().slice(0, 500));
       else if (m.type === "refresh") h.onRefresh?.();
       else if (m.type === "error" && m.message) h.onError?.(m.message.slice(0, 300));
-      else if (m.type === "viewFile" && typeof (m as { name?: unknown }).name === "string") h.onViewFile?.((m as unknown as { name: string }).name);
+      else if (m.type === "reviewDone") {
+        const whenSaved = () => (s.pending > 0 ? void setTimeout(whenSaved, 100) : handlersRef.current.onReviewDone?.());
+        whenSaved();
+      } else if (m.type === "viewFile" && typeof (m as { name?: unknown }).name === "string") h.onViewFile?.((m as unknown as { name: string }).name);
       else if (m.type === "open" && m.url && /^(https?:\/\/|mailto:|tel:)/i.test(m.url)) void openExternal(m.url);
     };
     window.addEventListener("message", onMessage);

@@ -8,6 +8,7 @@ import {
   messageArtifact,
   patchArtifact,
   refreshArtifact,
+  reviewDoneArtifact,
   restoreArtifactVersion,
   saveArtifactData,
   startArtifact,
@@ -70,6 +71,8 @@ export function registerArtifactRoutes(app: Hono): void {
   });
 
   app.post("/api/artifacts/:id/refresh", async (c) => c.json(await refreshArtifact(c.req.param("id"))));
+
+  app.post("/api/artifacts/:id/review-done", async (c) => c.json(await reviewDoneArtifact(c.req.param("id"))));
 
   // These open something on the core's machine: no use, and nobody's business, from anywhere else.
   app.post("/api/artifacts/:id/files/:name/open", (c) => {

@@ -11,9 +11,9 @@ import { basename, extname, isAbsolute, join } from "node:path";
 import type { ArtifactFile } from "@godmode/shared";
 import { MAX_ARTIFACT_FILES, MAX_ARTIFACT_FILES_BYTES, MAX_ARTIFACT_FILE_BYTES, SECRET_NAME, artifactFileKind } from "@godmode/shared";
 import { config } from "../config";
-import { all, get, run as sql } from "../db";
+import { all, get, getMeta, run as sql, setMeta } from "../db";
 import { bus } from "../events/bus";
-import { badRequest, notFound, now } from "../util";
+import { badRequest, notFound, now, parseJson } from "../util";
 import { openInDefaultApp, revealInFileManager } from "./chatFiles";
 
 const MIME: Record<string, string> = {
@@ -59,7 +59,7 @@ interface FileRow {
   updated_at: string;
 }
 
-const toFile = (r: FileRow): ArtifactFile => ({ name: r.name, mime: r.mime, kind: artifactFileKind(r.mime), size: r.size, updatedAt: r.updated_at });
+const toFile = (r: FileRow): ArtifactFile => ({ name: r.name, mime: r.mime, kind: artifactFileKind(r.mime), size: r.size, updatedAt: r.updated_at, ...(r.source_path ? { source: r.source_path } : {}) });
 
 const dirOf = (artifactId: string) => join(config().dataDir, "artifact-files", artifactId);
 
@@ -74,6 +74,7 @@ export function removeArtifactFilesDir(artifactId: string): void {
 export interface PreparedFile {
   path: string;
   size: number;
+  modifiedMs: number;
 }
 
 export interface PreparedFiles {
@@ -84,12 +85,12 @@ export interface PreparedFiles {
 
 const byName = new Intl.Collator("en", { numeric: true, sensitivity: "base" });
 
-function usable(path: string, size: number, skipped: string[]): PreparedFile | null {
+function usable(path: string, size: number, modifiedMs: number, skipped: string[]): PreparedFile | null {
   const name = basename(path);
   if (SECRET_NAME.test(name)) skipped.push(`${name}: looks like a secret`);
   else if (!MIME[extname(name).toLowerCase()]) skipped.push(`${name}: this file type can't be attached`);
   else if (size > MAX_ARTIFACT_FILE_BYTES) skipped.push(`${name}: bigger than ${MAX_ARTIFACT_FILE_BYTES / 1024 / 1024} MB`);
-  else return { path, size };
+  else return { path, size, modifiedMs };
   return null;
 }
 
@@ -110,17 +111,69 @@ export function prepareArtifactFiles(paths: string[]): PreparedFiles {
         const child = join(path, name);
         const s = statSync(child, { throwIfNoEntry: false });
         if (!s?.isFile()) continue;
-        const ok = usable(child, s.size, skipped);
+        const ok = usable(child, s.size, s.mtimeMs, skipped);
         if (ok) inside.push(ok);
       }
       if (!inside.length) throw badRequest(`The folder ${path} has no file that can be attached (images, videos, audio, PDF, text, Office)`);
       found.push(...inside);
     } else if (stat.isFile()) {
-      const ok = usable(path, stat.size, skipped);
+      const ok = usable(path, stat.size, stat.mtimeMs, skipped);
       if (ok) found.push(ok);
     }
   }
   return { found: [...new Map(found.map((f) => [f.path, f])).values()], skipped };
+}
+
+/** What an agent's code or data can name and a page can show: looked for by itself, so no agent has to think of it. */
+const SHOWN = /\.(?:png|jpe?g|gif|webp|avif|bmp|svg|heic|heif|tiff?|mp4|m4v|mov|webm|mp3|m4a|aac|wav|ogg|flac|pdf)$/i;
+const QUOTED = /["'`(]([^"'`()<>\r\n]{1,1024}?\.(?:png|jpe?g|gif|webp|avif|bmp|svg|heic|heif|tiff?|mp4|m4v|mov|webm|mp3|m4a|aac|wav|ogg|flac|pdf))(?:[?#][^"'`()]*)?["'`)]/gi;
+const IN_TEXT = /(?:file:\/\/|~\/|\/)[^\s"'`<>()]+\.(?:png|jpe?g|gif|webp|avif|bmp|svg|heic|heif|tiff?|mp4|m4v|mov|webm|mp3|m4a|aac|wav|ogg|flac|pdf)/gi;
+const MAX_MENTIONS = 2000;
+
+function stringsIn(value: unknown, out: string[]): void {
+  if (out.length >= MAX_MENTIONS) return;
+  if (typeof value === "string") out.push(value);
+  else if (Array.isArray(value)) for (const v of value) stringsIn(v, out);
+  else if (value && typeof value === "object") for (const v of Object.values(value)) stringsIn(v, out);
+}
+
+/**
+ * The files on this computer that an artifact's code and data name, by path or relative to the agent's folder. Only
+ * what exists and is made to be looked at; anything else that looks like a path stays what it is. Agents write these
+ * two, never the page: what a page saves isn't looked at (see saveArtifactData).
+ */
+export function findMentionedFiles(html: string, data: unknown, folder: string | null): PreparedFiles {
+  const mentions = new Set<string>();
+  for (const m of html.matchAll(QUOTED)) mentions.add(m[1]!);
+  for (const m of html.matchAll(IN_TEXT)) mentions.add(m[0]);
+  const strings: string[] = [];
+  stringsIn(data, strings);
+  for (const s of strings) {
+    if (s.length <= 1024 && SHOWN.test(s.trim())) mentions.add(s.trim());
+    if (s.length <= 100_000) for (const m of s.matchAll(IN_TEXT)) mentions.add(m[0]);
+  }
+  const found = new Map<string, PreparedFile>();
+  const skipped: string[] = [];
+  for (const raw of mentions) {
+    if (found.size >= MAX_ARTIFACT_FILES) break;
+    if (/^[a-z][a-z0-9+.-]*:/i.test(raw) && !/^file:/i.test(raw)) continue;
+    let path = raw.replace(/^file:\/\/(localhost)?/i, "");
+    try {
+      path = decodeURIComponent(path);
+    } catch {
+      /* it's written as it is */
+    }
+    if (path === "~" || path.startsWith("~/")) path = join(homedir(), path.slice(1));
+    if (!isAbsolute(path)) {
+      if (!folder) continue;
+      path = join(folder, path);
+    }
+    const stat = statSync(path, { throwIfNoEntry: false });
+    if (!stat?.isFile() || !SHOWN.test(path)) continue;
+    const ok = usable(path, stat.size, stat.mtimeMs, skipped);
+    if (ok) found.set(path, ok);
+  }
+  return { found: [...found.values()], skipped: [] };
 }
 
 function freeName(path: string, taken: Map<string, string>): string {
@@ -136,15 +189,19 @@ function freeName(path: string, taken: Map<string, string>): string {
 }
 
 /** Copy prepared files in. The same source again replaces its copy, so an agent can fix an image and attach it again. */
-export async function attachArtifactFiles(artifactId: string, prepared: PreparedFiles): Promise<{ attached: ArtifactFile[]; skipped: string[] }> {
+export async function attachArtifactFiles(artifactId: string, prepared: PreparedFiles, opts: { touch?: boolean } = {}): Promise<{ attached: ArtifactFile[]; skipped: string[] }> {
   const skipped = [...prepared.skipped];
   const rows = all<FileRow>("SELECT * FROM artifact_files WHERE artifact_id = ?", artifactId);
+  const bySource = new Map(rows.map((r) => [r.source_path, r]));
   const taken = new Map(rows.map((r) => [r.name.toLowerCase(), r.source_path]));
   const sizes = new Map(rows.map((r) => [r.name.toLowerCase(), r.size]));
   const dir = dirOf(artifactId);
   mkdirSync(dir, { recursive: true });
   const attached: string[] = [];
   for (const file of prepared.found) {
+    // An unchanged file stays as it is: a new copy would reload every open page, at every refresh of the data.
+    const same = bySource.get(file.path);
+    if (same && same.size === file.size && file.modifiedMs <= Date.parse(same.updated_at)) continue;
     const name = freeName(file.path, taken);
     const slot = name.toLowerCase();
     const total = [...sizes.entries()].reduce((sum, [n, s]) => (n === slot ? sum : sum + s), 0);
@@ -180,11 +237,24 @@ export async function attachArtifactFiles(artifactId: string, prepared: Prepared
     }
   }
   if (attached.length) {
-    sql("UPDATE artifacts SET files_key = CASE WHEN files_key = '' THEN ? ELSE files_key END, updated_at = ? WHERE id = ?", randomBytes(24).toString("hex"), now(), artifactId);
+    sql("UPDATE artifacts SET files_key = CASE WHEN files_key = '' THEN ? ELSE files_key END WHERE id = ?", randomBytes(24).toString("hex"), artifactId);
+    if (opts.touch !== false) sql("UPDATE artifacts SET updated_at = ? WHERE id = ?", now(), artifactId);
     bus.changed("artifacts");
   }
   const names = new Set(attached);
   return { attached: listArtifactFiles(artifactId).filter((f) => names.has(f.name)), skipped };
+}
+
+/** Artifacts from before files could be shown: what they name is there the next time they open. Once per computer. */
+export async function attachFilesOfOldArtifacts(): Promise<void> {
+  if (getMeta("artifact_files.backfilled")) return;
+  const rows = all<{ id: string; html: string; data: string; repo_path: string | null }>(
+    "SELECT a.id, a.html, a.data, g.repo_path FROM artifacts a LEFT JOIN agents g ON g.id = a.agent_id",
+  );
+  for (const r of rows) {
+    await attachArtifactFiles(r.id, findMentionedFiles(r.html, parseJson<unknown>(r.data, null), r.repo_path), { touch: false }).catch(() => undefined);
+  }
+  setMeta("artifact_files.backfilled", now());
 }
 
 /** Take files out by name; returns the names that weren't there. */
