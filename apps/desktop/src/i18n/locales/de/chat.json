@@ -30,6 +30,7 @@
       "editedAFileOn": "Datei auf {{target}} bearbeitet",
       "readAFile": "Datei gelesen",
       "entered2fa": "2FA-Code eingegeben",
+      "githubSignIn": "GitHub-Anmeldung erneuert",
       "entered2faFor": "2FA-Code für {{label}} eingegeben",
       "fromVault": "aus dem Tresor",
       "fromVaultHidden": "aus dem Tresor · nie für die KI sichtbar"

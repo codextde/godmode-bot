@@ -472,6 +472,7 @@ const GODMODE_TOOLS = new Set([
   "vault_list_logins",
   "vault_fill_login",
   "vault_fill_totp",
+  "github_sign_in",
   "vault_save_login",
   "vault_get_login",
   "vault_get_totp",
@@ -589,6 +590,8 @@ function godmodeMeta(tool: string, input: Input, ctx: ToolContext): Omit<ToolMet
         title: credLabel ? t("chat:tools.common.entered2faFor", { label: credLabel }) : t("chat:tools.common.entered2fa"),
         detail: t("chat:tools.common.fromVault"),
       };
+    case "github_sign_in":
+      return { kind: "vault", icon: ShieldCheck, title: t("chat:tools.common.githubSignIn") };
     case "vault_save_login": {
       const site = hostOf(input.url);
       const user = str(input.username);
@@ -956,6 +959,8 @@ function easyMeta(meta: ToolMeta, input: Input, ctx: ToolContext): { title: stri
     case "vault_fill_totp":
     case "fill_totp":
       return { title: credLabel ? t("chat:tools.easy.enteredCodeFor", { label: credLabel }) : t("chat:tools.easy.enteredCode"), detail: meta.detail };
+    case "github_sign_in":
+      return { title: t("chat:tools.common.githubSignIn") };
     case "vault_get_login":
       return { title: credLabel ? t("chat:tools.easy.lookedUpLoginFor", { label: credLabel }) : t("chat:tools.easy.lookedUpLogin") };
     case "vault_get_totp":

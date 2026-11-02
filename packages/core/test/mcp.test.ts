@@ -1,10 +1,11 @@
 import { readFileSync } from "node:fs";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { mkdtempSync } from "node:fs";
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Agent, Credential, TotpEntry } from "@godmode/shared";
 import { argValue, fillFailure, fills, invocations, otpPages, makeAgent, setupEnv, type TestEnv } from "./fixtures/runner-harness";
+import { __setSignInForTests } from "../src/github/signIn";
 import * as vault from "../src/vault/vault";
 import { createCredential, deleteCredential, getCredential, listCredentials } from "../src/vault/credentials";
 import { createTotp, deleteTotp, getTotp } from "../src/vault/totp";
@@ -249,6 +250,22 @@ describe("vault tools", () => {
     expect(audits.length).toBe(2);
     expect(audits[0]!.actor).toBe(`agent:${worker.id}`);
     expect(audits[0]!.details.runId).toBe(`run_mcp_${worker.slug}_0`);
+  });
+
+  test("github_sign_in leaves a working login alone", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "fake-gh-"));
+    const bin = join(dir, "gh");
+    writeFileSync(bin, '#!/bin/sh\necho "  Logged in to github.com account someone (keyring)"\n');
+    chmodSync(bin, 0o755);
+    __setSignInForTests({ gh: bin });
+    try {
+      const r = await call(tokens[worker.id]!, "github_sign_in", {});
+      expect(r.isError).toBeFalsy();
+      expect(r.content[0]!.text).toContain("as someone. Nothing to renew.");
+    } finally {
+      __setSignInForTests(null);
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   test("vault_fill_totp fills the linked 2FA code", async () => {

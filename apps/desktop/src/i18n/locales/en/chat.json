@@ -30,6 +30,7 @@
       "editedAFileOn": "Edited a file on {{target}}",
       "readAFile": "Read a file",
       "entered2fa": "Entered 2FA code",
+      "githubSignIn": "Renewed the GitHub login",
       "entered2faFor": "Entered 2FA code for {{label}}",
       "fromVault": "from vault",
       "fromVaultHidden": "from vault · never shown to the AI"

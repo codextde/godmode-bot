@@ -136,7 +136,7 @@ import {
   type CardField,
 } from "../vault/cards";
 import { nameGuessMatchesHost } from "../vault/match";
-import { chatWorkspaceId, createProfile, currentPage, deleteProfile, fillIntoPage, listProfiles, probeOtpPage, resolveProfileForAgent, solveCaptchaInPage } from "../browser/manager";
+import { chatWorkspaceId, createProfile, currentPage, deleteProfile, fillIntoPage, listProfiles, onOpenedPage, probeOtpPage, resolveProfileForAgent, solveCaptchaInPage } from "../browser/manager";
 import { SOLVERS, activeSolver, captchaSolvingAvailable } from "../browser/captcha";
 import { currentVmPage, fillIntoVm, probeOtpInVm, solveCaptchaInVm } from "../vm/guest";
 import { createMcpServer, deleteMcpServer, getMcpServer, listMcpServers, mcpServerInAgentScope, TRANSPORTS, updateMcpServer } from "../integrations/mcpServers";
@@ -147,6 +147,8 @@ import { all, get } from "../db";
 import { config } from "../config";
 import { link } from "../remote/runners";
 import { loginFillScope } from "../browser/fill";
+import { errorMessage } from "../computer/engine";
+import { DEVICE_URL, approveOnPage, ensureSignIn, githubLogin, otherRunsSignIn, signInEnd } from "../github/signIn";
 import { chatFillOnly, chatGoal, createConversation, isPrivateChat, maskSecretInChat, sendMessage } from "../services/conversations";
 import { assignVm, createVm, getVm, listVms, sharedDirOf, startVm, stopVm, suspendVm, vmInUse, vmOfRun, vmStatus } from "../vm/service";
 import { resolveVmId } from "../vm/assignments";
@@ -440,8 +442,16 @@ const ASK_HUMAN = "ask the human to change this in Settings";
 
 /** A task that tells the human to run something in a terminal: the agent has a shell of its own. */
 export function handsOverCommand(text: string): boolean {
-  return /\b(?:im|ins|in the|in your|in deinem|open|open the|öffne|öffne das|öffne dein)\s+terminal\b/i.test(text) || (/```/.test(text) && /\b(?:terminal|befehl|kommando|command)\b/i.test(text));
+  return (
+    /\b(?:im|ins|in the|in your|in deinem|open|open the|öffne|öffne das|öffne dein)\s+terminal\b/i.test(text) ||
+    (/```/.test(text) && /\b(?:terminal|befehl|kommando|command)\b/i.test(text)) ||
+    NAMES_A_COMMAND.test(text)
+  );
 }
+
+/** "Run gh auth refresh", "führe `npm login` aus": a verb for running something, right before a command line tool. */
+const NAMES_A_COMMAND =
+  /\b(?:run|execute|type|enter|führe|ausführen|eingeben|tippe)\b[\s:`'"„“]+(?:this |the |diesen |den )?(?:command |befehl )?[`'"„“]?(?:sudo |npx |pnpm dlx )?(?:gh|git|npm|pnpm|yarn|bun|npx|brew|pip3?|curl|wget|ssh|scp|rsync|docker|kubectl|claude|wrangler|vercel|netlify|gcloud|aws|az|heroku|fly|flyctl|supabase|firebase|stripe|openssl|chmod|chown)\s+[\w-]/i;
 
 /** The VM this run works in when it is kept off the human's computer (settings.vm.isolateHostShell), else null. */
 function lockedVm(ctx: RunContext): string | null {
@@ -1781,6 +1791,54 @@ const TOOLS: ToolDef[] = [
   }),
 
   defineTool({
+    name: "github_sign_in",
+    description:
+      "Renew this computer's GitHub login for gh and git when it is missing or expired: `gh auth status` fails, gh tells you to re-authenticate, or a push or pull request comes back with a 401 or bad credentials. Godmode runs the sign-in in the background and approves it in your browser, so nobody has to touch a terminal. When GitHub asks for its password or 2FA code the result says so: fill them with vault_fill_login / vault_fill_totp and call this again. Also the way to sign in for the first time.",
+    schema: z.object({}),
+    when: (agent, ctx) => agent.browser.enabled && !isCheckRun(ctx) && !vmOfRun(ctx.runId),
+    run: async (_args, { agent, ctx }) => {
+      const before = await githubLogin();
+      if (before.ok) return before.account ? `GitHub is signed in on this computer as ${before.account}. Nothing to renew.` : "GitHub is signed in on this computer. Nothing to renew.";
+      let flow;
+      try {
+        flow = await ensureSignIn(ctx.runId, before.account);
+      } catch (err) {
+        return fail(errorMessage(err));
+      }
+      if (!flow) {
+        const other = await otherRunsSignIn(30_000);
+        if (other?.ok) return `Another run just signed GitHub in${other.account ? ` as ${other.account}` : ""}. Go on with your work.`;
+        return "Another run is signing GitHub in right now. Go on with what doesn't need GitHub and call this again in a minute.";
+      }
+      const running = flow;
+      const profile = runBrowserProfile(ctx.runId) ?? resolveProfileForAgent(agent, ctx.conversationId).id;
+      const page = await onOpenedPage(profile, DEVICE_URL, ctx.conversationId, (p) => approveOnPage(p, running.code, () => !!running.end)).catch((err: unknown) => ({
+        step: "stuck" as const,
+        url: DEVICE_URL,
+        text: errorMessage(err),
+      }));
+      if (page?.step === "approved") {
+        const end = await signInEnd(running);
+        if (!end) return "GitHub approved the sign-in, but gh hasn't noticed yet. Call this again in a moment.";
+        audit(`agent:${agent.id}`, "github.sign_in", "github.com", { runId: ctx.runId, ok: end.ok, account: end.ok ? end.account : null, previous: running.previous });
+        if (!end.ok) return fail(end.detail);
+        const switched = end.account && running.previous && end.account !== running.previous;
+        return `GitHub is signed in on this computer${end.account ? ` as ${end.account}` : ""}; gh and git work again.${switched ? ` It was ${running.previous} before: your browser is signed in to another account. Say so in your answer.` : ""}`;
+      }
+      switch (page?.step) {
+        case "password":
+          return `GitHub wants its password in your browser. Find the login${running.previous ? ` of the account ${running.previous}` : ""} with vault_list_logins({ domain: "github.com" }), fill the username if the page asks for it and the password with vault_fill_login (submit: true), then call github_sign_in again. No saved login: report_missing_login.`;
+        case "otp":
+          return `GitHub wants a 2FA code in your browser. Fill it with vault_fill_totp (submit: true) using the login${running.previous ? ` of ${running.previous}` : " you are signed in with"}, and call github_sign_in again.`;
+        case "code-rejected":
+          return fail(`GitHub didn't take the sign-in code. Call this again in a minute. The page said: ${page.text}`);
+        default:
+          return `The sign-in is waiting, but Godmode couldn't finish GitHub's page by itself (${page?.url ?? "no open tab"}: ${page?.text ?? "nothing to read"}). Finish it with your browser tools: at ${DEVICE_URL} enter the code ${running.code}, press Continue, then Authorize. Then call github_sign_in again.`;
+      }
+    },
+  }),
+
+  defineTool({
     name: "human_task_create",
     description: `Give the human a task: something you can't do yourself and they have to — solve a CAPTCHA, log in where only they can, confirm on their phone, sign or upload a document, pay, call someone, change a setting only they reach, give you access. Never a command for them to run: commands are yours, and a password one needs you get with ask_human. It goes onto their Needs you page as a to-do with a notification. Write \`title\` as an imperative ("Confirm the Google Ads sign-in on your phone"), \`instructions\` as exact steps plus what you need back, and link the page where they do it. Finish what doesn't depend on it, then end your turn with a short summary of what you're waiting for: when they mark it done (or say they can't), this chat continues by itself with their note — don't poll and don't schedule a follow-up for it. On a board task the ticket waits in Blocked until then. One task per thing to do (at most ${MAX_OPEN_PER_CHAT} open per chat). Godmode refuses a task the human's list already holds (from any agent or chat) and names it: then work with that one instead of rephrasing it into a new one. For a decision or an OK use ask_human / request_approval instead.`,
     schema: z.object({
@@ -1792,7 +1850,7 @@ const TOOLS: ToolDef[] = [
     when: (agent, ctx) => canAsk(agent, ctx) && followupsAllowed(ctx.conversationId),
     run: ({ title, instructions, url, priority }, { agent, ctx }) => {
       if (handsOverCommand(`${title}\n${instructions ?? ""}`)) {
-        return fail("This hands the human a command. Run it yourself. If it needs a password or passphrase only a person has, ask for just that with ask_human, save it with vault_save_login and pass it on stdin. Give them a task only for what none of your tools can do.");
+        return fail("This hands the human a command. Run it yourself; a GitHub login that expired you renew with github_sign_in. If it needs a password or passphrase only a person has, ask for just that with ask_human, save it with vault_save_login and pass it on stdin. Give them a task only for what none of your tools can do.");
       }
       const t = createAgentHumanTask(
         { agentId: agent.id, conversationId: ctx.conversationId, runId: ctx.runId, workspaceId: ctx.workspaceId },

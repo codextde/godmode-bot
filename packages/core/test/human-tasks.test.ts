@@ -214,6 +214,13 @@ describe("an agent gives the human a task", () => {
     expect(refused.content[0]!.text).toContain("Run it yourself");
     expect(listHumanTasks({ conversationId }).length).toBe(1);
 
+    for (const title of ["Renew the GitHub login on this Mac: run gh auth refresh -h github.com", "Bitte führe `npm login` aus", "Execute: sudo chown -R me dist"]) {
+      const named = await callTool(ctx, "human_task_create", { title });
+      expect(named.isError).toBe(true);
+      expect(named.content[0]!.text).toContain("github_sign_in");
+    }
+    expect((await callTool(ctx, "human_task_create", { title: "Run the payroll in Lexware", instructions: "Type your PIN at the terminal in the shop" })).isError).toBeUndefined();
+
     expect((await callTool(ctx, "human_task_create", { title: "Pay at the shop", instructions: "Use the card terminal at the counter" })).isError).toBeUndefined();
     expect((await callTool(ctx, "human_task_create", { title: "Scan the voucher", instructions: "Scan this code:\n\n```\nABC-123\n```" })).isError).toBeUndefined();
     for (const t of listHumanTasks({ conversationId })) await callTool(ctx, "human_task_cancel", { id: t.id });

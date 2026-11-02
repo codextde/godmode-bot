@@ -674,6 +674,7 @@ describe("runner integration", () => {
     expect(r1.result).toBe("no computer server");
     const system = argValue(invocations(env).filter((i) => i.prompt.includes("CALL_COMPUTER")).pop()!, "--append-system-prompt")!;
     expect(system).toContain("### Doing it yourself");
+    expect(system).toContain("`github_sign_in`");
     expect(system).toContain("This run has no screen control");
 
     updateConversation(conv.id, { computerTarget: { kind: "desktop" } });

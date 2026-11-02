@@ -878,6 +878,21 @@ export async function navigate(profileId: string, url: string, conversationId?: 
   if (!done) await rb.client.send("Target.createTarget", { url: parsed.href, newWindow: true, background: true });
 }
 
+/** Opens `url` in the chat's tab and runs `fn` on that page. Null when the tab is gone. */
+export async function onOpenedPage<T>(profileId: string, url: string, conversationId: string | undefined, fn: (page: PageSession) => Promise<T>): Promise<T | null> {
+  await navigate(profileId, url, conversationId);
+  const rb = await ensureBrowser(profileId);
+  rb.lastUsedAt = Date.now();
+  try {
+    return await withPage(rb, { conversationId }, async (page) => {
+      await page.waitForReady(5000);
+      return fn(page);
+    });
+  } finally {
+    rb.lastUsedAt = Date.now();
+  }
+}
+
 /** What bot detection sees in the profile's browser; a browser started just for the check is stopped again. */
 export async function botCheck(profileId: string): Promise<BotCheckReport> {
   requireRow(profileId);

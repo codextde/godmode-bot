@@ -332,7 +332,7 @@ No browser tools are attached to this run. If a task needs a website, say so in 
   if (ctx.android?.length) out.push(androidSection(ctx.android, human, !!ctx.androidVaultFill));
   const rawSecrets = perms.secretAccess === "reveal" && !ctx.fillOnly;
   if (ctx.computer) out.push(computerSection(ctx.computer, human, rawSecrets));
-  if (!ctx.check) out.push(ownHandsSection(agent.name, human, { asking: !!ctx.asking, screen: !ctx.computer && !ctx.vm && settings.computer.enabled }));
+  if (!ctx.check) out.push(ownHandsSection(agent.name, human, { asking: !!ctx.asking, screen: !ctx.computer && !ctx.vm && settings.computer.enabled, githubSignIn: !ctx.vm && agent.browser.enabled }));
 
   out.push(`### Logging in to websites
 Never ask ${human} for the password of a website login and never type a saved password or authenticator (TOTP) code yourself — Godmode fills secrets directly into the page so you never see them.
@@ -646,7 +646,7 @@ ${devices.map(androidLine).join("\n")}
 - ${vaultFill ? "Signing in inside an app: find the login with `vault_list_logins`, tap the field, then call `fill_login({ credentialId, field })` or `fill_totp({ credentialId })` — Godmode types the value and you never see it; passwords only go into password fields. Only fill a login in its own app or site." : `Godmode doesn't type saved logins or 2FA codes into phones for you. If a task needs a sign-in on the phone, ask ${human} to sign in there (they can do it in the live view); apps stay signed in.`} Never type a saved password or authenticator code with \`type_text\` (a code sent to you by email or SMS you type yourself).`;
 }
 
-function ownHandsSection(agentName: string, human: string, can: { asking: boolean; screen: boolean }): string {
+function ownHandsSection(agentName: string, human: string, can: { asking: boolean; screen: boolean; githubSignIn: boolean }): string {
   const missing = can.asking
     ? `ask for only that with \`ask_human\`, save it right away with \`vault_save_login\` under the site it belongs to (Godmode then masks it everywhere in this chat)`
     : `say in your final answer which one you need, and stop there. Once you have it, save it right away with \`vault_save_login\` under the site it belongs to (Godmode then masks it everywhere in this chat)`;
@@ -655,6 +655,7 @@ function ownHandsSection(agentName: string, human: string, can: { asking: boolea
     : "";
   return `### Doing it yourself
 A command or script you could run is yours to run. Never give ${human} a command or a Terminal step, not in a task, a question or your answer, not even when it asks for a password. They only get what none of your tools can do.
+- A login of a command line tool that expired or is missing is yours too.${can.githubSignIn ? " GitHub (\`gh\`, \`git\` over https): call \`github_sign_in\`." : ""} Otherwise start its browser or device login as a background command, read the URL and code it prints, approve it in your browser with the vault, and check that it works.
 - A password or passphrase nobody saved (a file's, an app's, one a colleague has): look once where you already have access (mail, messages, notes, the vault), without signing in anywhere new for it. Still missing: ${missing}, then run the command yourself. Pass it on stdin or in an environment variable, never as an argument or in a file.${screen}`;
 }
 
