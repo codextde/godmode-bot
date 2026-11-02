@@ -3,9 +3,9 @@
  *
  * One run = one `claude -p` process (prompt on stdin, stream-json on stdout) in the agent's repo (or the folder
  * attached to the chat, with the repo added via --add-dir), resuming
- * the conversation's Claude session. Runs are queued (settings.runner.maxConcurrentRuns, re-read on every
- * dequeue) with strictly one active run per conversation (FIFO). Output is parsed by StreamAccumulator into
- * one assistant message, pushed live as `run.delta` events, persisted (redacted) to SQLite, the agent repo
+ * the conversation's Claude session. Any number of chats run at once, with strictly one active run per
+ * conversation (FIFO); a run only queues behind its own chat or a shared VM, computer or dream. Output is parsed by
+ * StreamAccumulator into one assistant message, pushed live as `run.delta` events, persisted (redacted) to SQLite, the agent repo
  * transcript and a raw JSONL run log.
  *
  * Messages the human sends meanwhile wait in the chat's queue (services/messageQueue.ts): Claude Code asks for them
@@ -1047,9 +1047,6 @@ export async function shutdownRunner(): Promise<void> {
 
 function pump() {
   if (shuttingDown) return;
-  const max = Math.max(1, Math.floor(getSettings().runner.maxConcurrentRuns || 1));
-  // Dreams don't take run slots (there is at most one at a time), so they never hold up anyone's work.
-  let running = [...jobs.values()].filter((j) => j.status === "running" && j.trigger !== "dream").length;
   const blocked = new Set<string>();
   const frozen = queue.length ? pausedConversations() : null;
   for (const runId of ticketOrder()) {
@@ -1069,10 +1066,8 @@ function pump() {
       blocked.add(job.conversationId);
       continue;
     }
-    // A delegated run whose parent is running (and typically waiting for it) may exceed the limit — otherwise
-    // a parent holding the last slot would deadlock on its own child.
-    const parentRunning = !!job.parentRunId && jobs.get(job.parentRunId)?.status === "running";
-    if (job.trigger === "dream" ? [...jobs.values()].some((j) => j.trigger === "dream" && j.status === "running") : running >= max && !parentRunning) {
+    // At most one dream at a time.
+    if (job.trigger === "dream" && [...jobs.values()].some((j) => j.trigger === "dream" && j.status === "running")) {
       blocked.add(job.conversationId);
       continue;
     }
@@ -1102,7 +1097,6 @@ function pump() {
     }
     queue.splice(queue.indexOf(runId), 1);
     job.status = "running";
-    if (job.trigger !== "dream") running++;
     job.done = execute(job)
       .catch((err) => log.error(`run ${runId} crashed`, err))
       .finally(() => {
@@ -2786,7 +2780,7 @@ async function suspend(job: Job, agent: Agent | null, startedMs: number): Promis
   if (pause.reason === "limit" && !pause.switchAccount && retries >= MAX_RETRIES && wanted) {
     safely("stop continuing", () => stopContinuing(row, `Claude still reports its ${row.limit_name ?? "usage limit"} after ${MAX_RETRIES} tries. Continue the chat when the limit has reset.`));
   }
-  // The slot is free: other chats go on.
+  // Its locks are free: other chats go on.
   pump();
 }
 

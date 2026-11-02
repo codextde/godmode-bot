@@ -148,8 +148,7 @@
     },
     "work": {
       "title": "Arbeit",
-      "footer": "Läufe über dem Limit warten in der Schlange. Ein Lauf, der länger als das Zeitlimit dauert, wird gestoppt.",
-      "parallel": "Parallele Läufe",
+      "footer": "Ein Lauf, der länger als das Zeitlimit dauert, wird gestoppt.",
       "timeout": "Zeitlimit pro Lauf",
       "continueLimit": "Nach Nutzungslimits weitermachen",
       "continueLimitDetail": "Ein Lauf, der Claudes Limit erreicht hat, macht von selbst weiter, sobald es zurückgesetzt ist.",

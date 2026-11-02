@@ -17,7 +17,7 @@ import { openDb, closeDb } from "../../src/db";
 import { setLogLevel } from "../../src/log";
 import { resetSettingsCache, updateSettings } from "../../src/services/settings";
 import { createApp } from "../../src/server/app";
-import { createAgent } from "../../src/agents/service";
+import { createAgent, updateAgent } from "../../src/agents/service";
 import { bus } from "../../src/events/bus";
 import { __setClaudeBinaryForTests, cancelRun, listActiveRuns, waitForRun } from "../../src/runner/runner";
 import { __setTaskRetryDelaysForTests } from "../../src/tasks/service";
@@ -113,7 +113,7 @@ export async function setupEnv(prefix = "godmode-runner-"): Promise<TestEnv> {
   loadConfig({ dataDir, host: "127.0.0.1" });
   openDb(join(dataDir, "godmode.db"));
   resetSettingsCache();
-  updateSettings({ memory: { autoCommit: false }, runner: { maxConcurrentRuns: 3, runTimeoutMinutes: 60 } });
+  updateSettings({ memory: { autoCommit: false }, runner: { runTimeoutMinutes: 60 } });
   const app = createApp();
   const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: (req, srv) => app.fetch(req, { server: srv }) });
   config().port = server.port!;
@@ -200,4 +200,12 @@ export async function until(cond: () => boolean, timeoutMs = 10_000, what = "con
     if (Date.now() - start > timeoutMs) throw new Error(`timed out waiting for ${what}`);
     await new Promise((r) => setTimeout(r, 20));
   }
+}
+
+/** Runs of these agents take turns on the computer until the returned function is called: how a test keeps a run queued. */
+export async function takeTurns(...agentIds: string[]): Promise<() => Promise<void>> {
+  for (const id of agentIds) await updateAgent(id, { computer: { enabled: true, target: null } });
+  return async () => {
+    for (const id of agentIds) await updateAgent(id, { computer: { enabled: false, target: null } });
+  };
 }

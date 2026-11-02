@@ -30,7 +30,7 @@
     "switchOn": "Switch on",
     "now": "Now",
     "working": "Working…",
-    "queued": "Queued — waiting for a free slot",
+    "queued": "Queued — waiting its turn",
     "waitingAnswer": "Waiting for your answer",
     "waitingLimit": "Waiting for Claude's {{limit}}",
     "waitingLimitResumes": "Waiting for Claude's {{limit}} · continues {{when}}",

@@ -29,7 +29,7 @@ const EMPTY_ICON: Record<Tab, IconName> = { all: "chats", running: "bolt", sched
 
 const EMPTY_SOURCE_ICON: Record<ChatSource, IconName> = { mine: "chats", automations: "clock", agents: "user" };
 
-/** The chats a run works on right now, and the ones waiting for a free slot. */
+/** The chats a run works on right now, and the ones waiting their turn. */
 function useChatRuns(): { running: Set<string>; queued: Set<string> } {
   const key = useLive((s) => {
     const runs = Object.values(s.runs).map(({ run }) => run);

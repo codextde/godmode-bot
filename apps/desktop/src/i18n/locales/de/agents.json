@@ -1143,7 +1143,7 @@
     "andMore_one": "und {{count}} weitere",
     "andMore_other": "und {{count}} weitere",
     "working": "Arbeitet…",
-    "queued": "In der Warteschlange – wartet auf einen freien Platz",
+    "queued": "In der Warteschlange – wartet, bis es weitergeht",
     "watch": "Ansehen",
     "stopLabel": "Stoppen: {{title}}",
     "waitingForAnswer": "Wartet auf deine Antwort",

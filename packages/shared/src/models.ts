@@ -1398,7 +1398,6 @@ export interface RunnerSettings {
   ultracode: boolean;
   /** --dangerously-skip-permissions (full bypass). */
   bypassPermissions: boolean;
-  maxConcurrentRuns: number;
   /** Timeout per run in minutes */
   runTimeoutMinutes: number;
   /** A run that hit Claude's usage limit continues by itself once the limit has reset. */

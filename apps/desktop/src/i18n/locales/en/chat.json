@@ -323,7 +323,7 @@
   },
   "status": {
     "working": "Working…",
-    "queuedWaiting": "Queued — waiting for a free slot",
+    "queuedWaiting": "Queued — waiting its turn",
     "needsOk": "Needs your OK",
     "needsAnswer": "Needs your answer",
     "paused": "Paused",

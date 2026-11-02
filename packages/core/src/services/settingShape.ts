@@ -2,7 +2,6 @@ import { APP_LANGUAGES, INTERFACE_MODES, PALETTES, THEMES, TIME_FORMATS } from "
 
 /** Ranges for the numbers a phone or an agent may set (as in the app); for text, the maximum length. */
 const SETTING_LIMITS: Record<string, [min: number, max: number]> = {
-  "runner.maxConcurrentRuns": [1, 32],
   "runner.runTimeoutMinutes": [0, 1440],
   "runner.stallMinutes": [3, 240],
   "runner.loopRepeats": [3, 50],

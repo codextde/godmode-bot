@@ -31,7 +31,7 @@
     "boardCopy": "Das ist die Kopie vom Board, ohne ihre Texte.",
     "retryA11y": "Aufgabe erneut aktualisieren",
     "unassigned": "Nicht zugewiesen",
-    "queued": "In der Warteschlange — wartet auf einen freien Platz",
+    "queued": "In der Warteschlange — wartet, bis es weitergeht",
     "workingOnIt": "Arbeitet daran",
     "waitingAnswer": "Wartet auf deine Antwort",
     "waitsForTickets": "Wartet auf {{tickets}} — startet nach der Lieferung",

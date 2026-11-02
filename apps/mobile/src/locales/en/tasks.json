@@ -31,7 +31,7 @@
     "boardCopy": "This is the board's copy, without its texts.",
     "retryA11y": "Try refreshing the task again",
     "unassigned": "Unassigned",
-    "queued": "Queued — waiting for a free slot",
+    "queued": "Queued — waiting its turn",
     "workingOnIt": "Working on it",
     "waitingAnswer": "Waiting for your answer",
     "waitsForTickets": "Waits for {{tickets}} — starts once delivered",

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import type { Agent, Task } from "@godmode/shared";
 import { githubBranchUrl, hostedRepo, taskAttachmentUrl } from "@godmode/shared";
-import { invocations, makeAgent, setupEnv, until, type TestEnv } from "./fixtures/runner-harness";
+import { invocations, makeAgent, setupEnv, takeTurns, until, type TestEnv } from "./fixtures/runner-harness";
 import { startSmartGitServer, type SmartGitServer } from "./fixtures/smart-git-server";
 import { all, get, run as sql } from "../src/db";
 import { getRun, activeRunForConversation } from "../src/runner/runner";
@@ -708,9 +708,9 @@ describe("races and safety", () => {
   });
 
   test("reassigning a task whose run is still queued hands it to the new agent", async () => {
-    updateSettings({ runner: { maxConcurrentRuns: 1 } });
+    const restore = await takeTurns(wsAgent.id, agent.id);
     try {
-      const hog = createTask({ workspaceId, title: "SLEEP hogging the only slot", agentId: wsAgent.id });
+      const hog = createTask({ workspaceId, title: "SLEEP hogging the computer", agentId: wsAgent.id });
       await until(() => getTask(hog.id).runStatus === "running", 10_000, "hog to run");
       const task = createTask({ workspaceId, title: "Waiting in line", agentId: wsAgent.id });
       await until(() => getTask(task.id).runStatus === "queued", 10_000, "queued run");
@@ -722,7 +722,7 @@ describe("races and safety", () => {
       await settled(task.id, ["in_review"]);
       expect(get<{ agent_id: string }>("SELECT agent_id FROM conversations WHERE id = ?", getTask(task.id).conversationId!)?.agent_id).toBe(agent.id);
     } finally {
-      updateSettings({ runner: { maxConcurrentRuns: 3 } });
+      await restore();
     }
   });
 

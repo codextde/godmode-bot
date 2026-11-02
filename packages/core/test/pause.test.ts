@@ -2,7 +2,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Agent, MessageBlock, Run } from "@godmode/shared";
-import { argValue, captureEvents, invocations, makeAgent, setupEnv, until, type TestEnv } from "./fixtures/runner-harness";
+import { argValue, captureEvents, invocations, makeAgent, setupEnv, takeTurns, until, type TestEnv } from "./fixtures/runner-harness";
 import { all, get, run as sql } from "../src/db";
 import { getAccessToken } from "../src/server/auth";
 import { deviceMayCall } from "../src/mobile/scope";
@@ -142,7 +142,7 @@ describe("pausing a run", () => {
   });
 
   test("a run that hasn't reached Claude yet sends its prompt when it continues", async () => {
-    updateSettings({ runner: { maxConcurrentRuns: 1 } });
+    const restore = await takeTurns(agent.id);
     try {
       const first = await working("SLEEP in front");
       const second = await startChat({ agentId: agent.id, content: "the real question" });
@@ -153,7 +153,7 @@ describe("pausing a run", () => {
 
       await cancelRun(first.run.id);
       await waitForRun(first.run.id, 15_000);
-      // Frozen: a free slot doesn't start it.
+      // Frozen: the computer coming free doesn't start it.
       await new Promise((r) => setTimeout(r, 150));
       expect(getRun(second.run.id).status).toBe("paused");
 
@@ -161,7 +161,7 @@ describe("pausing a run", () => {
       expect((await waitForRun(second.run.id, 20_000)).status).toBe("succeeded");
       expect(lastPrompt().prompt.replace(/^<godmode-context>[^<]+<\/godmode-context>\n\n/, "")).toBe("the real question");
     } finally {
-      updateSettings({ runner: { maxConcurrentRuns: 3 } });
+      await restore();
     }
   });
 

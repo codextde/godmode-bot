@@ -533,28 +533,18 @@ describe("dreams end to end (fake claude)", () => {
     await dreamToEnd(again);
   });
 
-  test("dreams don't take run slots, and only one dreams at a time", async () => {
-    updateSettings({ runner: { maxConcurrentRuns: 1 } });
-    try {
-      const busy = await makeAgent({ name: "Busy Bot" });
-      const chat = await sendMessage(conversationFor(busy), { content: "SLEEP please" });
-      await until(() => getRun(chat.run.id).status === "running", 10_000, "chat running");
-      const one = await makeAgent({ name: "Dreamer One" });
-      const two = await makeAgent({ name: "Dreamer Two" });
-      addExchange(one, conversationFor(one), { prompt: "x", result: "DREAM_SLEEP" });
-      const first = await startDream(one.id);
-      await until(() => getDream(first.id).status === "running", 10_000, "first dream running despite the full slot");
-      const second = await startDream(two.id);
-      await new Promise((r) => setTimeout(r, 300));
-      expect(getDream(second.id).status).toBe("queued");
-      await cancelRun(getDream(first.id).runId!);
-      await dreamToEnd(first);
-      await dreamToEnd(second);
-      await cancelRun(chat.run.id);
-      await waitForRun(chat.run.id, 10_000);
-    } finally {
-      updateSettings({ runner: { maxConcurrentRuns: 3 } });
-    }
+  test("only one dreams at a time", async () => {
+    const one = await makeAgent({ name: "Dreamer One" });
+    const two = await makeAgent({ name: "Dreamer Two" });
+    addExchange(one, conversationFor(one), { prompt: "x", result: "DREAM_SLEEP" });
+    const first = await startDream(one.id);
+    await until(() => getDream(first.id).status === "running", 10_000, "first dream running");
+    const second = await startDream(two.id);
+    await new Promise((r) => setTimeout(r, 300));
+    expect(getDream(second.id).status).toBe("queued");
+    await cancelRun(getDream(first.id).runId!);
+    await dreamToEnd(first);
+    await dreamToEnd(second);
   });
 
   test("nobody can chat in the dream conversation", async () => {

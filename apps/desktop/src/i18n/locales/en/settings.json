@@ -250,8 +250,6 @@
     "limits": {
       "title": "Limits",
       "description": "Guardrails for runaway tasks.",
-      "parallel": "Parallel runs",
-      "parallelDescription": "How many agent runs may execute at the same time. Extra runs wait in a queue.",
       "timeout": "Run timeout",
       "timeoutDescription": "A run is stopped after this long.",
       "minutes": "min",

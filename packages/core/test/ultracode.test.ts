@@ -485,7 +485,7 @@ describe("Ultracode in routes and tools", () => {
     try {
       const saved = (await (await api("PUT", "/api/settings", { runner: { ultracode: true } })).json()) as Settings;
       expect(saved.runner.ultracode).toBe(true);
-      expect(buildLogReport()).toContain("effort medium, Ultracode on, up to");
+      expect(buildLogReport()).toContain("effort medium, Ultracode on,");
     } finally {
       updateSettings({ runner: { ultracode: false } });
     }

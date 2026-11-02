@@ -240,7 +240,7 @@ export function useConversationFinishedRun(conversationId: string | undefined): 
   return useLive((s) => (conversationId ? (s.finished[conversationId] ?? null) : null));
 }
 
-/** Working right now — a queued run waits for a free slot and isn't working yet. */
+/** Working right now — a queued run waits its turn and isn't working yet. */
 export function useAgentRunning(agentId: string | undefined): boolean {
   return useLive((s) => (agentId ? Object.values(s.runs).some((r) => r.agentId === agentId && r.status === "running") : false));
 }
@@ -250,7 +250,7 @@ export function useRunningCount(): number {
   return useLive((s) => Object.values(s.runs).filter((r) => r.status === "running").length);
 }
 
-/** How many runs wait for a free slot. */
+/** How many runs wait their turn. */
 export function useQueuedCount(): number {
   return useLive((s) => Object.values(s.runs).filter((r) => r.status === "queued").length);
 }

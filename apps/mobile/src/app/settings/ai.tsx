@@ -79,7 +79,6 @@ export default function ModelAndLimits() {
       </Group>
 
       <Group title={t("ai.work.title")} footer={t("ai.work.footer")}>
-        <StepperRow icon="cpu" title={t("ai.work.parallel")} value={r.maxConcurrentRuns} min={1} max={32} onChange={(maxConcurrentRuns) => void patchSettings({ runner: { maxConcurrentRuns } })} />
         <StepperRow
           icon="clock"
           title={t("ai.work.timeout")}

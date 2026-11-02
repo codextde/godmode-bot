@@ -148,8 +148,7 @@
     },
     "work": {
       "title": "Work",
-      "footer": "Runs over the limit wait in line. A run that takes longer than the timeout is stopped.",
-      "parallel": "Parallel runs",
+      "footer": "A run that takes longer than the timeout is stopped.",
       "timeout": "Timeout per run",
       "continueLimit": "Continue after usage limits",
       "continueLimitDetail": "A run that hit Claude's limit picks up by itself once it resets.",

@@ -30,7 +30,7 @@
     "switchOn": "Einschalten",
     "now": "Jetzt",
     "working": "Arbeitet…",
-    "queued": "In Warteschlange — wartet auf einen freien Platz",
+    "queued": "In Warteschlange — wartet, bis es weitergeht",
     "waitingAnswer": "Wartet auf deine Antwort",
     "waitingLimit": "Wartet auf {{limit}} von Claude",
     "waitingLimitResumes": "Wartet auf {{limit}} von Claude · geht {{when}} weiter",

@@ -139,7 +139,6 @@ const SETTINGS: Record<string, string[]> = {
     "fallbackModel",
     "effort",
     "ultracode",
-    "maxConcurrentRuns",
     "runTimeoutMinutes",
     "autoContinueOnLimit",
     "resumeAfterRestart",

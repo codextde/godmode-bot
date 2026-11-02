@@ -2,7 +2,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test
 import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Agent, AgentQuestion, MessageBlock, Run } from "@godmode/shared";
-import { argValue, captureEvents, invocations, makeAgent, setupEnv, until, type TestEnv } from "./fixtures/runner-harness";
+import { argValue, captureEvents, invocations, makeAgent, setupEnv, takeTurns, until, type TestEnv } from "./fixtures/runner-harness";
 import { all, get, insert, run as sql } from "../src/db";
 import { getAccessToken } from "../src/server/auth";
 import { deviceBodyKeys, deviceMayCall } from "../src/mobile/scope";
@@ -275,10 +275,10 @@ describe("asking", () => {
   }, 30_000);
 
   test("an answer survives the run being paused again before it starts", async () => {
-    updateSettings({ runner: { maxConcurrentRuns: 1 } });
+    const restore = await takeTurns(agent.id);
     try {
       const { run, question } = await asking();
-      const blocker = await startChat({ agentId: agent.id, content: "SLEEP to hold the only slot" });
+      const blocker = await startChat({ agentId: agent.id, content: "SLEEP to hold the computer" });
       await until(() => getRun(blocker.run.id).status === "running", 10_000, "the blocker to run");
       answerQuestion(question.id, { optionId: "2" }, { actor: "user", via: "app" });
       expect(getRun(run.id).status).toBe("queued");
@@ -290,7 +290,7 @@ describe("asking", () => {
       await waitForRun(run.id, 20_000);
       expect(lastPrompt().prompt).toMatch(/<answer-from-human id="[0-9a-f]{6}">\nBlue\n<\/answer-from-human id="[0-9a-f]{6}">/);
     } finally {
-      updateSettings({ runner: { maxConcurrentRuns: 3 } });
+      await restore();
     }
   }, 30_000);
 
@@ -440,8 +440,8 @@ describe("an answer the agent hasn't read yet", () => {
     const chat = await startChat({ agentId: agent.id, content: "Say hello" });
     await waitForRun(chat.run.id, 20_000);
     const q = owe(chat.conversation.id);
-    // Hold the only slot so the run with the answer never starts.
-    updateSettings({ runner: { maxConcurrentRuns: 1 } });
+    // Hold the computer so the run with the answer never starts.
+    const restore = await takeTurns(agent.id);
     const blocker = await startChat({ agentId: agent.id, content: "SLEEP for a while" });
     try {
       await until(() => getRun(blocker.run.id).status === "running", 10_000, "the blocker to run");
@@ -453,7 +453,7 @@ describe("an answer the agent hasn't read yet", () => {
     } finally {
       await cancelRun(blocker.run.id, "Cancelled by user");
       await waitForRun(blocker.run.id, 10_000);
-      updateSettings({ runner: { maxConcurrentRuns: 3 } });
+      await restore();
     }
     const next = await sendMessage(chat.conversation.id, { content: "What's on my calendar?" });
     await waitForRun(next.run.id, 20_000);
