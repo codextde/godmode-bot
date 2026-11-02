@@ -159,6 +159,7 @@ export interface Invocation {
   pluginServers: Record<string, { command?: string; args?: string[]; env?: Record<string, string> }>;
   env: {
     ANTHROPIC_API_KEY: string | null;
+    OMC_SKIP_HOOKS: string | null;
     GODMODE_TOKEN: string | null;
     CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD: string | null;
     CLAUDE_CODE_PLUGIN_DIR_WATCH: string | null;

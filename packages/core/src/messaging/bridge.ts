@@ -511,7 +511,7 @@ async function startTurn(conn: ConnectionRow, adapter: MessagingAdapter, msg: In
   const settle = from.owner ? replySettles(conversationId, msg.text) : null;
   let run: Run;
   try {
-    ({ run } = await sendMessage(conversationId, { content, attachments: files.length ? files : undefined, trigger: "chat" }));
+    ({ run } = await sendMessage(conversationId, { content, attachments: files.length ? files : undefined, trigger: "chat", fromOther: !from.owner }));
   } catch (err) {
     await stop();
     await say(adapter, msg, err instanceof HttpError ? err.message : "Something went wrong — try again in a moment.");

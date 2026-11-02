@@ -120,6 +120,7 @@ import { recordMemoryEdits } from "../memory/edits";
 import { teamProfile } from "../memory/profile";
 import { teamBelow } from "../memory/team";
 import { applyZaiEnv, claudeEnv, killTree, resolveClaudeCommand, zaiKey } from "./claude";
+import { SKILLS_NEEDING_DETECTOR, modeKeywordsOff, skipKeywordDetector } from "./modeKeywords";
 import { buildMcpConfig, gatewayUrl, removeMcpConfigFile, writeMcpConfigFile } from "./mcpConfig";
 import { effortFor, ultracodeFor } from "./models";
 import {
@@ -171,6 +172,8 @@ export interface StartRunInput {
   alsoAnswers?: string[];
   /** Id for the run (callers that must know it before the run can start or finish). Default: a new one. */
   runId?: string;
+  /** The prompt is what the human typed. Default: every chat run. */
+  humanTyped?: boolean;
 }
 
 export const CLAUDE_NOT_FOUND = RUN_CLI_MISSING;
@@ -361,6 +364,7 @@ interface Job {
   /** Unredacted prompt — memory only. */
   prompt: string;
   trigger: RunTrigger;
+  humanTyped: boolean;
   parentRunId: string | null;
   depth: number;
   voice: boolean;
@@ -626,6 +630,7 @@ export async function startRun(input: StartRunInput): Promise<Run> {
     alsoAnswers,
     prompt: input.prompt,
     trigger: input.trigger,
+    humanTyped: input.humanTyped ?? input.trigger === "chat",
     parentRunId: input.parentRunId ?? null,
     depth: input.depth ?? 0,
     voice: input.voice ?? false,
@@ -844,6 +849,7 @@ export function resumeRun(
     alsoAnswers: parseJson<string[]>(p.also_answers, []),
     prompt: row.prompt,
     trigger: row.trigger,
+    humanTyped: row.trigger === "chat",
     parentRunId: row.parent_run_id,
     depth: p.depth,
     voice: p.voice === 1,
@@ -2333,6 +2339,8 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   const disallowed: string[] = [];
   // Godmode's ask_human / request_approval are how an agent asks: Claude Code's own question tool would go nowhere.
   if (!dreaming) disallowed.push("AskUserQuestion");
+  const keywordsOff = modeKeywordsOff(job.humanTyped, job.prompt);
+  if (keywordsOff) disallowed.push(...SKILLS_NEEDING_DETECTOR);
   // Hide browser-use tools that need their own LLM key when none is configured (they would only error). The key never
   // goes into a VM, so a VM's browser has none.
   if (mcp.mcpServers[BROWSER_MCP_NAME] && (vm || !browserLlmKey())) disallowed.push(...BROWSER_LLM_TOOLS.map((t) => `mcp__${BROWSER_MCP_NAME}__${t}`));
@@ -2391,6 +2399,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   const extraArgs = (settings.runner.extraArgs ?? []).filter((a) => typeof a === "string" && a.length > 0);
 
   const env = buildEnv(agent, !!folder || sources.length > 0, toolKeysInEnv);
+  if (keywordsOff) skipKeywordDetector(env);
   if (job.private || !folder) env.CLAUDE_CODE_DISABLE_AUTO_MEMORY = "1";
   if (artifactsHere && !glm) env.CLAUDE_CODE_ENABLE_FINE_GRAINED_TOOL_STREAMING ??= "1";
   // Without it a headless Claude Code keeps a mod's failures to its debug log: a hook that throws, a module that
