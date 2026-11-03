@@ -983,7 +983,7 @@ export const api = {
 
   offers: {
     /** What the main agent offers to take off the human's plate (open ones). */
-    list: () => get<Offer[]>("/api/offers"),
+    list: (workspaceId?: string | null) => get<Offer[]>(workspaceId ? `/api/offers?workspaceId=${encodeURIComponent(workspaceId)}` : "/api/offers"),
     /** Starts a chat with the agent with the offer's prompt. */
     accept: (id: string) => post<AcceptOfferResult>(`/api/offers/${id}/accept`, {}),
     dismiss: (id: string) => post<Offer>(`/api/offers/${id}/dismiss`, {}),

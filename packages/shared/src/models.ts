@@ -831,6 +831,8 @@ export interface Offer {
   why: string;
   prompt: string;
   status: OfferStatus;
+  workspaceId: ID | null;
+  projectId: ID | null;
   /** The chat "Do it" started. */
   conversationId: ID | null;
   createdAt: string;
