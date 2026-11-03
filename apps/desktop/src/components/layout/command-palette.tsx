@@ -99,7 +99,7 @@ const SETTINGS = [
   { id: "vms", label: "vms", icon: Box, words: "vm tart macos linux feature turn on off" },
   { id: "ssh", label: "ssh", icon: Server, words: "remote linux servers feature turn on off" },
   { id: "api-keys", label: "apiKeys", icon: KeyRound, words: "anthropic openai elevenlabs z.ai glm captcha browser-use secrets" },
-  { id: "security", label: "security", icon: ShieldCheck, words: "vault passphrase auto-lock password" },
+  { id: "security", label: "security", icon: ShieldCheck, words: "vault godmode password passphrase auto-lock" },
   { id: "files", label: "files", icon: FolderOpen, words: "workspace notes memory cleanup tidy delete bin agents" },
   { id: "backup", label: "backup", icon: DatabaseBackup, words: "restore export import" },
   { id: "phone", label: "phone", icon: Smartphone, words: "mobile iphone android pair app" },

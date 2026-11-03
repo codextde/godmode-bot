@@ -96,7 +96,7 @@ describe("crypto", () => {
   test("passphrase container round trip", () => {
     const sealed = sealWithPassphrase("backup-pass", new TextEncoder().encode("payload"));
     expect(new TextDecoder().decode(openWithPassphrase("backup-pass", sealed))).toBe("payload");
-    expect(() => openWithPassphrase("wrong-pass", sealed)).toThrow("Wrong backup passphrase");
+    expect(() => openWithPassphrase("wrong-pass", sealed)).toThrow("Wrong backup password");
   }, SLOW);
 
   test("password hashing", () => {
