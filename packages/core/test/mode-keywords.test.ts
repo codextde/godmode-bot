@@ -59,6 +59,13 @@ describe("runs", () => {
     return { skip: inv.env.OMC_SKIP_HOOKS, disallowed: argValue(inv, "--disallowedTools") ?? "" };
   }
 
+  test("oh-my-claudecode's read gate is off, Claude Code's Read sets the limit", async () => {
+    const conversation = createConversation({ agentId: agent.id });
+    const { run } = await sendMessage(conversation.id, { content: "Read the notes", trigger: "chat" });
+    await waitForRun(run.id, 20_000);
+    expect(invocations(env).at(-1)!.env.OMC_READ_BUDGET).toBe("off");
+  });
+
   test("typed in a chat: the detector stays on", async () => {
     const { skip, disallowed } = await runWith({ content: HAND_OVER, trigger: "chat" });
     expect(skip).toBeNull();

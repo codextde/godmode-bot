@@ -162,6 +162,7 @@ export interface Invocation {
   env: {
     ANTHROPIC_API_KEY: string | null;
     OMC_SKIP_HOOKS: string | null;
+    OMC_READ_BUDGET: string | null;
     GODMODE_TOKEN: string | null;
     CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD: string | null;
     CLAUDE_CODE_PLUGIN_DIR_WATCH: string | null;

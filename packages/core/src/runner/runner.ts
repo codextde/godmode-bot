@@ -2411,6 +2411,8 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
 
   const env = buildEnv(agent, !!folder || sources.length > 0, toolKeysInEnv);
   if (keywordsOff) skipKeywordDetector(env);
+  // oh-my-claudecode's read gate refuses files Claude Code's Read returns fine; what doesn't fit, Read refuses itself.
+  env.OMC_READ_BUDGET ??= "off";
   if (job.private || !folder) env.CLAUDE_CODE_DISABLE_AUTO_MEMORY = "1";
   if (artifactsHere && !glm) env.CLAUDE_CODE_ENABLE_FINE_GRAINED_TOOL_STREAMING ??= "1";
   // Without it a headless Claude Code keeps a mod's failures to its debug log: a hook that throws, a module that

@@ -64,6 +64,8 @@ import {
   canRestore,
   currentMemoryFile,
   diffSnapshots,
+  NOTE_MAX_BYTES,
+  longNotes,
   memoryChars,
   memoryDigest,
   memoryOutgrew,
@@ -478,6 +480,8 @@ export interface DreamPromptInput {
   inventoryPath?: string | null;
   /** Characters of MEMORY.md as the dream finds it. */
   memoryChars?: number;
+  /** Notes too long to read in one go, the largest first. */
+  longNotes?: string[];
   /** The main agent may offer work (`offer_help`): its free slots and what became of earlier offers. */
   offers?: { slots: number; open: string[]; history: string[] } | null;
   now?: Date;
@@ -545,6 +549,9 @@ export function buildDreamPrompt(input: DreamPromptInput): string {
     `- ${input.lastDream ? `Your last dream: ${fmtTime(input.lastDream)}.` : "This is your first dream."}`,
     `- ${activity}`,
     `- ${size}`,
+    ...(input.longNotes?.length
+      ? [`- These notes don't fit in one read: ${input.longNotes.join(", ")}. Read them in ranges and shrink the first one in this dream: cut what is finished or stale, split the rest by topic into memory/<topic>.md, each under ${NOTE_MAX_BYTES / 1000} KB, and update the links.`]
+      : []),
     "",
     "1. Read MEMORY.md and look through memory/ (read the notes that relate to the activity).",
     input.digestPath
@@ -735,6 +742,7 @@ export async function startDream(agentId: string, reason: DreamReason = "manual"
       agent,
       settings,
       memoryChars: memoryChars(agent.repoPath),
+      longNotes: longNotes(agent.repoPath),
       digestPath,
       morePaths: digestPaths.slice(1),
       remaining: activity.remaining,
