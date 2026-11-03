@@ -16,9 +16,11 @@ let agent: Agent;
 let root: string;
 let project: string;
 let other: string;
+let dataParent: string;
 
 beforeAll(async () => {
-  env = await setupEnv("godmode-folders-");
+  dataParent = mkdtempSync(join(tmpdir(), "godmode-folders-parent-"));
+  env = await setupEnv("godmode-folders-", dataParent);
   root = mkdtempSync(join(tmpdir(), "godmode-folder-root-"));
   project = join(root, "project");
   other = join(root, "other");
@@ -30,6 +32,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await env.close();
   rmSync(root, { recursive: true, force: true });
+  rmSync(dataParent, { recursive: true, force: true });
 });
 
 async function call<T>(method: string, path: string, body?: unknown): Promise<{ status: number; data: T }> {

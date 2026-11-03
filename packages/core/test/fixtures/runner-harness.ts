@@ -107,9 +107,9 @@ export interface TestEnv {
   close: () => Promise<void>;
 }
 
-export async function setupEnv(prefix = "godmode-runner-"): Promise<TestEnv> {
+export async function setupEnv(prefix = "godmode-runner-", parentDir = tmpdir()): Promise<TestEnv> {
   setLogLevel("error");
-  const dataDir = mkdtempSync(join(tmpdir(), prefix));
+  const dataDir = mkdtempSync(join(parentDir, prefix));
   loadConfig({ dataDir, host: "127.0.0.1" });
   openDb(join(dataDir, "godmode.db"));
   resetSettingsCache();
