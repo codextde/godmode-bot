@@ -2,8 +2,7 @@ import { chainOf, type Agent, type RunTrigger } from "@godmode/shared";
 import { all } from "../db";
 import { listAgents } from "../agents/service";
 import { truncate } from "../util";
-import { MEMORY_FILE, currentMemoryFile, isMemoryPath } from "./files";
-import { memoryTopics } from "./editor";
+import { MEMORY_FILE, currentMemoryFile, isMemoryPath, memoryTopics } from "./files";
 
 const RESULT_MAX = 600;
 export const TEAM_ACTIVITY_BUDGET = 20_000;
