@@ -1022,6 +1022,12 @@ export interface VaultStatus {
   autoLockMinutes: number;
 }
 
+export interface TouchIdStatus {
+  /** This computer can read a fingerprint right now. */
+  available: boolean;
+  enabled: boolean;
+}
+
 /* ------------------------------------------------------------------ */
 /* Missing logins                                                       */
 /* ------------------------------------------------------------------ */

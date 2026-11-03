@@ -56,7 +56,7 @@ const SLOW_REQUEST_MS = 1000;
 
 /** Expected refusals (signed out, vault locked, passphrase needed) — not worth a log line. */
 function isRoutineRefusal(err: HttpError) {
-  return err.status === 401 || err.status === 423 || err.code === "grant_required";
+  return err.status === 401 || err.status === 423 || err.code === "grant_required" || !!err.code?.startsWith("touch_id_");
 }
 
 /**

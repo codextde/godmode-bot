@@ -87,13 +87,19 @@ function embeddedHelper(): Blob | null {
   return null;
 }
 
+/** The helper this build shipped with. In a release it lives inside the signed core; a file on disk can be swapped. */
+export async function embeddedHelperBytes(): Promise<Uint8Array | null> {
+  const file = embeddedHelper();
+  return file ? new Uint8Array(await file.arrayBuffer()) : null;
+}
+
 /** Extract the embedded helper to `<data>/bin/godmode-computer-<hash>` (once per build). */
 async function extractEmbedded(file: Blob): Promise<string> {
   const bytes = new Uint8Array(await file.arrayBuffer());
   const hash = createHash("sha256").update(bytes).digest("hex").slice(0, 12);
   const dir = join(config().dataDir, "bin");
   const dest = join(dir, `${HELPER_NAME}-${hash}`);
-  if (existsSync(dest) && statSync(dest).size === bytes.length) return dest;
+  if (existsSync(dest) && createHash("sha256").update(readFileSync(dest)).digest("hex").startsWith(hash)) return dest;
   mkdirSync(dir, { recursive: true, mode: 0o700 });
   const tmp = `${dest}.${process.pid}.tmp`;
   writeFileSync(tmp, bytes, { mode: 0o755 });
@@ -236,7 +242,7 @@ function windowsScript(): string {
 }
 
 /** Spawn a JSON-lines helper process and wait for its ready line. */
-async function spawnHelper(command: string, args: string[], name: string, path: string, readyMs: number): Promise<NativeHelper> {
+export async function spawnHelper(command: string, args: string[], name: string, path: string, readyMs: number): Promise<NativeHelper> {
   let ready: () => void = () => {};
   const readyPromise = new Promise<void>((r) => (ready = r));
   const proc = new LineProcess({

@@ -1707,6 +1707,9 @@
     "rememberOnDescription": "Der Tresorschlüssel liegt im Schlüsselbund deines Systems.",
     "rememberOffDescription": "Nach jedem Neustart gibst du dein Passwort ein.",
     "rememberError": "Geräte-Entsperrung konnte nicht geändert werden",
+    "touchIdOn": "Touch ID entsperrt jetzt deinen Tresor",
+    "touchIdOff": "Touch ID ausgeschaltet",
+    "touchIdError": "Touch ID konnte nicht geändert werden",
     "title": "Sicherheit",
     "description": "Dein Tresor, wie Agenten Geheimnisse nutzen dürfen und wer das Dashboard erreicht. Jeder Zugriff auf ein Geheimnis wird protokolliert.",
     "change": "Ändern…",
@@ -1722,6 +1725,8 @@
       "passphraseDescription": "Ändere das Passwort, das deinen Tresor schützt.",
       "remember": "Auf diesem Gerät merken",
       "rememberDescription": "Legt den Tresorschlüssel im macOS-Schlüsselbund bzw. der Windows-Anmeldeinformationsverwaltung ab, damit Automationen nach einem Neustart unbeaufsichtigt laufen. Auf geteilten Rechnern für maximale Sicherheit ausschalten.",
+      "touchId": "Touch ID",
+      "touchIdDescription": "Entsperre den Tresor mit deinem Fingerabdruck. Dein Godmode-Passwort funktioniert weiterhin.",
       "autoLock": "Automatisch sperren",
       "autoLockDescription": "Sperrt den Tresor nach so vielen Minuten ohne Aktivität. 0 = nie."
     },

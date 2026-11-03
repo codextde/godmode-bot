@@ -74,7 +74,7 @@ const EXCLUDED_TABLES = new Set([
   "replica_deferred",
 ]);
 /** Vault key material travels in vault.json, not db.json. */
-const VAULT_META_KEYS = new Set(["vault.kdf", "vault.wrapped_dek", "vault.canary"]);
+const VAULT_META_KEYS = new Set(["vault.kdf", "vault.wrapped_dek", "vault.canary", "vault.touch_id"]);
 /** Settings sections that belong to this machine (bind address, remote access, allowed origins, phone and cloud access). */
 const DEVICE_SETTINGS = new Set(["server", "mobile", "cloud"]);
 

@@ -1,7 +1,7 @@
-import { useRef, useState, type FormEvent } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion, useAnimationControls } from "motion/react";
-import { ArchiveRestore, ChevronDown, FileArchive, Lock, ShieldCheck, Upload } from "lucide-react";
+import { ArchiveRestore, ChevronDown, FileArchive, Fingerprint, Lock, ShieldCheck, Upload } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -11,15 +11,16 @@ import { Spinner } from "@/components/ui/spinner";
 import { AuthLayout, FormError, SubmitButton, shake, unlockError } from "@/components/onboarding/auth-layout";
 import { CopyButton } from "@/components/vault/copy-button";
 import { PasswordInput } from "@/components/vault/password-input";
-import { ApiRequestError, api, errorMessage } from "@/lib/api";
+import { ApiRequestError, api, errorMessage, vaultLockedByHand } from "@/lib/api";
 import { useBootstrap } from "@/lib/hooks";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
 import { useLocale } from "@/i18n/language";
+import type { VaultStatus } from "@godmode/shared";
 
 /** Shown when the vault is initialized but locked (auto-lock, manual lock or restart without "remember device"). */
 export function UnlockPage() {
-  const { t } = useTranslation("auth");
+  const { t } = useTranslation(["auth", "common"]);
   const qc = useQueryClient();
   const { data: boot } = useBootstrap();
   const controls = useAnimationControls();
@@ -28,6 +29,50 @@ export function UnlockPage() {
   const [busy, setBusy] = useState(false);
   const [forgotOpen, setForgotOpen] = useState(false);
   const [restoreOpen, setRestoreOpen] = useState(false);
+  const [touchBusy, setTouchBusy] = useState(false);
+  const { data: touchId } = useQuery({ queryKey: qk.touchId, queryFn: api.vault.touchId.status });
+  const touchIdReady = !!touchId?.enabled && touchId.available;
+
+  const unlocked = async (status: VaultStatus) => {
+    qc.setQueryData(qk.vaultStatus, status);
+    setPassphrase("");
+    await qc.invalidateQueries({ queryKey: qk.bootstrap });
+    toast.success(t("unlock.unlockedToast"), { description: t("unlock.unlockedToastDescription") });
+  };
+
+  const unlockWithTouchId = async () => {
+    setTouchBusy(true);
+    setError(null);
+    try {
+      await unlocked(await api.vault.touchId.unlock());
+    } catch (err) {
+      const code = err instanceof ApiRequestError ? err.code : undefined;
+      if (code === "touch_id_invalid") {
+        setError(t("unlock.touchIdInvalid"));
+        void qc.invalidateQueries({ queryKey: qk.touchId });
+      } else if (code === "touch_id_failed") {
+        setError(t("unlock.touchIdFailed"));
+      } else if (code !== "touch_id_cancelled" && code !== "touch_id_busy") {
+        setError(t("unlock.touchIdUnavailable"));
+      }
+    }
+    setTouchBusy(false);
+  };
+
+  // Asks for the finger once, when the window is in front. Closing the prompt brings the focus back, so never again here.
+  const asked = useRef(false);
+  useEffect(() => {
+    if (!touchIdReady || asked.current) return;
+    const ask = () => {
+      if (asked.current) return;
+      asked.current = true;
+      void unlockWithTouchId();
+    };
+    if (document.hasFocus() && !vaultLockedByHand.current) ask();
+    vaultLockedByHand.current = false;
+    window.addEventListener("focus", ask);
+    return () => window.removeEventListener("focus", ask);
+  }, [touchIdReady]);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -35,11 +80,7 @@ export function UnlockPage() {
     setBusy(true);
     setError(null);
     try {
-      const status = await api.vault.unlock(passphrase);
-      qc.setQueryData(qk.vaultStatus, status);
-      setPassphrase("");
-      await qc.invalidateQueries({ queryKey: qk.bootstrap });
-      toast.success(t("unlock.unlockedToast"), { description: t("unlock.unlockedToastDescription") });
+      await unlocked(await api.vault.unlock(passphrase));
     } catch (err) {
       setError(unlockError(err));
       void controls.start(shake);
@@ -66,6 +107,18 @@ export function UnlockPage() {
         </span>
       }
     >
+      {touchIdReady && (
+        <>
+          <Button type="button" size="lg" className="w-full" disabled={touchBusy} onClick={() => void unlockWithTouchId()}>
+            {touchBusy ? <Spinner /> : <Fingerprint />} {t("unlock.touchId")}
+          </Button>
+          <div className="my-4 flex items-center gap-3 text-xs text-muted-foreground">
+            <span className="h-px flex-1 bg-border" />
+            {t("common:words.or")}
+            <span className="h-px flex-1 bg-border" />
+          </div>
+        </>
+      )}
       <form onSubmit={submit} className="space-y-4">
         <motion.div animate={controls} className="space-y-2">
           <Label htmlFor="unlock-passphrase">{t("unlock.passphraseLabel")}</Label>

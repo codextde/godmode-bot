@@ -11,6 +11,7 @@ import {
   updateCredential,
 } from "../../vault/credentials";
 import { macPasswordStatus, removeMacPassword, saveMacPassword } from "../../services/macPassword";
+import { disableTouchId, enableTouchId, touchIdStatus, unlockWithTouchId } from "../../vault/touchId";
 import { suggestTotpLinks } from "../../vault/totpGuess";
 import { deletePasskey, getPasskey, listPasskeys } from "../../vault/passkeys";
 import { createTotp, currentCodes, deleteTotp, importTotpUris, listTotp, updateTotp } from "../../vault/totp";
@@ -18,7 +19,7 @@ import { importPasswords, MAX_IMPORT_BYTES, previewPasswordImport } from "../../
 import { audit } from "../../services/audit";
 import { CAPTCHA_SECRETS } from "../../browser/captcha";
 import { updateSettings } from "../../services/settings";
-import { clientIp as relayedClientIp, isRelayed, rateLimitLogin, resetLoginAttempts, setDashboardPassword, type CloudRelayEnv } from "../auth";
+import { clientIp as relayedClientIp, isLocalRequest, isRelayed, rateLimitLogin, resetLoginAttempts, setDashboardPassword, type CloudRelayEnv } from "../auth";
 import { issueGrant, requireGrant, verifyVaultPassphrase } from "../grants";
 import { body, z } from "../validate";
 import { badRequest, HttpError } from "../../util";
@@ -160,6 +161,41 @@ export function registerVaultRoutes(app: Hono): void {
     resetLoginAttempts(key);
     audit("user", "vault.unlock", null, { ip });
     return c.json(status);
+  });
+
+  /** The prompt shows on this computer, so only someone at it may ask for one. */
+  const requireLocal = (c: Context) => {
+    if (!isLocalRequest(c)) throw new HttpError(403, "Touch ID only works on the computer Godmode runs on", "not_local");
+  };
+
+  app.get("/api/vault/touch-id", async (c) => c.json(isLocalRequest(c) ? await touchIdStatus() : { available: false, enabled: false }));
+
+  app.post("/api/vault/touch-id/unlock", async (c) => {
+    requireLocal(c);
+    if (!vault.isInitialized()) throw badRequest("Vault not initialized");
+    const key = `touch-id:${limitKey(c)}`;
+    rateLimitLogin(key);
+    const status = await unlockWithTouchId().catch((err: unknown) => {
+      audit("user", "vault.unlock_failed", null, { ip: clientIp(c), method: "touch_id", code: err instanceof HttpError ? err.code : null });
+      throw err;
+    });
+    resetLoginAttempts(key);
+    audit("user", "vault.unlock", null, { ip: clientIp(c), method: "touch_id" });
+    return c.json(status);
+  });
+
+  app.put("/api/vault/touch-id", async (c) => {
+    requireLocal(c);
+    const { enabled } = await body(c, z.object({ enabled: z.boolean() }));
+    if (enabled) {
+      // A fingerprint opens the vault from now on: like remembering the key, that takes the password.
+      requireGrant(c);
+      await enableTouchId();
+    } else {
+      disableTouchId();
+    }
+    audit("user", "vault.touch_id", null, { enabled });
+    return c.json(await touchIdStatus());
   });
 
   app.post("/api/vault/lock", (c) => {
