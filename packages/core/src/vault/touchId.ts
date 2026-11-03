@@ -1,7 +1,7 @@
 /**
  * Touch ID for the vault (macOS). The vault key is sealed to a Secure Enclave key that only works after a fingerprint,
  * so nothing on this computer opens it without the finger: not the API token, not an agent, not the Mac password. The
- * seal is useless on another Mac, stays out of backups, and the passphrase always keeps working.
+ * seal is useless on another Mac, stays out of backups, and the Godmode password always keeps working.
  */
 import { createECDH, hkdfSync } from "node:crypto";
 import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
@@ -89,7 +89,7 @@ function failure(code: string, message: string): HttpError {
   return new HttpError(409, message, code);
 }
 
-const invalid = () => failure("touch_id_invalid", "Touch ID can't open the vault anymore. Unlock with your passphrase and turn it on again.");
+const invalid = () => failure("touch_id_invalid", "Touch ID can't open the vault anymore. Unlock with your Godmode password and turn it on again.");
 
 function wrappingKey(secret: Buffer): Buffer {
   return Buffer.from(hkdfSync("sha256", secret, Buffer.alloc(0), HKDF_INFO, 32));
@@ -157,7 +157,7 @@ export async function enableTouchId(): Promise<void> {
       throw failure("touch_id_unavailable", "Touch ID isn't available right now");
     });
     const sealed = seal(created.key, created.publicKey, dek);
-    // Only a seal that really opened with this finger may stand in for the passphrase.
+    // Only a seal that really opened with this finger may stand in for the password.
     if ((await openSeal(sealed)) !== dek.toString("base64")) throw invalid();
     setMeta(META_KEY, JSON.stringify(sealed));
   } finally {

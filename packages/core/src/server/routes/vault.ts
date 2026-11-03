@@ -188,7 +188,7 @@ export function registerVaultRoutes(app: Hono): void {
     requireLocal(c);
     const { enabled } = await body(c, z.object({ enabled: z.boolean() }));
     if (enabled) {
-      // A fingerprint opens the vault from now on: like remembering the key, that takes the passphrase.
+      // A fingerprint opens the vault from now on: like remembering the key, that takes the password.
       requireGrant(c);
       await enableTouchId();
     } else {
