@@ -11,8 +11,8 @@ import { decrypt, deriveKey, sha256, type KdfParams } from "../vault/crypto";
 export const GRANT_HEADER = "x-godmode-grant";
 export const GRANT_TTL_MS = 10 * 60_000;
 
-/** sha256(grant) → expiry (epoch ms). In memory only: a restart invalidates every grant. */
-const grants = new Map<string, number>();
+/** sha256(grant) → when it ends (epoch ms) and whether a finger gave it. In memory only: a restart invalidates every grant. */
+const grants = new Map<string, { expires: number; finger: boolean }>();
 
 /** Check the vault passphrase against the wrapped data key without touching the vault's lock state. */
 export function verifyVaultPassphrase(passphrase: string): boolean {
@@ -28,21 +28,21 @@ export function verifyVaultPassphrase(passphrase: string): boolean {
   }
 }
 
-export function issueGrant(): { grant: string; expiresAt: string } {
+export function issueGrant(how: "password" | "finger" = "password"): { grant: string; expiresAt: string } {
   const t = Date.now();
-  for (const [key, expires] of grants) if (expires <= t) grants.delete(key);
+  for (const [key, entry] of grants) if (entry.expires <= t) grants.delete(key);
   const grant = randomToken(32);
   const expires = t + GRANT_TTL_MS;
-  grants.set(sha256(grant), expires);
+  grants.set(sha256(grant), { expires, finger: how === "finger" });
   return { grant, expiresAt: new Date(expires).toISOString() };
 }
 
 export function isValidGrant(grant: string | null | undefined): boolean {
   if (!grant) return false;
   const key = sha256(grant);
-  const expires = grants.get(key);
-  if (expires === undefined) return false;
-  if (expires <= Date.now()) {
+  const entry = grants.get(key);
+  if (!entry) return false;
+  if (entry.expires <= Date.now()) {
     grants.delete(key);
     return false;
   }
@@ -56,6 +56,14 @@ export function requireGrant(c: Context): void {
   }
 }
 
+/** Only the password: a seal made with a finger's grant would take in fingerprints added since the last one. */
+export function requirePasswordGrant(c: Context): void {
+  requireGrant(c);
+  if (grants.get(sha256(c.req.header(GRANT_HEADER)!))?.finger) {
+    throw new HttpError(403, "Confirm with your Godmode password to continue", "grant_required");
+  }
+}
+
 /** Drop every grant (tests). */
 export function clearGrants(): void {
   grants.clear();
@@ -64,5 +72,5 @@ export function clearGrants(): void {
 /** A grant the primary of this computer's device group issued: valid here too until it expires (remote/deviceRouting.ts). */
 export function adoptGrant(grant: string, expiresAt: string): void {
   const expires = Math.min(Date.parse(expiresAt), Date.now() + GRANT_TTL_MS);
-  if (grant && Number.isFinite(expires) && expires > Date.now()) grants.set(sha256(grant), expires);
+  if (grant && Number.isFinite(expires) && expires > Date.now()) grants.set(sha256(grant), { expires, finger: false });
 }

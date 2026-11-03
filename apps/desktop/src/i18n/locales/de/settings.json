@@ -1726,7 +1726,7 @@
       "remember": "Auf diesem Gerät merken",
       "rememberDescription": "Legt den Tresorschlüssel im macOS-Schlüsselbund bzw. der Windows-Anmeldeinformationsverwaltung ab, damit Automationen nach einem Neustart unbeaufsichtigt laufen. Auf geteilten Rechnern für maximale Sicherheit ausschalten.",
       "touchId": "Touch ID",
-      "touchIdDescription": "Entsperre den Tresor mit deinem Fingerabdruck. Dein Godmode-Passwort funktioniert weiterhin.",
+      "touchIdDescription": "Entsperre den Tresor und bestätige, dass du es bist, mit deinem Fingerabdruck. Dein Godmode-Passwort funktioniert weiterhin.",
       "autoLock": "Automatisch sperren",
       "autoLockDescription": "Sperrt den Tresor nach so vielen Minuten ohne Aktivität. 0 = nie."
     },

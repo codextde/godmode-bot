@@ -477,6 +477,7 @@ export const api = {
     touchId: {
       status: () => get<TouchIdStatus>("/api/vault/touch-id"),
       unlock: () => post<VaultStatus>("/api/vault/touch-id/unlock"),
+      grant: () => post<VaultGrant>("/api/vault/touch-id/grant"),
       set: (enabled: boolean, grant?: string) => request<TouchIdStatus>("PUT", "/api/vault/touch-id", { enabled }, withGrant(grant)),
     },
     changePassphrase: (current: string, next: string) => post<{ ok: true }>("/api/vault/passphrase", { current, next }),

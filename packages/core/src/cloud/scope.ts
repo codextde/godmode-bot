@@ -93,6 +93,7 @@ const RULES: [methods: string, path: string, rule: Rule][] = [
   ["GET|PUT|DELETE", "/api/vault/mac-password", refused(COMPUTER_ONLY)],
   ["GET|PUT", "/api/vault/touch-id", refused(COMPUTER_ONLY)],
   ["POST", "/api/vault/touch-id/unlock", refused(COMPUTER_ONLY)],
+  ["POST", "/api/vault/touch-id/grant", refused(COMPUTER_ONLY)],
   ["POST", "/api/doctor/permissions/fix", refused(COMPUTER_ONLY)],
   ["POST", "/api/doctor/permissions/open", refused(COMPUTER_ONLY)],
   ["POST", "/api/doctor/permissions/reset", refused(COMPUTER_ONLY)],

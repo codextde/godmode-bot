@@ -14,7 +14,7 @@ import { hostApp } from "../services/permissions";
 import { getSettings } from "../services/settings";
 import { HttpError } from "../util";
 import { decrypt, encrypt } from "./crypto";
-import { exportKeyForBackup, isUnlocked, lockCount, status, useRememberedKey } from "./vault";
+import { exportKeyForBackup, isUnlocked, isVaultKey, lockCount, status, useRememberedKey } from "./vault";
 
 const META_KEY = "vault.touch_id";
 const CONTEXT = "vault.touch_id";
@@ -113,21 +113,26 @@ function saved(): Sealed | null {
   }
 }
 
-function reason(): string {
+const REASONS = {
+  unlock: { de: "den Godmode-Tresor entsperren", en: "unlock the Godmode vault" },
+  confirm: { de: "bestätigen, dass du es bist", en: "confirm it's you" },
+};
+
+function reason(purpose: keyof typeof REASONS): string {
   const { language } = getSettings().general;
   const german = language === "de" || (language === "system" && Intl.DateTimeFormat().resolvedOptions().locale.startsWith("de"));
-  return german ? "den Godmode-Tresor entsperren" : "unlock the Godmode vault";
+  return REASONS[purpose][german ? "de" : "en"];
 }
 
 let prompting = false;
 
 /** Asks for the finger, one prompt at a time, and returns the vault key (base64) the seal holds. */
-async function openSeal(sealed: Sealed): Promise<string> {
+async function openSeal(sealed: Sealed, purpose: keyof typeof REASONS): Promise<string> {
   if (prompting) throw failure("touch_id_busy", "Touch ID is already waiting for a finger");
   prompting = true;
   let secret: string;
   try {
-    secret = await touchIdDeps.derive(sealed.key, sealed.peer, reason());
+    secret = await touchIdDeps.derive(sealed.key, sealed.peer, reason(purpose));
   } catch (err) {
     if (err instanceof HelperError && err.code === "touch_id_invalid") throw invalid();
     if (err instanceof HelperError && err.code.startsWith("touch_id_")) throw failure(err.code, err.message);
@@ -158,7 +163,7 @@ export async function enableTouchId(): Promise<void> {
     });
     const sealed = seal(created.key, created.publicKey, dek);
     // Only a seal that really opened with this finger may stand in for the password.
-    if ((await openSeal(sealed)) !== dek.toString("base64")) throw invalid();
+    if ((await openSeal(sealed, "unlock")) !== dek.toString("base64")) throw invalid();
     setMeta(META_KEY, JSON.stringify(sealed));
   } finally {
     dek.fill(0);
@@ -176,7 +181,7 @@ export async function unlockWithTouchId(): Promise<VaultStatus> {
   const locks = lockCount();
   let value: string;
   try {
-    value = await openSeal(sealed);
+    value = await openSeal(sealed, "unlock");
   } catch (err) {
     // New fingerprints or a replaced vault: this seal never opens again, so stop offering it.
     if (err instanceof HttpError && err.code === "touch_id_invalid") deleteMeta(META_KEY);
@@ -189,4 +194,24 @@ export async function unlockWithTouchId(): Promise<VaultStatus> {
     throw invalid();
   }
   return status();
+}
+
+/**
+ * The finger in place of the password for a reveal grant. The opened key must be the vault's own, so a seal planted in
+ * the database for another key confirms nothing. The lock state stays.
+ */
+export async function confirmWithTouchId(): Promise<void> {
+  const sealed = saved();
+  if (!sealed) throw failure("touch_id_off", "Touch ID is off");
+  let value: string;
+  try {
+    value = await openSeal(sealed, "confirm");
+  } catch (err) {
+    if (err instanceof HttpError && err.code === "touch_id_invalid") deleteMeta(META_KEY);
+    throw err;
+  }
+  if (!isVaultKey(value)) {
+    deleteMeta(META_KEY);
+    throw invalid();
+  }
 }

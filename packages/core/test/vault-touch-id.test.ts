@@ -1,14 +1,17 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
-import { createECDH } from "node:crypto";
+import { createECDH, hkdfSync, randomBytes } from "node:crypto";
 import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { Context } from "hono";
 import { HelperError } from "../src/computer/helperError";
+import { isValidGrant, issueGrant, requireGrant, requirePasswordGrant } from "../src/server/grants";
 import { loadConfig } from "../src/config";
 import { closeDb, getMeta, openDb, setMeta } from "../src/db";
 import { HttpError } from "../src/util";
 import { resetSettingsCache } from "../src/services/settings";
-import { disableTouchId, enableTouchId, touchIdDeps, touchIdStatus, unlockWithTouchId } from "../src/vault/touchId";
+import { encrypt } from "../src/vault/crypto";
+import { confirmWithTouchId, disableTouchId, enableTouchId, touchIdDeps, touchIdStatus, unlockWithTouchId } from "../src/vault/touchId";
 import * as vault from "../src/vault/vault";
 
 const PASSPHRASE = "correct horse battery";
@@ -129,6 +132,62 @@ describe("vault touch id", () => {
     expect(vault.isUnlocked()).toBe(false);
     expect(getMeta("vault.touch_id")).toBeNull();
     setMeta("vault.canary", meta.canary!);
+  });
+
+  test("a finger confirms it's you without changing the lock state", async () => {
+    await enableTouchId();
+    prompts = [];
+    await confirmWithTouchId();
+    expect(prompts).toEqual(["confirm it's you"]);
+    expect(vault.isUnlocked()).toBe(true);
+
+    vault.lock();
+    await confirmWithTouchId();
+    expect(vault.isUnlocked()).toBe(false);
+  });
+
+  test("confirming needs Touch ID on and a finger", async () => {
+    expect(await code(confirmWithTouchId())).toBe("touch_id_off");
+    await enableTouchId();
+    answer = () => {
+      throw new HelperError("Touch ID was cancelled", "touch_id_cancelled");
+    };
+    expect(await code(confirmWithTouchId())).toBe("touch_id_cancelled");
+    expect((await touchIdStatus()).enabled).toBe(true);
+  });
+
+  test("a planted seal and canary of another key confirm nothing while unlocked", async () => {
+    await enableTouchId();
+    const real = JSON.parse(getMeta("vault.touch_id")!) as { peer: string };
+    const canary = getMeta("vault.canary")!;
+    const secret = enclave.computeSecret(Buffer.from(real.peer, "base64"));
+    const wrapping = Buffer.from(hkdfSync("sha256", secret, Buffer.alloc(0), "godmode vault touch id", 32));
+    const other = randomBytes(32);
+    setMeta("vault.touch_id", JSON.stringify({ ...real, box: encrypt(wrapping, other.toString("base64"), "vault.touch_id") }));
+    setMeta("vault.canary", encrypt(other, "ok", "vault.canary"));
+    expect(await code(confirmWithTouchId())).toBe("touch_id_invalid");
+    setMeta("vault.canary", canary);
+  });
+
+  test("a finger's grant can't turn Touch ID on, the password's can", () => {
+    const context = (grant: string) => ({ req: { header: () => grant } }) as unknown as Context;
+    const finger = issueGrant("finger").grant;
+    expect(isValidGrant(finger)).toBe(true);
+    expect(() => requireGrant(context(finger))).not.toThrow();
+    expect(() => requirePasswordGrant(context(finger))).toThrow();
+    expect(() => requirePasswordGrant(context(issueGrant().grant))).not.toThrow();
+    expect(() => requirePasswordGrant(context("nothing"))).toThrow();
+  });
+
+  test("a planted seal of another key confirms nothing", async () => {
+    await enableTouchId();
+    const real = JSON.parse(getMeta("vault.touch_id")!) as { peer: string };
+    const secret = enclave.computeSecret(Buffer.from(real.peer, "base64"));
+    const wrapping = Buffer.from(hkdfSync("sha256", secret, Buffer.alloc(0), "godmode vault touch id", 32));
+    const planted = encrypt(wrapping, randomBytes(32).toString("base64"), "vault.touch_id");
+    setMeta("vault.touch_id", JSON.stringify({ ...real, box: planted }));
+    expect(await code(confirmWithTouchId())).toBe("touch_id_invalid");
+    expect(getMeta("vault.touch_id")).toBeNull();
   });
 
   test("a prompt left open across a lock doesn't undo that lock", async () => {

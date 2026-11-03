@@ -198,6 +198,8 @@
   "grant": {
     "title": "Bestätige, dass du es bist",
     "defaultReason": "Gib dein Godmode-Passwort ein, um Geheimnisse im Klartext anzuzeigen.",
+    "touchIdReason": "Nutze Touch ID oder dein Godmode-Passwort, um Geheimnisse im Klartext anzuzeigen.",
+    "touchId": "Mit Touch ID bestätigen",
     "notAgain": "Für die nächsten 10 Minuten wirst du nicht erneut gefragt.",
     "passphrase": "Godmode-Passwort"
   },
