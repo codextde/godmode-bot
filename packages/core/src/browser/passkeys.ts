@@ -38,7 +38,8 @@ const AUTHENTICATOR = {
 /**
  * `navigator.credentials.get({ password })` on a site with a saved password opens Chrome's account chooser. That dialog
  * can't be seen or closed over CDP and blocks all trusted input to the tab, so to an agent a normal looking page ignores
- * every click and key. Asked silently, Chrome answers without a dialog and the page shows its login form.
+ * every click and key. Asked silently, Chrome answers without a dialog and the page shows its login form. A site that
+ * requires the choice gets null, as if it was dismissed: silently Chrome could sign in on its own.
  */
 const NO_ACCOUNT_CHOOSER = `(() => {
   const proto = globalThis.CredentialsContainer?.prototype;
@@ -47,7 +48,8 @@ const NO_ACCOUNT_CHOOSER = `(() => {
     apply(get, self, args) {
       const o = args[0];
       const chooser = o && (o.password || o.federated) && !o.publicKey && !o.identity && !o.otp && !o.digital && [undefined, "optional", "required"].includes(o.mediation);
-      return Reflect.apply(get, self, chooser ? [{ ...o, mediation: "silent" }] : args);
+      if (!chooser) return Reflect.apply(get, self, args);
+      return o.mediation === "required" ? Promise.resolve(null) : Reflect.apply(get, self, [{ ...o, mediation: "silent" }]);
     },
   });
 })();`;

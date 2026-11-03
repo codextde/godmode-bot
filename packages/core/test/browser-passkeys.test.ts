@@ -23,9 +23,9 @@ import * as vault from "../src/vault/vault";
 const PAGE = `<!doctype html><title>Passkeys</title><input id="field" autocomplete="username webauthn" style="width:300px;height:40px"><script>
 window.seen = { keydown: 0, mousedown: 0 };
 for (const type of ["keydown", "mousedown"]) window.addEventListener(type, () => window.seen[type]++, true);
-window.askAccounts = () => {
+window.askAccounts = (mediation) => {
   window.accounts = "pending";
-  navigator.credentials.get({ password: true, federated: { providers: ["https://accounts.google.com"] } }).then((c) => (window.accounts = c), (e) => (window.accounts = e.name));
+  navigator.credentials.get({ password: true, federated: { providers: ["https://accounts.google.com"] }, mediation }).then((c) => (window.accounts = c), (e) => (window.accounts = e.name));
 };
 window.autofill = async () => {
   try {
@@ -259,12 +259,12 @@ describe.skipIf(!chrome)("passkeys in the browser", () => {
   }, 30_000);
 
   describe("Chrome's account chooser", () => {
-    async function tabAskingForAccounts() {
+    async function tabAskingForAccounts(mediation = "optional") {
       const { targetId } = await rb().client.send<{ targetId: string }>("Target.createTarget", { url: "about:blank" });
       const page = await attachToPage(rb().client, targetId);
       await page.send("Page.navigate", { url: `${origin}/` });
       await waitFor(() => page.evaluate<boolean>("document.readyState === 'complete' && typeof askAccounts === 'function'", { timeoutMs: 1000 }));
-      await page.evaluate("askAccounts(); 0");
+      await page.evaluate(`askAccounts("${mediation}"); 0`);
       await Bun.sleep(500);
       return page;
     }
@@ -294,6 +294,15 @@ describe.skipIf(!chrome)("passkeys in the browser", () => {
       } finally {
         await rb().client.send("Target.closeTarget", { targetId: page.targetId });
         await resumePasskeys(profileId);
+      }
+    }, 30_000);
+
+    test("a site that requires the choice gets none", async () => {
+      const page = await tabAskingForAccounts("required");
+      try {
+        expect(await typeInto(page)).toEqual({ seen: { keydown: 1, mousedown: 1 }, value: "a", accounts: null });
+      } finally {
+        await page.detach();
       }
     }, 30_000);
 
