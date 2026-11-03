@@ -654,11 +654,7 @@
     "turns_one": "{{count}} turn",
     "turns_other": "{{count}} turns",
     "tokenUsage": "{{input}} in · {{output}} out · {{cached}} cached",
-    "queuedEllipsis": "Queued…",
-    "pause": "Pause",
-    "pausing": "Pausing…",
-    "pausingHint": "Finishing the step it is in",
-    "pauseHint": "Pause after the current step — continue anytime"
+    "queuedEllipsis": "Queued…"
   },
   "browser": {
     "title": "Browser",
@@ -852,6 +848,8 @@
     "queueMessage": "Queue message",
     "sendMessage": "Send message",
     "send": "Send",
+    "stop": "Stop",
+    "stopping": "Stopping…",
     "options": "Options",
     "optionsTitle": "Options for this chat"
   },

@@ -13,7 +13,7 @@ import {
   type Ref,
 } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { ArrowUp, AudioLines, Loader2, Mic, Paperclip, SlidersHorizontal, SquareSlash } from "lucide-react";
+import { ArrowUp, AudioLines, Loader2, Mic, Paperclip, SlidersHorizontal, Square, SquareSlash } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import type { SlashCommand } from "@godmode/shared";
@@ -57,6 +57,8 @@ interface ComposerProps {
   busy?: boolean;
   /** The agent is working — new messages get queued */
   running?: boolean;
+  onStop?: () => void;
+  stopping?: boolean;
   /** Nothing can be written or sent right now (the computer the chat works on is away); a draft that is there stays. */
   disabled?: boolean;
   /** What sending does right now, when it isn't a plain send (e.g. "Send and continue"). */
@@ -96,6 +98,8 @@ export function Composer({
   autoFocus,
   busy,
   running,
+  onStop,
+  stopping,
   disabled,
   sendHint,
   blocked,
@@ -208,7 +212,9 @@ export function Composer({
     [addFiles, setText],
   );
 
-  const canSend = (text.trim().length > 0 || attachments.length > 0) && !busy && !blocked && !disabled;
+  const hasContent = text.trim().length > 0 || attachments.length > 0;
+  const canSend = hasContent && !busy && !blocked && !disabled;
+  const showStop = !!running && !!onStop && !hasContent;
 
   // Slash commands: the menu lists matches while only the command name is typed; afterwards a hint shows its arguments.
   const slashToken = /^\/([\w:.-]*)$/.exec(text)?.[1] ?? null;
@@ -501,27 +507,45 @@ export function Composer({
             </ToolbarButton>
           )}
 
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                type="button"
-                size="icon"
-                onClick={() => void submit()}
-                disabled={!canSend}
-                aria-label={blocked ?? sendHint ?? (running ? t("composer.queueMessage") : t("composer.sendMessage"))}
-                className="ml-0.5 size-8 rounded-lg transition-[background-color,scale] active:scale-95 disabled:bg-secondary disabled:text-muted-foreground disabled:opacity-100 disabled:shadow-none"
-              >
-                {busy ? <Loader2 className="size-4 animate-spin" /> : <ArrowUp className="size-[18px]" strokeWidth={2.4} />}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              {blocked ?? (
-                <>
-                  {sendHint ?? (running ? t("composer.queueMessage") : t("composer.send"))} <Kbd>↵</Kbd>
-                </>
-              )}
-            </TooltipContent>
-          </Tooltip>
+          {showStop ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  size="icon"
+                  onClick={onStop}
+                  disabled={stopping}
+                  aria-label={stopping ? t("composer.stopping") : t("composer.stop")}
+                  className="ml-0.5 size-8 rounded-lg transition-[background-color,scale] active:scale-95 disabled:opacity-100"
+                >
+                  {stopping ? <Loader2 className="size-4 animate-spin" /> : <Square className="size-3.5 fill-current" />}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>{stopping ? t("composer.stopping") : t("composer.stop")}</TooltipContent>
+            </Tooltip>
+          ) : (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  size="icon"
+                  onClick={() => void submit()}
+                  disabled={!canSend}
+                  aria-label={blocked ?? sendHint ?? (running ? t("composer.queueMessage") : t("composer.sendMessage"))}
+                  className="ml-0.5 size-8 rounded-lg transition-[background-color,scale] active:scale-95 disabled:bg-secondary disabled:text-muted-foreground disabled:opacity-100 disabled:shadow-none"
+                >
+                  {busy ? <Loader2 className="size-4 animate-spin" /> : <ArrowUp className="size-[18px]" strokeWidth={2.4} />}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                {blocked ?? (
+                  <>
+                    {sendHint ?? (running ? t("composer.queueMessage") : t("composer.send"))} <Kbd>↵</Kbd>
+                  </>
+                )}
+              </TooltipContent>
+            </Tooltip>
+          )}
         </div>
       </div>
 

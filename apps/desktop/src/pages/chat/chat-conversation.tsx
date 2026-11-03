@@ -24,7 +24,7 @@ import { PrivateChatNote, usePrivateChatLifetime } from "@/components/chat/priva
 import { useConversationMood } from "@/components/chat/conversation-mood";
 import { FollowupBar } from "@/components/chat/followup";
 import { HumanTaskBar } from "@/components/human-tasks/human-task-chat";
-import { PauseBar, usePauseActions } from "@/components/chat/pause";
+import { PauseBar } from "@/components/chat/pause";
 import { QuestionScopeProvider } from "@/components/chat/question-card";
 import { ModelPicker, type ModelChoice } from "@/components/chat/model-picker";
 import { FolderChip, folderName } from "@/components/chat/folder-picker";
@@ -199,8 +199,6 @@ function ConversationView({ conversationId }: { conversationId: string }) {
     : paused
       ? { mood: "idle" as const, label: paused.reason === "limit" ? t("conv.waitingLimitReset") : t("status.paused") }
       : liveMood;
-  const { pause } = usePauseActions(conversationId);
-  const pausing = pause.isPending || live?.activity === "Pausing…" || live?.activity === "Asking you…";
   const answeringRef = useRef(false);
   const busyRef = useRef(false);
   // While the agent works, is paused or older messages still wait, a new message joins the queue.
@@ -610,10 +608,6 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                 delegatedFrom={conv.delegatedFrom}
                 inflight={inflight}
                 after={lastTurn && <TurnEnd key={lastTurn.id} conversation={conv} message={lastTurn} agent={agent} />}
-                onStop={() => activeRunId && cancel.mutate(activeRunId)}
-                stopping={cancel.isPending}
-                onPause={conv.origin === "dream" || live?.trigger === "dream" || live?.trigger === "check" || paused ? undefined : () => pause.mutate()}
-                pausing={pausing}
                 empty={
                   <ConversationWelcome agent={agent} seed={conversationId} onPick={(text) => composerRef.current?.setText(text)} />
                 }
@@ -742,6 +736,8 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                 agentId={conv.agentId}
                 autoFocus
                 running={!!activeRunId && !paused}
+                onStop={() => activeRunId && cancel.mutate(activeRunId)}
+                stopping={cancel.isPending}
                 blocked={agent && !agent.enabled ? `Switch ${agent.name} on to send` : undefined}
                 disabled={runnerAway}
                 onRecall={() => queueRef.current?.editLast() ?? false}

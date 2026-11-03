@@ -70,10 +70,6 @@ export interface ThreadProps {
   agent?: Agent;
   /** In-flight turn: live blocks (or null while waiting for the first delta) */
   inflight: { live: LiveRun | null; startedAt: number; runId: string | null } | null;
-  onStop?: () => void;
-  stopping?: boolean;
-  onPause?: () => void;
-  pausing?: boolean;
   /** Rendered when there are no messages and nothing in flight */
   empty?: ReactNode;
   /** A handed-over chat: who asked (names the opening message). */
@@ -88,7 +84,7 @@ export interface ThreadProps {
 
 const LOAD_OLDER_PX = 800;
 
-export function Thread({ messages, agent, inflight, onStop, stopping, onPause, pausing, empty, delegatedFrom, after, focusId, hasMore, onLoadOlder }: ThreadProps) {
+export function Thread({ messages, agent, inflight, empty, delegatedFrom, after, focusId, hasMore, onLoadOlder }: ThreadProps) {
   const { t } = useTranslation("chat");
   const reduce = useReduceAnimations();
   const { scrollRef, contentRef, spacerRef, atBottom, scrollToBottom, pinTurn, unstick } = useStickToBottom({ reduceMotion: reduce });
@@ -177,10 +173,6 @@ export function Thread({ messages, agent, inflight, onStop, stopping, onPause, p
               agent={agent}
               live={inflight.live}
               startedAt={inflight.startedAt}
-              onStop={inflight.runId ? onStop : undefined}
-              stopping={stopping}
-              onPause={inflight.runId ? onPause : undefined}
-              pausing={pausing}
             />
           )}
         </div>
