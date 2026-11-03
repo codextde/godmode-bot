@@ -155,7 +155,7 @@ describe("import on another machine", () => {
 
   test("wrong passphrase / garbage → 400", async () => {
     const err = await expectHttpError(() => importBackup(backup, "wrong passphrase!"), 400);
-    expect(err.message).toBe("Wrong backup passphrase or corrupted file");
+    expect(err.message).toBe("Wrong backup password or corrupted file");
     await expectHttpError(() => importBackup(new TextEncoder().encode("hello"), BACKUP_PASSPHRASE), 400);
     // Nothing changed.
     expect(vault.isUnlocked()).toBe(true);
@@ -462,7 +462,7 @@ describe("routes", () => {
     wrong.set("passphrase", "not the passphrase");
     res = await app.request("/api/backup/import", { method: "POST", body: wrong });
     expect(res.status).toBe(400);
-    expect(((await res.json()) as { error: string }).error).toBe("Wrong backup passphrase or corrupted file");
+    expect(((await res.json()) as { error: string }).error).toBe("Wrong backup password or corrupted file");
 
     const form = new FormData();
     form.set("file", new File([bytes], "backup.godmode-backup"));

@@ -124,14 +124,14 @@ build from source; to build your own desktop app, server binary or Docker image,
 
 ### Security model
 
-- **Vault**: your passphrase is stretched with scrypt (N=2^17) into a key that wraps a random 256-bit data key. Every
+- **Vault**: your Godmode password is stretched with scrypt (N=2^17) into a key that wraps a random 256-bit data key. Every
   secret is encrypted with AES-256-GCM and bound to its database row. *Remember on this device* (on by default, so
-  automations run unattended) keeps the data key in the OS keychain; switch it off to type the passphrase after every
+  automations run unattended) keeps the data key in the OS keychain; switch it off to type the password after every
   restart.
 - **Fill, don't reveal**: agents ask Godmode to type a password or 2FA code into the page over CDP, and the value never
   enters the model's context. A fill only goes into a page whose host matches the login's domains, over https, and
   passwords only into real password fields, so a lookalike page gets nothing. Reveal mode is opt-in per agent and
-  needs your passphrase.
+  needs your Godmode password.
 - **Audit**: known secrets are masked in transcripts, logs and the UI, and every fill and reveal is in the audit log.
 - **Local API**: the core listens on `127.0.0.1`, each run gets its own MCP token that expires with the run, and the
   web dashboard has CSRF, DNS-rebinding and login rate-limit protection.

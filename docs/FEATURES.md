@@ -22,7 +22,7 @@ Everything Godmode does, the screenshots, and the setup guides for each part. Ba
 | **Persistent agents** | Bots with their own instructions, conversations, memory (`MEMORY.md`), routines and history — each in its own git repo. |
 | **Characters & personality** | Every agent is a little creature with a face: pick its body, eyes, mouth, hat, glasses or bow tie and colour (or hit *Surprise me*), give it a name and a personality — Buddy, Sunny, Calm, Witty, Straight shooter, Curious, Butler, Hype or your own words — and it greets you and reports back in that voice. Its face shows what it's doing: it thinks, looks busy while it works, waves when it needs you, hops when the job is done and naps while switched off. Godmode itself is the mint mochi with the lightning bolt. |
 | **Dreaming** | While you're away, agents review their recent conversations and rewrite their memory: they pick up what they learned (even if nobody said "remember this"), merge duplicates, fix contradictions and update dates ("is going to Singapore in July" → "went to Singapore in July"). They also tidy their workspace: loose files into topic folders, leftovers of finished work out. Memory loads into every new chat, so dreams also keep it short: details move into notes, and an agent whose memory outgrows what a chat loads dreams as soon as it is idle. Pick the model that dreams (Opus by default); every dream can be reviewed as a diff and undone. |
-| **Proactive offers** | Your main agent doesn't wait to be asked. While it dreams it spots work it can take off your plate — a chore you repeat every week, a deadline nobody is on, a task that stopped half-way — and offers it on Home. *Do it* starts the chat that does it, *No thanks* declines, and the next dream learns from both. At most three wait at a time, they expire after a week, and nothing starts without your click. Switch it off in Settings → Memory. |
+| **Proactive offers** | Your main agent doesn't wait to be asked. While it dreams it spots work it can take off your plate — a chore you repeat every week, a deadline nobody is on, a task that stopped half-way — and offers it on Home. An offer about one workspace or project says so, shows only on that workspace's Home (and on *All workspaces*), and *Do it* starts its chat there. *Do it* starts the chat that does it, *No thanks* declines, and the next dream learns from both. At most three wait at a time, they expire after a week, and nothing starts without your click. Switch it off in Settings → Memory. |
 | **Bring your memory** | Coming from ChatGPT, Claude or Gemini? Settings → Memory → *Import*: copy one prompt into the other assistant, paste its answer, and your main agent merges what it knows about you — work, people, preferences, plans — into its own memory, without duplicates or secrets. |
 | **Working folders** | Optionally point a chat or an agent at any folder on your machine — it works on the files there and keeps its memory in its own repo. |
 | **Goals** | Say what the work is for: a goal (*Close Q4 books on time* — why it matters, by when) above the board shows how far it is — tickets done of all — and a click filters the board to its tickets. Every ticket that serves a goal tells its agent why, so choices the ticket leaves open go the right way; parts serve their ticket's goal. |
@@ -310,7 +310,7 @@ the full path). Inside Godmode nothing changes: the built-in *Godmode* agent cre
 
 ## Quick start
 
-1. **Onboarding** — pick a vault passphrase (enable *Remember on this device* so routines run unattended).
+1. **Onboarding** — pick a Godmode password (enable *Remember on this device* so routines run unattended).
 2. **Add access** — import your Chrome sessions, import or add logins in **Vault → Logins**, and import 2FA QR codes in
    **Vault → 2FA Codes** (Google Authenticator → *Transfer accounts* → *Export* → screenshot).
 3. **Chat** — ask Godmode anything: *“Log into our billing portal and download September's invoice.”*
@@ -489,8 +489,8 @@ Every run is committed, so you can see exactly what an agent learned and did —
 - **Site-bound fills**: a login is only ever typed into its own website (https, real password fields) — a phishing or
   prompt-injected lookalike page gets nothing.
 - **Address-bound API keys**: a tool's key is added by Godmode and only sent to URLs under the tool's address (redirects
-  elsewhere aren't followed); moving a saved key to another address or into agents' environment needs your passphrase.
-- **Re-auth for sensitive actions**: revealing a password or granting an agent reveal access needs your vault passphrase.
+  elsewhere aren't followed); moving a saved key to another address or into agents' environment needs your Godmode password.
+- **Re-auth for sensitive actions**: revealing a password or granting an agent reveal access needs your Godmode password.
 - **Redaction** of known secrets in transcripts, logs and the UI · **audit log** of every secret access.
 - **Local-first**: API on `127.0.0.1`, per-run MCP tokens, DNS-rebinding & CSRF protection, strict CSP,
   rate-limited logins, HttpOnly/SameSite cookies for the dashboard. Nothing leaves your computer unless you link it to
@@ -501,7 +501,7 @@ Every run is committed, so you can see exactly what an agent learned and did —
   can. The computer decides what the cloud may do: browser access, phone access, and whether the vault and saved
   passwords may be used through it (off by default). Some actions are never possible through the cloud.
 - **Remember this device** keeps the data key in the OS keychain so routines run unattended — disable it to require
-  your passphrase after every restart.
+  your Godmode password after every restart.
 - **Phones** pair with a one-time, five-minute QR code and get their own key (stored hashed on the computer, in the
   Keychain / Keystore on the phone). Their key only works on the computer's Tailscale address (and through the gateway
   of a cloud the computer is linked to), is only sent to an address that proves it's your Godmode, and opens a fixed

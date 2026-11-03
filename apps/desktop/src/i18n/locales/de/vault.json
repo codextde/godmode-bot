@@ -158,7 +158,7 @@
     "secretEncrypted": "Das Geheimnis bleibt verschlüsselt in deinem Tresor"
   },
   "cardDetails": {
-    "grantReason": "Bestätige mit deiner Tresor-Passphrase, um die Kartendaten anzuzeigen.",
+    "grantReason": "Bestätige mit deinem Godmode-Passwort, um die Kartendaten anzuzeigen.",
     "showFailed": "Kartendaten konnten nicht angezeigt werden",
     "description": "Wird nach {{seconds}} Sekunden automatisch ausgeblendet. Das Anzeigen einer Karte wird protokolliert.",
     "copyNumber": "Kartennummer kopieren",
@@ -197,9 +197,9 @@
   "deletedAgent": "Gelöschter Agent",
   "grant": {
     "title": "Bestätige, dass du es bist",
-    "defaultReason": "Gib deine Tresor-Passphrase ein, um Geheimnisse im Klartext anzuzeigen.",
+    "defaultReason": "Gib dein Godmode-Passwort ein, um Geheimnisse im Klartext anzuzeigen.",
     "notAgain": "Für die nächsten 10 Minuten wirst du nicht erneut gefragt.",
-    "passphrase": "Tresor-Passphrase"
+    "passphrase": "Godmode-Passwort"
   },
   "totpManual": {
     "secretMissing": "Füge den Einrichtungsschlüssel ein, der neben dem QR-Code steht.",
@@ -312,7 +312,7 @@
     "viewCode": "2FA-Code ansehen"
   },
   "purchases": {
-    "freesRoom": "Bestätige mit deiner Tresor-Passphrase: Dadurch wird wieder Spielraum unter den Kartenlimits frei.",
+    "freesRoom": "Bestätige mit deinem Godmode-Passwort: Dadurch wird wieder Spielraum unter den Kartenlimits frei.",
     "status": {
       "pending": "Wartet auf dein OK",
       "pendingHint": "Der Agent hat vor dem Bezahlen gefragt. Gib den Kauf hier oder im Chat frei oder lehne ihn ab.",
@@ -451,9 +451,9 @@
       "cvc": "Die Prüfnummer hat 3 oder 4 Ziffern.",
       "agents": "Wähle mindestens einen Agenten aus."
     },
-    "grantBilling": "Bestätige mit deiner Tresor-Passphrase, um die Rechnungsadresse anzuzeigen.",
+    "grantBilling": "Bestätige mit deinem Godmode-Passwort, um die Rechnungsadresse anzuzeigen.",
     "showBillingFailed": "Rechnungsadresse konnte nicht angezeigt werden",
-    "grantLoosen": "Bestätige mit deiner Tresor-Passphrase, um die Regeln dieser Karte zu lockern.",
+    "grantLoosen": "Bestätige mit deinem Godmode-Passwort, um die Regeln dieser Karte zu lockern.",
     "updated": "Karte aktualisiert",
     "saved": "Karte gespeichert",
     "updateFailed": "Karte konnte nicht aktualisiert werden",
@@ -527,7 +527,7 @@
     "remove": "Rechnungsadresse entfernen"
   },
   "passwordImport": {
-    "grantReason": "Gib deine Tresor-Passphrase ein, um den Export mit deinen gespeicherten Logins abzugleichen.",
+    "grantReason": "Gib dein Godmode-Passwort ein, um den Export mit deinen gespeicherten Logins abzugleichen.",
     "noEntries": "{{file}} enthält keine Einträge.",
     "noLogins": "Keine Website-Logins in {{file}}.",
     "noLoginsWhy": "Keine Website-Logins in {{file}} – {{why}}.",
@@ -637,7 +637,7 @@
   },
   "deleteTitle": "„{{name}}“ löschen?",
   "cardsPage": {
-    "grantUnfreeze": "Bestätige mit deiner Tresor-Passphrase, um diese Karte aufzutauen.",
+    "grantUnfreeze": "Bestätige mit deinem Godmode-Passwort, um diese Karte aufzutauen.",
     "frozen": "Karte eingefroren",
     "frozenDescription": "Agenten können damit nicht bezahlen, bis du sie auftaust.",
     "unfrozen": "Karte aufgetaut",
@@ -660,11 +660,11 @@
     "deleteDescription": "Die Karte wird aus dem Tresor entfernt. Ihr Kaufverlauf wird ebenfalls gelöscht.",
     "trust": {
       "encryptedTitle": "Verschlüsselt auf diesem Gerät",
-      "encryptedText": "AES-256-GCM, entsperrt mit deiner Tresor-Passphrase.",
+      "encryptedText": "AES-256-GCM, entsperrt mit deinem Godmode-Passwort.",
       "hiddenTitle": "Agenten sehen die Karte nie",
       "hiddenText": "Godmode tippt sie im Checkout ein und maskiert sie überall, wo ein Agent sie zurücklesen könnte.",
       "limitsTitle": "Deine Limits gelten",
-      "limitsText": "Zum Lockern der Kartenlimits brauchst du deine Passphrase."
+      "limitsText": "Zum Lockern der Kartenlimits brauchst du dein Passwort."
     }
   },
   "nothingMatchesQuery": "Keine Treffer für „{{query}}“",

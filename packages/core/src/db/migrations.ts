@@ -1967,4 +1967,12 @@ CREATE TABLE mac_password_grants (
 CREATE INDEX idx_mac_password_grants_ask ON mac_password_grants(conversation_id, agent_id, kind, subject, created_at);
 `,
   },
+  {
+    id: 118,
+    name: "offer_scope",
+    sql: /* sql */ `
+ALTER TABLE offers ADD COLUMN workspace_id TEXT;
+ALTER TABLE offers ADD COLUMN project_id TEXT;
+`,
+  },
 ];

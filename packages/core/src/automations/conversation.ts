@@ -1,9 +1,13 @@
 /** The conversation an automation's runs go to. */
-import type { Routine } from "@godmode/shared";
+import type { Routine, Run } from "@godmode/shared";
 import { get, run as exec } from "../db";
-import { createConversation } from "../services/conversations";
+import { logger } from "../log";
+import { createConversation, emitConversationUpdated, setConversationState } from "../services/conversations";
+import { generateAutomationTitle } from "../runner/chatTitle";
 import { getAgent } from "../agents/service";
 import { getSettings } from "../services/settings";
+
+const log = logger("automations");
 
 function formatDate(date: Date, timezone: string): string {
   try {
@@ -56,4 +60,22 @@ export function automationConversation(routine: Routine, occasion?: string): str
   const conversation = createConversation({ agentId: routine.agentId, title, origin: "routine", fillOnly: routine.fillOnly });
   if (routine.reuseConversation) exec("UPDATE routines SET conversation_id = ? WHERE id = ?", conversation.id, routine.id);
   return conversation.id;
+}
+
+export function nameAutomationRun(routine: Routine, run: Run): void {
+  if (routine.reuseConversation || run.status !== "succeeded" || !run.result?.trim() || !getSettings().general.aiChatTitles) return;
+  const prefix = `${routine.name} · `;
+  const placeholder = get<{ title: string }>("SELECT title FROM conversations WHERE id = ?", run.conversationId)?.title;
+  if (!placeholder?.startsWith(prefix)) return;
+  const runs = get<{ n: number }>("SELECT COUNT(*) AS n FROM runs WHERE conversation_id = ? AND trigger = 'routine'", run.conversationId)?.n ?? 0;
+  if (runs !== 1) return;
+  void generateAutomationTitle(run.prompt, run.result)
+    .then((title) => {
+      if (!title) return;
+      const row = get<{ title: string }>("SELECT title FROM conversations WHERE id = ?", run.conversationId);
+      if (row?.title !== placeholder) return;
+      setConversationState(run.conversationId, { title: `${prefix}${title}` });
+      emitConversationUpdated(run.conversationId);
+    })
+    .catch((err) => log.warn(`could not name conversation ${run.conversationId}`, err));
 }

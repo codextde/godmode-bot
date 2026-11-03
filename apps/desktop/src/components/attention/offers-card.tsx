@@ -8,9 +8,12 @@ import { useTranslation } from "react-i18next";
 import type { Agent, Offer } from "@godmode/shared";
 import { toast } from "sonner";
 import { AgentAvatar } from "@/components/common";
+import { useProjectIndex } from "@/components/projects/project-utils";
+import { WorkspaceTile } from "@/components/workspaces/workspace-tile";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { api, errorMessage } from "@/lib/api";
+import { useScopeWorkspace, useWorkspaces } from "@/lib/hooks";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
 import { EASE_OUT } from "@/lib/motion";
@@ -24,7 +27,9 @@ export function OffersCard({ agents }: { agents: Agent[] }) {
   const { t } = useTranslation("attention");
   const qc = useQueryClient();
   const navigate = useNavigate();
-  const { data: offers = [] } = useQuery({ queryKey: qk.offers, queryFn: api.offers.list, staleTime: 60_000 });
+  const scopeWorkspaceId = useScopeWorkspace()?.id ?? null;
+  const queryKey = [...qk.offers, scopeWorkspaceId ?? "all"];
+  const { data: offers = [] } = useQuery({ queryKey, queryFn: () => api.offers.list(scopeWorkspaceId), staleTime: 60_000 });
   const agentById = useMemo(() => new Map(agents.map((a) => [a.id, a])), [agents]);
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -32,7 +37,7 @@ export function OffersCard({ agents }: { agents: Agent[] }) {
     mutationFn: (id: string) => api.offers.accept(id),
     onMutate: (id) => setBusy(id),
     onSuccess: ({ offer, conversation }) => {
-      qc.setQueryData<Offer[]>(qk.offers, (cur) => cur?.filter((o) => o.id !== offer.id));
+      qc.setQueryData<Offer[]>(queryKey, (cur) => cur?.filter((o) => o.id !== offer.id));
       qc.invalidateQueries({ queryKey: qk.offers });
       qc.invalidateQueries({ queryKey: qk.conversationsAll });
       navigate(`/chat/${conversation.id}`);
@@ -46,7 +51,7 @@ export function OffersCard({ agents }: { agents: Agent[] }) {
 
   const dismiss = useMutation({
     mutationFn: (id: string) => api.offers.dismiss(id),
-    onMutate: (id) => qc.setQueryData<Offer[]>(qk.offers, (cur) => cur?.filter((o) => o.id !== id)),
+    onMutate: (id) => qc.setQueryData<Offer[]>(queryKey, (cur) => cur?.filter((o) => o.id !== id)),
     onError: (err) => toast.error(t("offers.declineError"), { description: errorMessage(err) }),
     onSettled: () => qc.invalidateQueries({ queryKey: qk.offers }),
   });
@@ -68,6 +73,7 @@ export function OffersCard({ agents }: { agents: Agent[] }) {
             <OfferRow
               key={o.id}
               offer={o}
+              showWorkspace={!scopeWorkspaceId}
               pending={busy === o.id}
               disabled={busy !== null}
               onAccept={() => accept.mutate(o.id)}
@@ -82,12 +88,14 @@ export function OffersCard({ agents }: { agents: Agent[] }) {
 
 function OfferRow({
   offer,
+  showWorkspace,
   pending,
   disabled,
   onAccept,
   onDismiss,
 }: {
   offer: Offer;
+  showWorkspace: boolean;
   pending: boolean;
   disabled: boolean;
   onAccept: () => void;
@@ -114,8 +122,9 @@ function OfferRow({
             <span className="text-muted-foreground">{t("offers.startsWith")} </span>
             <span className={cn("whitespace-pre-wrap", long && !open && "line-clamp-2")}>{offer.prompt}</span>
           </p>
-          <p className="mt-1.5 flex items-center gap-1 text-[11px] text-muted-foreground">
+          <div className="mt-1.5 flex min-w-0 items-center gap-1 text-[11px] text-muted-foreground">
             <time dateTime={offer.createdAt}>{t("offers.offered", { time: formatDistanceStrict(new Date(offer.createdAt), new Date(), { addSuffix: true, locale: dateLocale }) })}</time>
+            <OfferScope offer={offer} showWorkspace={showWorkspace} />
             {long && (
               <>
                 <span className="opacity-50">·</span>
@@ -130,7 +139,7 @@ function OfferRow({
                 </button>
               </>
             )}
-          </p>
+          </div>
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
           <Button size="sm" variant="ghost" className="text-muted-foreground" disabled={disabled} onClick={onDismiss}>
@@ -143,5 +152,26 @@ function OfferRow({
         </div>
       </div>
     </motion.li>
+  );
+}
+
+function OfferScope({ offer, showWorkspace }: { offer: Offer; showWorkspace: boolean }) {
+  const { data: workspaces } = useWorkspaces();
+  const projects = useProjectIndex();
+  const project = offer.projectId ? projects.get(offer.projectId)?.project : undefined;
+  const workspace = workspaces?.find((w) => w.id === offer.workspaceId);
+  const parts = [showWorkspace ? workspace : undefined, project].filter((p) => !!p);
+  if (!parts.length) return null;
+  return (
+    <>
+      <span className="opacity-50">·</span>
+      {parts.map((p, i) => (
+        <span key={p.id} className="inline-flex min-w-0 items-center gap-1">
+          {i > 0 && <span className="opacity-50">›</span>}
+          <WorkspaceTile icon={p.icon} color={p.color} size="sm" className="size-3.5 rounded-[3px] text-[8px]" />
+          <span className="truncate">{p.name}</span>
+        </span>
+      ))}
+    </>
   );
 }

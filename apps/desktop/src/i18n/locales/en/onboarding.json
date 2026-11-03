@@ -13,7 +13,7 @@
   },
   "unlock": {
     "tooMany": "Too many attempts — wait a minute and try again.",
-    "wrong": "That passphrase isn't right."
+    "wrong": "That password isn't right."
   },
   "remote": {
     "eyebrow": "Remote dashboard",
@@ -55,25 +55,25 @@
   },
   "vault": {
     "guarantees": {
-      "key": "Your passphrase derives the encryption key (scrypt). It is never stored or sent anywhere.",
+      "key": "Your password derives the encryption key (scrypt). It is never stored or sent anywhere.",
       "encryption": "Every password, 2FA secret and API key is encrypted individually with AES-256-GCM.",
       "fill": "Agents fill secrets straight into the browser — the AI model never sees them unless you allow it."
     },
     "eyebrow": "Vault",
     "readyTitle": "Your vault is ready.",
     "readyDescription": "It's unlocked and encrypted on this machine.",
-    "readyBody": "Logins, 2FA codes and API keys you add are encrypted with your passphrase.",
+    "readyBody": "Logins, 2FA codes and API keys you add are encrypted with your password.",
     "createTitle": "Create your vault.",
     "createSubtitle": "Sealed on this machine.",
     "createDescription": "The vault holds website logins, 2FA secrets and API keys so your agents can sign in without interrupting you.",
-    "passphrase": "Vault passphrase",
+    "passphrase": "Godmode password",
     "noRecovery": "It can't be recovered.",
     "noRecoveryHint": "Store it in your password manager — without it, the vault can only be reset.",
     "remember": "Remember on this device",
-    "rememberHint": "Recommended so automations run unattended. The vault key is kept in your operating system's keychain and the vault unlocks automatically on this machine. Turn off to type the passphrase after every restart.",
+    "rememberHint": "Recommended so automations run unattended. The vault key is kept in your operating system's keychain and the vault unlocks automatically on this machine. Turn off to type the password after every restart.",
     "create": "Create vault",
     "unlockTitle": "Unlock your vault.",
-    "unlockDescription": "A vault already exists on this machine. Enter its passphrase to continue setting up.",
+    "unlockDescription": "A vault already exists on this machine. Enter its password to continue setting up.",
     "unlock": "Unlock"
   },
   "doctor": {

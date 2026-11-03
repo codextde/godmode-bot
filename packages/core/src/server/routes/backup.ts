@@ -4,7 +4,7 @@ import { exportBackup, importBackup, MAX_BACKUP_BYTES } from "../../backup/backu
 import { badRequest, HttpError } from "../../util";
 
 const exportSchema = z.object({
-  passphrase: z.string().min(8, "Backup passphrase must be at least 8 characters").max(1024),
+  passphrase: z.string().min(8, "Backup password must be at least 8 characters").max(1024),
   includeAgentRepos: z.boolean().optional().default(true),
   includeBrowserProfiles: z.boolean().optional().default(false),
 });
@@ -41,7 +41,7 @@ export function registerBackupRoutes(app: Hono): void {
     const file = form.get("file");
     const passphrase = form.get("passphrase");
     if (!(file instanceof Blob)) throw badRequest("Choose a backup file to restore");
-    if (typeof passphrase !== "string" || !passphrase) throw badRequest("Enter the passphrase of the backup");
+    if (typeof passphrase !== "string" || !passphrase) throw badRequest("Enter the password of the backup");
     if (file.size > MAX_BACKUP_BYTES) throw tooLarge();
     const data = new Uint8Array(await file.arrayBuffer());
     return c.json(await importBackup(data, passphrase));
