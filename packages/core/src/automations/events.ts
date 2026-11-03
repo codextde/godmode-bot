@@ -15,7 +15,7 @@ import { sendMessage, updateConversation } from "../services/conversations";
 import { notify } from "../services/notifications";
 import { redact } from "../vault/vault";
 import { INTERRUPTED } from "../runner/runner";
-import { automationConversation, chatFitsAutomation } from "./conversation";
+import { automationConversation, chatFitsAutomation, nameAutomationRun } from "./conversation";
 import { pausedRun } from "../services/pauses";
 import { remindWaitingAutomation } from "../services/questions";
 import { onCheckRunFinished } from "./conditions";
@@ -643,6 +643,7 @@ function onBusEvent(event: ServerEvent) {
   const updated = exec("UPDATE routines SET last_status = ? WHERE id = ?", run.status, routineId);
   finishEvents(run);
   if (updated.changes === 0) return;
+  if (run.trigger === "routine") nameAutomationRun(getRoutine(routineId), run);
   emitRoutine(routineId);
   dispatch(routineId).catch((err) => log.warn(`automation ${routineId} could not start`, err));
 }

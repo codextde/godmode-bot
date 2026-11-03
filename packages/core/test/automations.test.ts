@@ -12,6 +12,7 @@ import { resetSettingsCache } from "../src/services/settings";
 import * as conversations from "../src/services/conversations";
 import * as vault from "../src/vault/vault";
 import * as composio from "../src/integrations/composio";
+import * as chatTitle from "../src/runner/chatTitle";
 import { createAgent } from "../src/agents/service";
 import * as repo from "../src/agents/repo";
 import { createRoutine, getRoutine, listRoutines, readTriggerState, runRoutineNow, updateRoutine } from "../src/services/routines";
@@ -408,6 +409,31 @@ describe("event queue", () => {
     expect(eventsOf(r.id)[0]).toMatchObject({ source: "manual", title: "Test event", runId: started.id });
     expect((await catchHttp(runRoutineNow(r.id))).status).toBe(409);
     finish(started);
+  });
+
+  test("Haiku names a per-run conversation after its result, keeping the automation's name in front", async () => {
+    const titleSpy = spyOn(chatTitle, "generateAutomationTitle").mockImplementation(async (_task, result) => `Named from ${result}`);
+    try {
+      const r = createRoutine({ agentId: agent.id, name: "Retouren", cron: "0 9 * * 1", prompt: "Check returns", reuseConversation: false });
+      const first = await triggerRoutine(r.id);
+      finish(first, "succeeded", "3 returns");
+      await waitFor(() => get<{ title: string }>("SELECT title FROM conversations WHERE id = ?", first.conversationId)!.title === "Retouren · Named from 3 returns", "the generated title");
+      expect(titleSpy).toHaveBeenCalledWith("Check returns", "3 returns");
+
+      const failed = await triggerRoutine(r.id);
+      const placeholder = get<{ title: string }>("SELECT title FROM conversations WHERE id = ?", failed.conversationId)!.title;
+      finish(failed, "failed", null, "boom");
+
+      const shared = createRoutine({ agentId: agent.id, name: "Shared", cron: "0 9 * * 1", prompt: "x" });
+      const reused = await triggerRoutine(shared.id);
+      finish(reused, "succeeded", "done");
+      await tick();
+      expect(titleSpy).toHaveBeenCalledTimes(1);
+      expect(get<{ title: string }>("SELECT title FROM conversations WHERE id = ?", failed.conversationId)!.title).toBe(placeholder);
+      expect(get<{ title: string }>("SELECT title FROM conversations WHERE id = ?", reused.conversationId)!.title).toBe("Shared");
+    } finally {
+      titleSpy.mockRestore();
+    }
   });
 
   test("schedule ticks are recorded as events", async () => {
