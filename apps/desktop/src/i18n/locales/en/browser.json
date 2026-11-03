@@ -242,6 +242,7 @@
     "chatsAria": "Chats in this browser",
     "untitledChat": "Untitled chat",
     "tabs": "{{n}} tabs",
+    "noPageTitle": "No page open",
     "noTabTitle": "No page open in this chat",
     "noTabBody": "The agent opens its own tab when it needs the web. Enter an address above to open one yourself.",
     "waitingLabel": "Waiting for the first frame",

@@ -49,6 +49,7 @@ class LiveView {
   private offs: (() => void)[] = [];
   private switching: Promise<void> | null = null;
   private stopped = false;
+  private empty = false;
 
   /** With a chat: show the tab that chat works in, not the browser's active one. */
   constructor(
@@ -112,8 +113,13 @@ class LiveView {
         if (this.stopped) return;
         if (!page) {
           await this.detach();
+          if (!this.empty) {
+            this.empty = true;
+            bus.emit({ type: "browser.empty", profileId: this.rb.profileId, ...(this.conversationId ? { conversationId: this.conversationId } : {}) });
+          }
           return;
         }
+        this.empty = false;
         if (page.targetId === this.targetId && this.session) return;
         await this.detach();
         const session = await attachToPage(this.rb.client, page.targetId);

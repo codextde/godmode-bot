@@ -242,6 +242,7 @@
     "chatsAria": "Chats in diesem Browser",
     "untitledChat": "Unbenannter Chat",
     "tabs": "{{n}} Tabs",
+    "noPageTitle": "Keine Seite offen",
     "noTabTitle": "In diesem Chat ist keine Seite offen",
     "noTabBody": "Der Agent öffnet seinen eigenen Tab, wenn er das Web braucht. Gib oben eine Adresse ein, um selbst eine zu öffnen.",
     "waitingLabel": "Warte auf das erste Bild",

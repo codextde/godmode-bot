@@ -835,6 +835,14 @@ function onBrowserFrame(runnerId: string, e: Raw): boolean {
   return true;
 }
 
+function onBrowserEmpty(runnerId: string, e: Raw): boolean {
+  const profileId = safeId(e.profileId);
+  const conversationId = safeId(e.conversationId);
+  if (!profileId || !conversationId || !ownChat(runnerId, conversationId)) return false;
+  bus.emit({ type: "browser.empty", profileId, conversationId });
+  return true;
+}
+
 /** The runner's screen: its views are named `runner:<id>:<view>` here, so they never pass for a view of this computer. */
 function onComputer(runnerId: string, type: "computer.frame" | "computer.action", e: Raw): boolean {
   if (typeof e.view !== "string" || e.view.length > 300 || !VIEW.test(e.view)) return false;
@@ -969,6 +977,8 @@ function apply(runnerId: string, raw: unknown): boolean {
       return onNotification(e.notification);
     case "browser.frame":
       return onBrowserFrame(runnerId, e);
+    case "browser.empty":
+      return onBrowserEmpty(runnerId, e);
     case "computer.frame":
     case "computer.action":
       return onComputer(runnerId, type, e);

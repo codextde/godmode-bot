@@ -184,6 +184,7 @@ function ownEvent(event: ServerEvent): boolean {
     case "computer.action":
       return !event.view.startsWith("runner:");
     case "browser.frame":
+    case "browser.empty":
       return !event.conversationId || !!forwarding?.localBrowser({ profileId: event.profileId, conversationId: event.conversationId });
     case "entity.changed":
       return LOCAL_ENTITIES.has(event.entity);
@@ -419,9 +420,9 @@ function deliver(event: ServerEvent, only: ((ws: HubSocket) => boolean) | null) 
 }
 
 function deliverNow(event: ServerEvent) {
-  if (event.type === "browser.frame") {
+  if (event.type === "browser.frame" || event.type === "browser.empty") {
     const key = `browser:${browserView(event.profileId, event.conversationId)}`;
-    for (const ws of audience()) if (ws.data.subscriptions.has(key) && !congested(ws)) send(ws, event);
+    for (const ws of audience()) if (ws.data.subscriptions.has(key) && (event.type === "browser.empty" || !congested(ws))) send(ws, event);
     return;
   }
   if (event.type === "computer.frame" || event.type === "computer.action") {

@@ -696,6 +696,18 @@ describe("live views of a runner", () => {
     });
     expect(events).toEqual([{ ...frame, conversationId: conversation.id }]);
   });
+
+  test("its browser reports an empty tab only for one of its own chats", () => {
+    const conversation = adopt();
+    const foreign = adopt(OTHER);
+    const empty = { type: "browser.empty" as const, profileId: "prof_default" };
+    const events = during(() => {
+      applyRunnerEvent(RUNNER, { ...empty, conversationId: conversation.id });
+      applyRunnerEvent(RUNNER, empty);
+      applyRunnerEvent(RUNNER, { ...empty, conversationId: foreign.id });
+    });
+    expect(events).toEqual([{ ...empty, conversationId: conversation.id }]);
+  });
 });
 
 describe("reconciling a chat with the runner's answer", () => {
