@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Eye, Globe2, KeyRound, Lock, LockKeyhole, MonitorSmartphone, ShieldCheck, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
@@ -21,7 +21,7 @@ import { Switch } from "@/components/ui/switch";
 import { InlineCode } from "@/components/onboarding/doctor-checklist";
 import { isGrantCancelled, useVaultGrant, withGrant } from "@/components/vault/grant";
 import { toastApiError } from "@/components/vault/vault-utils";
-import { api } from "@/lib/api";
+import { ApiRequestError, api } from "@/lib/api";
 import { useBootstrap, useVaultStatus } from "@/lib/hooks";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
@@ -89,6 +89,20 @@ export function SecuritySection({ settings }: { settings: Settings }) {
     onError: (e) => !isGrantCancelled(e) && toastApiError(e, t("security.rememberError"), qc),
   });
 
+  const { data: touchId } = useQuery({ queryKey: qk.touchId, queryFn: api.vault.touchId.status });
+  const setTouchId = useMutation({
+    mutationFn: (on: boolean) => withGrant((grant) => api.vault.touchId.set(on, grant)),
+    onSuccess: (status, on) => {
+      qc.setQueryData(qk.touchId, status);
+      toast.success(on ? t("security.touchIdOn") : t("security.touchIdOff"));
+    },
+    onError: (e) => {
+      if (isGrantCancelled(e) || (e instanceof ApiRequestError && e.code === "touch_id_cancelled")) return;
+      toastApiError(e, t("security.touchIdError"), qc);
+    },
+  });
+  const touchIdOn = setTouchId.isPending ? !!setTouchId.variables : !!touchId?.enabled;
+
   const rememberOn = remember.isPending ? !!remember.variables : !!vault?.rememberDevice;
 
   return (
@@ -123,6 +137,11 @@ export function SecuritySection({ settings }: { settings: Settings }) {
         >
           <Switch id="remember-device" checked={rememberOn} disabled={remember.isPending} onCheckedChange={(on) => remember.mutate(on)} />
         </SettingRow>
+        {(touchId?.available || touchId?.enabled) && (
+          <SettingRow label={t("security.vault.touchId")} htmlFor="vault-touch-id" description={t("security.vault.touchIdDescription")}>
+            <Switch id="vault-touch-id" checked={touchIdOn} disabled={setTouchId.isPending || (!touchId.available && !touchId.enabled)} onCheckedChange={(on) => setTouchId.mutate(on)} />
+          </SettingRow>
+        )}
         <SettingRow label={t("security.vault.autoLock")} htmlFor="auto-lock" description={t("security.vault.autoLockDescription")}>
           <NumberField
             id="auto-lock"

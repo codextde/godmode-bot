@@ -236,7 +236,7 @@ function windowsScript(): string {
 }
 
 /** Spawn a JSON-lines helper process and wait for its ready line. */
-async function spawnHelper(command: string, args: string[], name: string, path: string, readyMs: number): Promise<NativeHelper> {
+export async function spawnHelper(command: string, args: string[], name: string, path: string, readyMs: number): Promise<NativeHelper> {
   let ready: () => void = () => {};
   const readyPromise = new Promise<void>((r) => (ready = r));
   const proc = new LineProcess({

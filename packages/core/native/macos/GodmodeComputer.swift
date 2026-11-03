@@ -14,12 +14,14 @@ import AppKit
 import ApplicationServices
 import Carbon.HIToolbox
 import CoreGraphics
+import CryptoKit
 import Foundation
 import ImageIO
+import LocalAuthentication
 import ScreenCaptureKit
 import UniformTypeIdentifiers
 
-let HELPER_VERSION = "3"
+let HELPER_VERSION = "4"
 
 // MARK: - Output
 
@@ -82,6 +84,75 @@ struct Params {
   func requireInt(_ key: String) throws -> Int {
     guard let v = int(key) else { throw HelperError("Missing integer \"\(key)\"", code: "bad_request") }
     return v
+  }
+}
+
+// MARK: - Touch ID
+
+// The vault key is sealed to a Secure Enclave key that only works after a fingerprint. Biometry only, no password
+// fallback: agents can be allowed to type the Mac password, never to touch the sensor.
+let touchIdQueue = DispatchQueue(label: "godmode.computer.touchid")
+let TOUCH_ID_PROMPT_SECONDS = 60.0
+
+func touchIdStatus() -> [String: Any] {
+  var error: NSError?
+  return ["available": SecureEnclave.isAvailable && LAContext().canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error)]
+}
+
+func touchIdCreate() throws -> [String: Any] {
+  var error: Unmanaged<CFError>?
+  guard let access = SecAccessControlCreateWithFlags(nil, kSecAttrAccessibleWhenUnlockedThisDeviceOnly, [.privateKeyUsage, .biometryCurrentSet], &error) else {
+    throw HelperError("Touch ID isn't available", code: "touch_id_unavailable")
+  }
+  do {
+    let key = try SecureEnclave.P256.KeyAgreement.PrivateKey(accessControl: access)
+    return ["key": key.dataRepresentation.base64EncodedString(), "publicKey": key.publicKey.x963Representation.base64EncodedString()]
+  } catch {
+    throw HelperError("Touch ID isn't available", code: "touch_id_unavailable")
+  }
+}
+
+func touchIdError(_ error: Error) -> HelperError {
+  switch (error as NSError).code {
+  case LAError.userCancel.rawValue, LAError.appCancel.rawValue, LAError.systemCancel.rawValue, LAError.userFallback.rawValue, LAError.invalidContext.rawValue, LAError.notInteractive.rawValue:
+    return HelperError("Touch ID was cancelled", code: "touch_id_cancelled")
+  case LAError.authenticationFailed.rawValue:
+    return HelperError("That fingerprint didn't match", code: "touch_id_failed")
+  default:
+    return HelperError("Touch ID isn't available right now", code: "touch_id_unavailable")
+  }
+}
+
+func touchIdDerive(_ p: Params) throws -> [String: Any] {
+  guard
+    let blob = p.string("key").flatMap({ Data(base64Encoded: $0) }),
+    let peerData = p.string("peer").flatMap({ Data(base64Encoded: $0) }),
+    let peer = try? P256.KeyAgreement.PublicKey(x963Representation: peerData),
+    let reason = p.string("reason"), !reason.isEmpty
+  else { throw HelperError("Missing Touch ID parameters", code: "bad_request") }
+
+  let context = LAContext()
+  context.localizedFallbackTitle = ""
+  let expiry = DispatchWorkItem { context.invalidate() }
+  DispatchQueue.global().asyncAfter(deadline: .now() + TOUCH_ID_PROMPT_SECONDS, execute: expiry)
+  defer { expiry.cancel() }
+
+  let answered = DispatchSemaphore(value: 0)
+  var failure: Error?
+  context.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, localizedReason: reason) { ok, error in
+    if !ok { failure = error ?? HelperError("Touch ID failed") }
+    answered.signal()
+  }
+  answered.wait()
+  if let failure { throw touchIdError(failure) }
+
+  // The finger was fine, so a key that refuses now was sealed to fingerprints that have changed since.
+  do {
+    let key = try SecureEnclave.P256.KeyAgreement.PrivateKey(dataRepresentation: blob, authenticationContext: context)
+    let secret = try key.sharedSecretFromKeyAgreement(with: peer)
+    return ["secret": secret.withUnsafeBytes { Data($0).base64EncodedString() }]
+  } catch {
+    throw HelperError("The fingerprints on this Mac have changed", code: "touch_id_invalid")
   }
 }
 
@@ -1848,7 +1919,7 @@ final class FocusGuard {
 /// Input runs one command at a time (event order matters); lookups run concurrently so a long `type` doesn't block them.
 let inputQueue = DispatchQueue(label: "godmode.computer.input")
 let readQueue = DispatchQueue(label: "godmode.computer.read", attributes: .concurrent)
-let readCommands: Set<String> = ["hello", "permissions", "displays", "windows", "window", "apps", "cursor", "guardFocus"]
+let readCommands: Set<String> = ["hello", "permissions", "displays", "windows", "window", "apps", "cursor", "guardFocus", "touchIdStatus", "touchIdCreate"]
 
 func handle(_ line: String) {
   guard let data = line.data(using: .utf8),
@@ -1883,6 +1954,11 @@ func handle(_ line: String) {
     return
   }
 
+  if cmd == "touchIdDerive" {
+    touchIdQueue.async { reply { try touchIdDerive(p) } }
+    return
+  }
+
   (readCommands.contains(cmd) ? readQueue : inputQueue).async {
     reply {
       switch cmd {
@@ -1902,6 +1978,8 @@ func handle(_ line: String) {
       case "type":
         try requireAccessibility()
         return try typeText(p)
+      case "touchIdStatus": return touchIdStatus()
+      case "touchIdCreate": return try touchIdCreate()
       case "passwordPrompt": return try passwordPrompt()
       case "passwordFill": return try fillPassword(p)
       case "activate": return try activate(p)

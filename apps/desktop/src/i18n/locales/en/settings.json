@@ -1707,6 +1707,9 @@
     "rememberOnDescription": "The vault key is stored in your OS keychain.",
     "rememberOffDescription": "You'll enter your passphrase after every restart.",
     "rememberError": "Could not change device unlock",
+    "touchIdOn": "Touch ID unlocks your vault",
+    "touchIdOff": "Touch ID turned off",
+    "touchIdError": "Couldn't change Touch ID",
     "title": "Security",
     "description": "Your vault, how agents may use secrets, and who can reach the dashboard. Every secret access is audited.",
     "change": "Change…",
@@ -1722,6 +1725,8 @@
       "passphraseDescription": "Change the passphrase that protects your vault.",
       "remember": "Remember on this device",
       "rememberDescription": "Stores the vault key in the macOS Keychain / Windows Credential Manager so automations can run unattended after a restart. Turn off for maximum security on shared machines.",
+      "touchId": "Touch ID",
+      "touchIdDescription": "Unlock the vault with your fingerprint. Your passphrase keeps working.",
       "autoLock": "Auto-lock",
       "autoLockDescription": "Lock the vault after this many idle minutes. 0 = never."
     },

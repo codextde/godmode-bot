@@ -24,6 +24,7 @@ export const qk = {
   power: ["power"] as unknown[],
   models: ["models"] as unknown[],
   vaultStatus: ["vault", "status"] as unknown[],
+  touchId: ["vault", "touch-id"] as unknown[],
   appSecrets: ["vault", "secrets"] as unknown[],
   credentials: ["credentials"] as unknown[],
   credentialList: (workspaceId: string, search: string) => ["credentials", "list", workspaceId, search],

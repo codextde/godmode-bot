@@ -247,7 +247,7 @@ export async function tryAutoUnlock(opts: { waitMs?: number } = {}): Promise<boo
   return value ? useRememberedKey(value) : false;
 }
 
-function useRememberedKey(value: string): boolean {
+export function useRememberedKey(value: string): boolean {
   const candidate = Buffer.from(value, "base64");
   if (candidate.length !== 32) {
     log.warn("remembered vault key is invalid");
@@ -267,7 +267,7 @@ function useRememberedKey(value: string): boolean {
   touch();
   loadKnownSecrets();
   emitStatus();
-  log.info("vault auto-unlocked from device keychain");
+  log.info("vault unlocked with this device's key");
   return true;
 }
 

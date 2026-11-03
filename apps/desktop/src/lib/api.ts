@@ -208,6 +208,7 @@ import type { DeviceGroup, DeviceGroupPatch, DeviceInvite, HandoffInput, Handoff
   TotpAutoLinkSuggestion,
   UpdateReport,
   UsageSummary,
+  TouchIdStatus,
   VaultStatus,
   Vm,
   VmAssignInput,
@@ -293,6 +294,9 @@ export function setUnauthorizedHandler(fn: () => void) {
 
 /** Header for a reveal grant from `api.vault.grant` (see components/vault/grant.tsx). */
 export const GRANT_HEADER = "x-godmode-grant";
+
+/** Whoever just locked the vault on purpose doesn't want a Touch ID prompt in their face. */
+export const vaultLockedByHand = { current: false };
 
 export interface VaultGrant {
   grant: string;
@@ -466,7 +470,15 @@ export const api = {
     status: () => get<VaultStatus>("/api/vault/status"),
     setup: (input: SetupInput) => post<VaultStatus>("/api/vault/setup", input),
     unlock: (passphrase: string) => post<VaultStatus>("/api/vault/unlock", { passphrase }),
-    lock: () => post<VaultStatus>("/api/vault/lock"),
+    lock: () => {
+      vaultLockedByHand.current = true;
+      return post<VaultStatus>("/api/vault/lock");
+    },
+    touchId: {
+      status: () => get<TouchIdStatus>("/api/vault/touch-id"),
+      unlock: () => post<VaultStatus>("/api/vault/touch-id/unlock"),
+      set: (enabled: boolean, grant?: string) => request<TouchIdStatus>("PUT", "/api/vault/touch-id", { enabled }, withGrant(grant)),
+    },
     changePassphrase: (current: string, next: string) => post<{ ok: true }>("/api/vault/passphrase", { current, next }),
     remember: (remember: boolean, grant?: string) => request<VaultStatus>("POST", "/api/vault/remember", { remember }, withGrant(grant)),
     /** Re-enter the passphrase → short-lived grant for revealing secrets (the lock state doesn't change). */

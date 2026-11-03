@@ -89,6 +89,18 @@ async function grantHeaders(): Promise<Record<string, string>> {
   return { "x-godmode-grant": res.data.grant };
 }
 
+describe("touch id routes", () => {
+  test("only someone at this computer gets a prompt", async () => {
+    expect((await call<{ code: string }>("POST", "/api/vault/touch-id/unlock", undefined, true, { "x-forwarded-for": "1.2.3.4" })).data.code).toBe("not_local");
+    expect((await call<{ code: string }>("PUT", "/api/vault/touch-id", { enabled: true }, true, { "x-forwarded-for": "1.2.3.4" })).data.code).toBe("not_local");
+    expect((await call("GET", "/api/vault/touch-id", undefined, true, { "x-forwarded-for": "1.2.3.4" })).data).toEqual({ available: false, enabled: false });
+  });
+
+  test("needs the sign-in", async () => {
+    expect((await call("POST", "/api/vault/touch-id/unlock", undefined, false)).status).toBe(401);
+  });
+});
+
 describe("vault routes", () => {
   test("require authentication", async () => {
     expect((await call("GET", "/api/vault/status", undefined, false)).status).toBe(401);
