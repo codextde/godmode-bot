@@ -18,6 +18,7 @@ import { CONNECT_INSTRUCTIONS } from "../connect/instructions";
 import { catchUpRun, deliverQueued, pauseAtStep } from "../runner/runner";
 import { hasQueued } from "../services/messageQueue";
 import { denyReason, foreignBrowserCall } from "../browser/cdpGuard";
+import { sweepingKill } from "../runner/killGuard";
 import { chatLeaseUrl } from "../browser/proxy";
 import { UnknownToolError, callTool, listToolsFor, toolErrorMessage } from "./tools";
 import { COMPUTER_INSTRUCTIONS, UnknownComputerToolError, callComputerTool, listComputerTools } from "../computer/tools";
@@ -327,12 +328,17 @@ export function registerMcpRoutes(app: Hono): void {
   });
 
   // Claude Code's PreToolUse hook: a run stays in the browser profile resolved for it — no scripts driving another
-  // Godmode browser through its raw DevTools port.
+  // Godmode browser through its raw DevTools port — and its cleanup doesn't end what else runs on this computer.
   app.post("/mcp/hooks/pre-tool-use", async (c) => {
     const ctx = resolveRunToken(bearer(c));
     if (!ctx) return c.body(null, 401);
     const input: unknown = await c.req.json().catch(() => null);
     if (!isObj(input) || typeof input.tool_name !== "string" || !isObj(input.tool_input)) return c.body(null, 204);
+    const sweeping = input.tool_name === "Bash" ? sweepingKill(input.tool_input.command) : null;
+    if (sweeping) {
+      log.info(`run ${ctx.runId}: refused a shell command that would match nearly every process`);
+      return c.json({ hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: sweeping } });
+    }
     const why = foreignBrowserCall(input.tool_name, input.tool_input, typeof input.cwd === "string" ? input.cwd : undefined);
     if (!why) return c.body(null, 204);
     log.warn(`run ${ctx.runId}: refused ${input.tool_name} reaching another browser (${why})`);

@@ -1,5 +1,5 @@
 /**
- * The Godmode system prompt appended to Claude Code's default prompt (`--append-system-prompt`).
+ * The Godmode system prompt appended to Claude Code's default prompt (`--append-system-prompt-file`).
  * CLAUDE.md in the agent repo carries identity + standing instructions; this carries runtime context,
  * the tool guide (browser, vault login procedure, missing logins, delegation, management) and policies.
  */
