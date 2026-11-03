@@ -203,11 +203,23 @@ export async function until(cond: () => boolean, timeoutMs = 10_000, what = "con
   }
 }
 
+/** Agents only get the desktop where there is one; Linux CI has no display. */
+export function withOwnDesktop(): () => void {
+  const display = process.env.DISPLAY;
+  process.env.DISPLAY ||= ":0";
+  return () => {
+    if (display === undefined) delete process.env.DISPLAY;
+    else process.env.DISPLAY = display;
+  };
+}
+
 /** Runs of these agents take turns on the computer until the returned function is called: how a test keeps a run queued. */
 export async function takeTurns(...agentIds: string[]): Promise<() => Promise<void>> {
+  const restoreDesktop = withOwnDesktop();
   for (const id of agentIds) await updateAgent(id, { computer: { enabled: true, target: null } });
   __setAgentRunsTakeTurnsForTests(true);
   return async () => {
+    restoreDesktop();
     __setAgentRunsTakeTurnsForTests(false);
     for (const id of agentIds) await updateAgent(id, { computer: { enabled: false, target: null } });
   };

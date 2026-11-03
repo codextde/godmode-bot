@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Agent, ComputerTarget, ServerEvent } from "@godmode/shared";
 import { computerTargetLabel, computerView, sameComputerTarget } from "@godmode/shared";
-import { argValue, captureEvents, invocations, makeAgent, setupEnv, until, type TestEnv } from "./fixtures/runner-harness";
+import { argValue, captureEvents, invocations, makeAgent, setupEnv, until, withOwnDesktop, type TestEnv } from "./fixtures/runner-harness";
 import { KeyError, parseKeyCombo, parseKeySequence } from "../src/computer/keys";
 import { fitSize, frameToImage, imageToFrame, inImage, regionToFrame, unionRect } from "../src/computer/geometry";
 import { imageSize } from "../src/computer/image";
@@ -654,6 +654,12 @@ describe("revoking access", () => {
 });
 
 describe("runner integration", () => {
+  let restoreDesktop: () => void;
+  beforeAll(() => {
+    restoreDesktop = withOwnDesktop();
+  });
+  afterAll(() => restoreDesktop());
+
   test("a shared tab adds the computer server with the run's token", async () => {
     const conv = createConversation({ agentId: agent.id });
     updateConversation(conv.id, { computerTarget: { kind: "tab", profileId: "bpr_nope", targetId: "T9", title: "Docs", url: "https://example.com" } });

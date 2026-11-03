@@ -501,7 +501,7 @@ describe("files on this computer", () => {
       expect((await post("one.png/open")).status).toBe(200);
       expect(launched[0]!.at(-1)).toContain(join("artifact-files", id, "one.png"));
       expect((await post("one.png/reveal")).status).toBe(200);
-      expect(launched[1]!.at(-1)).toBe(join(dir, "one.png"));
+      expect(launched[1]!.at(-1)).toBe(process.platform === "linux" ? dir : join(dir, "one.png"));
       expect((await post(`${encodeURIComponent("../../godmode.db")}/open`)).status).toBe(404);
       expect(launched.length).toBe(2);
     } finally {
