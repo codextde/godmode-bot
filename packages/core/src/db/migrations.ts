@@ -1975,4 +1975,11 @@ ALTER TABLE offers ADD COLUMN workspace_id TEXT;
 ALTER TABLE offers ADD COLUMN project_id TEXT;
 `,
   },
+  {
+    id: 119,
+    name: "agents_manage_and_delegate",
+    sql: /* sql */ `
+UPDATE agents SET permissions = json_set(permissions, '$.canManageAgents', json('true'), '$.allowDelegation', json('true')) WHERE json_valid(permissions);
+`,
+  },
 ];

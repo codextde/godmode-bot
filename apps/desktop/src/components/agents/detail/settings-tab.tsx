@@ -53,7 +53,7 @@ export function SettingsTab({ agent }: { agent: Agent }) {
         <Section
           title={t("settingsTab.dangerZone")}
           description={t("settingsTab.dangerZoneDescription")}
-          className="border-destructive/30"
+          className="mx-auto max-w-3xl border-destructive/30"
         >
           <Button variant="outline" className="border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => setConfirmDelete(true)}>
             <Trash2 /> {t("settingsTab.deleteAgent", { name: agent.name })}

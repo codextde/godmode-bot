@@ -23,7 +23,7 @@ beforeAll(async () => {
   updateSettings({ artifacts: { enabled: true } });
   __setArtifactCheckForTests(async (html) => ({ image: "aW1n", errors: html.includes("boom") ? ["ReferenceError: boom is not defined"] : [], warnings: [], height: 800 }));
   agent = await makeAgent({ name: "Builder" });
-  other = await makeAgent({ name: "Other" });
+  other = await makeAgent({ name: "Other", permissions: { canManageAgents: false } });
 });
 
 afterAll(async () => {

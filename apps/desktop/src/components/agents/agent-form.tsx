@@ -1,58 +1,17 @@
 import { useEffect, useEffectEvent, useMemo, useState, type ComponentProps, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation } from "react-router";
-import { Trans, useTranslation } from "react-i18next";
-import { motion, AnimatePresence } from "motion/react";
-import {
-  ArrowRight,
-  Bot,
-  Box,
-  BrainCircuit,
-  ChevronRight,
-  Eye,
-  FolderOpen,
-  Globe,
-  KeyRound,
-  MonitorUp,
-  Plug,
-  Plus,
-  Server,
-  ShieldCheck,
-  SlidersHorizontal,
-  Smartphone,
-  Sparkles,
-  Trash2,
-  TriangleAlert,
-  UserRound,
-  Users,
-  Workflow,
-  Wrench,
-} from "lucide-react";
+import { useTranslation } from "react-i18next";
+import { ArrowRight, ChevronRight, FolderOpen, Globe, MonitorUp, Plug, Plus, Server, Trash2, Wrench } from "lucide-react";
 import type { Agent, AgentCharacter, AgentInput, Effort, SecretAccessMode, SubagentDefinition } from "@godmode/shared";
-import {
-  DEFAULT_MODEL,
-  EFFORT_OPTIONS,
-  MAX_AGENT_ROLE_LENGTH,
-  characterGreeting,
-  defaultCharacter,
-  effortForModel,
-  effortLabel,
-  findModel,
-  leadProblem,
-  normalizeRole,
-  reportsOf,
-  ULTRACODE_HINT,
-  ULTRACODE_HINT_DE,
-  withinReach,
-} from "@godmode/shared";
-import { currentLanguage, intlLocale, t as translate } from "@/i18n";
+import { MAX_AGENT_ROLE_LENGTH, defaultCharacter, leadProblem, normalizeRole, reportsOf } from "@godmode/shared";
+import { t as translate } from "@/i18n";
 import { api } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
-import { useAllAgents, useBootstrap, useModelCatalog, useSshServers, useVmChoices, useWorkspaces } from "@/lib/hooks";
+import { useAllAgents, useBootstrap, useSshServers, useVmChoices, useWorkspaces } from "@/lib/hooks";
 import { isMac, modKey } from "@/lib/desktop";
 import { useUi } from "@/stores/ui";
 import { useDraft } from "@/lib/drafts";
-import { useEasyMode } from "@/lib/mode";
 import { cn } from "@/lib/utils";
 import { AgentAvatar, DraftStatus, Kbd, Section } from "@/components/common";
 import { Button } from "@/components/ui/button";
@@ -65,12 +24,9 @@ import { Switch } from "@/components/ui/switch";
 import { Spinner } from "@/components/ui/spinner";
 import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { AvatarPicker, ColorSwatches } from "./avatar-picker";
 import { CharacterPartsPicker, CharacterStage, PersonalityPicker, randomLook } from "./character-studio";
 import { MultiSelect } from "./multi-select";
-import { ModelOptions } from "./model-options";
-import { useVaultGrant } from "@/components/vault/grant";
 import { FolderPickerDialog, folderName, useShortPath } from "@/components/chat/folder-picker";
 import { defaultProfileFor } from "@/components/chat/browser-panel";
 import { InheritedInstructions, useInheritedInstructions } from "@/components/instructions/instructions";
@@ -103,9 +59,7 @@ export interface AgentFormValues {
   /** null = the global default. */
   ultracode: boolean | null;
   secretAccess: SecretAccessMode;
-  allowDelegation: boolean;
   delegateTo: string[];
-  canManageAgents: boolean;
   browserEnabled: boolean;
   browserProfileId: string | null;
   headless: boolean | null;
@@ -144,9 +98,7 @@ export function agentToValues(
     effort: source?.effort ?? null,
     ultracode: source?.ultracode ?? null,
     secretAccess: source?.permissions?.secretAccess ?? defaults.secretAccess ?? "fill",
-    allowDelegation: source?.permissions?.allowDelegation ?? true,
     delegateTo: source?.permissions?.delegateTo ?? [],
-    canManageAgents: source?.permissions?.canManageAgents ?? false,
     browserEnabled: source?.browser?.enabled ?? true,
     browserProfileId: source?.browser?.profileId ?? null,
     headless: source?.browser?.headless ?? null,
@@ -178,19 +130,12 @@ export function valuesToInput(v: AgentFormValues): AgentInput {
     model: v.model,
     effort: v.effort,
     ultracode: v.ultracode,
-    permissions: {
-      secretAccess: v.secretAccess,
-      allowDelegation: v.allowDelegation,
-      delegateTo: v.allowDelegation ? v.delegateTo : [],
-      canManageAgents: v.canManageAgents,
-    },
+    permissions: { secretAccess: v.secretAccess, allowDelegation: true, delegateTo: v.delegateTo, canManageAgents: true },
     browser: { enabled: v.browserEnabled, profileId: v.browserProfileId, headless: v.headless },
     computer: { enabled: v.computerEnabled, target: v.computerDisplayId ? { kind: "display", displayId: v.computerDisplayId } : null },
     inheritMcp: v.inheritMcp,
     mcpServerIds: v.mcpServerIds,
-    subagents: v.subagents
-      .map((s) => ({ ...s, name: slugify(s.name), description: s.description.trim(), prompt: s.prompt, model: s.model || undefined }))
-      .filter((s) => s.name),
+    subagents: v.subagents,
     workingDirectory: v.workingDirectory,
     vmId: v.vmId,
     sshServerIds: v.sshServerIds,
@@ -198,54 +143,7 @@ export function valuesToInput(v: AgentFormValues): AgentInput {
   };
 }
 
-function slugify(s: string) {
-  return s
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
-
-function validate(v: AgentFormValues): Record<string, string> {
-  const errors: Record<string, string> = {};
-  if (!v.name.trim()) errors.name = translate("agents:agentForm.errors.name");
-  const names = new Set<string>();
-  v.subagents.forEach((s, i) => {
-    const n = slugify(s.name);
-    if (!n) errors[`subagent-${i}`] = translate("agents:agentForm.errors.subagentName");
-    else if (names.has(n)) errors[`subagent-${i}`] = translate("agents:agentForm.errors.subagentUnique");
-    else if (!s.prompt.trim()) errors[`subagent-${i}`] = translate("agents:agentForm.errors.subagentPrompt");
-    names.add(n);
-  });
-  return errors;
-}
-
-const SECTIONS = [
-  { id: "identity", labelKey: "agentForm.nav.identity" },
-  { id: "team", labelKey: "agentForm.nav.team" },
-  { id: "personality", labelKey: "agentForm.nav.personality" },
-  { id: "instructions", labelKey: "agentForm.nav.instructions" },
-  { id: "brain", labelKey: "agentForm.nav.brain" },
-  { id: "folder", labelKey: "agentForm.nav.folder" },
-  { id: "permissions", labelKey: "agentForm.nav.permissions" },
-  { id: "browser", labelKey: "agentForm.nav.browser" },
-  { id: "computer", labelKey: "agentForm.nav.computer" },
-  { id: "vm", labelKey: "agentForm.nav.vm" },
-  { id: "ssh", labelKey: "agentForm.nav.ssh" },
-  { id: "android", labelKey: "agentForm.nav.android" },
-  { id: "tools", labelKey: "agentForm.nav.tools" },
-  { id: "subagents", labelKey: "agentForm.nav.subagents" },
-] as const;
-
-// Easy mode shows these up front; every other section waits behind "Advanced options".
-const EASY_SECTIONS = [
-  { id: "identity", labelKey: "agentForm.navEasy.identity" },
-  { id: "instructions", labelKey: "agentForm.navEasy.instructions" },
-  { id: "personality", labelKey: "agentForm.nav.personality" },
-  { id: "team", labelKey: "agentForm.nav.team" },
-] as const;
-const ADVANCED_ID = "advanced";
-const isAdvancedSection = (id: string) => SECTIONS.some((s) => s.id === id) && !EASY_SECTIONS.some((s) => s.id === id);
+const ADVANCED_SECTIONS = ["folder", "browser", "computer", "vm", "ssh", "android", "tools"];
 
 export function AgentForm({
   initial,
@@ -274,7 +172,6 @@ export function AgentForm({
 }) {
   const { t } = useTranslation(["agents", "common"]);
   const { data: boot } = useBootstrap();
-  const { catalog } = useModelCatalog();
   const scope = useUi((s) => s.workspace);
   const scopeProject = useUi((s) => s.project);
   const defaults = useMemo(
@@ -289,43 +186,14 @@ export function AgentForm({
   // Realtime updates flow into the fields that haven't been edited.
   const [values, setValues, draft] = useDraft<AgentFormValues>(draftKey, seed);
   const [showErrors, setShowErrors] = useState(false);
-  const easy = useEasyMode();
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const dirty = JSON.stringify(values) !== JSON.stringify(seed);
-  const effectiveModel = findModel(catalog.models, values.model || boot?.settings.runner.model || DEFAULT_MODEL);
-  const efforts: readonly Effort[] = effectiveModel?.efforts ?? EFFORT_OPTIONS;
-  // A custom model id: possible whenever this Claude Code has Ultracode at all.
-  const anyUltracode = catalog.models.some((m) => m.ultracode);
-  const ultracodeAvailable = effectiveModel ? effectiveModel.ultracode : anyUltracode;
-
-  const errors = validate(values);
-  const hasErrors = Object.keys(errors).length > 0;
+  const nameMissing = !values.name.trim();
   const set = <K extends keyof AgentFormValues>(key: K, value: AgentFormValues[K]) => setValues((v) => ({ ...v, [key]: value }));
-  const ensureGrant = useVaultGrant();
-
-  // Letting the AI read secrets needs the vault passphrase (the core checks it again on save).
-  const chooseSecretAccess = async (mode: SecretAccessMode) => {
-    if (mode === "reveal" && seed.secretAccess !== "reveal") {
-      try {
-        await ensureGrant();
-      } catch {
-        return;
-      }
-    }
-    set("secretAccess", mode);
-  };
-
   const submit = () => {
-    if (hasErrors) {
+    if (nameMissing) {
       setShowErrors(true);
-      const first = Object.keys(errors)[0];
-      const focus = () =>
-        document.getElementById(first === "name" ? "agent-name" : "subagents-list")?.focus();
-      // The field may sit in the collapsed advanced options: open them, then focus once they render.
-      if (easy && first !== "name" && !advancedOpen) {
-        setAdvancedOpen(true);
-        requestAnimationFrame(focus);
-      } else focus();
+      document.getElementById("agent-name")?.focus();
       return;
     }
     onSubmit(valuesToInput(values));
@@ -346,395 +214,21 @@ export function AgentForm({
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  const err = (k: string) => (showErrors ? errors[k] : undefined);
-  const preview = { id: agentId, name: values.name, avatar: values.avatar, color: values.color, character: values.character };
-  const human = boot?.settings.general.userName;
   const inherited = useInheritedInstructions(values.workspaceId, undefined, values.projectId);
   const vmChoices = useVmChoices();
   const androidOn = !!boot?.settings.android.enabled;
   const integrationsOn = !!boot?.settings.integrations.enabled;
   const sshOn = !!boot?.settings.ssh.enabled;
-  const sections = SECTIONS.filter(
-    (s) =>
-      (s.id !== "vm" || vmChoices.available) && (s.id !== "android" || androidOn) && (s.id !== "tools" || integrationsOn) && (s.id !== "ssh" || sshOn),
-  );
+  const messagingOn = !!boot?.settings.messaging.enabled;
 
   const { hash } = useLocation();
   // Again once the VM or Android section shows up: they wait for the VM status and the settings (links from the VMs page go to #vm).
   useEffect(() => {
     const id = hash.slice(1);
-    if (!SECTIONS.some((s) => s.id === id)) return;
-    const scroll = () => document.getElementById(id)?.scrollIntoView({ block: "start" });
-    // A link to an advanced section (e.g. #permissions) opens the advanced options first.
-    if (easy && isAdvancedSection(id)) {
-      setAdvancedOpen(true);
-      requestAnimationFrame(() => requestAnimationFrame(scroll));
-    } else requestAnimationFrame(scroll);
-  }, [hash, vmChoices.available, androidOn, easy]);
-  const advancedError = showErrors && Object.keys(errors).some((k) => k !== "name");
-  const navItems = easy ? [...EASY_SECTIONS, { id: ADVANCED_ID, labelKey: "agentForm.nav.advanced" as const }] : sections;
-
-  const teamSection = (
-    <FormSection
-      id="team"
-      title={t("agentForm.team.title")}
-      description={easy ? t("agentForm.team.descriptionEasy") : t("agentForm.team.description")}
-    >
-      <TeamField
-        agentId={agentId}
-        isDefault={isDefault}
-        name={values.name}
-        workspaceId={values.workspaceId}
-        value={values.reportsTo}
-        onChange={(v) => set("reportsTo", v)}
-      />
-    </FormSection>
-  );
-  const personalitySection = (
-    <FormSection
-      id="personality"
-      title={t("agentForm.personality.title")}
-      description={easy ? t("agentForm.personality.descriptionEasy") : t("agentForm.personality.description")}
-    >
-      <PersonalityPicker value={values.personality} onChange={(p) => set("personality", p)} />
-    </FormSection>
-  );
-  const instructionsSection = (
-    <FormSection
-      id="instructions"
-      title={easy ? t("agentForm.instructions.titleEasy") : t("agentForm.instructions.title")}
-      description={easy ? t("agentForm.instructions.descriptionEasy") : t("agentForm.instructions.description")}
-    >
-      <Textarea
-        id="agent-instructions"
-        value={values.instructions}
-        onChange={(e) => set("instructions", e.target.value)}
-        placeholder={t("agentForm.instructions.placeholder")}
-        aria-label={t("agentForm.instructions.title")}
-        className="min-h-64 resize-y text-[14px] leading-relaxed"
-      />
-      <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-        <span className="flex items-center gap-1.5">
-          <Sparkles className="size-3.5" />
-          {easy ? t("agentForm.instructions.tipEasy") : t("agentForm.instructions.tip")}
-        </span>
-        <span className="tabular-nums">{t("agentForm.instructions.chars", { count: values.instructions.length, formatted: values.instructions.length.toLocaleString(intlLocale()) })}</span>
-      </div>
-      {inherited.length > 0 && (
-        <div className="mt-4 rounded-lg border bg-paper-2 p-1.5">
-          <p className="px-2 pt-1 pb-0.5 text-[11px] font-medium text-muted-foreground">{t("agentForm.instructions.inherited")}</p>
-          <InheritedInstructions layers={inherited} />
-        </div>
-      )}
-    </FormSection>
-  );
-  const advanced = (
-    <>
-      <FormSection id="brain" title={t("agentForm.brain.title")} description={t("agentForm.brain.description")}>
-        <div className="grid grid-cols-1 gap-4 @xl:grid-cols-2">
-          <div className="space-y-1.5">
-            <Label htmlFor="agent-model">{t("agentForm.brain.model")}</Label>
-            <Select
-              value={findModel(catalog.models, values.model)?.id ?? (values.model || "__default")}
-              onValueChange={(v) => set("model", v === "__default" ? "" : v)}
-            >
-              <SelectTrigger id="agent-model" className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent position="popper">
-                <SelectItem value="__default">{t("agentForm.brain.defaultFromSettings")}</SelectItem>
-                <SelectSeparator />
-                <ModelOptions models={catalog.models} current={values.model} />
-              </SelectContent>
-            </Select>
-          </div>
-          <WorkspaceField
-            value={values.workspaceId}
-            onChange={(v) => {
-              set("workspaceId", v);
-              set("projectId", null);
-            }}
-            disabled={isDefault}
-          />
-          <ProjectField workspaceId={values.workspaceId} value={values.projectId} onChange={(v) => set("projectId", v)} />
-        </div>
-        <div className="mt-4 space-y-1.5">
-          <span id="agent-effort-label" className="flex items-center gap-1.5 text-sm font-medium">
-            <BrainCircuit className="size-4 text-muted-foreground" /> {t("agentForm.brain.effort")}
-          </span>
-          <ToggleGroup
-            type="single"
-            variant="outline"
-            value={(values.effort && effortForModel(efforts, values.effort)) || "default"}
-            onValueChange={(v) => v && set("effort", v === "default" ? null : (v as Effort))}
-            aria-labelledby="agent-effort-label"
-            className="w-full flex-wrap @xl:flex-nowrap"
-          >
-            <ToggleGroupItem value="default" className="flex-1 data-[state=on]:bg-secondary data-[state=on]:text-foreground data-[state=on]:ring-1 data-[state=on]:ring-foreground/15 data-[state=on]:ring-inset">
-              {t("agentForm.default")}
-            </ToggleGroupItem>
-            {efforts.map((e) => (
-              <ToggleGroupItem key={e} value={e} className="flex-1 data-[state=on]:bg-secondary data-[state=on]:text-foreground data-[state=on]:ring-1 data-[state=on]:ring-foreground/15 data-[state=on]:ring-inset">
-                {effortLabel(e, currentLanguage())}
-              </ToggleGroupItem>
-            ))}
-          </ToggleGroup>
-          <p className="text-xs text-muted-foreground">
-            {efforts.length
-              ? t("agentForm.brain.effortHint")
-              : t("agentForm.brain.noEffort", { model: effectiveModel?.label ?? t("agentForm.brain.thisModel") })}
-          </p>
-        </div>
-        <div className="mt-4 space-y-1.5">
-          <span id="agent-ultracode-label" className="flex items-center gap-1.5 text-sm font-medium">
-            <Workflow className="size-4 text-muted-foreground" /> Ultracode
-          </span>
-          <ToggleGroup
-            type="single"
-            variant="outline"
-            value={values.ultracode === null ? "default" : values.ultracode ? "on" : "off"}
-            onValueChange={(v) => v && set("ultracode", v === "default" ? null : v === "on")}
-            aria-labelledby="agent-ultracode-label"
-            className="w-full"
-          >
-            <ToggleGroupItem value="default" className="flex-1 data-[state=on]:bg-secondary data-[state=on]:text-foreground data-[state=on]:ring-1 data-[state=on]:ring-foreground/15 data-[state=on]:ring-inset">
-              {t("agentForm.default")}
-            </ToggleGroupItem>
-            <ToggleGroupItem value="on" disabled={!ultracodeAvailable} className="flex-1 data-[state=on]:bg-secondary data-[state=on]:text-foreground data-[state=on]:ring-1 data-[state=on]:ring-foreground/15 data-[state=on]:ring-inset">
-              {t("common:status.on")}
-            </ToggleGroupItem>
-            <ToggleGroupItem value="off" className="flex-1 data-[state=on]:bg-secondary data-[state=on]:text-foreground data-[state=on]:ring-1 data-[state=on]:ring-foreground/15 data-[state=on]:ring-inset">
-              {t("common:status.off")}
-            </ToggleGroupItem>
-          </ToggleGroup>
-          <p className="text-xs text-muted-foreground">
-            {ultracodeAvailable
-              ? (currentLanguage() === "de" ? ULTRACODE_HINT_DE : ULTRACODE_HINT)
-              : anyUltracode
-                ? t("agentForm.brain.noUltracode", { model: effectiveModel?.label ?? t("agentForm.brain.thisModel") })
-                : t("agentForm.brain.noUltracodeInstalled")}
-          </p>
-        </div>
-      </FormSection>
-
-      <FormSection
-        id="folder"
-        title={t("agentForm.folder.title")}
-        description={t("agentForm.folder.description")}
-      >
-        <FolderField value={values.workingDirectory} onChange={(v) => set("workingDirectory", v)} />
-      </FormSection>
-
-      <FormSection id="permissions" title={t("agentForm.permissions.title")} description={t("agentForm.permissions.description")}>
-        <div className="space-y-5">
-          <div className="space-y-2">
-            <span id="secret-access-label" className="flex items-center gap-1.5 text-sm font-medium">
-              <KeyRound className="size-4 text-muted-foreground" /> {t("agentForm.permissions.secrets")}
-            </span>
-            <RadioGroup
-              value={values.secretAccess}
-              onValueChange={(v) => void chooseSecretAccess(v as SecretAccessMode)}
-              aria-labelledby="secret-access-label"
-              className="grid grid-cols-1 gap-3 @xl:grid-cols-2"
-            >
-              <RadioCard
-                value="fill"
-                current={values.secretAccess}
-                icon={<ShieldCheck className="size-4 text-success" />}
-                title={t("agentForm.permissions.fill")}
-                badge={t("agentForm.permissions.recommended")}
-                description={t("agentForm.permissions.fillDescription")}
-              />
-              <RadioCard
-                value="reveal"
-                current={values.secretAccess}
-                icon={<Eye className="size-4 text-warning" />}
-                title={t("agentForm.permissions.reveal")}
-                description={t("agentForm.permissions.revealDescription")}
-              />
-            </RadioGroup>
-            <AnimatePresence>
-              {values.secretAccess === "reveal" && (
-                <motion.p
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  exit={{ opacity: 0, height: 0 }}
-                  className="flex items-center gap-1.5 overflow-hidden text-xs text-warning"
-                >
-                  <TriangleAlert className="size-3.5 shrink-0" /> {t("agentForm.permissions.revealWarning")}
-                </motion.p>
-              )}
-            </AnimatePresence>
-          </div>
-
-          <ToggleRow
-            id="agent-delegation"
-            icon={<Users className="size-4" />}
-            title={t("agentForm.permissions.delegation")}
-            description={t("agentForm.permissions.delegationDescription")}
-            checked={values.allowDelegation}
-            onChange={(v) => set("allowDelegation", v)}
-          />
-          <AnimatePresence initial={false}>
-            {values.allowDelegation && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: "auto" }}
-                exit={{ opacity: 0, height: 0 }}
-                className="overflow-hidden"
-              >
-                <DelegateField
-                  agentId={agentId}
-                  workspaceId={values.workspaceId}
-                  canManageAgents={values.canManageAgents}
-                  value={values.delegateTo}
-                  onChange={(v) => set("delegateTo", v)}
-                />
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          <ToggleRow
-            id="agent-manage"
-            icon={<Bot className="size-4" />}
-            title={t("agentForm.permissions.manage")}
-            description={t("agentForm.permissions.manageDescription")}
-            checked={values.canManageAgents}
-            onChange={(v) => set("canManageAgents", v)}
-          />
-
-        </div>
-      </FormSection>
-
-      <FormSection id="browser" title={t("agentForm.browser.title")} description={t("agentForm.browser.description")}>
-        <div className="space-y-5">
-          <ToggleRow
-            id="agent-browser"
-            icon={<Globe className="size-4" />}
-            title={t("agentForm.browser.access")}
-            description={t("agentForm.browser.accessDescription")}
-            checked={values.browserEnabled}
-            onChange={(v) => set("browserEnabled", v)}
-          />
-          <div className={cn("grid grid-cols-1 gap-4 @xl:grid-cols-2", !values.browserEnabled && "pointer-events-none opacity-50")}>
-            <BrowserProfileField
-              value={values.browserProfileId}
-              workspaceId={values.workspaceId}
-              onChange={(v) => set("browserProfileId", v)}
-              disabled={!values.browserEnabled}
-            />
-            <div className="space-y-1.5">
-              <span id="agent-headless-label" className="text-sm font-medium">
-                {t("agentForm.browser.window")}
-              </span>
-              <ToggleGroup
-                type="single"
-                variant="outline"
-                value={values.headless === null ? "default" : values.headless ? "headless" : "visible"}
-                onValueChange={(v) => v && set("headless", v === "default" ? null : v === "headless")}
-                aria-labelledby="agent-headless-label"
-                disabled={!values.browserEnabled}
-                className="w-full"
-              >
-                <ToggleGroupItem value="default" className="flex-1 data-[state=on]:bg-secondary data-[state=on]:text-foreground data-[state=on]:ring-1 data-[state=on]:ring-foreground/15 data-[state=on]:ring-inset">
-                  {t("agentForm.default")}
-                </ToggleGroupItem>
-                <ToggleGroupItem value="visible" className="flex-1 data-[state=on]:bg-secondary data-[state=on]:text-foreground data-[state=on]:ring-1 data-[state=on]:ring-foreground/15 data-[state=on]:ring-inset">
-                  {t("agentForm.browser.visible")}
-                </ToggleGroupItem>
-                <ToggleGroupItem value="headless" className="flex-1 data-[state=on]:bg-secondary data-[state=on]:text-foreground data-[state=on]:ring-1 data-[state=on]:ring-foreground/15 data-[state=on]:ring-inset">
-                  {t("agentForm.browser.headless")}
-                </ToggleGroupItem>
-              </ToggleGroup>
-            </div>
-          </div>
-        </div>
-      </FormSection>
-
-      <FormSection
-        id="computer"
-        title={t("agentForm.computer.title")}
-        description={t("agentForm.computer.description")}
-      >
-        <div className="space-y-5">
-          <ToggleRow
-            id="agent-computer"
-            icon={<MonitorUp className="size-4" />}
-            title={t("agentForm.computer.unattended")}
-            description={t("agentForm.computer.unattendedDescription")}
-            checked={values.computerEnabled}
-            onChange={(v) => set("computerEnabled", v)}
-          />
-          <ComputerDisplayField value={values.computerDisplayId} onChange={(v) => set("computerDisplayId", v)} disabled={!values.computerEnabled} />
-        </div>
-      </FormSection>
-
-      {vmChoices.available && (
-        <FormSection
-          id="vm"
-          title={t("agentForm.vm.title")}
-          description={t("agentForm.vm.description")}
-        >
-          <VmField value={values.vmId} workspaceId={values.workspaceId} onChange={(v) => set("vmId", v)} />
-        </FormSection>
-      )}
-
-      {sshOn && (
-        <FormSection id="ssh" title={t("agentForm.ssh.title")} description={t("agentForm.ssh.description")}>
-          <SshField value={values.sshServerIds} onChange={(v) => set("sshServerIds", v)} />
-        </FormSection>
-      )}
-
-      {androidOn && (
-        <FormSection
-          id="android"
-          title={t("agentForm.android.title")}
-          description={t("agentForm.android.description")}
-        >
-          <AndroidField value={values.androidDeviceIds} onChange={(v) => set("androidDeviceIds", v)} />
-        </FormSection>
-      )}
-
-      {integrationsOn && (
-        <FormSection id="tools" title={t("agentForm.tools.title")} description={t("agentForm.tools.description")}>
-          <div className="space-y-5">
-            <ToggleRow
-              id="agent-inherit-mcp"
-              icon={<Plug className="size-4" />}
-              title={t("agentForm.tools.inherit")}
-              description={t("agentForm.tools.inheritDescription")}
-              checked={values.inheritMcp}
-              onChange={(v) => set("inheritMcp", v)}
-            />
-            <ApiToolsField agentId={agentId} workspaceId={values.workspaceId} savedWorkspaceId={initial?.workspaceId ?? null} inherit={values.inheritMcp} />
-            <McpField agentId={agentId} value={values.mcpServerIds} onChange={(v) => set("mcpServerIds", v)} />
-          </div>
-        </FormSection>
-      )}
-
-      <FormSection
-        id="subagents"
-        title={t("agentForm.subagents.title")}
-        description={t("agentForm.subagents.description")}
-        actions={
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => set("subagents", [...values.subagents, { name: "", description: "", prompt: "" }])}
-          >
-            <Plus /> {t("agentForm.subagents.add")}
-          </Button>
-        }
-      >
-        <SubagentsEditor
-          value={values.subagents}
-          onChange={(v) => set("subagents", v)}
-          errors={showErrors ? errors : {}}
-        />
-      </FormSection>
-    </>
-  );
+    if (!ADVANCED_SECTIONS.includes(id)) return;
+    setAdvancedOpen(true);
+    requestAnimationFrame(() => requestAnimationFrame(() => document.getElementById(id)?.scrollIntoView({ block: "start" })));
+  }, [hash, vmChoices.available, androidOn]);
 
   return (
     <form
@@ -742,185 +236,203 @@ export function AgentForm({
         e.preventDefault();
         submit();
       }}
-      className="relative"
+      className="relative mx-auto max-w-3xl"
       noValidate
     >
-      <div className="grid grid-cols-1 gap-6 @5xl:grid-cols-[minmax(0,1fr)_240px]">
-        <div className="min-w-0 space-y-5">
-          <FormSection
-            id="identity"
-            title={easy ? t("agentForm.identity.titleEasy") : t("agentForm.identity.title")}
-            description={easy ? t("agentForm.identity.descriptionEasy") : t("agentForm.identity.description")}
-          >
-            <div className="grid grid-cols-1 gap-5 @2xl:grid-cols-[15rem_minmax(0,1fr)]">
-              <CharacterStage
-                character={values.character}
-                color={values.color}
-                name={values.name}
-                personality={values.personality}
-                human={human}
-                onSurprise={() => setValues((v) => ({ ...v, ...randomLook() }))}
-                className="min-h-64"
-              />
-              <div className="min-w-0 space-y-4">
-                <div className="space-y-1.5">
-                  <Label htmlFor="agent-name">{t("common:words.name")}</Label>
-                  <Input
-                    id="agent-name"
-                    value={values.name}
-                    onChange={(e) => set("name", e.target.value)}
-                    placeholder={t("agentForm.identity.namePlaceholder")}
-                    aria-invalid={!!err("name")}
-                    maxLength={60}
-                    autoFocus={mode === "create"}
-                  />
-                  {err("name") && <p className="text-xs text-destructive">{err("name")}</p>}
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="agent-role">{easy ? t("agentForm.identity.jobTitle") : t("agentForm.identity.role")}</Label>
-                  <Input
-                    id="agent-role"
-                    value={values.role}
-                    onChange={(e) => set("role", e.target.value)}
-                    placeholder={isDefault ? t("agentForm.identity.rolePlaceholderDefault") : t("agentForm.identity.rolePlaceholder")}
-                    maxLength={MAX_AGENT_ROLE_LENGTH}
-                    aria-describedby="agent-role-hint"
-                  />
-                  <p id="agent-role-hint" className="text-xs text-muted-foreground">
-                    {t("agentForm.identity.roleHint")}
-                  </p>
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="agent-description">{t("agentForm.identity.shortDescription")}</Label>
-                  <Input
-                    id="agent-description"
-                    value={values.description}
-                    onChange={(e) => set("description", e.target.value)}
-                    placeholder={t("agentForm.identity.descriptionPlaceholder")}
-                    maxLength={160}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <span className="text-sm font-medium">{t("agentForm.identity.color")}</span>
-                  <ColorSwatches value={values.color} onChange={(c) => set("color", c)} />
-                </div>
+      <div className="space-y-5">
+        <FormSection id="identity" title={t("agentForm.identity.title")}>
+          <div className="grid grid-cols-1 gap-5 @2xl:grid-cols-[15rem_minmax(0,1fr)]">
+            <CharacterStage
+              character={values.character}
+              color={values.color}
+              name={values.name}
+              personality={values.personality}
+              human={boot?.settings.general.userName}
+              onSurprise={() => setValues((v) => ({ ...v, ...randomLook() }))}
+              className="min-h-64"
+            />
+            <div className="min-w-0 space-y-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="agent-name">{t("common:words.name")}</Label>
+                <Input
+                  id="agent-name"
+                  value={values.name}
+                  onChange={(e) => set("name", e.target.value)}
+                  placeholder={t("agentForm.identity.namePlaceholder")}
+                  aria-invalid={showErrors && nameMissing}
+                  maxLength={60}
+                  autoFocus={mode === "create"}
+                />
+                {showErrors && nameMissing && <p className="text-xs text-destructive">{t("agentForm.errors.name")}</p>}
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="agent-role">{t("agentForm.identity.jobTitle")}</Label>
+                <Input
+                  id="agent-role"
+                  value={values.role}
+                  onChange={(e) => set("role", e.target.value)}
+                  placeholder={isDefault ? t("agentForm.identity.rolePlaceholderDefault") : t("agentForm.identity.rolePlaceholder")}
+                  maxLength={MAX_AGENT_ROLE_LENGTH}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="agent-description">{t("agentForm.identity.shortDescription")}</Label>
+                <Input
+                  id="agent-description"
+                  value={values.description}
+                  onChange={(e) => set("description", e.target.value)}
+                  placeholder={t("agentForm.identity.descriptionPlaceholder")}
+                  maxLength={160}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <span className="text-sm font-medium">{t("agentForm.identity.color")}</span>
+                <ColorSwatches value={values.color} onChange={(c) => set("color", c)} />
+              </div>
+              {messagingOn && (
                 <div className="space-y-1.5">
                   <Label htmlFor="agent-avatar">{t("agentForm.identity.emoji")}</Label>
-                  <div className="flex items-center gap-3">
-                    <AvatarPicker id="agent-avatar" avatar={values.avatar} color={values.color} onChange={(v) => set("avatar", v)} />
-                    <p className="text-xs text-muted-foreground">{t("agentForm.identity.emojiHint")}</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div className="mt-5 border-t pt-4">
-              <CharacterPartsPicker character={values.character} color={values.color} onChange={(c) => set("character", c)} />
-            </div>
-          </FormSection>
-
-          {easy ? (
-            <>
-              {instructionsSection}
-              {personalitySection}
-              {teamSection}
-            </>
-          ) : (
-            <>
-              {teamSection}
-              {personalitySection}
-              {instructionsSection}
-            </>
-          )}
-
-          {easy ? (
-            <Collapsible id={ADVANCED_ID} open={advancedOpen} onOpenChange={setAdvancedOpen} className="scroll-mt-6">
-              <CollapsibleTrigger className="group flex w-full items-center gap-3 rounded-xl border bg-card p-4 text-left shadow-card transition hover:border-foreground/15 focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none">
-                <span className="grid size-8 shrink-0 place-items-center rounded-lg border bg-paper-2 text-muted-foreground">
-                  <SlidersHorizontal className="size-4" />
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block text-sm font-medium">{t("agentForm.nav.advanced")}</span>
-                  <span className={cn("mt-0.5 block text-xs", advancedError ? "text-destructive" : "text-muted-foreground")}>
-                    {advancedError ? t("agentForm.advanced.error") : t("agentForm.advanced.summary")}
-                  </span>
-                </span>
-                <ChevronRight className="size-4 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-90" />
-              </CollapsibleTrigger>
-              <CollapsibleContent className="-mx-1 overflow-hidden px-1 pb-1 data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down">
-                <div className="space-y-5 pt-5">{advanced}</div>
-              </CollapsibleContent>
-            </Collapsible>
-          ) : (
-            advanced
-          )}
-        </div>
-
-        {/* Sticky preview + section nav on wide screens */}
-        <aside className="hidden @5xl:block">
-          <div className="sticky top-6 space-y-4">
-            <div className="rounded-xl border bg-card p-4 shadow-card">
-              <div className="eyebrow mb-3">{t("agentForm.preview.title")}</div>
-              <div className="flex items-center gap-3">
-                <AgentAvatar agent={preview} size="lg" follow />
-                <div className="min-w-0">
-                  <div className="truncate font-medium tracking-[-0.01em]">{values.name || t("agentForm.preview.unnamed")}</div>
-                  <div className="line-clamp-2 text-xs text-muted-foreground">{values.description || t("agentForm.preview.noDescription")}</div>
-                </div>
-              </div>
-              <p className="mt-3 rounded-lg rounded-tl-sm border bg-paper-2 px-3 py-2 text-xs leading-relaxed text-foreground/85">
-                {characterGreeting({ name: values.name.trim() || t("agentForm.preview.yourAgent"), personality: values.personality, human, seed: "studio", lang: currentLanguage() })}
-              </p>
-              {!easy && (
-                <div className="mt-3 flex flex-wrap gap-1.5 text-[11px] text-muted-foreground">
-                  <span className="rounded-[5px] border bg-secondary px-1.5 py-0.5">{findModel(catalog.models, values.model)?.label ?? (values.model || t("agentForm.preview.defaultModel"))}</span>
-                  {values.browserEnabled && <span className="rounded-[5px] border bg-secondary px-1.5 py-0.5">{t("agentForm.preview.browser")}</span>}
-                  {values.computerEnabled && <span className="rounded-[5px] border bg-secondary px-1.5 py-0.5">{t("agentForm.preview.computer")}</span>}
-                  {vmChoices.available && values.vmId && (
-                    <span className="flex max-w-full items-center gap-1 rounded-[5px] border bg-secondary px-1.5 py-0.5">
-                      <Box className="size-3 shrink-0" />
-                      <span className="truncate">{vmChoices.vms.find((v) => v.id === values.vmId)?.name ?? "VM"}</span>
-                    </span>
-                  )}
-                  {values.sshServerIds.length > 0 && (
-                    <span className="flex items-center gap-1 rounded-[5px] border bg-secondary px-1.5 py-0.5">
-                      <Server className="size-3 shrink-0" />
-                      {t("agentForm.preview.servers", { count: values.sshServerIds.length })}
-                    </span>
-                  )}
-                  {androidOn && values.androidDeviceIds.length > 0 && (
-                    <span className="flex items-center gap-1 rounded-[5px] border bg-secondary px-1.5 py-0.5">
-                      <Smartphone className="size-3 shrink-0" />
-                      {t("agentForm.preview.phones", { count: values.androidDeviceIds.length })}
-                    </span>
-                  )}
-                  {values.workingDirectory && (
-                    <span className="flex max-w-full items-center gap-1 rounded-[5px] border bg-secondary px-1.5 py-0.5">
-                      <FolderOpen className="size-3 shrink-0" />
-                      <span className="truncate">{folderName(values.workingDirectory)}</span>
-                    </span>
-                  )}
-                  <span className="rounded-[5px] border bg-secondary px-1.5 py-0.5">{values.secretAccess === "fill" ? t("agentForm.preview.fillOnly") : t("agentForm.preview.reveals")}</span>
+                  <AvatarPicker id="agent-avatar" avatar={values.avatar} color={values.color} onChange={(v) => set("avatar", v)} />
                 </div>
               )}
             </div>
-            <nav aria-label={t("agentForm.preview.sections")} className="space-y-0.5">
-              {navItems.map((s) => (
-                <a
-                  key={s.id}
-                  href={`#${s.id}`}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    if (s.id === ADVANCED_ID) setAdvancedOpen(true);
-                    document.getElementById(s.id)?.scrollIntoView({ behavior: "smooth", block: "start" });
-                  }}
-                  className="block rounded-md px-3 py-1.5 text-sm text-muted-foreground transition hover:bg-accent hover:text-foreground"
-                >
-                  {t(s.labelKey)}
-                </a>
-              ))}
-            </nav>
           </div>
-        </aside>
+          <div className="mt-5 border-t pt-4">
+            <CharacterPartsPicker character={values.character} color={values.color} onChange={(c) => set("character", c)} />
+          </div>
+        </FormSection>
+
+        <FormSection id="instructions" title={t("agentForm.instructions.title")}>
+          <Textarea
+            id="agent-instructions"
+            value={values.instructions}
+            onChange={(e) => set("instructions", e.target.value)}
+            placeholder={t("agentForm.instructions.placeholder")}
+            aria-label={t("agentForm.instructions.title")}
+            className="min-h-64 resize-y text-[14px] leading-relaxed"
+          />
+          {inherited.length > 0 && (
+            <div className="mt-4 rounded-lg border bg-paper-2 p-1.5">
+              <p className="px-2 pt-1 pb-0.5 text-[11px] font-medium text-muted-foreground">{t("agentForm.instructions.inherited")}</p>
+              <InheritedInstructions layers={inherited} />
+            </div>
+          )}
+        </FormSection>
+
+        <FormSection id="personality" title={t("agentForm.personality.title")}>
+          <PersonalityPicker value={values.personality} onChange={(p) => set("personality", p)} />
+        </FormSection>
+
+        <FormSection id="team" title={t("agentForm.team.title")}>
+          <div className="space-y-4">
+            {!isDefault && (
+              <>
+                <WorkspaceField
+                  value={values.workspaceId}
+                  onChange={(v) => {
+                    set("workspaceId", v);
+                    set("projectId", null);
+                  }}
+                />
+                <ProjectField workspaceId={values.workspaceId} value={values.projectId} onChange={(v) => set("projectId", v)} />
+              </>
+            )}
+            <TeamField
+              agentId={agentId}
+              isDefault={isDefault}
+              workspaceId={values.workspaceId}
+              value={values.reportsTo}
+              onChange={(v) => set("reportsTo", v)}
+            />
+          </div>
+        </FormSection>
+
+        <Collapsible id="advanced" open={advancedOpen} onOpenChange={setAdvancedOpen} className="scroll-mt-6">
+          <CollapsibleTrigger className="group flex w-full items-center justify-between gap-3 rounded-xl border bg-card px-5 py-4 text-left shadow-card transition hover:border-foreground/15 focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none">
+            <span className="text-sm font-medium">{t("agentForm.advanced")}</span>
+            <ChevronRight className="size-4 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-90" />
+          </CollapsibleTrigger>
+          <CollapsibleContent className="-mx-1 overflow-hidden px-1 pb-1 data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down">
+            <div className="space-y-5 pt-5">
+              <FormSection id="folder" title={t("agentForm.folder.title")}>
+                <FolderField value={values.workingDirectory} onChange={(v) => set("workingDirectory", v)} />
+              </FormSection>
+
+              <FormSection id="browser" title={t("agentForm.browser.title")}>
+                <div className="space-y-5">
+                  <ToggleRow id="agent-browser" icon={<Globe className="size-4" />} title={t("agentForm.browser.access")} checked={values.browserEnabled} onChange={(v) => set("browserEnabled", v)} />
+                  <div className={cn("grid grid-cols-1 gap-4 @xl:grid-cols-2", !values.browserEnabled && "pointer-events-none opacity-50")}>
+                    <BrowserProfileField
+                      value={values.browserProfileId}
+                      workspaceId={values.workspaceId}
+                      onChange={(v) => set("browserProfileId", v)}
+                      disabled={!values.browserEnabled}
+                    />
+                    <div className="space-y-1.5">
+                      <span id="agent-headless-label" className="flex items-center text-sm leading-none font-medium">
+                        {t("agentForm.browser.window")}
+                      </span>
+                      <ToggleGroup
+                        type="single"
+                        variant="outline"
+                        value={values.headless === null ? "default" : values.headless ? "headless" : "visible"}
+                        onValueChange={(v) => v && set("headless", v === "default" ? null : v === "headless")}
+                        aria-labelledby="agent-headless-label"
+                        disabled={!values.browserEnabled}
+                        className="w-full"
+                      >
+                        <ToggleGroupItem value="default" className="flex-1 data-[state=on]:bg-secondary data-[state=on]:text-foreground data-[state=on]:ring-1 data-[state=on]:ring-foreground/15 data-[state=on]:ring-inset">
+                          {t("agentForm.default")}
+                        </ToggleGroupItem>
+                        <ToggleGroupItem value="visible" className="flex-1 data-[state=on]:bg-secondary data-[state=on]:text-foreground data-[state=on]:ring-1 data-[state=on]:ring-foreground/15 data-[state=on]:ring-inset">
+                          {t("agentForm.browser.visible")}
+                        </ToggleGroupItem>
+                        <ToggleGroupItem value="headless" className="flex-1 data-[state=on]:bg-secondary data-[state=on]:text-foreground data-[state=on]:ring-1 data-[state=on]:ring-foreground/15 data-[state=on]:ring-inset">
+                          {t("agentForm.browser.headless")}
+                        </ToggleGroupItem>
+                      </ToggleGroup>
+                    </div>
+                  </div>
+                </div>
+              </FormSection>
+
+              <FormSection id="computer" title={t("agentForm.computer.title")}>
+                <div className="space-y-5">
+                  <ToggleRow id="agent-computer" icon={<MonitorUp className="size-4" />} title={t("agentForm.computer.unattended")} checked={values.computerEnabled} onChange={(v) => set("computerEnabled", v)} />
+                  <ComputerDisplayField value={values.computerDisplayId} onChange={(v) => set("computerDisplayId", v)} disabled={!values.computerEnabled} />
+                </div>
+              </FormSection>
+
+              {vmChoices.available && (
+                <FormSection id="vm" title={t("agentForm.vm.title")}>
+                  <VmField value={values.vmId} workspaceId={values.workspaceId} onChange={(v) => set("vmId", v)} />
+                </FormSection>
+              )}
+
+              {sshOn && (
+                <FormSection id="ssh" title={t("agentForm.ssh.title")}>
+                  <SshField value={values.sshServerIds} onChange={(v) => set("sshServerIds", v)} />
+                </FormSection>
+              )}
+
+              {androidOn && (
+                <FormSection id="android" title={t("agentForm.android.title")}>
+                  <AndroidField value={values.androidDeviceIds} onChange={(v) => set("androidDeviceIds", v)} />
+                </FormSection>
+              )}
+
+              {integrationsOn && (
+                <FormSection id="tools" title={t("agentForm.tools.title")}>
+                  <div className="space-y-5">
+                    <ToggleRow id="agent-inherit-mcp" icon={<Plug className="size-4" />} title={t("agentForm.tools.inherit")} checked={values.inheritMcp} onChange={(v) => set("inheritMcp", v)} />
+                    <ApiToolsField agentId={agentId} workspaceId={values.workspaceId} savedWorkspaceId={initial?.workspaceId ?? null} inherit={values.inheritMcp} />
+                    <McpField agentId={agentId} value={values.mcpServerIds} onChange={(v) => set("mcpServerIds", v)} />
+                  </div>
+                </FormSection>
+              )}
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
       </div>
 
       {/* Submit bar */}
@@ -970,69 +482,15 @@ function FormSection({ id, ...props }: { id: string } & ComponentProps<typeof Se
   );
 }
 
-function ToggleRow({
-  id,
-  icon,
-  title,
-  description,
-  checked,
-  onChange,
-}: {
-  id: string;
-  icon: ReactNode;
-  title: string;
-  description: string;
-  checked: boolean;
-  onChange: (v: boolean) => void;
-}) {
+function ToggleRow({ id, icon, title, checked, onChange }: { id: string; icon: ReactNode; title: string; checked: boolean; onChange: (v: boolean) => void }) {
   return (
-    <div className="flex items-start gap-3">
-      <div className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-lg border bg-card text-foreground shadow-card">{icon}</div>
-      <div className="min-w-0 flex-1">
-        <Label htmlFor={id} className="cursor-pointer">
-          {title}
-        </Label>
-        <p className="mt-1 text-xs text-muted-foreground">{description}</p>
-      </div>
-      <Switch id={id} checked={checked} onCheckedChange={onChange} className="mt-1" />
+    <div className="flex items-center gap-3">
+      <div className="grid size-8 shrink-0 place-items-center rounded-lg border bg-card text-foreground shadow-card">{icon}</div>
+      <Label htmlFor={id} className="min-w-0 flex-1 cursor-pointer">
+        {title}
+      </Label>
+      <Switch id={id} checked={checked} onCheckedChange={onChange} />
     </div>
-  );
-}
-
-function RadioCard({
-  value,
-  current,
-  icon,
-  title,
-  badge,
-  description,
-}: {
-  value: string;
-  current: string;
-  icon: ReactNode;
-  title: string;
-  badge?: string;
-  description: string;
-}) {
-  const id = `radio-${value}`;
-  return (
-    <Label
-      htmlFor={id}
-      className={cn(
-        "flex cursor-pointer items-start gap-3 rounded-lg border bg-card p-3.5 font-normal shadow-card transition hover:border-foreground/15",
-        current === value && "border-foreground/30 ring-1 ring-foreground/10",
-      )}
-    >
-      <RadioGroupItem id={id} value={value} className="mt-0.5" />
-      <span className="min-w-0 flex-1 space-y-1">
-        <span className="flex items-center gap-1.5 text-sm font-medium">
-          {icon}
-          {title}
-          {badge && <span className="rounded-[5px] border border-brand/25 bg-brand-soft px-1.5 py-px text-[10px] font-medium text-brand-strong">{badge}</span>}
-        </span>
-        <span className="block text-xs leading-relaxed text-muted-foreground">{description}</span>
-      </span>
-    </Label>
   );
 }
 
@@ -1161,18 +619,17 @@ function SshField({ value, onChange }: { value: string[]; onChange: (v: string[]
               );
             })}
       </div>
-      <p className="text-xs text-muted-foreground">{t("agentForm.ssh.hint")}</p>
     </div>
   );
 }
 
-function WorkspaceField({ value, onChange, disabled }: { value: string | null; onChange: (v: string | null) => void; disabled?: boolean }) {
+function WorkspaceField({ value, onChange }: { value: string | null; onChange: (v: string | null) => void }) {
   const { t } = useTranslation("agents");
   const { data: workspaces = [] } = useWorkspaces();
   return (
     <div className="space-y-1.5">
       <Label htmlFor="agent-workspace">{t("agentForm.workspace.label")}</Label>
-      <Select value={value ?? "__global"} onValueChange={(v) => onChange(v === "__global" ? null : v)} disabled={disabled}>
+      <Select value={value ?? "__global"} onValueChange={(v) => onChange(v === "__global" ? null : v)}>
         <SelectTrigger id="agent-workspace" className="w-full">
           <SelectValue />
         </SelectTrigger>
@@ -1214,75 +671,6 @@ function ProjectField({ workspaceId, value, onChange }: { workspaceId: string | 
           ))}
         </SelectContent>
       </Select>
-      <p className="text-xs text-muted-foreground">{t("agentForm.project.hint")}</p>
-    </div>
-  );
-}
-
-function DelegateField({
-  agentId,
-  workspaceId,
-  canManageAgents,
-  value,
-  onChange,
-}: {
-  agentId?: string;
-  workspaceId: string | null;
-  canManageAgents: boolean;
-  value: string[];
-  onChange: (v: string[]) => void;
-}) {
-  const { t } = useTranslation(["agents", "common"]);
-  const { data: agents = [] } = useAllAgents();
-  // The core's own rule (withinReach): global agents and its workspace; a manager reaches everyone.
-  const reach = { id: agentId ?? "", workspaceId, canManageAgents };
-  const inReach = agents.filter((a) => a.id !== agentId && withinReach(reach, a));
-  const options = inReach.map((a) => ({
-    value: a.id,
-    label: a.name,
-    icon: <AgentAvatar agent={a} size="sm" still className="size-5" />,
-    hint: [a.role, a.enabled ? "" : t("agentForm.switchedOff"), a.description].filter(Boolean).join(" · "),
-  }));
-  const outOfReach = value.flatMap((id) => {
-    const a = agents.find((x) => x.id === id);
-    return a && !withinReach(reach, a) ? [a] : [];
-  });
-  const listed = value.flatMap((id) => inReach.filter((a) => a.id === id));
-  const names = (list: Agent[]) =>
-    list.length > 4
-      ? t("agentForm.delegate.namesMore", { names: list.slice(0, 4).map((a) => a.name).join(", "), count: list.length - 4 })
-      : list.map((a) => a.name).join(", ");
-  return (
-    <div className="space-y-1.5 pl-11">
-      <Label htmlFor="agent-delegate-to" className="text-xs text-muted-foreground">
-        <Trans t={t} i18nKey="agentForm.delegate.label" components={{ muted: <span className="font-normal" /> }} />
-      </Label>
-      <MultiSelect
-        id="agent-delegate-to"
-        options={options}
-        value={value.filter((id) => inReach.some((a) => a.id === id))}
-        onChange={(next) => onChange([...next, ...outOfReach.map((a) => a.id)])}
-        placeholder={t("agentForm.delegate.placeholder")}
-        emptyText={t("agentForm.delegate.noneInReach")}
-      />
-      <p className="text-xs text-muted-foreground">
-        {value.length === 0
-          ? inReach.length
-            ? t("agentForm.delegate.reaches", { count: inReach.length, names: names(inReach) })
-            : t("agentForm.delegate.noneInReach")
-          : listed.length
-            ? t("agentForm.delegate.handsTo", { names: names(listed) })
-            : t("agentForm.delegate.nobodyInReach")}
-      </p>
-      {outOfReach.map((a) => (
-        <p key={a.id} className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md bg-warning/10 px-2 py-1 text-xs text-foreground">
-          <TriangleAlert className="size-3.5 shrink-0 text-warning" aria-hidden />
-          <span className="min-w-0 flex-1">{t("agentForm.delegate.outOfReach", { name: a.name })}</span>
-          <Button type="button" size="xs" variant="ghost" onClick={() => onChange(value.filter((id) => id !== a.id))}>
-            {t("common:actions.remove")}
-          </Button>
-        </p>
-      ))}
     </div>
   );
 }
@@ -1291,14 +679,12 @@ function DelegateField({
 function TeamField({
   agentId,
   isDefault,
-  name,
   workspaceId,
   value,
   onChange,
 }: {
   agentId?: string;
   isDefault: boolean;
-  name: string;
   workspaceId: string | null;
   value: string | null;
   onChange: (v: string | null) => void;
@@ -1336,7 +722,7 @@ function TeamField({
   }
   return (
     <div className="space-y-4">
-      <div className="space-y-1.5 @md:max-w-sm">
+      <div className="space-y-1.5">
         <Label htmlFor="agent-reports-to">{t("agentForm.team.reportsTo")}</Label>
         <Select
           value={value ?? "__builtin"}
@@ -1345,7 +731,7 @@ function TeamField({
             onChange(v === "__builtin" ? null : v);
           }}
         >
-          <SelectTrigger id="agent-reports-to" className="w-full" aria-describedby="agent-reports-to-hint">
+          <SelectTrigger id="agent-reports-to" className="w-full">
             <SelectValue />
           </SelectTrigger>
           <SelectContent position="popper">
@@ -1372,9 +758,7 @@ function TeamField({
             )}
           </SelectContent>
         </Select>
-        <p id="agent-reports-to-hint" className="text-xs text-muted-foreground">
-          {resetNote ?? (name.trim() ? t("agentForm.team.leadHintNamed", { name: name.trim() }) : t("agentForm.team.leadHint"))}
-        </p>
+        {resetNote && <p className="text-xs text-muted-foreground">{resetNote}</p>}
       </div>
       <LedBy agents={reports} />
     </div>
@@ -1550,114 +934,6 @@ function McpField({ agentId, value, onChange }: { agentId?: string; value: strin
         placeholder={options.length ? t("agentForm.tools.mcpPlaceholder") : t("agentForm.tools.mcpNone")}
         emptyText={t("agentForm.tools.mcpEmpty")}
       />
-    </div>
-  );
-}
-
-function SubagentsEditor({
-  value,
-  onChange,
-  errors,
-}: {
-  value: SubagentDefinition[];
-  onChange: (v: SubagentDefinition[]) => void;
-  errors: Record<string, string>;
-}) {
-  const { t } = useTranslation(["agents", "common"]);
-  const { catalog } = useModelCatalog();
-  const update = (i: number, patch: Partial<SubagentDefinition>) => onChange(value.map((s, j) => (j === i ? { ...s, ...patch } : s)));
-  if (value.length === 0) {
-    return (
-      <div className="flex items-center gap-3 rounded-lg border border-dashed px-4 py-5 text-sm text-muted-foreground">
-        <UserRound className="size-5 shrink-0" />
-        {t("agentForm.subagents.empty")}
-      </div>
-    );
-  }
-  return (
-    <div id="subagents-list" tabIndex={-1} className="space-y-3 outline-none">
-      <AnimatePresence initial={false}>
-        {value.map((s, i) => (
-          <motion.div
-            key={i}
-            layout
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.98 }}
-            className="space-y-3 rounded-lg border bg-paper-2 p-3.5"
-          >
-            <div className="flex items-start gap-3">
-              <div className="grid flex-1 grid-cols-1 gap-3 @xl:grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label htmlFor={`sub-name-${i}`} className="text-xs">
-                    {t("common:words.name")}
-                  </Label>
-                  <Input
-                    id={`sub-name-${i}`}
-                    value={s.name}
-                    onChange={(e) => update(i, { name: e.target.value })}
-                    onBlur={(e) => update(i, { name: slugify(e.target.value) })}
-                    placeholder="researcher"
-                    className="h-8 font-mono text-sm"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor={`sub-model-${i}`} className="text-xs">
-                    {t("agentForm.brain.model")}
-                  </Label>
-                  <Select
-                    value={findModel(catalog.models, s.model)?.id ?? (s.model || "__inherit")}
-                    onValueChange={(v) => update(i, { model: v === "__inherit" ? undefined : v })}
-                  >
-                    <SelectTrigger id={`sub-model-${i}`} size="sm" className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent position="popper">
-                      <SelectItem value="__inherit">{t("agentForm.subagents.sameModel")}</SelectItem>
-                      <ModelOptions models={catalog.models} current={s.model} claudeOnly />
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1.5 @xl:col-span-2">
-                  <Label htmlFor={`sub-desc-${i}`} className="text-xs">
-                    {t("agentForm.subagents.whenToUse")}
-                  </Label>
-                  <Input
-                    id={`sub-desc-${i}`}
-                    value={s.description}
-                    onChange={(e) => update(i, { description: e.target.value })}
-                    placeholder={t("agentForm.subagents.whenPlaceholder")}
-                    className="h-8 text-sm"
-                  />
-                </div>
-                <div className="space-y-1.5 @xl:col-span-2">
-                  <Label htmlFor={`sub-prompt-${i}`} className="text-xs">
-                    {t("agentForm.subagents.prompt")}
-                  </Label>
-                  <Textarea
-                    id={`sub-prompt-${i}`}
-                    value={s.prompt}
-                    onChange={(e) => update(i, { prompt: e.target.value })}
-                    placeholder={t("agentForm.subagents.promptPlaceholder")}
-                    className="min-h-20 text-sm"
-                  />
-                </div>
-              </div>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                aria-label={t("agentForm.subagents.remove", { name: s.name || i + 1 })}
-                onClick={() => onChange(value.filter((_, j) => j !== i))}
-                className="text-muted-foreground hover:text-destructive"
-              >
-                <Trash2 />
-              </Button>
-            </div>
-            {errors[`subagent-${i}`] && <p className="text-xs text-destructive">{errors[`subagent-${i}`]}</p>}
-          </motion.div>
-        ))}
-      </AnimatePresence>
     </div>
   );
 }

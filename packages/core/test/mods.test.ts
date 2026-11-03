@@ -37,7 +37,7 @@ beforeAll(async () => {
   env = await setupEnv("godmode-mods-");
   updateSettings({ plugins: { enabled: true } });
   await vault.setup(PASSPHRASE, false);
-  agent = await makeAgent({ name: "Coder" });
+  agent = await makeAgent({ name: "Coder", permissions: { canManageAgents: false } });
   other = await makeAgent({ name: "Researcher" });
   manager = await makeAgent({ name: "Boss", permissions: { canManageAgents: true, allowDelegation: true } });
 });

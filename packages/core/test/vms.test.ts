@@ -502,7 +502,7 @@ describe("the orchestrator's VM tools", () => {
   test("list, create, assign and power VMs; managers only", async () => {
     const { callTool, listToolsFor } = await import("../src/mcp/tools");
     const boss = await makeAgent({ name: "VM Boss", permissions: { canManageAgents: true } });
-    const worker = await makeAgent({ name: "VM Helper" });
+    const worker = await makeAgent({ name: "VM Helper", permissions: { canManageAgents: false } });
     const ctx = (a: Agent) => ({ runId: `run_${a.id}`, agentId: a.id, conversationId: createConversation({ agentId: a.id }).id, workspaceId: null, depth: 0 });
     const bossCtx = ctx(boss);
     const names = (a: Agent) => listToolsFor(getAgent(a.id), ctx(a)).map((t) => t.name);

@@ -154,106 +154,39 @@
   },
   "agentForm": {
     "errors": {
-      "name": "Gib deinem Agenten einen Namen",
-      "subagentName": "Subagenten brauchen einen Namen",
-      "subagentUnique": "Subagenten-Namen müssen eindeutig sein",
-      "subagentPrompt": "Sag dem Subagenten, was er tun soll"
-    },
-    "nav": {
-      "identity": "Identität",
-      "team": "Team",
-      "personality": "Persönlichkeit",
-      "instructions": "Anweisungen",
-      "brain": "Modell",
-      "folder": "Ordner",
-      "permissions": "Berechtigungen",
-      "browser": "Browser",
-      "computer": "Computer",
-      "vm": "Virtuelle Maschine",
-      "ssh": "SSH-Server",
-      "android": "Android-Handys",
-      "tools": "Tools",
-      "subagents": "Subagenten",
-      "advanced": "Erweiterte Optionen"
-    },
-    "navEasy": {
-      "identity": "Über",
-      "instructions": "Was er tut"
+      "name": "Gib deinem Agenten einen Namen"
     },
     "default": "Standard",
     "switchedOff": "ausgeschaltet",
     "team": {
       "title": "Team",
-      "descriptionEasy": "Wem er unterstellt ist. Jeder Agent weiß, wer ihn leitet und wer was macht – so landet die Arbeit beim Richtigen.",
-      "description": "Sein Platz in deinem Team. Jeder Agent erfährt, wer ihn leitet und wer was macht – so landet die Arbeit beim Richtigen.",
       "resetNote": "Zurückgesetzt auf {{lead}}: {{name}} arbeitet in einem anderen Workspace.",
       "builtinLeads": "{{name}} leitet das Team und berichtet an dich. Jeder Agent ohne eigene Leitung berichtet an ihn.",
       "reportsTo": "Berichtet an",
       "builtIn": "– integriert",
-      "leadHint": "Seine Leitung im Organigramm. Das ändert nichts daran, was er darf.",
-      "leadHintNamed": "Seine Leitung im Organigramm – {{name}} erfährt, wer das ist. Das ändert nichts daran, was er darf.",
       "leads": "Leitet",
       "orgChart": "Organigramm"
     },
     "personality": {
-      "title": "Persönlichkeit",
-      "descriptionEasy": "Wie er mit dir spricht – in Begrüßungen, Updates und Berichten.",
-      "description": "Wie er mit dir spricht – Begrüßungen, Updates und Berichte. Landet in der CLAUDE.md des Agenten."
+      "title": "Persönlichkeit"
     },
     "instructions": {
-      "titleEasy": "Was soll er tun?",
-      "title": "Anweisungen",
-      "descriptionEasy": "Beschreib den Job in deinen eigenen Worten: was zu tun ist, wo Dinge abgelegt werden und wann er bei dir nachfragen soll.",
-      "description": "Daueraufträge: wie er arbeiten soll, was er immer oder nie tun soll. Landet in der CLAUDE.md des Agenten.",
+      "title": "Was soll er tun?",
       "placeholder": "Du bist mein Finanzassistent.\n\n- Melde dich bei meinen Lieferantenportalen an und lade neue Rechnungen als PDF herunter.\n- Speichere sie unter workspace/invoices/YYYY-MM/.\n- Fass am Ende die Summen zusammen und sag mir, wenn dir etwas Ungewöhnliches auffällt.\n- Bezahl nie etwas, ohne mich vorher zu fragen.",
-      "tipEasy": "Tipp: Sei konkret bei Zielen, Speicherorten und wann er dich fragen soll. Er merkt sich, was er unterwegs lernt.",
-      "tip": "Tipp: Sei konkret bei Zielen, Speicherorten und wann er dich fragen soll. Der Agent hält seine Erkenntnisse in MEMORY.md fest.",
-      "chars_one": "{{formatted}} Zeichen",
-      "chars_other": "{{formatted}} Zeichen",
       "inherited": "Bekommt dieser Agent zusätzlich bei jedem Lauf"
-    },
-    "brain": {
-      "title": "Modell & Workspace",
-      "description": "Welches Claude-Modell ihn antreibt, wie gründlich er nachdenkt und wo er zu Hause ist.",
-      "model": "Modell",
-      "defaultFromSettings": "Standard (aus den Einstellungen)",
-      "effort": "Denkaufwand",
-      "effortHint": "Mehr Aufwand denkt länger nach – besser für knifflige, mehrstufige Arbeit, aber langsamer und teurer.",
-      "noEffort": "{{model}} nutzt keine Aufwandsstufen.",
-      "thisModel": "Dieses Modell",
-      "noUltracode": "{{model}} unterstützt Ultracode nicht.",
-      "noUltracodeInstalled": "Das installierte Claude Code bietet kein Ultracode."
     },
     "folder": {
       "title": "Arbeitsordner",
-      "description": "Optional. Seine Chats und Automationen laufen in diesem Ordner und können die Dateien dort lesen und bearbeiten. Das Gedächtnis bleibt im eigenen Repository des Agenten.",
       "change": "Ändern",
       "remove": "Ordner entfernen",
-      "none": "Kein Ordner – der Agent arbeitet in seinem eigenen Repository. Ein einzelner Chat kann trotzdem einen Ordner wählen.",
+      "none": "Kein Ordner",
       "choose": "Ordner wählen…",
       "dialogTitle": "Standardordner",
       "dialogDescription": "Neue Chats und Automationen dieses Agenten laufen in diesem Ordner. Jeder Chat kann trotzdem zu einem anderen wechseln."
     },
-    "permissions": {
-      "title": "Berechtigungen",
-      "description": "Was dieser Agent in deinem Namen tun darf.",
-      "secrets": "Passwörter & 2FA-Codes",
-      "fill": "Im Browser ausfüllen",
-      "recommended": "Empfohlen",
-      "fillDescription": "Godmode tippt Geheimnisse direkt in die Seite. Die KI sieht sie nie.",
-      "reveal": "Für die KI sichtbar",
-      "revealDescription": "Das Modell kann Passwörter und Codes im Klartext lesen (nötig für reine API-Tools). Jeder Zugriff wird protokolliert.",
-      "revealWarning": "Geheimnisse können im Kontext des Modells landen. Nutz das nur für Agenten, denen du vertraust.",
-      "delegation": "Darf Arbeit an Teammitglieder abgeben",
-      "delegationDescription": "Teile einer Aufgabe an andere Agenten abgeben und deren Ergebnisse nutzen.",
-      "manage": "Darf Agenten & Automationen verwalten",
-      "manageDescription": "Agenten und Zeitpläne erstellen, ändern und löschen – wie der integrierte Godmode-Orchestrator."
-    },
     "browser": {
       "title": "Browser",
-      "description": "Ein echtes Chromium, mit dem der Agent Websites für dich bedient.",
       "access": "Browserzugriff",
-      "accessDescription": "Webseiten aufrufen, klicken, tippen und lesen.",
       "window": "Fenster",
       "visible": "Sichtbar",
       "headless": "Unsichtbar",
@@ -265,9 +198,7 @@
     },
     "computer": {
       "title": "Computer",
-      "description": "In Chats kannst du auch ein einzelnes Fenster oder den Bildschirm teilen. Standardmäßig nutzt dieser Agent den Computer selbst, wenn eine Aufgabe den Bildschirm braucht.",
       "unattended": "Computer ohne Freigabe nutzen",
-      "unattendedDescription": "Steuert echte Maus und Tastatur, wenn kein anderes Tool den Schritt schafft. Schalte das für Agenten aus, die nicht an deinen Desktop sollen.",
       "screen": "Bildschirm",
       "entireDesktop": "Gesamter Desktop",
       "entireDesktopCount_one": "Gesamter Desktop ({{count}} Display)",
@@ -277,7 +208,6 @@
     },
     "vm": {
       "title": "Virtuelle Maschine",
-      "description": "Lass diesen Agenten in seiner eigenen macOS-VM arbeiten: Er installiert dort Tools, führt Builds aus und nutzt Apps statt auf diesem Mac. Ein einzelner Chat kann trotzdem eine andere VM wählen.",
       "worksIn": "Arbeitet in",
       "noneWithVm": "Keine – VM des Workspace nutzen ({{vm}})",
       "none": "Keine – VM des Workspace nutzen",
@@ -287,22 +217,17 @@
     },
     "ssh": {
       "title": "SSH-Server",
-      "description": "Entfernte Rechner, an denen sich dieser Agent anmelden und die er steuern kann. Godmode tippt Passwort oder Schlüssel – die KI sieht sie nie.",
       "empty": "Noch keine SSH-Server – füg einen hinzu, dann kann dieser Agent darauf arbeiten.",
       "add": "Server hinzufügen",
       "canSignIn": "Darf sich anmelden bei",
-      "manage": "Server verwalten",
-      "hint": "Jeder Lauf dieses Agenten kann sich hier anmelden. Ein einzelner Chat kann über den SSH-Button im Eingabefeld weitere hinzufügen."
+      "manage": "Server verwalten"
     },
     "android": {
-      "title": "Android-Handys",
-      "description": "Handys, die dieser Agent in jedem Lauf sehen und steuern kann. Es sind echte Handys mit echten Konten – gib ihm nur die, die er für seinen Job braucht."
+      "title": "Android-Handys"
     },
     "tools": {
       "title": "Tools & Integrationen",
-      "description": "APIs, MCP-Server und verbundene Apps, die dieser Agent nutzen kann.",
       "inherit": "Gemeinsame Integrationen übernehmen",
-      "inheritDescription": "Auch die globalen und Workspace-Tools, MCP-Server und Composio-Apps nutzen.",
       "apiTools": "API-Tools",
       "manage": "Tools verwalten",
       "emptyInherit": "Noch keine API-Tools. Füg eins hinzu, damit er Bilder erzeugen, sprechen, suchen oder deine eigenen APIs aufrufen kann.",
@@ -313,55 +238,18 @@
       "mcpNone": "Noch keine MCP-Server – füg sie unter Integrationen hinzu",
       "mcpEmpty": "Keine MCP-Server eingerichtet."
     },
-    "subagents": {
-      "title": "Subagenten",
-      "description": "Spezialisten, die dieser Agent innerhalb eines Laufs für gezielte Teilaufgaben starten kann.",
-      "add": "Subagent hinzufügen",
-      "empty": "Keine Subagenten. Füg einen für wiederkehrende Spezialarbeit hinzu, z. B. einen „researcher“, der nur sucht und zusammenfasst.",
-      "sameModel": "Wie der Agent",
-      "whenToUse": "Wann einsetzen",
-      "whenPlaceholder": "Für Webrecherche und Quellensuche",
-      "prompt": "Prompt",
-      "promptPlaceholder": "Du bist ein gründlicher Rechercheur. Finde Primärquellen, nenne URLs und fass in Stichpunkten zusammen.",
-      "remove": "Subagent {{name}} entfernen"
-    },
     "identity": {
-      "titleEasy": "Über",
-      "title": "Identität",
-      "descriptionEasy": "Sein Name, sein Aussehen und in einer Zeile, was er tut.",
-      "description": "Wie dieser Agent aussieht und wie er überall in Godmode auftritt.",
+      "title": "Über",
       "namePlaceholder": "z. B. Rechnungsjäger",
       "jobTitle": "Jobtitel",
-      "role": "Rolle",
       "rolePlaceholderDefault": "z. B. Stabschef",
       "rolePlaceholder": "z. B. Buchhalter",
-      "roleHint": "Sein Jobtitel – steht unter seinem Namen und wird seinen Teammitgliedern mitgeteilt.",
       "shortDescription": "Kurzbeschreibung",
       "descriptionPlaceholder": "Lädt jeden Monat meine Rechnungen herunter und legt sie ab",
       "color": "Farbe",
-      "emoji": "Emoji in Chat-Apps",
-      "emojiHint": "Unterschreibt damit seine Nachrichten, wo nur Text passt – Slack, Telegram, Teams."
+      "emoji": "Emoji in Chat-Apps"
     },
-    "advanced": {
-      "error": "Hier drin muss noch etwas korrigiert werden, bevor du speichern kannst.",
-      "summary": "Modell, Ordner, Berechtigungen, Browser, Computer, Server, Tools und Subagenten. Die Standardwerte passen gut."
-    },
-    "preview": {
-      "title": "Vorschau",
-      "unnamed": "Unbenannter Agent",
-      "noDescription": "Noch keine Beschreibung",
-      "yourAgent": "Dein Agent",
-      "defaultModel": "Standardmodell",
-      "browser": "Browser",
-      "computer": "Computer",
-      "servers_one": "{{count}} Server",
-      "servers_other": "{{count}} Server",
-      "phones_one": "{{count}} Handy",
-      "phones_other": "{{count}} Handys",
-      "fillOnly": "Geheimnisse nur ausfüllen",
-      "reveals": "Sieht Geheimnisse",
-      "sections": "Formularabschnitte"
-    },
+    "advanced": "Erweitert",
     "footer": {
       "unsaved": "Du hast ungespeicherte Änderungen",
       "allSaved": "Alle Änderungen gespeichert",
@@ -374,20 +262,7 @@
     },
     "project": {
       "label": "Projekt",
-      "none": "Kein Projekt – der ganze Workspace",
-      "hint": "Seine Chats arbeiten an diesem Projekt, außer ein Chat wählt ein anderes."
-    },
-    "delegate": {
-      "namesMore_one": "{{names}} und {{count}} weiterer",
-      "namesMore_other": "{{names}} und {{count}} weitere",
-      "label": "Darf Arbeit abgeben an <muted>(leer = jedes erreichbare Teammitglied)</muted>",
-      "placeholder": "Jedes erreichbare Teammitglied",
-      "noneInReach": "Noch keine anderen Agenten erreichbar.",
-      "reaches_one": "Erreicht {{count}} Agenten: {{names}}.",
-      "reaches_other": "Erreicht {{count}} Agenten: {{names}}.",
-      "handsTo": "Gibt Arbeit ab an: {{names}}.",
-      "nobodyInReach": "Niemand auf dieser Liste ist erreichbar, also kann er keine Arbeit abgeben.",
-      "outOfReach": "{{name}} arbeitet in einem anderen Workspace und ist daher nicht erreichbar."
+      "none": "Kein Projekt – der ganze Workspace"
     }
   },
   "settingsTab": {
@@ -772,8 +647,6 @@
     "reportsTo": "Berichtet an <avatar/> {{name}}",
     "leads_one": "Leitet {{count}}",
     "leads_other": "Leitet {{count}}",
-    "defaultModel": "Standardmodell",
-    "effort": "Aufwand {{effort}}",
     "browser": "Browser",
     "switchOffLabel": "{{name}} ausschalten",
     "switchOnLabel": "{{name}} einschalten",
@@ -1231,7 +1104,6 @@
     "automations_other": "{{count}} Automationen",
     "lastRun": "Letzter Lauf: {{when}}",
     "neverRan": "Noch nie gelaufen",
-    "model": "Modell",
     "chat": "Chat",
     "continue": "Fortsetzen",
     "pause": "Pausieren",

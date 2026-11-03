@@ -79,7 +79,7 @@ describe("agent creation", () => {
     expect(agent.model).toBe("");
     expect(agent.status).toBe("idle");
     expect(agent.permissions).toEqual({
-      canManageAgents: false,
+      canManageAgents: true,
       allowDelegation: true,
       delegateTo: [],
       secretAccess: "fill",
@@ -291,7 +291,7 @@ describe("scopes and peers", () => {
   test("peersFor respects workspace boundaries, enabled state and delegateTo", async () => {
     const wsA = workspace("PeersA");
     const wsB = workspace("PeersB");
-    const a1 = await createAgent({ name: "A1", workspaceId: wsA });
+    const a1 = await createAgent({ name: "A1", workspaceId: wsA, permissions: { canManageAgents: false } });
     const a2 = await createAgent({ name: "A2", workspaceId: wsA });
     const b1 = await createAgent({ name: "B1", workspaceId: wsB });
     const g = await createAgent({ name: "Global Helper" });

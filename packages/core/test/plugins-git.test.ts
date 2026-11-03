@@ -69,7 +69,7 @@ function pluginDirs(args: string[]): string[] {
 beforeAll(async () => {
   env = await setupEnv("godmode-plugins-git-");
   updateSettings({ plugins: { enabled: true } });
-  agent = await makeAgent({ name: "Coder" });
+  agent = await makeAgent({ name: "Coder", permissions: { canManageAgents: false } });
   manager = await makeAgent({ name: "Boss", permissions: { canManageAgents: true, allowDelegation: true } });
 });
 

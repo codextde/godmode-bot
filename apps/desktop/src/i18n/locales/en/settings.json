@@ -1732,7 +1732,7 @@
     },
     "secrets": {
       "title": "Agents & secrets",
-      "description": "Defaults for new agents. Each agent can be adjusted individually.",
+      "description": "Which agents may read passwords and 2FA codes in plain text.",
       "defaultAccess": "Default secret access",
       "fill": "Fill only",
       "fillDescription": "Godmode types passwords and 2FA codes straight into the page. The AI never sees them.",
@@ -1744,7 +1744,11 @@
       "iconsDescription": "Show login icons from Google's favicon service. This tells Google which sites you have saved; turn off for maximum privacy.",
       "retention": "Keep audit log for",
       "retentionDescription": "Older entries are pruned automatically.",
-      "days": "days"
+      "days": "days",
+      "agents": "Agents that read secrets",
+      "agentsPlaceholder": "None: Godmode fills them in",
+      "agentsEmpty": "No agents yet.",
+      "agentsSaveError": "Couldn't save the change"
     },
     "web": {
       "title": "Web dashboard",

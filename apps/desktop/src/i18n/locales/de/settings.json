@@ -1732,7 +1732,7 @@
     },
     "secrets": {
       "title": "Agenten & Geheimnisse",
-      "description": "Standards für neue Agenten. Jeder Agent lässt sich einzeln anpassen.",
+      "description": "Welche Agenten Passwörter und 2FA-Codes im Klartext lesen dürfen.",
       "defaultAccess": "Standardzugriff auf Geheimnisse",
       "fill": "Nur ausfüllen",
       "fillDescription": "Godmode tippt Passwörter und 2FA-Codes direkt in die Seite. Die KI sieht sie nie.",
@@ -1744,7 +1744,11 @@
       "iconsDescription": "Zeigt Login-Icons über Googles Favicon-Dienst. Damit erfährt Google, welche Websites du gespeichert hast; für maximale Privatsphäre ausschalten.",
       "retention": "Protokoll aufbewahren für",
       "retentionDescription": "Ältere Einträge werden automatisch gelöscht.",
-      "days": "Tage"
+      "days": "Tage",
+      "agents": "Agenten mit Klartext-Zugriff",
+      "agentsPlaceholder": "Keine: Godmode trägt sie ein",
+      "agentsEmpty": "Noch keine Agenten.",
+      "agentsSaveError": "Änderung konnte nicht gespeichert werden"
     },
     "web": {
       "title": "Web-Dashboard",

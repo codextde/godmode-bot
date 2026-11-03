@@ -91,10 +91,10 @@ function delegatedRunId(r: { content: { text: string }[] }): string {
 beforeAll(async () => {
   env = await setupEnv("godmode-mcp-");
   updateSettings({ vm: { enabled: true } });
-  worker = await makeAgent({ name: "Worker", description: "Does browser work", browser: { enabled: true }, permissions: { allowDelegation: false } });
+  worker = await makeAgent({ name: "Worker", description: "Does browser work", browser: { enabled: true }, permissions: { canManageAgents: false, allowDelegation: false } });
   manager = await makeAgent({ name: "Boss", permissions: { canManageAgents: true, allowDelegation: true } });
-  revealer = await makeAgent({ name: "Revealer", permissions: { secretAccess: "reveal", allowDelegation: false } });
-  delegator = await makeAgent({ name: "Delegator", permissions: { allowDelegation: true } });
+  revealer = await makeAgent({ name: "Revealer", permissions: { canManageAgents: false, secretAccess: "reveal", allowDelegation: false } });
+  delegator = await makeAgent({ name: "Delegator", permissions: { canManageAgents: false, allowDelegation: true } });
   for (const a of [worker, manager, revealer, delegator]) tokens[a.id] = tokenFor(a);
   await vault.setup(PASSPHRASE, false);
   cred = createCredential({ name: "Example", url: "https://example.com/login", username: "alice", password: PASSWORD });
@@ -753,7 +753,7 @@ describe("management tools", () => {
     const out = JSON.parse(created.content[0]!.text) as { created: { id: string }; routine: { id: string } };
     const agent = getAgent(out.created.id);
     expect(agent.name).toBe("Invoice Bot");
-    expect(agent.permissions.canManageAgents).toBe(false);
+    expect(agent.permissions.canManageAgents).toBe(true);
     expect(listRoutines({ agentId: agent.id }).map((r) => r.cron)).toEqual(["0 9 1 * *"]);
 
     const updated = await call(tokens[manager.id]!, "agent_update", { agentId: agent.id, description: "Downloads invoices monthly" });
@@ -951,8 +951,8 @@ describe("management tools", () => {
     expect(company.members.map((m) => m.role)).not.toContain("Legal department");
     const ceo = getAgent(company.lead.id);
     expect(ceo).toMatchObject({ role: "Chief executive officer", workspaceId: company.workspace.id });
-    // Installed by an agent: the new agents get no secrets or management rights.
-    expect(ceo.permissions).toMatchObject({ secretAccess: "fill", canManageAgents: false, allowDelegation: true });
+    // Installed by an agent: the new agents get no secrets.
+    expect(ceo.permissions).toMatchObject({ secretAccess: "fill", canManageAgents: true, allowDelegation: true });
     expect(listAudit(20).find((a) => a.action === "team.install")?.actor).toBe(`agent:${manager.id}`);
 
     const team = JSON.parse((await call(t, "team_install", { template: "back-office", workspaceId: "Tiny Co" })).content[0]!.text) as { workspace: string; members: unknown[] };
@@ -997,7 +997,7 @@ describe("agent looks through MCP", () => {
 });
 
 describe("no privilege escalation through agent tools", () => {
-  test("agent-created agents are fill-only without management, even when the default is reveal", async () => {
+  test("agent-created agents are fill-only, even when the default is reveal", async () => {
     updateSettings({ security: { defaultSecretAccess: "reveal" } });
     try {
       const created = await call(tokens[manager.id]!, "agent_create", {
@@ -1008,11 +1008,15 @@ describe("no privilege escalation through agent tools", () => {
       const id = (JSON.parse(created.content[0]!.text) as { created: { id: string } }).created.id;
       const a = getAgent(id);
       expect(a.permissions.secretAccess).toBe("fill");
-      expect(a.permissions.canManageAgents).toBe(false);
+      expect(a.permissions.canManageAgents).toBe(true);
       expect(a.permissions.credentialIds).toBeNull();
       // Service level (defense in depth): an agent actor cannot flip human-only permissions.
       const after = await updateAgent(id, { permissions: { secretAccess: "reveal", canManageAgents: true, totpIds: [] } as never }, `agent:${manager.id}`);
-      expect(after.permissions).toMatchObject({ secretAccess: "fill", canManageAgents: false, totpIds: null });
+      expect(after.permissions).toMatchObject({ secretAccess: "fill", canManageAgents: true, totpIds: null });
+      // Whoever the human took management from doesn't get it back from an agent.
+      await updateAgent(id, { permissions: { canManageAgents: false } });
+      const still = await updateAgent(id, { permissions: { canManageAgents: true } as never }, `agent:${manager.id}`);
+      expect(still.permissions.canManageAgents).toBe(false);
     } finally {
       updateSettings({ security: { defaultSecretAccess: "fill" } });
     }

@@ -250,9 +250,9 @@ ${lines.length ? `Teammates you can hand work to:\n${lines.join("\n")}` : "There
   } else if (reports.length) {
     out.push(`These agents report to you: ${reports.map(teammate).join(", ")}.`);
   }
-  // Not towards a lead that manages agents: work steered there (an injected page, an email) would reach a run that can
-  // change agents and automations. Such a decision goes to the human instead.
-  const leadReachable = !!team.lead && canDelegate && peers.some((p) => p.id === team.lead!.id) && !team.lead.permissions.canManageAgents;
+  // Not from an agent without management rights towards a lead with them: work steered there (an injected page, an
+  // email) would reach a run that can change agents and automations. Such a decision goes to the human instead.
+  const leadReachable = !!team.lead && canDelegate && peers.some((p) => p.id === team.lead!.id) && (perms.canManageAgents || !team.lead.permissions.canManageAgents);
   out.push(
     ctx.delegated
       ? `A teammate handed you this task: your final answer goes back to that teammate, not to ${human}. Lead with the result, then say what failed or is still open.`
@@ -379,7 +379,7 @@ Not in this chat: its task came from another agent that may not read raw secrets
 
   if (perms.canManageAgents && !ctx.check) {
     out.push(`### Managing agents
-You are the orchestrator. Your tools for it:
+${agent.isDefault ? "You are the orchestrator. Your tools for it:" : "You can also manage the team. Change other agents, automations or settings only when your task calls for it. Your tools for it:"}
 - Agents: \`agent_create\`, \`agent_update\`, \`agent_delete\`; their automations: \`routine_list\`, \`routine_create\`, \`routine_update\`, \`routine_run\`, \`routine_delete\`, \`automation_events_list\`.
 - Runs: \`runs_list\` (results and errors of every agent), \`run_continue\` for a run a restart of Godmode cut off, \`run_cancel\` to stop one for good (a paused run that would repeat work already done, a run nobody needs any more).
 - Task board: \`tasks_list\`, \`task_get\`, \`task_create\`, \`task_update\`, \`task_message\`, \`task_note\`. Coding tasks end in a pull request. Read a ticket's result and timeline with \`task_get\`; send feedback into it with \`task_message\` instead of filing a new task for the same work.
