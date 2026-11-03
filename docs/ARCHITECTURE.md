@@ -258,7 +258,7 @@ claude -p --output-format stream-json --verbose --include-partial-messages
        --model <agent.model || settings.runner.model> [--effort <e>]
        --dangerously-skip-permissions          (settings.runner.bypassPermissions)
        --mcp-config <tmp json> --strict-mcp-config
-       --append-system-prompt <godmode system prompt>
+       --append-system-prompt-file <godmode system prompt>
        [--resume <conversation.claudeSessionId> | --session-id <new uuid>]
        [--agents <subagents json>] [--fallback-model m]
        --setting-sources project,local
