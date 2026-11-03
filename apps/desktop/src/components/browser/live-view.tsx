@@ -13,7 +13,7 @@ import { Orb } from "@/components/aicss/Orb";
 import { Favicon } from "@/components/vault/favicon";
 import { domainFromUrl, normalizeUrl, toastApiError } from "@/components/vault/vault-utils";
 import { useNow } from "@/components/vault/use-now";
-import { api } from "@/lib/api";
+import { api, ApiRequestError } from "@/lib/api";
 import { subscribeBrowser } from "@/lib/realtime";
 import { useLive } from "@/stores/live";
 import { cn } from "@/lib/utils";
@@ -74,7 +74,7 @@ export function LiveView({
   const view = browserView(profile.id, conversationId);
   const frame = useLive((s) => (running ? s.frames[view] : undefined));
   const chat = conversationId ? profile.chats.find((c) => c.conversationId === conversationId) : undefined;
-  const noTabYet = !!conversationId && running && !chat && !frame;
+  const noPage = running && (frame === null || (!!conversationId && !chat && !frame));
   const hasFrame = !!frame;
   const now = useNow(1000);
 
@@ -126,8 +126,8 @@ export function LiveView({
   }, [view]);
 
   useEffect(() => {
-    if (!running) setTakeover(false);
-  }, [running]);
+    if (!running || noPage) setTakeover(false);
+  }, [running, noPage]);
 
   // Hint when no frame arrives for a while.
   useEffect(() => {
@@ -168,13 +168,17 @@ export function LiveView({
       queue.current = queue.current
         .then(() => api.browser.input(profile.id, event, conversationId).then(() => undefined))
         .catch((e) => {
+          if (e instanceof ApiRequestError && e.status === 409) {
+            useLive.getState().browserFrame(view, null);
+            return;
+          }
           if (Date.now() - lastErrorAt.current > 3000) {
             lastErrorAt.current = Date.now();
             toastApiError(e, t("live.inputFailed"), qc);
           }
         });
     },
-    [profile.id, conversationId, qc, t],
+    [profile.id, conversationId, view, qc, t],
   );
 
   const textBuf = useRef("");
@@ -336,11 +340,11 @@ export function LiveView({
             ) : (
               <div className="-mb-px flex min-w-0 max-w-72 items-center gap-2 rounded-t-md border border-b-0 bg-card px-3 py-1.5 text-xs">
                 {domain ? <Favicon domain={domain} name={frame?.title || domain} size="sm" className="size-4 rounded-sm" /> : <Globe className="size-3.5 text-muted-foreground" />}
-                <span className="truncate font-medium">{running ? frame?.title || chat?.pageTitle || domain || t("live.newTab") : profile.name}</span>
+                <span className="truncate font-medium">{running && !noPage ? frame?.title || chat?.pageTitle || domain || t("live.newTab") : profile.name}</span>
               </div>
             )}
             <div className="ml-auto flex items-center gap-2 pb-2">
-              {running && (
+              {running && !noPage && (
                 <span
                   className={cn(
                     "inline-flex items-center gap-1.5 rounded-[5px] border px-1.5 py-0.5 text-[11px] font-medium",
@@ -421,7 +425,7 @@ export function LiveView({
           </div>
 
           {/* Banner */}
-          {running && (
+          {running && !noPage && (
             <div
               className={cn(
                 "flex items-center gap-2 border-b px-3 py-1.5 text-xs transition-colors",
@@ -476,8 +480,8 @@ export function LiveView({
           >
             {!running ? (
               <NotRunning profileName={profile.name} onLaunch={onLaunch} launching={launching} />
-            ) : noTabYet ? (
-              <NoTabYet />
+            ) : noPage ? (
+              <NoPage inChat={!!conversationId} />
             ) : frame ? (
               <>
                 <img
@@ -597,7 +601,7 @@ function ChatTabs({ chats, selected, onSelect }: { chats: BrowserChat[]; selecte
   );
 }
 
-function NoTabYet() {
+function NoPage({ inChat }: { inChat: boolean }) {
   const { t } = useTranslation("browser");
   return (
     <div className="absolute inset-0 grid place-items-center bg-paper-2">
@@ -605,8 +609,8 @@ function NoTabYet() {
         <span className="grid size-10 place-items-center rounded-lg border bg-card text-muted-foreground shadow-card">
           <Globe className="size-5" />
         </span>
-        <p className="text-sm font-medium">{t("live.noTabTitle")}</p>
-        <p className="text-xs text-muted-foreground">{t("live.noTabBody")}</p>
+        <p className="text-sm font-medium">{t(inChat ? "live.noTabTitle" : "live.noPageTitle")}</p>
+        {inChat && <p className="text-xs text-muted-foreground">{t("live.noTabBody")}</p>}
       </div>
     </div>
   );

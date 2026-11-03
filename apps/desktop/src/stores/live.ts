@@ -61,8 +61,8 @@ interface LiveState {
   runs: Record<string, LiveRun>;
   /** Last finished run per conversation id. */
   finished: Record<string, FinishedRun>;
-  /** Browser live view frames per view (`browserView`: a profile's active tab, or one chat's tab). */
-  frames: Record<string, BrowserFrame>;
+  /** Browser live view frames per view (`browserView`: a profile's active tab, or one chat's tab). null: no page open. */
+  frames: Record<string, BrowserFrame | null>;
   /** Computer live view frames per view ("display:1", "window:812:4711", …). */
   computerFrames: Record<string, ComputerFrame>;
   /** Latest agent action per view (drawn as a ripple). */
@@ -77,7 +77,7 @@ interface LiveState {
   runFinished: (run: Run) => void;
   /** The run stands still: nothing streams, and it has not ended. */
   runPaused: (run: Run) => void;
-  browserFrame: (view: string, frame: BrowserFrame) => void;
+  browserFrame: (view: string, frame: BrowserFrame | null) => void;
   dropBrowserFrame: (profileId: string) => void;
   computerFrame: (view: string, frame: ComputerFrame) => void;
   computerAction: (view: string, action: ComputerAction) => void;

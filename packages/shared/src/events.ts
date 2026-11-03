@@ -94,6 +94,8 @@ export type ServerEvent =
       width: number;
       height: number;
     }
+  /** The view has no page any more: forget its last frame. */
+  | { type: "browser.empty"; profileId: ID; conversationId?: ID }
   | {
       type: "computer.frame";
       /** Live view stream, e.g. "display:1" or "window:812:4711" (see computerView). */

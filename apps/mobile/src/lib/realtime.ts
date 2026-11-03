@@ -334,6 +334,9 @@ function handle(event: ServerEvent) {
         at: Date.now(),
       });
       break;
+    case "browser.empty":
+      live.dropFrame(`browser:${browserView(event.profileId, event.conversationId)}`);
+      break;
     case "computer.frame":
       live.frame(`computer:${event.view}`, {
         data: event.data,

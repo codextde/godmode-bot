@@ -435,6 +435,9 @@ function handle(qc: QueryClient, event: ServerEvent) {
         at: Date.now(),
       });
       break;
+    case "browser.empty":
+      live.browserFrame(browserView(event.profileId, event.conversationId), null);
+      break;
     case "computer.frame":
       live.computerFrame(event.view, {
         data: event.data,

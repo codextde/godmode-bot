@@ -349,6 +349,29 @@ suite("parallel chats in one browser", () => {
     }
   });
 
+  test("a live view without a page says so once, until a tab comes and goes", async () => {
+    const empty: string[] = [];
+    const frames: string[] = [];
+    const off = bus.on((e) => {
+      if (e.type === "browser.empty" && e.conversationId === "cnv_late") empty.push(e.profileId);
+      if (e.type === "browser.frame" && e.conversationId === "cnv_late") frames.push(e.url);
+    });
+    try {
+      await startLiveView(profileId, "cnv_late");
+      await waitFor(() => empty.length === 1);
+      const late = (chats.late = await connect("cnv_late", "run_late"));
+      await openIn(late, "/late");
+      await waitFor(() => frames.some((url) => url.endsWith("/late")), 15_000);
+      expect(empty).toEqual([profileId]);
+      releaseChatLease("run_late");
+      await manager.closeChatTabs("cnv_late");
+      await waitFor(() => empty.length === 2, 15_000);
+    } finally {
+      off();
+      await stopLiveView(profileId, "cnv_late");
+    }
+  }, 40_000);
+
   test("the profile lists its chats with their tabs", async () => {
     const chats = await waitFor(() => {
       const list = manager.getProfile(profileId).chats;
