@@ -173,7 +173,13 @@ export function registerVaultRoutes(app: Hono): void {
   app.post("/api/vault/touch-id/unlock", async (c) => {
     requireLocal(c);
     if (!vault.isInitialized()) throw badRequest("Vault not initialized");
-    const status = await unlockWithTouchId();
+    const key = `touch-id:${limitKey(c)}`;
+    rateLimitLogin(key);
+    const status = await unlockWithTouchId().catch((err: unknown) => {
+      audit("user", "vault.unlock_failed", null, { ip: clientIp(c), method: "touch_id", code: err instanceof HttpError ? err.code : null });
+      throw err;
+    });
+    resetLoginAttempts(key);
     audit("user", "vault.unlock", null, { ip: clientIp(c), method: "touch_id" });
     return c.json(status);
   });

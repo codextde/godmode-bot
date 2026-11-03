@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { createECDH } from "node:crypto";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { HelperError } from "../src/computer/helperError";
@@ -131,6 +131,14 @@ describe("vault touch id", () => {
     setMeta("vault.canary", meta.canary!);
   });
 
+  test("a prompt left open across a lock doesn't undo that lock", async () => {
+    await enableTouchId();
+    vault.lock();
+    answer = () => vault.lock();
+    expect(await code(unlockWithTouchId())).toBe("touch_id_cancelled");
+    expect(vault.isUnlocked()).toBe(false);
+  });
+
   test("one prompt at a time", async () => {
     await enableTouchId();
     vault.lock();
@@ -145,6 +153,25 @@ describe("vault touch id", () => {
     expect(prompts).toHaveLength(0);
     touchIdDeps.supported = () => false;
     expect(await touchIdStatus()).toEqual({ available: false, enabled: false });
+  });
+
+  test.skipIf(process.platform !== "darwin")("a swapped helper never runs: the bytes are checked before every start", async () => {
+    const fake = join(dir, "helper.sh");
+    const script = `#!/bin/sh\necho '{"ready":true}'\nwhile read -r line; do id=$(echo "$line" | sed -E 's/.*"id":([0-9]+).*/\\1/'); echo "{\\"id\\":$id,\\"ok\\":true,\\"result\\":{\\"available\\":true}}"; done\n`;
+    writeFileSync(fake, script, { mode: 0o755 });
+    process.env.GODMODE_COMPUTER_HELPER = fake;
+    try {
+      expect(await realDeps.available()).toBe(true);
+      const root = join(dir, "bin", "touch-id");
+      const binary = join(root, readdirSync(root)[0]!, "Contents", "MacOS", "godmode-computer");
+      expect(readFileSync(binary, "utf8")).toBe(script);
+
+      writeFileSync(binary, "#!/bin/sh\necho planted > /dev/null\n");
+      expect(await realDeps.available()).toBe(true);
+      expect(readFileSync(binary, "utf8")).toBe(script);
+    } finally {
+      delete process.env.GODMODE_COMPUTER_HELPER;
+    }
   });
 
   test("locked vault can't be sealed", async () => {

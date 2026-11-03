@@ -132,6 +132,10 @@ export async function unlock(passphrase: string): Promise<VaultStatus> {
   return status();
 }
 
+export function lockCount(): number {
+  return secretsForgotten;
+}
+
 export function lock() {
   if (dek) dek.fill(0);
   dek = null;

@@ -135,7 +135,6 @@ func touchIdDerive(_ p: Params) throws -> [String: Any] {
   context.localizedFallbackTitle = ""
   let expiry = DispatchWorkItem { context.invalidate() }
   DispatchQueue.global().asyncAfter(deadline: .now() + TOUCH_ID_PROMPT_SECONDS, execute: expiry)
-  defer { expiry.cancel() }
 
   let answered = DispatchSemaphore(value: 0)
   var failure: Error?
@@ -144,6 +143,7 @@ func touchIdDerive(_ p: Params) throws -> [String: Any] {
     answered.signal()
   }
   answered.wait()
+  expiry.cancel()
   if let failure { throw touchIdError(failure) }
 
   // The finger was fine, so a key that refuses now was sealed to fingerprints that have changed since.

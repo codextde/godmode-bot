@@ -3,18 +3,18 @@
  * so nothing on this computer opens it without the finger: not the API token, not an agent, not the Mac password. The
  * seal is useless on another Mac, stays out of backups, and the passphrase always keeps working.
  */
-import { createECDH, createHash, hkdfSync } from "node:crypto";
-import { chmodSync, copyFileSync, existsSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { createECDH, hkdfSync } from "node:crypto";
+import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { TouchIdStatus, VaultStatus } from "@godmode/shared";
-import { HelperError, HELPER_NAME, resolveHelperBinary, spawnHelper, type NativeHelper } from "../computer/helper";
+import { embeddedHelperBytes, HelperError, HELPER_NAME, resolveHelperBinary, spawnHelper, type NativeHelper } from "../computer/helper";
 import { config } from "../config";
 import { deleteMeta, getMeta, setMeta } from "../db";
 import { hostApp } from "../services/permissions";
 import { getSettings } from "../services/settings";
 import { HttpError } from "../util";
 import { decrypt, encrypt } from "./crypto";
-import { exportKeyForBackup, isUnlocked, status, useRememberedKey } from "./vault";
+import { exportKeyForBackup, isUnlocked, lockCount, status, useRememberedKey } from "./vault";
 
 const META_KEY = "vault.touch_id";
 const CONTEXT = "vault.touch_id";
@@ -32,19 +32,17 @@ interface Sealed {
 
 /**
  * macOS names the program asking in the prompt, with its icon. A bare helper would read "godmode-computer-3fa9…", so
- * the helper runs from a small app bundle carrying the name and icon of the Godmode this is.
+ * the helper runs from a small app bundle carrying the name and icon of the Godmode this is. Agents run as the same
+ * user and could swap a file here, and a fake helper would hand over the vault key: its bytes are compared with the
+ * ones inside the signed core before every start.
  */
-function promptBundle(helper: string): string {
+async function promptBundle(helper: string): Promise<string> {
+  const bytes = (await embeddedHelperBytes()) ?? readFileSync(helper);
   const host = hostApp();
   const ours = host.bundleId ? host.path : null;
   const name = (ours && host.name) || "Godmode";
-  const { size, mtimeMs } = statSync(helper);
-  const id = createHash("sha256").update(`${helper}|${size}|${mtimeMs}|${name}|${ours}`).digest("hex").slice(0, 12);
-  const root = join(config().dataDir, "bin", "touch-id");
-  const contents = join(root, id, `${name}.app`, "Contents");
+  const contents = join(config().dataDir, "bin", "touch-id", `${name}.app`, "Contents");
   const binary = join(contents, "MacOS", HELPER_NAME);
-  if (existsSync(binary)) return binary;
-  if (existsSync(root)) for (const old of readdirSync(root)) rmSync(join(root, old), { recursive: true, force: true });
   mkdirSync(join(contents, "MacOS"), { recursive: true, mode: 0o700 });
   mkdirSync(join(contents, "Resources"), { recursive: true });
   const escaped = name.replace(/&/g, "&amp;").replace(/</g, "&lt;");
@@ -57,15 +55,20 @@ function promptBundle(helper: string): string {
   );
   const icon = ours && join(ours, "Contents", "Resources", "icon.icns");
   if (icon && existsSync(icon)) copyFileSync(icon, join(contents, "Resources", "icon.icns"));
-  copyFileSync(helper, binary);
-  chmodSync(binary, 0o755);
+  const same = existsSync(binary) && Buffer.compare(readFileSync(binary), bytes) === 0;
+  if (!same) {
+    const tmp = `${binary}.${process.pid}.tmp`;
+    writeFileSync(tmp, bytes, { mode: 0o755 });
+    chmodSync(tmp, 0o755);
+    renameSync(tmp, binary);
+  }
   return binary;
 }
 
 async function withHelper<T>(work: (helper: NativeHelper) => Promise<T>): Promise<T> {
   const helper = await resolveHelperBinary();
   if (!helper) throw new HelperError("Touch ID isn't available", "touch_id_unavailable");
-  const path = promptBundle(helper);
+  const path = await promptBundle(helper);
   const running = await spawnHelper(path, [], HELPER_NAME, path, 10_000);
   try {
     return await work(running);
@@ -170,6 +173,7 @@ export async function unlockWithTouchId(): Promise<VaultStatus> {
   if (isUnlocked()) return status();
   const sealed = saved();
   if (!sealed) throw failure("touch_id_off", "Touch ID is off");
+  const locks = lockCount();
   let value: string;
   try {
     value = await openSeal(sealed);
@@ -178,6 +182,8 @@ export async function unlockWithTouchId(): Promise<VaultStatus> {
     if (err instanceof HttpError && err.code === "touch_id_invalid") deleteMeta(META_KEY);
     throw err;
   }
+  // A prompt left open across a lock doesn't undo that lock.
+  if (locks !== lockCount()) throw failure("touch_id_cancelled", "Touch ID was cancelled");
   if (!isUnlocked() && !useRememberedKey(value)) {
     deleteMeta(META_KEY);
     throw invalid();
