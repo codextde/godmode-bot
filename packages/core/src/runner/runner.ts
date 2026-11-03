@@ -1331,8 +1331,16 @@ function writeTempFile(res: Resources, name: string, content: string): string {
   return path;
 }
 
+/** zsh aborts a whole command when one glob matches nothing (`grep --include=*.ts`, a URL with `?`); agents' commands expect bash's behavior: pass it on. */
+function agentShellInit(): string {
+  const path = join(config().dataDir, "agent-shell.sh");
+  if (!existsSync(path)) writeFileSync(path, 'if [ -n "${ZSH_VERSION:-}" ]; then\n  setopt no_nomatch\nfi\n');
+  return path;
+}
+
 export function buildEnv(agent: Agent, inFolder = false, apiKeys = true): Record<string, string | undefined> {
   const env = claudeEnv();
+  if (process.platform !== "win32") env.CLAUDE_ENV_FILE ??= agentShellInit();
   // Load CLAUDE.md files from --add-dir folders: the agent's repo when the cwd is an attached folder, and the workspace's folders.
   if (inFolder) env.CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD = "1";
   // `claude -p` stops background subagents still running 10 minutes after the main turn ended, and the agent never

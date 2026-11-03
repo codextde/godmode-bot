@@ -26,6 +26,7 @@ import {
   INTERRUPTED,
   __setClaudeBinaryForTests,
   activeRunForConversation,
+  buildEnv,
   cancelRun,
   findRunLog,
   getRun,
@@ -404,6 +405,16 @@ describe("runner end-to-end with fake claude", () => {
   test("disabled agents cannot start runs", async () => {
     const off = await makeAgent({ name: "Disabled Bot", enabled: false });
     await expect(startChat({ agentId: off.id, content: "hi" })).rejects.toThrow(/disabled/);
+  });
+});
+
+describe.skipIf(!Bun.which("zsh"))("agent shell", () => {
+  test("a glob without a match doesn't abort a command in zsh", async () => {
+    const file = buildEnv(agent).CLAUDE_ENV_FILE!;
+    const cwd = mkdtempSync(join(tmpdir(), "gm-shell-"));
+    const out = await Bun.$`zsh -c ${`source ${file} && eval 'echo --include=*.nomatch; echo after'`}`.cwd(cwd).nothrow().text();
+    expect(out).toBe("--include=*.nomatch\nafter\n");
+    rmSync(cwd, { recursive: true, force: true });
   });
 });
 
