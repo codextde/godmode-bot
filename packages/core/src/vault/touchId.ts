@@ -48,7 +48,7 @@ function promptBundle(helper: string): string {
   mkdirSync(join(contents, "MacOS"), { recursive: true, mode: 0o700 });
   mkdirSync(join(contents, "Resources"), { recursive: true });
   const escaped = name.replace(/&/g, "&amp;").replace(/</g, "&lt;");
-  const entries = { CFBundleName: escaped, CFBundleDisplayName: escaped, CFBundleIdentifier: "dev.codext.godmode.touchid", CFBundleExecutable: HELPER_NAME, CFBundlePackageType: "APPL", CFBundleIconFile: "icon" };
+  const entries = { CFBundleName: escaped, CFBundleDisplayName: escaped, CFBundleIdentifier: `${host.bundleId ?? "godmode"}.touchid`, CFBundleExecutable: HELPER_NAME, CFBundlePackageType: "APPL", CFBundleIconFile: "icon" };
   writeFileSync(
     join(contents, "Info.plist"),
     `<?xml version="1.0" encoding="UTF-8"?>\n<plist version="1.0"><dict>${Object.entries(entries)
