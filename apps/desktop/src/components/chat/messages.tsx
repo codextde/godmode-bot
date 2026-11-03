@@ -5,7 +5,7 @@ import { motion } from "motion/react";
 import { Link } from "react-router";
 import { Trans, useTranslation } from "react-i18next";
 import type { Agent, Conversation, Message, MessageBlock, RetryCause, RetryMode } from "@godmode/shared";
-import { ArrowRightLeft, ArrowUpRight, Cpu, HandHelping, Info, KanbanSquare, Loader2, Pause, Play, RotateCcw, Square, Timer, Volume2, Workflow } from "lucide-react";
+import { ArrowRightLeft, ArrowUpRight, Cpu, HandHelping, Info, KanbanSquare, Loader2, Play, RotateCcw, Square, Timer, Volume2, Workflow } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { AgentAvatar } from "@/components/common";
@@ -375,19 +375,10 @@ export function LiveAssistantMessage({
   agent,
   live,
   startedAt,
-  onStop,
-  stopping,
-  onPause,
-  pausing,
 }: {
   agent?: Agent;
   live: LiveRun | null;
   startedAt: number;
-  onStop?: () => void;
-  stopping?: boolean;
-  /** Make the run stand still so it can continue later. */
-  onPause?: () => void;
-  pausing?: boolean;
 }) {
   const reduce = useReduceAnimations();
   const { t } = useTranslation(["chat", "common"]);
@@ -404,27 +395,6 @@ export function LiveAssistantMessage({
             <span className="text-shimmer truncate font-medium">{label}</span>
             <span className="border-l pl-2 font-mono text-[11px] text-muted-foreground tabular-nums">{formatElapsed(now - since)}</span>
           </span>
-          {(onPause || onStop) && (
-            <span className="ml-auto flex shrink-0 items-center gap-0.5">
-              {onPause && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button type="button" variant="ghost" size="xs" onClick={onPause} disabled={pausing || stopping} className="gap-1.5 text-muted-foreground hover:text-foreground">
-                      {pausing ? <Loader2 className="animate-spin" /> : <Pause className="size-2.5 fill-current" />}
-                      {pausing ? t("messages.pausing") : t("messages.pause")}
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>{pausing ? t("messages.pausingHint") : t("messages.pauseHint")}</TooltipContent>
-                </Tooltip>
-              )}
-              {onStop && (
-                <Button type="button" variant="ghost" size="xs" onClick={onStop} disabled={stopping} className="gap-1.5 text-muted-foreground hover:text-destructive">
-                  {stopping ? <Loader2 className="animate-spin" /> : <Square className="size-2.5 fill-current" />}
-                  {t("common:actions.stop")}
-                </Button>
-              )}
-            </span>
-          )}
         </AgentHeader>
         <MessageBlocks blocks={live?.blocks ?? []} streaming runId={live?.runId} agent={agent} />
       </div>
