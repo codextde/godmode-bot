@@ -12,6 +12,8 @@ import { acceptOffer, dismissOffer, listOffers, offerContext } from "../src/memo
 import { importMemory } from "../src/memory/importMemory";
 import { getSettings } from "../src/services/settings";
 import { newId } from "../src/util";
+import { createWorkspace } from "../src/services/workspaces";
+import { createProject } from "../src/services/projects";
 
 let env: TestEnv;
 
@@ -40,12 +42,12 @@ async function mainAgent(name: string): Promise<Agent> {
   return agent;
 }
 
-function addExchange(agent: Agent, prompt: string) {
+function addExchange(agent: Agent, prompt: string, scope: { workspaceId?: string; projectId?: string } = {}) {
   const ts = new Date().toISOString();
   insert("runs", {
     id: newId("run"),
     agent_id: agent.id,
-    conversation_id: createConversation({ agentId: agent.id, title: "Work" }).id,
+    conversation_id: createConversation({ agentId: agent.id, title: "Work", ...scope }).id,
     routine_id: null,
     parent_run_id: null,
     trigger: "chat",
@@ -71,9 +73,22 @@ function report(dream: DreamDetail) {
   return JSON.parse((getRun(dream.runId!).result ?? "").replace(/^DREAM /, "")) as { tools: string[]; offer: { text: string; isError: boolean } | null };
 }
 
-function openOffer(agent: Agent, title: string, createdAt = new Date().toISOString()) {
+function openOffer(agent: Agent, title: string, createdAt = new Date().toISOString(), scope: { workspace_id?: string; project_id?: string } = {}) {
   const id = newId("ofr");
-  insert("offers", { id, agent_id: agent.id, dream_id: null, title, why: "", prompt: `Please ${title.toLowerCase()}`, status: "open", conversation_id: null, created_at: createdAt, decided_at: null });
+  insert("offers", {
+    id,
+    agent_id: agent.id,
+    dream_id: null,
+    title,
+    why: "",
+    prompt: `Please ${title.toLowerCase()}`,
+    status: "open",
+    workspace_id: scope.workspace_id ?? null,
+    project_id: scope.project_id ?? null,
+    conversation_id: null,
+    created_at: createdAt,
+    decided_at: null,
+  });
   return id;
 }
 
@@ -184,6 +199,48 @@ describe("offers", () => {
     expect(listOffers().map((o) => o.title)).toEqual(["New main agent's idea"]);
     updateSettings({ memory: { dreaming: { offers: false } } });
     expect(listOffers()).toEqual([]);
+  });
+
+  test("the dream scopes an offer to the project it saw it in, and Do it starts the chat there", async () => {
+    const agent = await mainAgent("Main Bot Scoped");
+    const ws = createWorkspace({ name: "Acme" });
+    const site = createProject({ workspaceId: ws.id, name: "Website" });
+    addExchange(agent, "The launch checklist is half done", { projectId: site.id });
+    expect(collectActivity(agent, null, "Daniel").digest).toContain(`workspace "Acme" ${ws.id} · project "Website" ${site.id}`);
+    writeFileSync(
+      offerArgs(),
+      JSON.stringify({
+        offers: [
+          { title: "Finish the launch checklist", why: "Half done.", prompt: "Finish the launch checklist.", projectId: site.id },
+          { title: "Tidy the Acme drive", why: "", prompt: "Tidy the Acme drive.", workspaceId: ws.id },
+          { title: "Update the old project", why: "", prompt: "Update it.", projectId: "prj_gone" },
+        ],
+      }),
+    );
+    const out = report(await dreamToEnd(agent.id));
+    expect(out.offer?.text).toContain('"Finish the launch checklist": offered.');
+    expect(out.offer?.text).toContain('"Update the old project": offered, but not in the workspace or project you gave');
+    const byTitle = new Map(listOffers().map((o) => [o.title, o]));
+    expect(byTitle.get("Finish the launch checklist")).toMatchObject({ workspaceId: ws.id, projectId: site.id });
+    expect(byTitle.get("Tidy the Acme drive")).toMatchObject({ workspaceId: ws.id, projectId: null });
+    expect(byTitle.get("Update the old project")).toMatchObject({ workspaceId: null, projectId: null });
+
+    const { conversation } = await acceptOffer(byTitle.get("Finish the launch checklist")!.id);
+    expect(conversation.workspaceId).toBe(ws.id);
+    expect(conversation.projectId).toBe(site.id);
+    await waitForRun(get<{ id: string }>("SELECT id FROM runs WHERE conversation_id = ?", conversation.id)!.id, 20_000);
+  }, 30_000);
+
+  test("Home in a workspace shows its offers and the unscoped ones", async () => {
+    const agent = await mainAgent("Main Bot Filtered");
+    const mine = createWorkspace({ name: "Mine" });
+    const other = createWorkspace({ name: "Other" });
+    openOffer(agent, "Anywhere");
+    openOffer(agent, "In mine", undefined, { workspace_id: mine.id });
+    openOffer(agent, "In other", undefined, { workspace_id: other.id });
+    expect(listOffers(mine.id).map((o) => o.title).sort()).toEqual(["Anywhere", "In mine"]);
+    expect(listOffers("all")).toHaveLength(3);
+    expect(listOffers()).toHaveLength(3);
   });
 
   test("open offers expire after a week", async () => {

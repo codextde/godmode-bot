@@ -10,7 +10,7 @@ const importSchema = z.object({
 });
 
 export function registerMemoryRoutes(app: Hono): void {
-  app.get("/api/offers", (c) => c.json(listOffers()));
+  app.get("/api/offers", (c) => c.json(listOffers(c.req.query("workspaceId"))));
 
   app.post("/api/offers/:id/accept", async (c) => c.json(await acceptOffer(c.req.param("id")), 201));
 

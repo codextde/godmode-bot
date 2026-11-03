@@ -3291,6 +3291,8 @@ Polished, calm, real hierarchy, responsive from 360 px, light and dark; no emoji
             title: z.string().min(1).max(OFFER_TITLE_MAX).describe('What you would do, as a short imperative, e.g. "Chase the 3 unpaid October invoices"'),
             why: z.string().max(OFFER_WHY_MAX).describe("Why now, from what you saw — one sentence for the human"),
             prompt: z.string().min(1).max(OFFER_PROMPT_MAX).describe("The message that starts the work, written as the human would send it to you, complete enough to act on"),
+            workspaceId: z.string().optional().describe("Workspace the work belongs to, from the activity's conversation headings; the chat starts there. Omit when it isn't about one workspace"),
+            projectId: z.string().optional().describe("Project the work belongs to, from the activity's conversation headings; the chat starts in it (and its workspace). Omit when it isn't about one project"),
           }),
         )
         .min(1)
