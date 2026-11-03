@@ -11,7 +11,7 @@ import {
   updateCredential,
 } from "../../vault/credentials";
 import { macPasswordStatus, removeMacPassword, saveMacPassword } from "../../services/macPassword";
-import { disableTouchId, enableTouchId, touchIdStatus, unlockWithTouchId } from "../../vault/touchId";
+import { confirmWithTouchId, disableTouchId, enableTouchId, touchIdStatus, unlockWithTouchId } from "../../vault/touchId";
 import { suggestTotpLinks } from "../../vault/totpGuess";
 import { deletePasskey, getPasskey, listPasskeys } from "../../vault/passkeys";
 import { createTotp, currentCodes, deleteTotp, importTotpUris, listTotp, updateTotp } from "../../vault/totp";
@@ -20,7 +20,7 @@ import { audit } from "../../services/audit";
 import { CAPTCHA_SECRETS } from "../../browser/captcha";
 import { updateSettings } from "../../services/settings";
 import { clientIp as relayedClientIp, isLocalRequest, isRelayed, rateLimitLogin, resetLoginAttempts, setDashboardPassword, type CloudRelayEnv } from "../auth";
-import { issueGrant, requireGrant, verifyVaultPassphrase } from "../grants";
+import { issueGrant, requireGrant, requirePasswordGrant, verifyVaultPassphrase } from "../grants";
 import { body, z } from "../validate";
 import { badRequest, HttpError } from "../../util";
 import { noteAnthropicKeyChanged } from "../../services/claudeLogin";
@@ -184,12 +184,27 @@ export function registerVaultRoutes(app: Hono): void {
     return c.json(status);
   });
 
+  /** The finger instead of the password for a reveal grant. Touch ID itself can only be turned on with the password. */
+  app.post("/api/vault/touch-id/grant", async (c) => {
+    requireLocal(c);
+    if (!vault.isInitialized()) throw badRequest("Vault not initialized");
+    const key = `touch-id:${limitKey(c)}`;
+    rateLimitLogin(key);
+    await confirmWithTouchId().catch((err: unknown) => {
+      audit("user", "vault.grant_failed", null, { ip: clientIp(c), method: "touch_id", code: err instanceof HttpError ? err.code : null });
+      throw err;
+    });
+    resetLoginAttempts(key);
+    audit("user", "vault.grant", null, { ip: clientIp(c), method: "touch_id" });
+    return c.json(issueGrant("finger"));
+  });
+
   app.put("/api/vault/touch-id", async (c) => {
     requireLocal(c);
     const { enabled } = await body(c, z.object({ enabled: z.boolean() }));
     if (enabled) {
       // A fingerprint opens the vault from now on: like remembering the key, that takes the password.
-      requireGrant(c);
+      requirePasswordGrant(c);
       await enableTouchId();
     } else {
       disableTouchId();

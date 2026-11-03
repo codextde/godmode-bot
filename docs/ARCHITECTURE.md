@@ -192,7 +192,8 @@ ask within the same moment share a request.
   are erased again) with `ioreg` / `ps` run without a shell. Unlike browser fills they can't be bound to a website, and the agent
   controls the VM, so this is best effort against a determined agent — closer to "reveal" than to fill-only.
 * **Grants**: revealing secrets and enabling reveal/remember-device require `X-Godmode-Grant`, obtained from
-  `POST /api/vault/grant {passphrase}` (10 min, in memory).
+  `POST /api/vault/grant {passphrase}` or, on this computer with Touch ID on, `POST /api/vault/touch-id/grant`
+  (10 min, in memory). Touch ID itself only turns on with the password.
 * **Saving logins** (`vault_save_login`): any agent may add a login the human gave it in the chat, or one it signed up
   for (`generatePassword` makes a password the model never sees). New logins land in the agent's scope (its workspace,
   or global), and an agent with a login allow-list gets the new one added. Updating a login keeps the old password in

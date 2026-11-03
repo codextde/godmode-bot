@@ -198,6 +198,8 @@
   "grant": {
     "title": "Confirm it's you",
     "defaultReason": "Enter your Godmode password to show secrets in plain text.",
+    "touchIdReason": "Use Touch ID or your Godmode password to show secrets in plain text.",
+    "touchId": "Confirm with Touch ID",
     "notAgain": "You won't be asked again for 10 minutes.",
     "passphrase": "Godmode password"
   },

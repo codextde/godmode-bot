@@ -251,6 +251,23 @@ export async function tryAutoUnlock(opts: { waitMs?: number } = {}): Promise<boo
   return value ? useRememberedKey(value) : false;
 }
 
+/** Is this the vault's key? Changes nothing. The key in memory decides; locked, the canary does, and without one the answer is no. */
+export function isVaultKey(value: string): boolean {
+  const candidate = Buffer.from(value, "base64");
+  const canary = getMeta("vault.canary");
+  if (candidate.length !== 32) return false;
+  try {
+    if (dek) return candidate.equals(dek);
+    if (!canary) return false;
+    decrypt(candidate, canary, "vault.canary");
+    return true;
+  } catch {
+    return false;
+  } finally {
+    candidate.fill(0);
+  }
+}
+
 export function useRememberedKey(value: string): boolean {
   const candidate = Buffer.from(value, "base64");
   if (candidate.length !== 32) {

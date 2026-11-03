@@ -489,7 +489,7 @@ Every run is committed, so you can see exactly what an agent learned and did —
 - **Site-bound fills**: a login is only ever typed into its own website (https, real password fields) — a phishing or
   prompt-injected lookalike page gets nothing.
 - **Address-bound API keys**: a tool's key is added by Godmode and only sent to URLs under the tool's address (redirects
-  elsewhere aren't followed); moving a saved key to another address or into agents' environment needs your Godmode password.
+  elsewhere aren't followed); moving a saved key to another address or into agents' environment needs your Godmode password or, on a Mac with Touch ID turned on, your fingerprint.
 - **Re-auth for sensitive actions**: revealing a password or granting an agent reveal access needs your Godmode password.
 - **Redaction** of known secrets in transcripts, logs and the UI · **audit log** of every secret access.
 - **Local-first**: API on `127.0.0.1`, per-run MCP tokens, DNS-rebinding & CSRF protection, strict CSP,

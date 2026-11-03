@@ -1726,7 +1726,7 @@
       "remember": "Remember on this device",
       "rememberDescription": "Stores the vault key in the macOS Keychain / Windows Credential Manager so automations can run unattended after a restart. Turn off for maximum security on shared machines.",
       "touchId": "Touch ID",
-      "touchIdDescription": "Unlock the vault with your fingerprint. Your Godmode password keeps working.",
+      "touchIdDescription": "Unlock the vault and confirm it's you with your fingerprint. Your Godmode password keeps working.",
       "autoLock": "Auto-lock",
       "autoLockDescription": "Lock the vault after this many idle minutes. 0 = never."
     },
