@@ -296,7 +296,7 @@ export interface ExportResult {
 export function exportBackup(input: BackupExportInput, actor = "user"): Promise<ExportResult> {
   return withLock("export", async () => {
     const passphrase = input.passphrase;
-    if (typeof passphrase !== "string" || passphrase.length < 8) throw badRequest("Backup passphrase must be at least 8 characters");
+    if (typeof passphrase !== "string" || passphrase.length < 8) throw badRequest("Backup password must be at least 8 characters");
     const includeAgentRepos = input.includeAgentRepos !== false;
     const includeBrowserProfiles = input.includeBrowserProfiles === true;
 
@@ -716,7 +716,7 @@ function restoreFiles(baseDir: string, files: PlannedFile[], stamp: string) {
 
 export function importBackup(file: Uint8Array, passphrase: string, actor = "user"): Promise<BackupImportResult> {
   return withLock("import", async () => {
-    if (typeof passphrase !== "string" || !passphrase) throw badRequest("Enter the passphrase of the backup");
+    if (typeof passphrase !== "string" || !passphrase) throw badRequest("Enter the password of the backup");
     if (!file || file.byteLength === 0) throw badRequest("The backup file is empty");
     if (file.byteLength > MAX_BACKUP_BYTES) throw new HttpError(413, "The backup file is larger than 2 GB", "too_large");
 
@@ -725,7 +725,7 @@ export function importBackup(file: Uint8Array, passphrase: string, actor = "user
       archive = openWithPassphrase(passphrase, file);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "";
-      throw badRequest(/not a godmode backup/i.test(msg) ? "This is not a Godmode backup file" : "Wrong backup passphrase or corrupted file", undefined);
+      throw badRequest(/not a godmode backup/i.test(msg) ? "This is not a Godmode backup file" : "Wrong backup password or corrupted file", undefined);
     }
     let entries: Record<string, Uint8Array>;
     try {

@@ -141,7 +141,7 @@ describe("vault routes", () => {
 
     const wrong = await call<{ error: string }>("POST", "/api/vault/unlock", { passphrase: "not the passphrase" });
     expect(wrong.status).toBe(400);
-    expect(wrong.data.error).toBe("Wrong passphrase");
+    expect(wrong.data.error).toBe("Wrong password");
     expect(listAudit(10, "vault.unlock_failed")).toHaveLength(1);
 
     expect((await call("POST", "/api/vault/unlock", {})).status).toBe(400);
@@ -405,7 +405,7 @@ describe("reveal grant endpoint", () => {
     expect((await call("POST", "/api/vault/grant", {})).status).toBe(400);
     const wrong = await call<{ error: string }>("POST", "/api/vault/grant", { passphrase: "not the passphrase" });
     expect(wrong.status).toBe(400);
-    expect(wrong.data.error).toBe("Wrong passphrase");
+    expect(wrong.data.error).toBe("Wrong password");
     expect(listAudit(10, "vault.grant_failed").length).toBeGreaterThan(0);
 
     await call("POST", "/api/vault/lock", {});

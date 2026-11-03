@@ -114,7 +114,7 @@ export async function setup(passphrase: string, rememberDevice: boolean): Promis
 }
 
 function validatePassphrase(p: string) {
-  if (typeof p !== "string" || p.length < 8) throw badRequest("Passphrase must be at least 8 characters");
+  if (typeof p !== "string" || p.length < 8) throw badRequest("Password must be at least 8 characters");
 }
 
 export async function unlock(passphrase: string): Promise<VaultStatus> {
@@ -124,7 +124,7 @@ export async function unlock(passphrase: string): Promise<VaultStatus> {
   try {
     dek = Buffer.from(decrypt(kek, getMeta("vault.wrapped_dek")!, "vault.dek"), "base64");
   } catch {
-    throw badRequest("Wrong passphrase");
+    throw badRequest("Wrong password");
   }
   touch();
   loadKnownSecrets();
@@ -153,7 +153,7 @@ export async function changePassphrase(current: string, next: string) {
   try {
     unwrapped = Buffer.from(decrypt(deriveKey(current, kdf), getMeta("vault.wrapped_dek")!, "vault.dek"), "base64");
   } catch {
-    throw badRequest("Current passphrase is wrong");
+    throw badRequest("Current password is wrong");
   }
   const newKdf = newKdfParams();
   const wrapped = encrypt(deriveKey(next, newKdf), unwrapped.toString("base64"), "vault.dek");

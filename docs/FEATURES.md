@@ -310,7 +310,7 @@ the full path). Inside Godmode nothing changes: the built-in *Godmode* agent cre
 
 ## Quick start
 
-1. **Onboarding** — pick a vault passphrase (enable *Remember on this device* so routines run unattended).
+1. **Onboarding** — pick a Godmode password (enable *Remember on this device* so routines run unattended).
 2. **Add access** — import your Chrome sessions, import or add logins in **Vault → Logins**, and import 2FA QR codes in
    **Vault → 2FA Codes** (Google Authenticator → *Transfer accounts* → *Export* → screenshot).
 3. **Chat** — ask Godmode anything: *“Log into our billing portal and download September's invoice.”*
@@ -489,8 +489,8 @@ Every run is committed, so you can see exactly what an agent learned and did —
 - **Site-bound fills**: a login is only ever typed into its own website (https, real password fields) — a phishing or
   prompt-injected lookalike page gets nothing.
 - **Address-bound API keys**: a tool's key is added by Godmode and only sent to URLs under the tool's address (redirects
-  elsewhere aren't followed); moving a saved key to another address or into agents' environment needs your passphrase.
-- **Re-auth for sensitive actions**: revealing a password or granting an agent reveal access needs your vault passphrase.
+  elsewhere aren't followed); moving a saved key to another address or into agents' environment needs your Godmode password.
+- **Re-auth for sensitive actions**: revealing a password or granting an agent reveal access needs your Godmode password.
 - **Redaction** of known secrets in transcripts, logs and the UI · **audit log** of every secret access.
 - **Local-first**: API on `127.0.0.1`, per-run MCP tokens, DNS-rebinding & CSRF protection, strict CSP,
   rate-limited logins, HttpOnly/SameSite cookies for the dashboard. Nothing leaves your computer unless you link it to
@@ -501,7 +501,7 @@ Every run is committed, so you can see exactly what an agent learned and did —
   can. The computer decides what the cloud may do: browser access, phone access, and whether the vault and saved
   passwords may be used through it (off by default). Some actions are never possible through the cloud.
 - **Remember this device** keeps the data key in the OS keychain so routines run unattended — disable it to require
-  your passphrase after every restart.
+  your Godmode password after every restart.
 - **Phones** pair with a one-time, five-minute QR code and get their own key (stored hashed on the computer, in the
   Keychain / Keystore on the phone). Their key only works on the computer's Tailscale address (and through the gateway
   of a cloud the computer is linked to), is only sent to an address that proves it's your Godmode, and opens a fixed

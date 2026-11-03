@@ -1,5 +1,5 @@
 {
-  "grantAnyone": "Damit jeder deine Agenten nutzen kann, brauchst du deine Tresor-Passphrase.",
+  "grantAnyone": "Damit jeder deine Agenten nutzen kann, brauchst du dein Godmode-Passwort.",
   "whoCanTalk": "Wer darf mit ihm schreiben",
   "platforms": {
     "slack": "Schreib dem Bot direkt oder erwähne ihn in einem Channel — er antwortet im Thread. Keine öffentliche Adresse nötig.",

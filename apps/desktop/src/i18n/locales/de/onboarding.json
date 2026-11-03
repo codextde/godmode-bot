@@ -13,7 +13,7 @@
   },
   "unlock": {
     "tooMany": "Zu viele Versuche – warte eine Minute und versuch es erneut.",
-    "wrong": "Diese Passphrase stimmt nicht."
+    "wrong": "Dieses Passwort stimmt nicht."
   },
   "remote": {
     "eyebrow": "Remote-Dashboard",
@@ -55,25 +55,25 @@
   },
   "vault": {
     "guarantees": {
-      "key": "Aus deiner Passphrase wird der Schlüssel abgeleitet (scrypt). Sie wird nie gespeichert oder irgendwohin gesendet.",
+      "key": "Aus deinem Passwort wird der Schlüssel abgeleitet (scrypt). Es wird nie gespeichert oder irgendwohin gesendet.",
       "encryption": "Jedes Passwort, jedes 2FA-Geheimnis und jeder API-Key wird einzeln mit AES-256-GCM verschlüsselt.",
       "fill": "Agenten tragen Geheimnisse direkt im Browser ein – das KI-Modell sieht sie nie, außer du erlaubst es."
     },
     "eyebrow": "Tresor",
     "readyTitle": "Dein Tresor ist bereit.",
     "readyDescription": "Er ist entsperrt und auf diesem Gerät verschlüsselt.",
-    "readyBody": "Logins, 2FA-Codes und API-Keys, die du hinzufügst, werden mit deiner Passphrase verschlüsselt.",
+    "readyBody": "Logins, 2FA-Codes und API-Keys, die du hinzufügst, werden mit deinem Passwort verschlüsselt.",
     "createTitle": "Leg deinen Tresor an.",
     "createSubtitle": "Versiegelt auf diesem Gerät.",
     "createDescription": "Der Tresor bewahrt Website-Logins, 2FA-Geheimnisse und API-Keys auf, damit sich deine Agenten anmelden können, ohne dich zu unterbrechen.",
-    "passphrase": "Tresor-Passphrase",
+    "passphrase": "Godmode-Passwort",
     "noRecovery": "Sie lässt sich nicht wiederherstellen.",
     "noRecoveryHint": "Speicher sie in deinem Passwortmanager – ohne sie lässt sich der Tresor nur zurücksetzen.",
     "remember": "Auf diesem Gerät merken",
-    "rememberHint": "Empfohlen, damit Automationen unbeaufsichtigt laufen. Der Tresorschlüssel liegt im Schlüsselbund deines Betriebssystems und der Tresor entsperrt sich auf diesem Gerät automatisch. Schalt es aus, um die Passphrase nach jedem Neustart einzugeben.",
+    "rememberHint": "Empfohlen, damit Automationen unbeaufsichtigt laufen. Der Tresorschlüssel liegt im Schlüsselbund deines Betriebssystems und der Tresor entsperrt sich auf diesem Gerät automatisch. Schalt es aus, um das Passwort nach jedem Neustart einzugeben.",
     "create": "Tresor anlegen",
     "unlockTitle": "Entsperr deinen Tresor.",
-    "unlockDescription": "Auf diesem Gerät gibt es bereits einen Tresor. Gib seine Passphrase ein, um mit der Einrichtung weiterzumachen.",
+    "unlockDescription": "Auf diesem Gerät gibt es bereits einen Tresor. Gib sein Passwort ein, um mit der Einrichtung weiterzumachen.",
     "unlock": "Entsperren"
   },
   "doctor": {

@@ -158,7 +158,7 @@
     "secretEncrypted": "Secret stays encrypted in your vault"
   },
   "cardDetails": {
-    "grantReason": "Confirm with your vault passphrase to show this card's details.",
+    "grantReason": "Confirm with your Godmode password to show this card's details.",
     "showFailed": "Could not show card details",
     "description": "Hides automatically after {{seconds}} seconds. Revealing a card is audited.",
     "copyNumber": "Copy card number",
@@ -197,9 +197,9 @@
   "deletedAgent": "Deleted agent",
   "grant": {
     "title": "Confirm it's you",
-    "defaultReason": "Enter your vault passphrase to show secrets in plain text.",
+    "defaultReason": "Enter your Godmode password to show secrets in plain text.",
     "notAgain": "You won't be asked again for 10 minutes.",
-    "passphrase": "Vault passphrase"
+    "passphrase": "Godmode password"
   },
   "totpManual": {
     "secretMissing": "Paste the setup key shown next to the QR code.",
@@ -312,7 +312,7 @@
     "viewCode": "View 2FA code"
   },
   "purchases": {
-    "freesRoom": "Confirm with your vault passphrase: this frees room under the card's limits.",
+    "freesRoom": "Confirm with your Godmode password: this frees room under the card's limits.",
     "status": {
       "pending": "Waiting for your OK",
       "pendingHint": "The agent asked before paying. Approve or decline here or in the chat.",
@@ -451,9 +451,9 @@
       "cvc": "The security code has 3 or 4 digits.",
       "agents": "Pick at least one agent."
     },
-    "grantBilling": "Confirm with your vault passphrase to show the billing address.",
+    "grantBilling": "Confirm with your Godmode password to show the billing address.",
     "showBillingFailed": "Could not show the billing address",
-    "grantLoosen": "Confirm with your vault passphrase to loosen this card's rules.",
+    "grantLoosen": "Confirm with your Godmode password to loosen this card's rules.",
     "updated": "Card updated",
     "saved": "Card saved",
     "updateFailed": "Could not update card",
@@ -527,7 +527,7 @@
     "remove": "Remove billing address"
   },
   "passwordImport": {
-    "grantReason": "Enter your vault passphrase to compare the export with your saved logins.",
+    "grantReason": "Enter your Godmode password to compare the export with your saved logins.",
     "noEntries": "{{file}} has no entries.",
     "noLogins": "No website logins in {{file}}.",
     "noLoginsWhy": "No website logins in {{file}} — {{why}}.",
@@ -637,7 +637,7 @@
   },
   "deleteTitle": "Delete “{{name}}”?",
   "cardsPage": {
-    "grantUnfreeze": "Confirm with your vault passphrase to unfreeze this card.",
+    "grantUnfreeze": "Confirm with your Godmode password to unfreeze this card.",
     "frozen": "Card frozen",
     "frozenDescription": "Agents can't pay with it until you unfreeze it.",
     "unfrozen": "Card unfrozen",
@@ -660,11 +660,11 @@
     "deleteDescription": "The card is removed from the vault. Its purchase history is deleted too.",
     "trust": {
       "encryptedTitle": "Encrypted on this device",
-      "encryptedText": "AES-256-GCM, unlocked by your vault passphrase.",
+      "encryptedText": "AES-256-GCM, unlocked by your Godmode password.",
       "hiddenTitle": "Agents never see the card",
       "hiddenText": "Godmode types it into the checkout and masks it wherever an agent could read it back.",
       "limitsTitle": "Your limits, enforced",
-      "limitsText": "Loosening a card's limits needs your passphrase."
+      "limitsText": "Loosening a card's limits needs your password."
     }
   },
   "nothingMatchesQuery": "Nothing matches “{{query}}”",
