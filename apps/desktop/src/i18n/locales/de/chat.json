@@ -654,11 +654,7 @@
     "turns_one": "{{count}} Runde",
     "turns_other": "{{count}} Runden",
     "tokenUsage": "{{input}} rein · {{output}} raus · {{cached}} gecacht",
-    "queuedEllipsis": "In der Warteschlange…",
-    "pause": "Pausieren",
-    "pausing": "Wird pausiert…",
-    "pausingHint": "Beendet noch den aktuellen Schritt",
-    "pauseHint": "Nach dem aktuellen Schritt pausieren – jederzeit fortsetzbar"
+    "queuedEllipsis": "In der Warteschlange…"
   },
   "browser": {
     "title": "Browser",
@@ -852,6 +848,8 @@
     "queueMessage": "In die Warteschlange",
     "sendMessage": "Nachricht senden",
     "send": "Senden",
+    "stop": "Stoppen",
+    "stopping": "Wird gestoppt…",
     "options": "Optionen",
     "optionsTitle": "Optionen für diesen Chat"
   },
