@@ -45,6 +45,7 @@ export const SCOPE_ITEMS: Record<ScopeItemKind, { table: string; entity: EntityN
   questions: { table: "questions", entity: "questions" },
   missingLogins: { table: "missing_logins", entity: "missing-logins" },
   artifacts: { table: "artifacts", entity: "artifacts" },
+  offers: { table: "offers", entity: "offers" },
 };
 
 /** Vault items: moving them to other agents takes the passphrase, as changing their workspace does. */

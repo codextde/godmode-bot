@@ -169,6 +169,7 @@ const REFRESH = [
   qk.questions,
   qk.missingLogins,
   qk.artifacts,
+  qk.offers,
 ];
 
 /** Runs moves and their undos: the list shows the result right away and the sidebar's scope follows what moved. */

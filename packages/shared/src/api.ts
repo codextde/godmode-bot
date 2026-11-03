@@ -86,7 +86,8 @@ export type ScopeItemKind =
   | "humanTasks"
   | "questions"
   | "missingLogins"
-  | "artifacts";
+  | "artifacts"
+  | "offers";
 
 /** What a workspace brought along when it became a project; moving that project out with it puts everything back. */
 export interface ScopeRestore {
