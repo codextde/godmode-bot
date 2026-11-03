@@ -16,6 +16,9 @@ export const MEMORY_DIR = "memory";
 const MAX_SNAPSHOT_FILE = 256 * 1024;
 const MAX_SNAPSHOT_TOTAL = 2 * 1024 * 1024;
 const MAX_SNAPSHOT_FILES = 500;
+const MAX_TOPICS = 300;
+/** Over this a note costs too much to load, and soon Claude Code's Read refuses to return it whole. */
+export const NOTE_MAX_BYTES = 40_000;
 
 /**
  * The memory files at one moment: `files` holds the content of every text file that was read; `skipped` lists paths
@@ -97,11 +100,49 @@ function readMemoryHead(repoPath: string, chars: number): string | null {
   }
 }
 
+/** Markdown notes under memory/, sorted; hidden entries and symlinks are skipped. */
+export function memoryTopics(repoPath: string): string[] {
+  const out: string[] = [];
+  const walk = (rel: string, depth: number) => {
+    if (depth > 6 || out.length >= MAX_TOPICS) return;
+    let names: string[];
+    try {
+      names = readdirSync(join(repoPath, rel)).sort();
+    } catch {
+      return;
+    }
+    for (const name of names) {
+      if (name.startsWith(".") || out.length >= MAX_TOPICS) continue;
+      const child = `${rel}/${name}`;
+      let info;
+      try {
+        info = lstatSync(join(repoPath, child));
+      } catch {
+        continue;
+      }
+      if (info.isDirectory()) walk(child, depth + 1);
+      else if (info.isFile() && /\.(md|markdown|txt)$/i.test(name)) out.push(child);
+    }
+  };
+  walk(MEMORY_DIR, 0);
+  return out;
+}
+
+/** Notes too long to read in one go, the largest first, each with its size: "memory/topic.md (171 KB)". */
+export function longNotes(repoPath: string): string[] {
+  return memoryTopics(repoPath)
+    .map((path) => ({ path, bytes: lstatSync(join(repoPath, path), { throwIfNoEntry: false })?.size ?? 0 }))
+    .filter((note) => note.bytes > NOTE_MAX_BYTES)
+    .sort((a, b) => b.bytes - a.bytes)
+    .map((note) => `${note.path} (${Math.round(note.bytes / 1000)} KB)`);
+}
+
 /** MEMORY.md as a run's system prompt gets it. `chars`: the length of the whole file. */
 export interface PromptMemory {
   text: string;
   truncated: boolean;
   chars: number;
+  longNotes: string[];
 }
 
 /** MEMORY.md for the system prompt: trimmed, and cut at a line break when it is longer than `limit`. */
@@ -111,9 +152,10 @@ export function memoryForPrompt(repoPath: string, limit = memoryBudget(undefined
   const text = (huge ? readMemoryHead(repoPath, limit) : whole)?.trim();
   if (!text) return null;
   const chars = huge ? memoryBytes(repoPath) : text.length;
-  if (!huge && text.length <= limit) return { text, truncated: false, chars };
+  const notes = longNotes(repoPath);
+  if (!huge && text.length <= limit) return { text, truncated: false, chars, longNotes: notes };
   const cut = text.lastIndexOf("\n", limit);
-  return { text: text.slice(0, cut > limit / 2 ? cut : limit).trimEnd(), truncated: true, chars };
+  return { text: text.slice(0, cut > limit / 2 ? cut : limit).trimEnd(), truncated: true, chars, longNotes: notes };
 }
 
 /** MEMORY.md and the files under memory/ (recursively; hidden entries are ignored, symlinks never followed). */

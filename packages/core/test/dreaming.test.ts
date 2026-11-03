@@ -35,7 +35,7 @@ import {
   revertDream,
   startDream,
 } from "../src/memory/dreaming";
-import { diffSnapshots, isMemoryPath, memoryChars, memoryForPrompt, memoryOutgrew, snapshotMemory } from "../src/memory/files";
+import { NOTE_MAX_BYTES, diffSnapshots, isMemoryPath, longNotes, memoryChars, memoryForPrompt, memoryOutgrew, snapshotMemory } from "../src/memory/files";
 import { applyTidy, canUndoWorkspace, undoWorkspace, workspaceChangedSince, workspaceInventory, workspacePath } from "../src/memory/workspace";
 
 let env: TestEnv;
@@ -131,6 +131,22 @@ describe("memory files", () => {
     expect(isMemoryPath("MEMORY.md")).toBe(true);
     expect(isMemoryPath("memory/a/b.md")).toBe(true);
     for (const bad of ["CLAUDE.md", "memory", "memory/../CLAUDE.md", "memory/.git/x", "../MEMORY.md", "state/agent.json"]) expect(isMemoryPath(bad)).toBe(false);
+  });
+
+  test("notes too long for one read are named, the largest first, for the run and the dream", async () => {
+    const agent = await makeAgent({ name: "Long Notes Bot" });
+    const notes = join(agent.repoPath, "memory");
+    mkdirSync(notes, { recursive: true });
+    writeFileSync(join(agent.repoPath, "MEMORY.md"), "# Memory\n- a fact\n");
+    writeFileSync(join(notes, "short.md"), "x".repeat(NOTE_MAX_BYTES));
+    writeFileSync(join(notes, "long.md"), "x".repeat(50_000));
+    writeFileSync(join(notes, "longest.md"), "x".repeat(171_000));
+    const long = ["memory/longest.md (171 KB)", "memory/long.md (50 KB)"];
+    expect(longNotes(agent.repoPath)).toEqual(long);
+    expect(memoryForPrompt(agent.repoPath)!.longNotes).toEqual(long);
+    const dream = { agent, settings: getSettings(), digestPath: null, exchanges: 0, conversations: 0, since: null, lastDream: null };
+    expect(buildDreamPrompt({ ...dream, longNotes: long })).toContain("don't fit in one read: memory/longest.md (171 KB), memory/long.md (50 KB)");
+    expect(buildDreamPrompt(dream)).not.toContain("don't fit in one read");
   });
 
   test("memory for the prompt is trimmed and cut at a line break", async () => {

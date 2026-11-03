@@ -1331,8 +1331,16 @@ function writeTempFile(res: Resources, name: string, content: string): string {
   return path;
 }
 
+/** zsh aborts a whole command when one glob matches nothing (`grep --include=*.ts`, a URL with `?`); agents' commands expect bash's behavior: pass it on. */
+function agentShellInit(): string {
+  const path = join(config().dataDir, "agent-shell.sh");
+  if (!existsSync(path)) writeFileSync(path, 'if [ -n "${ZSH_VERSION:-}" ]; then\n  setopt no_nomatch\nfi\n');
+  return path;
+}
+
 export function buildEnv(agent: Agent, inFolder = false, apiKeys = true): Record<string, string | undefined> {
   const env = claudeEnv();
+  if (process.platform !== "win32") env.CLAUDE_ENV_FILE ??= agentShellInit();
   // Load CLAUDE.md files from --add-dir folders: the agent's repo when the cwd is an attached folder, and the workspace's folders.
   if (inFolder) env.CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD = "1";
   // `claude -p` stops background subagents still running 10 minutes after the main turn ended, and the agent never
@@ -2403,6 +2411,8 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
 
   const env = buildEnv(agent, !!folder || sources.length > 0, toolKeysInEnv);
   if (keywordsOff) skipKeywordDetector(env);
+  // oh-my-claudecode's read gate refuses files Claude Code's Read returns fine; what doesn't fit, Read refuses itself.
+  env.OMC_READ_BUDGET ??= "off";
   if (job.private || !folder) env.CLAUDE_CODE_DISABLE_AUTO_MEMORY = "1";
   if (artifactsHere && !glm) env.CLAUDE_CODE_ENABLE_FINE_GRAINED_TOOL_STREAMING ??= "1";
   // Without it a headless Claude Code keeps a mod's failures to its debug log: a hook that throws, a module that
