@@ -68,7 +68,12 @@ export interface ResumedAnswer extends ContinueAnswer {
 export interface Answerer {
   actor: string;
   via: AnswerVia;
+  /** A Godmode Cloud user who isn't the owner: may not approve what uses the Mac password. */
+  notOwner?: boolean;
 }
+
+export const MAC_PASSWORD_RUN = "Use your Mac password to run a command as administrator";
+export const MAC_PASSWORD_FILL = "Enter your Mac password in a macOS dialog";
 
 interface QuestionRow {
   id: string;
@@ -205,7 +210,7 @@ function humanName(): string {
 }
 
 /** Text from the agent, as it may be stored and shown: saved secrets masked, no Godmode note tags. */
-function clean(text: string | undefined, max: number): string {
+export function clean(text: string | undefined, max: number): string {
   return stripNoteTags(redact(text ?? ""))
     .trim()
     .slice(0, max);
@@ -402,6 +407,9 @@ export async function questionHere(id: string, conversationId: string | null): P
 export function answerQuestion(id: string, input: AnswerQuestionInput, by: Answerer): { question: AgentQuestion; run: Run } {
   const r = row(id);
   if (!r) throw notFound("Question");
+  if (by.notOwner && input.decision === "approve" && (r.title === MAC_PASSWORD_RUN || r.title === MAC_PASSWORD_FILL)) {
+    throw new HttpError(403, "Only the owner can approve a use of the Mac password.", "mac_password_owner_only");
+  }
   const elsewhere = get<{ runner_id: string | null }>("SELECT runner_id FROM conversations WHERE id = ?", r.conversation_id)?.runner_id ?? null;
   if (elsewhere && remoteAnswer) {
     if (r.status !== "open") throw new HttpError(409, "This was answered already.", "question_closed");

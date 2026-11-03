@@ -33,6 +33,7 @@ export const qk = {
   totpList: (workspaceId: string) => ["totp", "list", workspaceId],
   totpCodes: ["totp", "codes"] as unknown[],
   totpAutolink: ["totp", "autolink"] as unknown[],
+  macPassword: ["mac-password"] as unknown[],
   cards: ["cards"] as unknown[],
   cardList: (workspaceId: string) => ["cards", "list", workspaceId],
   cardPurchases: ["cards", "purchases"] as unknown[],

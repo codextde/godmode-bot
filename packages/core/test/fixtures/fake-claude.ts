@@ -69,6 +69,7 @@
  *              then call the PostToolBatch hook like Claude Code does: told to stop, write `stopped-by-hook` and end the
  *              turn without an answer, else answer "no stop". The tool's result goes to `ask-result.json`.
  *   ASK_APPROVAL  the same with request_approval
+ *   ASK_MAC_PASSWORD  the same with mac_password (arguments from `ask-args.json`)
  *   ASK_TWICE   ask_human twice in one step (both results in `ask-result.json`), then the hook
  *   ASK_NO_HOOK ask_human, then end the turn with an answer without calling the hook
  *   <godmode-continue> … <your-question>  a run continuing with the human's answer: answers "CONTINUED", or — while the
@@ -400,7 +401,7 @@ const activeGoal = (): string | null => {
 };
 
 /** Ask the human through the gateway like an agent does, as one step, then stand still at the hook. */
-async function ask(mode: "question" | "approval" | "twice" | "nohook") {
+async function ask(mode: "question" | "approval" | "twice" | "nohook" | "mac") {
   out(init);
   const cfg = JSON.parse(readFileSync(argValue("--mcp-config")!, "utf8")) as {
     mcpServers: Record<string, { url: string; headers: Record<string, string> }>;
@@ -412,7 +413,7 @@ async function ask(mode: "question" | "approval" | "twice" | "nohook") {
     return raw ? JSON.parse(raw) : null;
   };
   await rpc({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "fake", version: "1" } } });
-  const name = mode === "approval" ? "request_approval" : "ask_human";
+  const name = mode === "approval" ? "request_approval" : mode === "mac" ? "mac_password" : "ask_human";
   const argsFile = join(stateDir, "ask-args.json");
   const args = existsSync(argsFile)
     ? (JSON.parse(readFileSync(argsFile, "utf8")) as Record<string, unknown>)
@@ -515,6 +516,8 @@ if (slash?.[1] === "clear") {
   await ask("twice");
 } else if (prompt.includes("ASK_NO_HOOK")) {
   await ask("nohook");
+} else if (prompt.includes("ASK_MAC_PASSWORD")) {
+  await ask("mac");
 } else if (prompt.includes("ASK_APPROVAL")) {
   await ask("approval");
 } else if (prompt.includes("ASK_HUMAN")) {

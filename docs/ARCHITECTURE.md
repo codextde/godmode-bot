@@ -1019,6 +1019,18 @@ Agents can work in isolated macOS VMs instead of on the host (`packages/core/src
   (never boots a VM). Backups carry VM records and assignments, not disks; a restore keeps this Mac's own VM records, and a
   restored VM whose disk is missing shows an error and can be reset.
 
+## Mac password
+
+`services/macPassword.ts`, Passwords → Mac password, `GET|PUT|DELETE /api/vault/mac-password` (machine-local, not on runners, macOS only).
+
+- **Storage:** one row in `mac_password`, sealed with the vault key, in no replicated table and no backup: it is this Mac's. Saving checks it with macOS first (wrong: 422). It is masked like every vault secret, and no route returns it.
+- **Approval:** the `mac_password` tool (runs that can ask, not in a VM) asks with a normal approval question that shows the exact command or dialog text. `mac_password_grants` ties that question to the agent, the chat and the exact subject. After the human approves, the same call again uses the approval once, within 30 minutes. A text answer is no approval.
+- **Commands (`run`):** `osascript -` with `do shell script ... user name ... password ... with administrator privileges` on stdin, so the password is in no process list. Not `sudo -S`: with Touch ID for sudo (`pam_tid`), sudo asks for a finger. A timed-out command can't be stopped from here, because it runs as root.
+- **Dialogs (`fill`):** the native helper reads the app at the front (`passwordPrompt`) and fills the focused `AXSecureTextField` through Accessibility (`passwordFill`), then presses Return. Key events reach SecurityAgent twice now and then. Only macOS's own prompts qualify (`isSystemDialog`: SecurityAgent and the LocalAuthentication UI at fixed `/System` paths): a web page, a terminal, an `osascript` dialog an agent made or a field inside System Settings or an installer could pass the password on. Godmode can't see what such a prompt unlocks, and the approval says so. Afterwards the dialog tells the result: closed, or focus back in the field after a moment of checking (rejected).
+- **What the human reads:** a command that the card can't show exactly as it runs (control characters, a saved secret, `<godmode` text) isn't asked for at all. Only the owner approves: a Godmode Cloud operator can't, and the routes are closed to the cloud and to phones.
+- **Backups:** both tables stay out of them.
+- **Audit:** `mac_password.save`, `mac_password.remove`, `mac_password.use` (the page lists the last five uses).
+
 ## SSH servers
 
 Remote machines agents sign in to and control (`packages/core/src/ssh/`, `/api/ssh`, the **SSH servers** page):

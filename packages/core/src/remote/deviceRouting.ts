@@ -42,6 +42,7 @@ const LOCAL: RegExp[] = [
   /^\/api\/mobile(\/|$)/,
   /^\/api\/cloud(\/|$)/,
   /^\/api\/power(\/|$)/,
+  /^\/api\/vault\/mac-password$/,
   /^\/api\/license(\/|$)/,
   /^\/api\/voice\//,
   /^\/api\/ssh\/local-keys$/,

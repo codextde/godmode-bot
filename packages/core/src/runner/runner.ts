@@ -70,6 +70,7 @@ import { excerpt, logger } from "../log";
 import { HttpError, awakeTimeout, badRequest, conflict, hostnameOf, newId, notFound, now, parseJson } from "../util";
 import { isUnlocked, redact, redactionEpoch } from "../vault/vault";
 import { hasCardsForAgent } from "../vault/cards";
+import { macPasswordSupported } from "../services/macPassword";
 import { commitAgentRepo, ensureAgentRepo, getAgent, listAgents, peersFor, setAgentFailedRun, setAgentStatus, teamOf, touchAgentRun } from "../agents/service";
 import { noteClaudeSignedOut, noteClaudeWorks } from "../services/claudeLogin";
 import { accountForRun, applyAccountEnv, noteAccountLimit, noteClaudeAccountSignedOut, type RunAccount } from "../services/claudeAccounts";
@@ -2289,6 +2290,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
         fillOnly,
         // Delegated work reports to the run that handed it over; checks only observe.
         asking: job.trigger !== "check" && !job.parentRunId,
+        macPassword: job.trigger !== "check" && job.trigger !== "dream" && !job.parentRunId && !vm && macPasswordSupported(),
         check: job.trigger === "check",
         unattended: UNATTENDED.has(job.trigger),
         cards: settings.cards.enabled && !vm && job.trigger !== "check" && "browser" in mcp.mcpServers && hasCardsForAgent(agent),

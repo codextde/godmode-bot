@@ -10,6 +10,7 @@ import {
   listCredentials,
   updateCredential,
 } from "../../vault/credentials";
+import { macPasswordStatus, removeMacPassword, saveMacPassword } from "../../services/macPassword";
 import { suggestTotpLinks } from "../../vault/totpGuess";
 import { deletePasskey, getPasskey, listPasskeys } from "../../vault/passkeys";
 import { createTotp, currentCodes, deleteTotp, importTotpUris, listTotp, updateTotp } from "../../vault/totp";
@@ -117,6 +118,13 @@ export function registerVaultRoutes(app: Hono): void {
   /* ---------------------------------------------------------------- */
 
   app.get("/api/vault/status", (c) => c.json(vault.status()));
+
+  app.get("/api/vault/mac-password", (c) => c.json(macPasswordStatus()));
+  app.put("/api/vault/mac-password", async (c) => {
+    const { password } = await body(c, z.object({ password: z.string().min(1).max(1024) }));
+    return c.json(await saveMacPassword(password));
+  });
+  app.delete("/api/vault/mac-password", (c) => c.json(removeMacPassword()));
 
   app.post("/api/vault/setup", async (c) => {
     const input = await body(

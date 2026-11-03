@@ -17,7 +17,8 @@
     "description": "Die Logins, 2FA-Codes und Passkeys, mit denen sich deine Agenten anmelden. Verschlüsselt auf diesem Computer; Agenten sehen die Geheimnisse nie.",
     "logins": "Logins",
     "codes": "2FA-Codes",
-    "passkeys": "Passkeys"
+    "passkeys": "Passkeys",
+    "macPassword": "Mac-Passwort"
   },
   "clipboard": {
     "accessFailed": "Kein Zugriff auf die Zwischenablage",
@@ -750,5 +751,37 @@
       "auditedTitle": "Jede Nutzung wird protokolliert",
       "auditedText": "Wer was genutzt hat, siehst du unter Einstellungen → Sicherheit."
     }
+  },
+  "macPasswordPage": {
+    "title": "Mac-Passwort",
+    "intro": "Manche Aufgaben brauchen dein Mac-Passwort: Software installieren, eine Systemeinstellung ändern, ein Passwort-Dialog von macOS. Speichere es einmal. Godmode fragt dich vor jeder Verwendung, trägt es dann selbst ein und macht weiter.",
+    "label": "Passwort von {{user}}",
+    "labelGeneric": "Dein Mac-Passwort",
+    "placeholder": "Das Passwort, mit dem du diesen Mac entsperrst",
+    "save": "Prüfen und speichern",
+    "checking": "Wird mit macOS geprüft…",
+    "change": "Ändern",
+    "cancel": "Abbrechen",
+    "remove": "Entfernen",
+    "saved": "Gespeichert für {{user}}",
+    "savedToast": "Mac-Passwort gespeichert",
+    "removedToast": "Mac-Passwort entfernt",
+    "saveFailed": "Passwort konnte nicht gespeichert werden",
+    "removeFailed": "Passwort konnte nicht entfernt werden",
+    "neverUsed": "Noch nicht verwendet",
+    "lastUsed": "Zuletzt verwendet {{when}}",
+    "removeTitle": "Mac-Passwort entfernen?",
+    "removeBody": "Agenten müssen dich dann beim nächsten Mal bitten, es neu zu speichern.",
+    "approveTitle": "Du bestätigst jede Verwendung",
+    "approveBody": "Du siehst vorher den genauen Befehl oder Dialog. Eine Bestätigung gilt für eine Verwendung.",
+    "hiddenTitle": "Agenten sehen es nie",
+    "hiddenBody": "Godmode trägt es selbst ein und maskiert es in jedem Ergebnis.",
+    "localTitle": "Es bleibt auf diesem Mac",
+    "localBody": "Verschlüsselt im Tresor und wird nie auf deine anderen Computer kopiert.",
+    "recent": "Letzte Verwendungen",
+    "filledDialog": "Dialog in {{what}} ausgefüllt",
+    "failed": "fehlgeschlagen",
+    "unsupported": "Das geht nur auf einem Mac.",
+    "locked": "Entsperre den Tresor, um dein Mac-Passwort zu speichern."
   }
 }

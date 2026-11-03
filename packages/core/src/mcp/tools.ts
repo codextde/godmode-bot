@@ -175,6 +175,7 @@ import { MAX_OPEN_PER_CHAT, createAgentHumanTask, duplicateAsk, findHumanTask, l
 import { createMod, findMod, installMod, listMods, updateMod } from "../mods/service";
 import { noteConnectorCall } from "../connect/connectors";
 import { selfRepairCheck } from "../diagnostics/selfRepair";
+import { macPasswordSupported, useMacPassword } from "../services/macPassword";
 import { recallRead, recallSearch } from "../memory/recall";
 import { readTeamMemory, teamBelow } from "../memory/team";
 
@@ -1808,6 +1809,24 @@ const TOOLS: ToolDef[] = [
       if (twice) return fail(twice);
       const out = askQuestion(ctx, { kind: "approval", action, reason, affects });
       return out.ok ? out.text : fail(out.text);
+    },
+  }),
+
+  defineTool({
+    name: "mac_password",
+    description:
+      'Use this Mac\'s password, which you never see, when something on this Mac needs it. `action: "run"` runs `command` as administrator (instead of sudo, which can\'t answer here). `action: "fill"` enters the password into macOS\'s own password prompt (the dialog that says an app wants to make changes) that is at the front right now, and confirms it; open it first. Prefer `run`: it shows the human what happens. Godmode shows the human the exact command or dialog and asks them to approve: this turn stops, and after they approve you call this again with the same arguments, and that call does it. An approval covers one use. If it is declined, don\'t do it and don\'t get the same effect another way. A dialog you started from a command closes while the turn stands still: start it again after the approval, or prefer `run`.',
+    schema: z.object({
+      action: z.enum(["run", "fill"]),
+      reason: z.string().min(1).max(2000).describe("Why this needs the Mac password, in one or two plain sentences the human reads before approving"),
+      command: z.string().min(1).max(900).optional().describe("run: the command, a zsh script"),
+      cwd: z.string().max(1000).optional().describe("run: the folder to run it in"),
+      timeout_seconds: z.number().int().min(1).max(600).optional().describe("run: how long it may take (default 120)"),
+    }),
+    when: (agent, ctx) => canAsk(agent, ctx) && macPasswordSupported() && !vmOfRun(ctx.runId),
+    run: async (args, { agent, ctx }) => {
+      const out = await useMacPassword(agent, ctx, args);
+      return out.isError ? fail(out.text) : out.text;
     },
   }),
 

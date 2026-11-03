@@ -90,6 +90,7 @@ const RULES: [methods: string, path: string, rule: Rule][] = [
   // Lid-closed mode: the first switch opens macOS's password dialog on the computer.
   ["GET", "/api/power", A],
   ["POST", "/api/power/lid", refused(COMPUTER_ONLY)],
+  ["GET|PUT|DELETE", "/api/vault/mac-password", refused(COMPUTER_ONLY)],
   ["POST", "/api/doctor/permissions/fix", refused(COMPUTER_ONLY)],
   ["POST", "/api/doctor/permissions/open", refused(COMPUTER_ONLY)],
   ["POST", "/api/doctor/permissions/reset", refused(COMPUTER_ONLY)],
