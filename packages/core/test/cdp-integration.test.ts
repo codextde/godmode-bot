@@ -12,6 +12,7 @@ import type { Agent, ServerEvent } from "@godmode/shared";
 import { loadConfig } from "../src/config";
 import { closeDb, openDb } from "../src/db";
 import { bus } from "../src/events/bus";
+import { pausePasskeys, resumePasskeys } from "../src/browser/passkeys";
 import { appBundle, findChrome, isProcessAlive, launchChrome, type ChromeProcess } from "../src/browser/chrome";
 import { CdpClient, attachToPage, getCookies, listPages, type CdpCookie, type CdpCookieParam, type PageSession } from "../src/browser/cdp";
 import { getRunning, unregisterBrowser } from "../src/browser/state";
@@ -193,7 +194,7 @@ suite("managed Chromium (CDP integration)", () => {
     dataDir = mkdtempSync(join(tmpdir(), "godmode-cdp-test-"));
     const cfg = loadConfig({ dataDir });
     openDb(cfg.dbPath);
-    // These tests count attached tabs as other CDP clients; passkeys (browser-passkeys.test.ts) keep their own sessions.
+    // Passkeys are browser-passkeys.test.ts; the bridge still attaches to every tab.
     updateSettings({ browser: { passkeys: false } });
     server = Bun.serve({
       hostname: "127.0.0.1",
@@ -686,10 +687,12 @@ suite("managed Chromium (CDP integration)", () => {
       expect(Date.now() - rb.lastUsedAt).toBeLessThan(5000);
 
       external.close();
+      await pausePasskeys(profileId);
       await waitFor(async () => {
         const { targetInfos } = await rb.client.send<{ targetInfos: { type: string; attached: boolean }[] }>("Target.getTargets");
         return targetInfos.every((t) => t.type !== "page" || !t.attached);
       });
+      await resumePasskeys(profileId);
       rb.lastUsedAt = Date.now() - 5 * 60_000;
       await manager.sweepIdleBrowsers();
       expect(getRunning(profileId)).toBeNull();

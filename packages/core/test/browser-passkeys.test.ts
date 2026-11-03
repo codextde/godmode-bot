@@ -20,7 +20,21 @@ import { updateSettings } from "../src/services/settings";
 import { deletePasskey, listPasskeys, passkeysForHost } from "../src/vault/passkeys";
 import * as vault from "../src/vault/vault";
 
-const PAGE = `<!doctype html><title>Passkeys</title><script>
+const PAGE = `<!doctype html><title>Passkeys</title><input id="field" autocomplete="username webauthn" style="width:300px;height:40px"><script>
+window.seen = { keydown: 0, mousedown: 0 };
+for (const type of ["keydown", "mousedown"]) window.addEventListener(type, () => window.seen[type]++, true);
+window.askAccounts = () => {
+  window.accounts = "pending";
+  navigator.credentials.get({ password: true, federated: { providers: ["https://accounts.google.com"] } }).then((c) => (window.accounts = c), (e) => (window.accounts = e.name));
+};
+window.autofill = async () => {
+  try {
+    const c = await navigator.credentials.get({ mediation: "conditional", publicKey: { challenge: new Uint8Array(32), userVerification: "preferred" } });
+    return { user: new TextDecoder().decode(c.response.userHandle) };
+  } catch (e) {
+    return { error: e.name };
+  }
+};
 const enc = (s) => new TextEncoder().encode(s);
 window.register = async (name) => {
   const c = await navigator.credentials.create({ publicKey: {
@@ -146,6 +160,15 @@ describe.skipIf(!chrome)("passkeys in the browser", () => {
     }
   }, 30_000);
 
+  test("passkey autofill signs in with it", async () => {
+    const page = await openTab();
+    try {
+      expect(await page.evaluate<{ user?: string }>("autofill()")).toEqual({ user: "dana@example.com" });
+    } finally {
+      await page.detach();
+    }
+  }, 30_000);
+
   test("another browser profile doesn't get it", async () => {
     const other = manager.createProfile({ name: "Other", workspaceId: null }).id;
     await manager.launchBrowser(other, { headless: true });
@@ -234,4 +257,62 @@ describe.skipIf(!chrome)("passkeys in the browser", () => {
     applyRuntimeSettings(updateSettings({ browser: { passkeys: true } }));
     await waitFor(() => passkeysActive(profileId));
   }, 30_000);
+
+  describe("Chrome's account chooser", () => {
+    async function tabAskingForAccounts() {
+      const { targetId } = await rb().client.send<{ targetId: string }>("Target.createTarget", { url: "about:blank" });
+      const page = await attachToPage(rb().client, targetId);
+      await page.send("Page.navigate", { url: `${origin}/` });
+      await waitFor(() => page.evaluate<boolean>("document.readyState === 'complete' && typeof askAccounts === 'function'", { timeoutMs: 1000 }));
+      await page.evaluate("askAccounts(); 0");
+      await Bun.sleep(500);
+      return page;
+    }
+
+    async function typeInto(page: PageSession) {
+      const { x, y } = await page.evaluate<{ x: number; y: number }>("(() => { const r = field.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()");
+      await page.click(x, y);
+      await page.send("Input.dispatchKeyEvent", { type: "keyDown", key: "a", code: "KeyA", text: "a", windowsVirtualKeyCode: 65 });
+      await page.send("Input.dispatchKeyEvent", { type: "keyUp", key: "a", code: "KeyA", windowsVirtualKeyCode: 65 });
+      await Bun.sleep(300);
+      return page.evaluate<{ seen: { keydown: number; mousedown: number }; value: string; accounts: unknown }>("({ seen, value: field.value, accounts: window.accounts })");
+    }
+
+    beforeAll(async () => {
+      const { targetId } = await rb().client.send<{ targetId: string }>("Target.createTarget", { url: "chrome://password-manager/passwords" });
+      const manager = await attachToPage(rb().client, targetId);
+      await waitFor(() => manager.evaluate<boolean>("!!window.chrome?.passwordsPrivate", { timeoutMs: 1000 }));
+      await manager.evaluate(`chrome.passwordsPrivate.addPassword({ url: "${origin}/", username: "dana", password: "not-a-secret", note: "", useAccountStore: false })`);
+      await rb().client.send("Target.closeTarget", { targetId });
+    }, 30_000);
+
+    test("takes a tab's input away when nothing stops it", async () => {
+      await pausePasskeys(profileId);
+      const page = await tabAskingForAccounts();
+      try {
+        expect(await typeInto(page)).toEqual({ seen: { keydown: 0, mousedown: 0 }, value: "", accounts: "pending" });
+      } finally {
+        await rb().client.send("Target.closeTarget", { targetId: page.targetId });
+        await resumePasskeys(profileId);
+      }
+    }, 30_000);
+
+    test.each([
+      ["passkeys on", true],
+      ["passkeys off", false],
+    ])("never opens, with %s", async (_, passkeys) => {
+      applyRuntimeSettings(updateSettings({ browser: { passkeys } }));
+      await waitFor(async () => passkeysActive(profileId) === passkeys);
+      await Bun.sleep(300);
+      const page = await tabAskingForAccounts();
+      try {
+        expect(await typeInto(page)).toEqual({ seen: { keydown: 1, mousedown: 1 }, value: "a", accounts: null });
+        expect(await page.evaluate<unknown>("[navigator.credentials.get.name, /native code/.test(String(navigator.credentials.get))]")).toEqual(["get", true]);
+      } finally {
+        await page.detach();
+        applyRuntimeSettings(updateSettings({ browser: { passkeys: true } }));
+        await waitFor(() => passkeysActive(profileId));
+      }
+    }, 30_000);
+  });
 });

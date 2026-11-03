@@ -7,6 +7,8 @@
  *
  * The bridge has its own CDP connection: auto-attach with waitForDebuggerOnStart puts the authenticator in place before
  * a new page runs any script. Its sessions mark every tab as attached, so the idle check pauses it (`pausePasskeys`).
+ *
+ * It runs with passkeys off or the vault locked too, then without authenticators, for NO_ACCOUNT_CHOOSER.
  */
 import { get } from "../db";
 import { bus } from "../events/bus";
@@ -33,6 +35,23 @@ const AUTHENTICATOR = {
   defaultBackupState: true,
 };
 
+/**
+ * `navigator.credentials.get({ password })` on a site with a saved password opens Chrome's account chooser. That dialog
+ * can't be seen or closed over CDP and blocks all trusted input to the tab, so to an agent a normal looking page ignores
+ * every click and key. Asked silently, Chrome answers without a dialog and the page shows its login form.
+ */
+const NO_ACCOUNT_CHOOSER = `(() => {
+  const proto = globalThis.CredentialsContainer?.prototype;
+  if (!proto) return;
+  proto.get = new Proxy(proto.get, {
+    apply(get, self, args) {
+      const o = args[0];
+      const chooser = o && (o.password || o.federated) && !o.publicKey && !o.identity && !o.otp && !o.digital && [undefined, "optional", "required"].includes(o.mediation);
+      return Reflect.apply(get, self, chooser ? [{ ...o, mediation: "silent" }] : args);
+    },
+  });
+})();`;
+
 const key = (c: { rpId?: string; credentialId: string }) => `${c.rpId ?? ""} ${c.credentialId}`;
 const same = (a: Credential, b: Credential) =>
   a.signCount === b.signCount && a.privateKey === b.privateKey && (a.userName ?? "") === (b.userName ?? "") && (a.userDisplayName ?? "") === (b.userDisplayName ?? "");
@@ -55,6 +74,7 @@ class PasskeyBridge {
   constructor(
     private rb: RunningBrowser,
     private onLost: () => void,
+    readonly authenticators: boolean,
   ) {}
 
   private get idle(): boolean {
@@ -62,7 +82,7 @@ class PasskeyBridge {
   }
 
   private load() {
-    this.loaded = new Map((passkeysForBrowser(this.rb.profileId) ?? []).map((c) => [key(c), c]));
+    this.loaded = new Map((this.authenticators ? (passkeysForBrowser(this.rb.profileId) ?? []) : []).map((c) => [key(c), c]));
   }
 
   async start() {
@@ -109,10 +129,17 @@ class PasskeyBridge {
         await detach();
         return;
       }
-      await client.send("WebAuthn.enable", { enableUI: false }, sessionId);
-      const { authenticatorId } = await client.send<{ authenticatorId: string }>("WebAuthn.addVirtualAuthenticator", { options: AUTHENTICATOR }, sessionId);
-      this.sessions.set(sessionId, { targetId: targetInfo.targetId, authenticatorId });
-      for (const credential of this.loaded.values()) await this.add(sessionId, credential);
+      // Not awaited: a tab waiting for its debugger may only answer these once it is released. Without Page.enable the script never runs.
+      for (const [method, params] of [["Page.enable", {}], ["Page.addScriptToEvaluateOnNewDocument", { source: NO_ACCOUNT_CHOOSER }]] as const) {
+        void client.send(method, params, sessionId).catch((err) => log.debug(`${method} failed in tab ${targetInfo.targetId}`, err));
+      }
+      if (!waitingForDebugger) void client.send("Runtime.evaluate", { expression: NO_ACCOUNT_CHOOSER }, sessionId).catch(() => {});
+      if (this.authenticators) {
+        await client.send("WebAuthn.enable", { enableUI: false }, sessionId);
+        const { authenticatorId } = await client.send<{ authenticatorId: string }>("WebAuthn.addVirtualAuthenticator", { options: AUTHENTICATOR }, sessionId);
+        this.sessions.set(sessionId, { targetId: targetInfo.targetId, authenticatorId });
+        for (const credential of this.loaded.values()) await this.add(sessionId, credential);
+      }
       // Paused (idle check) or stopped while this tab was being set up: let go of it like of the others.
       if (this.idle || !this.live.has(sessionId)) {
         this.sessions.delete(sessionId);
@@ -120,7 +147,7 @@ class PasskeyBridge {
         await detach();
       }
     } catch (err) {
-      log.debug(`could not give tab ${targetInfo.targetId} an authenticator`, err);
+      log.debug(`could not set up tab ${targetInfo.targetId}`, err);
     } finally {
       await release();
     }
@@ -209,7 +236,7 @@ class PasskeyBridge {
   }
 
   private async sync() {
-    if (this.idle || !this.client) return;
+    if (this.idle || !this.client || !this.authenticators) return;
     const current = passkeysForBrowser(this.rb.profileId);
     if (!current) return;
     const next = new Map(current.map((c) => [key(c), c]));
@@ -270,20 +297,32 @@ function wanted(): boolean {
   }
 }
 
+function browsersEnabled(): boolean {
+  try {
+    return getSettings().browser.enabled;
+  } catch {
+    return false;
+  }
+}
+
 function startFor(rb: RunningBrowser) {
-  if (bridges.has(rb.profileId) || rb.stopping) return;
+  if (rb.stopping || !browsersEnabled()) return;
+  const authenticators = wanted();
+  const running = bridges.get(rb.profileId);
+  if (running?.authenticators === authenticators) return;
+  if (running) stopFor(rb.profileId);
   const bridge: PasskeyBridge = new PasskeyBridge(rb, () => {
     // The bridge's own connection dropped while the browser runs on: start a new one after a pause.
     if (bridges.get(rb.profileId) !== bridge) return;
     bridges.delete(rb.profileId);
     bridge.stop();
     setTimeout(() => {
-      if (wanted() && !rb.stopping && !rb.client.closed && getRegistered(rb.profileId) === rb) startFor(rb);
+      if (!rb.stopping && !rb.client.closed && getRegistered(rb.profileId) === rb) startFor(rb);
     }, 2000).unref?.();
-  });
+  }, authenticators);
   bridges.set(rb.profileId, bridge);
   bridge.start().catch((err) => {
-    log.warn(`passkeys are not available in the browser of profile ${rb.profileId}`, err);
+    log.warn(`could not attach to the tabs of the browser of profile ${rb.profileId}`, err);
     if (bridges.get(rb.profileId) === bridge) bridges.delete(rb.profileId);
     bridge.stop();
   });
@@ -294,9 +333,9 @@ function stopFor(profileId: string) {
   bridges.delete(profileId);
 }
 
-/** Start or stop the bridges to match the setting and the vault (locked = Chrome's own passkey dialogs). */
+/** Start or restart the bridges to match the setting and the vault (locked = Chrome's own passkey dialogs). */
 function reconcile() {
-  if (!wanted()) {
+  if (!browsersEnabled()) {
     for (const id of [...bridges.keys()]) stopFor(id);
     return;
   }
@@ -311,7 +350,7 @@ export function initPasskeys() {
   installed = true;
   onBrowserState((profileId, rb) => {
     if (!rb) stopFor(profileId);
-    else if (wanted()) startFor(rb);
+    else startFor(rb);
   });
   onSettingsApplied(reconcile);
   bus.on((e) => {
@@ -329,7 +368,7 @@ export async function resumePasskeys(profileId: string): Promise<void> {
 
 /** Whether the profile's tabs have passkeys from the vault right now. */
 export function passkeysActive(profileId: string): boolean {
-  return bridges.has(profileId);
+  return !!bridges.get(profileId)?.authenticators;
 }
 
 /** Whether passkeys from the vault are in use (the setting is on and the vault is open). */
