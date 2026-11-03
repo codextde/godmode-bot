@@ -208,13 +208,14 @@ export function ModelPicker({
         side="top"
         align="end"
         sideOffset={8}
-        className="w-80 overflow-hidden rounded-xl p-0 shadow-float"
+        collisionPadding={8}
+        className="flex max-h-(--radix-popover-content-available-height) w-80 flex-col overflow-hidden rounded-xl p-0 shadow-float"
         onOpenAutoFocus={(e) => {
           e.preventDefault();
           selectedRef.current?.focus({ preventScroll: true });
         }}
       >
-        <div className="flex items-center justify-between px-3 pt-2.5 pb-1">
+        <div className="flex shrink-0 items-center justify-between px-3 pt-2.5 pb-1">
           <span className="eyebrow">{t("modelPicker.model")}</span>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -232,7 +233,7 @@ export function ModelPicker({
           </Tooltip>
         </div>
 
-        <div role="menu" aria-label={t("modelPicker.models")} onKeyDown={onListKeyDown} className="max-h-[min(22rem,50vh)] overflow-y-auto px-1.5 pb-1.5">
+        <div role="menu" aria-label={t("modelPicker.models")} onKeyDown={onListKeyDown} className="max-h-[min(22rem,50vh)] min-h-16 shrink overflow-y-auto px-1.5 pb-1.5">
           {latest.map((m) => (
             <ModelOption
               key={m.id}
@@ -292,7 +293,7 @@ export function ModelPicker({
           )}
         </div>
 
-        <div className="border-t px-3 py-3">
+        <div className="shrink-0 border-t px-3 py-3">
           {effort ? (
             <EffortMeter levels={current.efforts} value={effort} onChange={pickEffort} />
           ) : (
@@ -303,7 +304,7 @@ export function ModelPicker({
         </div>
 
         {current.ultracode ? (
-          <div className="border-t px-3 py-3">
+          <div className="shrink-0 border-t px-3 py-3">
             <div className="flex items-center justify-between gap-3">
               <label htmlFor={ultracodeId} className="flex items-center gap-1.5 text-[13px] font-medium">
                 <Workflow aria-hidden className="size-3.5 text-muted-foreground" /> Ultracode
@@ -316,13 +317,13 @@ export function ModelPicker({
           </div>
         ) : (
           anyUltracode && (
-            <p className="border-t px-3 py-2.5 text-xs text-muted-foreground">
+            <p className="shrink-0 border-t px-3 py-2.5 text-xs text-muted-foreground">
               <Trans t={t} i18nKey="modelPicker.ultracodeUnavailable" values={{ model: current.label }} components={{ b: <span className="font-medium text-foreground" /> }} />
             </p>
           )
         )}
 
-        <div className="flex items-center gap-2 border-t bg-muted/40 px-3 py-2 text-[11px] text-muted-foreground">
+        <div className="flex shrink-0 items-center gap-2 border-t bg-muted/40 px-3 py-2 text-[11px] text-muted-foreground">
           <Tooltip>
             <TooltipTrigger asChild>
               <span className="flex min-w-0 items-center gap-1.5">
