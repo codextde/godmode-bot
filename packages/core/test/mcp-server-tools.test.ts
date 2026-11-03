@@ -33,7 +33,7 @@ beforeAll(async () => {
   env = await setupEnv("godmode-mcp-tools-");
   await vault.setup("correct horse battery staple", false);
   manager = await makeAgent({ name: "Boss", permissions: { canManageAgents: true, allowDelegation: true } });
-  worker = await makeAgent({ name: "Worker" });
+  worker = await makeAgent({ name: "Worker", permissions: { canManageAgents: false } });
 });
 
 afterAll(async () => {

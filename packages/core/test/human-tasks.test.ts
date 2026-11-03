@@ -130,7 +130,7 @@ describe("an agent gives the human a task", () => {
   test("a lead takes back what its team gave, with a reason; never the human's own", async () => {
     const godmode = await ensureDefaultAgent();
     const lead = await makeAgent({ name: "Growth lead", permissions: { canManageAgents: true } });
-    const plain = await makeAgent({ name: "Plain lead", reportsTo: lead.id });
+    const plain = await makeAgent({ name: "Plain lead", reportsTo: lead.id, permissions: { canManageAgents: false } });
     const peer = await makeAgent({ name: "Peer lead", permissions: { canManageAgents: true } });
     await updateAgent(agent.id, { reportsTo: plain.id });
     try {

@@ -176,7 +176,7 @@ describe("roles and reporting lines", () => {
 
   test("a lead must exist, be someone else, be global or in the same workspace, and not report to the agent", async () => {
     const ws = createWorkspace({ name: "Shop" });
-    const lead = await makeAgent({ name: "Lena", role: "  Head of\nfinance " });
+    const lead = await makeAgent({ name: "Lena", role: "  Head of\nfinance ", permissions: { canManageAgents: false } });
     expect(lead.role).toBe("Head of finance");
     const clerk = await makeAgent({ name: "Clerk", reportsTo: lead.id });
     expect(clerk.reportsTo).toBe(lead.id);
@@ -273,6 +273,7 @@ describe("roles and reporting lines", () => {
     expect(sneaky.content[0]!.text).toContain("can reveal secrets");
     expect(listAgents().some((a) => a.name === "Auditor")).toBe(false);
     expect((await callTool(ctx, "agent_update", { agentId: helperId, reportsTo: vault.id })).isError).toBe(true);
+    await updateAgent(helperId, { permissions: { canManageAgents: false } });
     const refused = await callTool(runCtx(getAgent(helperId)), "agent_update", { agentId: summary.id, role: "Boss" });
     expect(refused.isError).toBe(true);
     expect(getAgent(summary.id).role).toBe("Research analyst");
@@ -300,10 +301,15 @@ describe("the team in the prompt", () => {
     expect(g).toContain("You lead Dana's team of Godmode agents as its Chief of staff and report to Dana directly.");
     expect(g).toContain(`- \`${lead.id}\` — **Ops lead**, Head of ops (reports to you)`);
 
-    const loner = await updateAgent(lead.id, { permissions: { allowDelegation: false } });
+    const loner = await updateAgent(lead.id, { permissions: { canManageAgents: false, allowDelegation: false } });
     const l = buildSystemPrompt({ agent: loner, settings, peers: [], browserAvailable: false, team: teamOf(loner) });
     expect(l).toContain("These agents report to you: **Runner** (Courier).");
     expect(l).not.toContain("agent_delegate({");
+    // Without management rights, a decision goes to the human, not to a lead that has them.
+    const plain = await updateAgent(worker.id, { permissions: { canManageAgents: false } });
+    const managerLead = await updateAgent(lead.id, { permissions: { canManageAgents: true, allowDelegation: true } });
+    const up = buildSystemPrompt({ agent: plain, settings, peers: [managerLead], browserAvailable: false, team: teamOf(plain) });
+    expect(up).not.toContain("hand that part to");
     const handed = buildSystemPrompt({ agent: w, settings, peers: [], browserAvailable: false, team: teamOf(w), delegated: true });
     expect(handed).toContain("A teammate handed you this task: your final answer goes back to that teammate, not to Dana.");
   }, 30_000);

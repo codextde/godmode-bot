@@ -3,10 +3,9 @@ import { Link, NavLink, useNavigate, useParams } from "react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "motion/react";
 import { Trans, useTranslation } from "react-i18next";
-import { ArrowLeft, Bot, Brain, ChevronDown, Copy, Cpu, Ellipsis, FolderOpen, GitCommitHorizontal, Globe, HeartPulse, LayoutGrid, MessageCircleQuestion, MessageSquare, MessagesSquare, Pause, Play, Settings2, StepForward, Trash2, Workflow } from "lucide-react";
+import { ArrowLeft, Bot, Brain, ChevronDown, Copy, Ellipsis, FolderOpen, GitCommitHorizontal, Globe, HeartPulse, LayoutGrid, MessageCircleQuestion, MessageSquare, MessagesSquare, Pause, Play, Settings2, StepForward, Trash2, Workflow } from "lucide-react";
 import type { Agent } from "@godmode/shared";
-import { effortLabel, leadOf, reportsOf } from "@godmode/shared";
-import { currentLanguage } from "@/i18n";
+import { leadOf, reportsOf } from "@godmode/shared";
 import { api, ApiRequestError, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { useAllAgents } from "@/lib/hooks";
@@ -22,7 +21,6 @@ import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useSidebar } from "@/components/ui/sidebar";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { useModelLabel } from "@/components/runs/run-status";
 import { folderName, useShortPath } from "@/components/chat/folder-picker";
 import {
   AgentStatus,
@@ -128,7 +126,6 @@ export default function AgentDetailPage() {
 
 function AgentHeader({ agent }: { agent: Agent }) {
   const { t } = useTranslation(["agents", "common"]);
-  const modelLabel = useModelLabel();
   const navigate = useNavigate();
   const chat = useStartAgentChat();
   const toggle = useToggleAgent();
@@ -142,7 +139,6 @@ function AgentHeader({ agent }: { agent: Agent }) {
   const shortPath = useShortPath();
   const [runTask, setRunTask] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const easy = useEasyMode();
 
   return (
     <div className="relative border-b">
@@ -191,13 +187,6 @@ function AgentHeader({ agent }: { agent: Agent }) {
                 </Link>
               )}
               <ScopeBadge workspaceId={agent.workspaceId} />
-              {!easy && (
-                <span className="flex items-center gap-1">
-                  <Cpu className="size-3.5" /> {agent.model ? modelLabel(agent.model) : t("agentDetail.defaultModel")}
-                  {agent.effort && <span className="text-muted-foreground/70">· {t("agentDetail.effort", { effort: effortLabel(agent.effort, currentLanguage()).toLowerCase() })}</span>}
-                  {agent.ultracode && <span className="text-muted-foreground/70">· Ultracode</span>}
-                </span>
-              )}
               {agent.browser.enabled && (
                 <span className="flex items-center gap-1">
                   <Globe className="size-3.5" /> {t("agentDetail.browser")}

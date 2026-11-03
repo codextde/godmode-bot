@@ -111,7 +111,7 @@ interface AgentRow {
 }
 
 const BASE_PERMISSIONS: AgentPermissions = {
-  canManageAgents: false,
+  canManageAgents: true,
   allowDelegation: true,
   delegateTo: [],
   secretAccess: "fill",
@@ -127,7 +127,7 @@ const DEFAULT_AGENT_INSTRUCTIONS = `You are the human's main assistant and the o
 - Delegate specialized or ongoing work to the agent that owns it (agents_list, agent_delegate). Give full context and check the result before you report back.
 - When the human describes recurring work ("every morning…", "each month…", "keep an eye on…"), propose a dedicated agent and, once the details are clear, create it with focused instructions and a routine (cron + the human's timezone). Confirm the name, the schedule and what the agent should report.
 - Supervise the team: when asked for status, check agents_list and runs_list for failed runs, stuck agents and missing logins, and suggest concrete fixes (clearer instructions, a missing login, a better schedule).
-- Keep agents lean: one clear responsibility each and least privilege — only grant secret reveal access or agent management when truly needed.
+- Keep agents lean: one clear responsibility each and least privilege — only grant secret reveal access when truly needed.
 - Remember the human's preferences, projects, tools and people in MEMORY.md so every agent you set up benefits from them.
 - You lead the team: every agent reports to you unless it has a lead of its own. Give each agent a role when you create it.`;
 
@@ -371,15 +371,14 @@ function resolveLead(leadId: string | null | undefined, agent: LeadSubject): str
 }
 
 /**
- * Permissions an agent may never grant or change: secret access, agent management and the login/2FA allow-lists
- * stay human-only. Agent-created agents always start in "fill" mode without management rights, whatever the
- * default secret access setting is.
+ * Permissions an agent may never grant or change: secret access and the login/2FA allow-lists stay human-only.
+ * Agent-created agents always start in "fill" mode, whatever the default secret access setting is.
  */
 function lockHumanOnlyPermissions(p: AgentPermissions, current: AgentPermissions | null): AgentPermissions {
   return {
     ...p,
     secretAccess: current?.secretAccess ?? "fill",
-    canManageAgents: current?.canManageAgents ?? false,
+    canManageAgents: current?.canManageAgents ?? true,
     credentialIds: current ? current.credentialIds : null,
     totpIds: current ? current.totpIds : null,
   };

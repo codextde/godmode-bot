@@ -154,106 +154,39 @@
   },
   "agentForm": {
     "errors": {
-      "name": "Give your agent a name",
-      "subagentName": "Subagents need a name",
-      "subagentUnique": "Subagent names must be unique",
-      "subagentPrompt": "Tell the subagent what it does"
-    },
-    "nav": {
-      "identity": "Identity",
-      "team": "Team",
-      "personality": "Personality",
-      "instructions": "Instructions",
-      "brain": "Model",
-      "folder": "Folder",
-      "permissions": "Permissions",
-      "browser": "Browser",
-      "computer": "Computer",
-      "vm": "Virtual machine",
-      "ssh": "SSH servers",
-      "android": "Android phones",
-      "tools": "Tools",
-      "subagents": "Subagents",
-      "advanced": "Advanced options"
-    },
-    "navEasy": {
-      "identity": "About",
-      "instructions": "What it does"
+      "name": "Give your agent a name"
     },
     "default": "Default",
     "switchedOff": "switched off",
     "team": {
       "title": "Team",
-      "descriptionEasy": "Who it reports to. Every agent knows who leads it and who does what, so work goes to the right one.",
-      "description": "Where it sits on your team. Every agent is told who leads it and who does what, so work goes to the right one.",
       "resetNote": "Reset to {{lead}}: {{name}} works in another workspace.",
       "builtinLeads": "{{name}} leads the team and reports to you. Every agent without a lead of its own reports to it.",
       "reportsTo": "Reports to",
       "builtIn": "— built-in",
-      "leadHint": "Its lead on the org chart. This doesn't change what it is allowed to do.",
-      "leadHintNamed": "Its lead on the org chart — {{name}} hears who that is. This doesn't change what it is allowed to do.",
       "leads": "Leads",
       "orgChart": "Org chart"
     },
     "personality": {
-      "title": "Personality",
-      "descriptionEasy": "How it talks to you in greetings, updates and reports.",
-      "description": "How it talks to you — greetings, updates and reports. Goes into the agent's CLAUDE.md."
+      "title": "Personality"
     },
     "instructions": {
-      "titleEasy": "What should it do?",
-      "title": "Instructions",
-      "descriptionEasy": "Describe the job in your own words: what to do, where to keep things and when to check with you.",
-      "description": "Standing orders: how it should work, what to always or never do. Goes into the agent's CLAUDE.md.",
+      "title": "What should it do?",
       "placeholder": "You are my finance assistant.\n\n- Log into the vendor portals I use and download new invoices as PDF.\n- Save them to workspace/invoices/YYYY-MM/.\n- Summarize totals at the end and tell me about anything unusual.\n- Never pay anything without asking me first.",
-      "tipEasy": "Tip: be specific about goals, where to save files and when to ask you. It remembers what it learns along the way.",
-      "tip": "Tip: be specific about goals, where to save files and when to ask you. The agent keeps its own learnings in MEMORY.md.",
-      "chars_one": "{{formatted}} char",
-      "chars_other": "{{formatted}} chars",
       "inherited": "Also given to this agent on every run"
-    },
-    "brain": {
-      "title": "Model & workspace",
-      "description": "Which Claude model powers it, how hard it thinks, and where it lives.",
-      "model": "Model",
-      "defaultFromSettings": "Default (from settings)",
-      "effort": "Reasoning effort",
-      "effortHint": "Higher effort thinks longer — better for tricky multi-step work, slower and pricier.",
-      "noEffort": "{{model}} doesn't use effort levels.",
-      "thisModel": "This model",
-      "noUltracode": "{{model}} doesn't support Ultracode.",
-      "noUltracodeInstalled": "The installed Claude Code doesn't offer Ultracode."
     },
     "folder": {
       "title": "Working folder",
-      "description": "Optional. Its chats and automations run inside this folder and can read and edit the files there. Memory stays in the agent's own repository.",
       "change": "Change",
       "remove": "Remove folder",
-      "none": "No folder — the agent works in its own repository. A single chat can still pick a folder.",
+      "none": "No folder",
       "choose": "Choose folder…",
       "dialogTitle": "Default folder",
       "dialogDescription": "New chats and automations of this agent run inside this folder. Each chat can still switch to another one."
     },
-    "permissions": {
-      "title": "Permissions",
-      "description": "What this agent is allowed to do on your behalf.",
-      "secrets": "Passwords & 2FA codes",
-      "fill": "Fill into browser",
-      "recommended": "Recommended",
-      "fillDescription": "Godmode types secrets straight into the page. The AI never sees them.",
-      "reveal": "Reveal to AI",
-      "revealDescription": "The model can read raw passwords and codes (needed for API-only tools). Every reveal is audited.",
-      "revealWarning": "Secrets may appear in the model's context. Only use this for agents you trust.",
-      "delegation": "Can hand work to teammates",
-      "delegationDescription": "Hand parts of a task to other agents and use their results.",
-      "manage": "Can manage agents & automations",
-      "manageDescription": "Create, change and delete agents and schedules — like the built-in Godmode orchestrator."
-    },
     "browser": {
       "title": "Browser",
-      "description": "A real Chromium the agent drives to use websites for you.",
       "access": "Browser access",
-      "accessDescription": "Navigate, click, type and read web pages.",
       "window": "Window",
       "visible": "Visible",
       "headless": "Headless",
@@ -265,9 +198,7 @@
     },
     "computer": {
       "title": "Computer",
-      "description": "In chats you can also share a single window or screen. By default this agent uses the computer on its own whenever a task needs the screen.",
       "unattended": "Use the computer without a share",
-      "unattendedDescription": "Controls the real mouse and keyboard when no other tool can do the step. Turn it off for agents that should stay off your desktop.",
       "screen": "Screen",
       "entireDesktop": "Entire desktop",
       "entireDesktopCount_one": "Entire desktop ({{count}} display)",
@@ -277,7 +208,6 @@
     },
     "vm": {
       "title": "Virtual machine",
-      "description": "Let this agent work in its own macOS VM: it installs tools, runs builds and uses apps there instead of on this Mac. A single chat can still pick another VM.",
       "worksIn": "Works in",
       "noneWithVm": "None — use the workspace's VM ({{vm}})",
       "none": "None — use the workspace's VM",
@@ -287,22 +217,17 @@
     },
     "ssh": {
       "title": "SSH servers",
-      "description": "Remote machines this agent can sign in to and control. Godmode types the password or key — the AI never sees it.",
       "empty": "No SSH servers yet — add one and this agent can work on it.",
       "add": "Add a server",
       "canSignIn": "Can sign in to",
-      "manage": "Manage servers",
-      "hint": "Every run of this agent can sign in to these. A single chat can add more with the SSH button in its message box."
+      "manage": "Manage servers"
     },
     "android": {
-      "title": "Android phones",
-      "description": "Phones this agent can see and control in every run. They are real phones with real accounts — only give it the ones its job needs."
+      "title": "Android phones"
     },
     "tools": {
       "title": "Tools & integrations",
-      "description": "APIs, MCP servers and connected apps this agent can use.",
       "inherit": "Inherit shared integrations",
-      "inheritDescription": "Also use the global and workspace tools, MCP servers and Composio apps.",
       "apiTools": "API tools",
       "manage": "Manage tools",
       "emptyInherit": "No API tools yet. Add one to let it generate images, speak, search or call your own APIs.",
@@ -313,55 +238,18 @@
       "mcpNone": "No MCP servers yet — add them in Integrations",
       "mcpEmpty": "No MCP servers configured."
     },
-    "subagents": {
-      "title": "Subagents",
-      "description": "Specialists this agent can spin up for focused sub-tasks within a run.",
-      "add": "Add subagent",
-      "empty": "No subagents. Add one for recurring specialist work, e.g. a “researcher” that only searches and summarizes.",
-      "sameModel": "Same as agent",
-      "whenToUse": "When to use it",
-      "whenPlaceholder": "Use for web research and source gathering",
-      "prompt": "Prompt",
-      "promptPlaceholder": "You are a meticulous researcher. Find primary sources, cite URLs, summarize in bullet points.",
-      "remove": "Remove subagent {{name}}"
-    },
     "identity": {
-      "titleEasy": "About",
-      "title": "Identity",
-      "descriptionEasy": "Its name, its look and what it does in one line.",
-      "description": "What this agent looks like and how it shows up across Godmode.",
+      "title": "About",
       "namePlaceholder": "e.g. Invoice Hunter",
       "jobTitle": "Job title",
-      "role": "Role",
       "rolePlaceholderDefault": "e.g. Chief of staff",
       "rolePlaceholder": "e.g. Bookkeeper",
-      "roleHint": "Its job title — shown under its name and told to its teammates.",
       "shortDescription": "Short description",
       "descriptionPlaceholder": "Downloads my invoices every month and files them",
       "color": "Color",
-      "emoji": "Emoji in chat apps",
-      "emojiHint": "Signs its messages where only text fits — Slack, Telegram, Teams."
+      "emoji": "Emoji in chat apps"
     },
-    "advanced": {
-      "error": "Something in here needs a fix before you can save.",
-      "summary": "Model, folder, permissions, browser, computer, servers, tools and subagents. The defaults work well."
-    },
-    "preview": {
-      "title": "Preview",
-      "unnamed": "Unnamed agent",
-      "noDescription": "No description yet",
-      "yourAgent": "Your agent",
-      "defaultModel": "Default model",
-      "browser": "Browser",
-      "computer": "Computer",
-      "servers_one": "{{count}} server",
-      "servers_other": "{{count}} servers",
-      "phones_one": "{{count}} phone",
-      "phones_other": "{{count}} phones",
-      "fillOnly": "Fill-only secrets",
-      "reveals": "Reveals secrets",
-      "sections": "Form sections"
-    },
+    "advanced": "Advanced",
     "footer": {
       "unsaved": "You have unsaved changes",
       "allSaved": "All changes saved",
@@ -374,20 +262,7 @@
     },
     "project": {
       "label": "Project",
-      "none": "No project — the whole workspace",
-      "hint": "Its chats work on this project unless a chat picks another."
-    },
-    "delegate": {
-      "namesMore_one": "{{names}} and {{count}} more",
-      "namesMore_other": "{{names}} and {{count}} more",
-      "label": "Can hand work to <muted>(empty = any teammate in reach)</muted>",
-      "placeholder": "Any teammate in reach",
-      "noneInReach": "No other agents in reach yet.",
-      "reaches_one": "Reaches {{count}} agent: {{names}}.",
-      "reaches_other": "Reaches {{count}} agents: {{names}}.",
-      "handsTo": "Hands work to: {{names}}.",
-      "nobodyInReach": "Nobody on this list is in reach, so it can't hand work to anyone.",
-      "outOfReach": "{{name}} works in another workspace, so it can't be reached."
+      "none": "No project — the whole workspace"
     }
   },
   "settingsTab": {
@@ -772,8 +647,6 @@
     "reportsTo": "Reports to <avatar/> {{name}}",
     "leads_one": "Leads {{count}}",
     "leads_other": "Leads {{count}}",
-    "defaultModel": "Default model",
-    "effort": "{{effort}} effort",
     "browser": "Browser",
     "switchOffLabel": "Switch {{name}} off",
     "switchOnLabel": "Switch {{name}} on",
@@ -1231,7 +1104,6 @@
     "automations_other": "{{count}} automations",
     "lastRun": "Last run {{when}}",
     "neverRan": "Never ran",
-    "model": "Model",
     "chat": "Chat",
     "continue": "Continue",
     "pause": "Pause",

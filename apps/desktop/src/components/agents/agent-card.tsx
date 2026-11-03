@@ -1,11 +1,10 @@
 import { Link, useNavigate } from "react-router";
 import { formatDistanceToNowStrict } from "date-fns";
 import { useTranslation } from "react-i18next";
-import { Check, Copy, Cpu, Ellipsis, FolderInput, History, MessageSquare, Pause, Pencil, Play, Power, PowerOff, StepForward, Trash2, Workflow } from "lucide-react";
+import { Check, Copy, Ellipsis, FolderInput, History, MessageSquare, Pause, Pencil, Play, Power, PowerOff, StepForward, Trash2, Workflow } from "lucide-react";
 import type { Agent } from "@godmode/shared";
 import { AgentAvatar, ScopeBadge } from "@/components/common";
 import { WorkingTicks } from "@/components/aicss/Motion";
-import { useModelLabel } from "@/components/runs/run-status";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import {
@@ -41,7 +40,6 @@ export function AgentCard({
 }) {
   const { t } = useTranslation(["agents", "common"]);
   const { dateLocale, intlLocale } = useLocale();
-  const modelLabel = useModelLabel();
   const live = useAgentLiveRun(agent.id);
   const running = !!live || agent.status === "running";
   const mood = useAgentMood(agent);
@@ -98,11 +96,6 @@ export function AgentCard({
             <History className="size-3.5 shrink-0" />
             <span className="truncate">{agent.lastRunAt ? formatDistanceToNowStrict(new Date(agent.lastRunAt), { addSuffix: true, locale: dateLocale }) : t("common:words.never")}</span>
           </span>
-          {agent.model && (
-            <span className="flex min-w-0 items-center gap-1" title={t("agentCard.model")}>
-              <Cpu className="size-3.5 shrink-0" /> <span className="truncate">{modelLabel(agent.model)}</span>
-            </span>
-          )}
         </div>
         <div className="relative z-10 flex shrink-0 gap-1.5">
           <Button size="xs" variant="secondary" className="h-7 px-2.5" onClick={() => chat.mutate(agent)} disabled={chatting}>

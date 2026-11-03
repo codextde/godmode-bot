@@ -183,7 +183,7 @@ describe("GLM on Z.ai", () => {
     expect(bad.isError).toBe(true);
 
     // Only managers route work to GLM.
-    const helper = await makeAgent({ name: "Helper", permissions: { allowDelegation: true } });
+    const helper = await makeAgent({ name: "Helper", permissions: { canManageAgents: false, allowDelegation: true } });
     const own = await startChat({ agentId: helper.id, content: "Hello there" });
     await waitForRun(own.run.id, 20_000);
     const helperCtx = { runId: own.run.id, agentId: helper.id, conversationId: own.conversation.id, workspaceId: null, depth: 0 };

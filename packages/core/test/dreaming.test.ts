@@ -920,7 +920,7 @@ describe("memory in chats", () => {
   });
 
   test("a chat is told how long its memory may be, and when it has outgrown that", async () => {
-    const agent = await makeAgent({ name: "Wordy Bot" });
+    const agent = await makeAgent({ name: "Wordy Bot", permissions: { canManageAgents: false } });
     const systemOf = async () => {
       const { run } = await sendMessage(conversationFor(agent), { content: "hi" });
       await waitForRun(run.id, 20_000);

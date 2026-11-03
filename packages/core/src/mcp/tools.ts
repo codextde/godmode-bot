@@ -763,7 +763,6 @@ const agentFields = {
   enabled: z.boolean().optional(),
   permissions: z
     .object({
-      allowDelegation: z.boolean().optional(),
       delegateTo: z.array(z.string()).optional().describe("Agent ids it may delegate to; empty = any peer"),
     })
     .optional(),
@@ -1204,15 +1203,26 @@ function ownPart(ctx: RunContext, t: Task): boolean {
   return !!led && t.parentId === led.id;
 }
 
+const MAX_AGENT_TASKS_PER_HOUR = 60;
+
+function agentTasksLastHour(): number {
+  const since = new Date(Date.now() - 3_600_000).toISOString();
+  return get<{ n: number }>("SELECT COUNT(*) AS n FROM tasks WHERE created_by LIKE 'agent:%' AND created_at > ?", since)?.n ?? 0;
+}
+
 /**
- * A manager handing a task to an agent follows the same rules as delegating or scheduling work for it. From a task
- * run, work never goes to a manager (itself included): that task could hand out tasks again, without end.
+ * Handing a task to an agent follows the same rules as delegating or scheduling work for it. From a task run, work
+ * never goes to the built-in agent or back to the caller, and agents file at most MAX_AGENT_TASKS_PER_HOUR tickets from
+ * task runs: every agent can hand out tasks, so a task could otherwise hand out tasks again, without end.
  */
 function taskAssignRefusal(caller: Agent, ctx: RunContext, agentId: string | null | undefined): string | null {
   if (!agentId) return null;
   const target = getAgent(agentId);
-  if (inTaskChain(ctx) && target.permissions.canManageAgents) {
-    return `${target.id === caller.id ? "You are" : `${target.name} is`} working on tasks already — only the human can start another manager from here. Assign a specialist agent, or leave it in the backlog.`;
+  if (inTaskChain(ctx)) {
+    if (target.isDefault || target.id === caller.id) {
+      return `${target.id === caller.id ? "You are" : `${target.name} is`} working on tasks already — only the human can start that from here. Assign another agent, or leave it in the backlog.`;
+    }
+    if (agentTasksLastHour() >= MAX_AGENT_TASKS_PER_HOUR) return "Agents filed too many tasks in the last hour. Leave it in the backlog, or say so in your answer.";
   }
   return offHostRefusal(ctx, target, "give it tasks") ?? revealTargetRefusal(caller, ctx, target, "give it tasks");
 }

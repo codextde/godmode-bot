@@ -22,9 +22,11 @@ import { InlineCode } from "@/components/onboarding/doctor-checklist";
 import { isGrantCancelled, useVaultGrant, withGrant } from "@/components/vault/grant";
 import { toastApiError } from "@/components/vault/vault-utils";
 import { ApiRequestError, api } from "@/lib/api";
-import { useBootstrap, useVaultStatus } from "@/lib/hooks";
+import { useAllAgents, useBootstrap, useVaultStatus } from "@/lib/hooks";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
+import { MultiSelect } from "@/components/agents/multi-select";
+import { AgentAvatar } from "@/components/common";
 import { AuditLog } from "./audit-log";
 import { ChangePassphraseDialog, DashboardPasswordDialog } from "./password-dialogs";
 import {
@@ -182,6 +184,7 @@ export function SecuritySection({ settings }: { settings: Settings }) {
             ]}
           />
         </div>
+        <RevealAgentsField />
         <SettingRow
           label={t("security.secrets.redact")}
           htmlFor="redact"
@@ -298,6 +301,37 @@ export function SecuritySection({ settings }: { settings: Settings }) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+    </div>
+  );
+}
+
+function RevealAgentsField() {
+  const { t } = useTranslation("settings");
+  const qc = useQueryClient();
+  const { data: agents = [] } = useAllAgents();
+  const save = useMutation({
+    mutationFn: (reveal: string[]) => {
+      const changed = agents.filter((a) => reveal.includes(a.id) !== (a.permissions.secretAccess === "reveal"));
+      return withGrant((grant) =>
+        Promise.all(changed.map((a) => api.agents.update(a.id, { permissions: { secretAccess: reveal.includes(a.id) ? "reveal" : "fill" } }, grant))),
+      );
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: qk.agents }),
+    onError: (err) => !isGrantCancelled(err) && toastApiError(err, t("security.secrets.agentsSaveError")),
+  });
+  return (
+    <div className="space-y-2 py-4">
+      <label htmlFor="reveal-agents" className="block text-sm font-medium">
+        {t("security.secrets.agents")}
+      </label>
+      <MultiSelect
+        id="reveal-agents"
+        options={agents.map((a) => ({ value: a.id, label: a.name, icon: <AgentAvatar agent={a} size="sm" still className="size-5" />, hint: a.role }))}
+        value={agents.filter((a) => a.permissions.secretAccess === "reveal").map((a) => a.id)}
+        onChange={(reveal) => save.mutate(reveal)}
+        placeholder={t("security.secrets.agentsPlaceholder")}
+        emptyText={t("security.secrets.agentsEmpty")}
+      />
     </div>
   );
 }

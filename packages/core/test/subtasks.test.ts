@@ -9,6 +9,7 @@ import { listActiveRuns } from "../src/runner/runner";
 import { createTask, deleteTask, getTask, listTaskEvents, listTasks, startTasks, stopTasks, updateTask } from "../src/tasks/service";
 import { get, run as sql } from "../src/db";
 import { MIGRATIONS } from "../src/db/migrations";
+import { ensureDefaultAgent, getAgent, updateAgent } from "../src/agents/service";
 
 let env: TestEnv;
 let lead: Agent;
@@ -18,7 +19,7 @@ let parentChat = "";
 
 beforeAll(async () => {
   env = await setupEnv("godmode-subtasks-");
-  lead = await makeAgent({ name: "Mia", role: "Marketing lead" });
+  lead = await makeAgent({ name: "Mia", role: "Marketing lead", permissions: { canManageAgents: false } });
   writer = await makeAgent({ name: "Lena", role: "Writer", reportsTo: lead.id });
   outsider = await makeAgent({ name: "Bo", role: "Bookkeeper" });
   startTasks();
@@ -176,5 +177,47 @@ describe("a lead splits its ticket into parts for its team", () => {
     sql("UPDATE tasks SET parts_seen_at = NULL WHERE id = ?", parent.id);
     sql(MIGRATIONS.find((m) => m.name === "parts_seen_backfill")!.sql);
     expect(get<{ at: string | null }>("SELECT parts_seen_at AS at FROM tasks WHERE id = ?", parent.id)?.at).toMatch(/^\d{4}-\d\d-\d\dT/);
+  });
+});
+
+describe("every agent can hand out tasks", () => {
+  const taskRun = async (agentId: string) => {
+    const chat = createTask({ title: `Own ticket WAIT_TO_FINISH ${agentId}`, agentId, status: "backlog" });
+    updateTask(chat.id, { status: "todo" });
+    await until(() => !!getTask(chat.id).conversationId, 20_000, "the ticket's chat");
+    writeFileSync(join(env.stateDir, "finish"), "");
+    await until(() => getTask(chat.id).status === "in_review", 30_000, "the ticket to be delivered");
+    rmSync(join(env.stateDir, "finish"), { force: true });
+    return { runId: "run_chain", agentId, conversationId: getTask(chat.id).conversationId!, workspaceId: null, depth: 0 };
+  };
+
+  test("from a task run: to another agent, never to itself or the built-in agent, and only so many an hour", async () => {
+    const boss = await makeAgent({ name: "Ida", permissions: { canManageAgents: true } });
+    const godmode = await ensureDefaultAgent();
+    const ctx = await taskRun(boss.id);
+    const file = (agentId: string) => callTool(ctx as never, "task_create", { title: "Next step", agentId, start: false });
+
+    const handed = await file(outsider.id);
+    expect(handed.isError).toBeUndefined();
+    const self = await file(boss.id);
+    expect(self.isError).toBe(true);
+    expect(self.content[0]!.text).toContain("You are working on tasks already");
+    const builtin = await file(godmode.id);
+    expect(builtin.isError).toBe(true);
+    expect(builtin.content[0]!.text).toContain(`${godmode.name} is working on tasks already`);
+
+    for (let i = 0; i < 60; i++) createTask({ title: `Filed ${i}`, status: "backlog" }, `agent:${boss.id}`);
+    const flood = await file(outsider.id);
+    expect(flood.isError).toBe(true);
+    expect(flood.content[0]!.text).toContain("too many tasks");
+    sql("UPDATE tasks SET created_at = ? WHERE created_by LIKE 'agent:%'", new Date(Date.now() - 2 * 3_600_000).toISOString());
+    expect((await file(outsider.id)).isError).toBeUndefined();
+  }, 60_000);
+
+  test("the upgrade gives every existing agent both rights and leaves the rest alone", async () => {
+    const old = await makeAgent({ name: "Old hand", permissions: { canManageAgents: false, allowDelegation: false, secretAccess: "reveal", delegateTo: [lead.id] } });
+    sql(MIGRATIONS.find((m) => m.name === "agents_manage_and_delegate")!.sql);
+    expect(getAgent(old.id).permissions).toMatchObject({ canManageAgents: true, allowDelegation: true, secretAccess: "reveal", delegateTo: [lead.id] });
+    await updateAgent(lead.id, { permissions: { canManageAgents: false } });
   });
 });
