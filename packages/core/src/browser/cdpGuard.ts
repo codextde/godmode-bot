@@ -16,7 +16,7 @@ export const RUN_CDP_ENV = "GODMODE_BROWSER_CDP_URL";
  * The lookup counts to the end of the line (a one-line script parses the output in its next statement), the file read
  * only over its own arguments and redirections: a later command that greps a log for the file's name reads no port.
  */
-const AT_COMMAND = String.raw`(?:^|[|;&(\x60'"]|\$\()\s*(?:sudo\s+)?`;
+export const AT_COMMAND = String.raw`(?:^|[|;&(\x60'"]|\$\()\s*(?:sudo\s+)?`;
 const LOOKUP_COMMANDS = "ps|pgrep|lsof";
 const FILE_COMMANDS = "cat|head|tail|less";
 const PORT_LOOKUP = new RegExp(`${AT_COMMAND}(?:${LOOKUP_COMMANDS})\\b[^\\n]*remote-debugging`, "im");

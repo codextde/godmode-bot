@@ -433,8 +433,8 @@ describe("private chats", () => {
       expect(existsSync(join(agent.repoPath, "conversations", `${conv.id}.md`))).toBe(false);
 
       const prompt = invocations(env).findLast((i) => i.prompt.includes("Something just between us"))!;
-      expect(prompt.args.join("\n")).toContain("## Private chat");
-      expect(prompt.args.join("\n")).not.toContain("update `MEMORY.md` with learnings");
+      expect(prompt.systemPrompt).toContain("## Private chat");
+      expect(prompt.systemPrompt).not.toContain("update `MEMORY.md` with learnings");
 
       const run = getRun(chat.run.id);
       const log = findRunLog(run)!;

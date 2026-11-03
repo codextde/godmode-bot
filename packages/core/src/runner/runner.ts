@@ -2365,8 +2365,8 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     disallowed.push(`Edit(/${checkout}/.git)`, `Edit(/${checkout}/.git/**)`);
   }
   if (disallowed.length) baseArgs.push("--disallowedTools", disallowed.join(","));
-  if (viaFiles) baseArgs.push("--append-system-prompt-file", writeTempFile(res, `godmode-prompt-${job.runId}.md`, systemPrompt));
-  else baseArgs.push("--append-system-prompt", systemPrompt);
+  // Never on the command line: `pkill -f <word>` in any run would also end every run whose prompt or memory holds the word.
+  baseArgs.push("--append-system-prompt-file", writeTempFile(res, `godmode-prompt-${job.runId}.md`, systemPrompt));
   // Dreams and runs kept off the host load no settings files: .claude/settings*.json in a folder the run can write to
   // could add hooks (shell commands on this computer) or widen its permissions.
   baseArgs.push("--setting-sources", dreaming || hostLocked ? "" : "project,local");

@@ -315,6 +315,7 @@ appendFileSync(
   join(stateDir, "invocations.jsonl"),
   JSON.stringify({
     args,
+    systemPrompt: argValue("--append-system-prompt-file") ? readFileSync(argValue("--append-system-prompt-file")!, "utf8") : null,
     prompt,
     cwd: process.cwd(),
     settings: sessionSettings,

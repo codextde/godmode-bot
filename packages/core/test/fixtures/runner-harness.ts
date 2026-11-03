@@ -149,6 +149,8 @@ export async function makeAgent(input: Partial<AgentInput> & { name: string }): 
 
 export interface Invocation {
   args: string[];
+  /** Content of the run's `--append-system-prompt-file`. */
+  systemPrompt: string | null;
   prompt: string;
   cwd: string;
   /** Content of the run's `--settings` file (the hooks, `ultracode` when on, the mods' options); null without one. */
@@ -185,6 +187,7 @@ export function invocations(env: TestEnv): Invocation[] {
 }
 
 export function argValue(inv: Invocation, flag: string): string | null {
+  if (flag === "--append-system-prompt") return inv.systemPrompt ?? null;
   const i = inv.args.indexOf(flag);
   return i >= 0 ? (inv.args[i + 1] ?? null) : null;
 }

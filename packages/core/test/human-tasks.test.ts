@@ -77,7 +77,7 @@ describe("an agent gives the human a task", () => {
     const item = listAttention().find((i) => i.id === `todo:${task.id}`);
     expect(item).toMatchObject({ kind: "todo", title: "Ads Bot needs you to: Create the passkey", link: `/my-tasks?task=${task.id}` });
     // The agent's system prompt tells it how.
-    expect(invocations(env).at(-1)!.args.join(" ")).toContain("### Tasks for Dana");
+    expect(invocations(env).at(-1)!.systemPrompt).toContain("### Tasks for Dana");
 
     const out = await closeHumanTask(task.id, { outcome: "done", note: "Passkey is set up on the YubiKey" });
     expect(out.continued).toBe(true);
@@ -457,7 +457,7 @@ describe("a decision an answer leaves open", () => {
     expect(text).toContain(`on Dana's task list as H-${mine.number}`);
     expect(text).toContain("don't ask them the same thing again");
     // The agent is told how to say it.
-    expect(invocations(env).at(-1)!.args.join(" ")).toContain("## Decision for Dana");
+    expect(invocations(env).at(-1)!.systemPrompt).toContain("## Decision for Dana");
     await closeHumanTask(mine.id, { outcome: "declined" });
   }, 30_000);
 
