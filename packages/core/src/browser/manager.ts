@@ -628,7 +628,7 @@ export async function sweepIdleBrowsers(): Promise<void> {
     // Passive previews attach our own screencast to the tab; pause it so it doesn't look like another CDP client.
     const previewing = hasBrowserSubscribers(rb.profileId);
     if (previewing) await pauseLiveViews(rb.profileId);
-    // The passkey authenticators keep every tab attached too.
+    // The passkey bridge keeps every tab attached too.
     await pausePasskeys(rb.profileId).catch((err) => log.warn("could not pause passkeys", err));
     // An error means the browser is going away — the exit handler cleans up.
     const inUse = await browserInUse(rb).catch(() => true);
