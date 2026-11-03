@@ -1,5 +1,5 @@
 {
-  "grantAnyone": "Letting anyone use your agents needs your vault passphrase.",
+  "grantAnyone": "Letting anyone use your agents needs your Godmode password.",
   "whoCanTalk": "Who can talk to it",
   "platforms": {
     "slack": "DM the bot or mention it in a channel — it answers in the thread. No public address needed.",

@@ -154,7 +154,7 @@ export function openWithPassphrase(passphrase: string, sealed: Uint8Array): Uint
   try {
     return Buffer.concat([decipher.update(ct), decipher.final()]);
   } catch {
-    throw new Error("Wrong backup passphrase or corrupted file");
+    throw new Error("Wrong backup password or corrupted file");
   }
 }
 

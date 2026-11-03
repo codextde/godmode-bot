@@ -52,7 +52,7 @@ export function isValidGrant(grant: string | null | undefined): boolean {
 /** Throw 403 `grant_required` unless the request carries a valid reveal grant. */
 export function requireGrant(c: Context): void {
   if (!isValidGrant(c.req.header(GRANT_HEADER))) {
-    throw new HttpError(403, "Confirm with your vault passphrase to continue", "grant_required");
+    throw new HttpError(403, "Confirm with your Godmode password to continue", "grant_required");
   }
 }
 

@@ -23,17 +23,17 @@ We aim to acknowledge reports within 72 hours and to ship a fix for critical iss
   ones are refused until someone decides. Relayed responses can't set cookies or run as pages on the cloud's origin,
   the cloud never forwards its own session cookie, and phones keep authenticating with their own key, checked by the
   computer. Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#godmode-cloud).
-- **Vault encryption**: your passphrase is stretched with scrypt (N=2^17) into a key-encryption key that wraps a random
+- **Vault encryption**: your Godmode password is stretched with scrypt (N=2^17) into a key-encryption key that wraps a random
   256-bit data key. Every secret is encrypted with AES-256-GCM and bound to its database row (AAD).
 - **Remember this device** stores the data key in the OS keychain (macOS Keychain, Windows Credential Manager,
-  libsecret) so scheduled routines can run unattended. Turn it off to require the passphrase after every restart.
+  libsecret) so scheduled routines can run unattended. Turn it off to require the password after every restart.
 - **Secrets never reach the model by default**: agents ask Godmode to *fill* a password or 2FA code into the browser
   page over the Chrome DevTools Protocol; the value is not returned to the model. "Reveal" mode is opt-in per agent.
 - **Site-bound fills**: a login is only typed into a page (or iframe) whose host matches the login's domains, over
   https (plain http only when the saved URL is http). Passwords only go into real password fields. A prompt-injected
   lookalike page gets nothing.
 - **Re-authentication for sensitive actions**: revealing a password, enabling "reveal" for an agent (or as default) and
-  turning on "remember this device" need a short-lived grant confirmed with your vault passphrase — a stolen API token
+  turning on "remember this device" need a short-lived grant confirmed with your Godmode password — a stolen API token
   alone is not enough.
 - **Connected apps** (Settings → Claude Code & MCP): Claude Code and other MCP clients reach Godmode with a key of
   their own (`gmc_…`, stored as a SHA-256 hash, shown once). The key opens the management tools of the MCP gateway and
@@ -55,7 +55,7 @@ We aim to acknowledge reports within 72 hours and to ship a fix for critical iss
 - **Dashboard mode**: token or password login (scrypt hashed), HttpOnly SameSite=Strict cookies (Secure behind TLS),
   rate-limited login, DNS-rebinding protection, CSRF origin checks, a strict Content-Security-Policy, WebSocket
   origin checks. Use TLS (reverse proxy) when you expose the dashboard beyond localhost.
-- **Backups** are encrypted with a passphrase (scrypt + AES-256-GCM, authenticated header); imports validate paths and
+- **Backups** are encrypted with a password (scrypt + AES-256-GCM, authenticated header); imports validate paths and
   reset settings that point at programs or endpoints, and disable stdio MCP servers, so a foreign backup can't run code.
 
 - **Computer use is opt-in per chat**: an agent only sees and controls what you share in that chat (one window, one
@@ -127,5 +127,5 @@ We aim to acknowledge reports within 72 hours and to ship a fix for critical iss
   tool writes the guest's own privacy database, which the guest's `admin` could do from the shell anyway (the images run
   with System Integrity Protection off). What an agent grants or revokes with the tool — and what it tried to — is in
   the audit log (`vm.permission.*`); none of it reaches this Mac's permissions.
-- Backups (`*.godmode-backup`) are encrypted with the backup passphrase you choose; secrets inside remain encrypted
+- Backups (`*.godmode-backup`) are encrypted with the backup password you choose; secrets inside remain encrypted
   with your vault key. Only import backups you created.

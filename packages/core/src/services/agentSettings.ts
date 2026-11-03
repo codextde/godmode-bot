@@ -137,7 +137,7 @@ const brief = (v: unknown) => (typeof v === "string" && v.length > AUDIT_TEXT ? 
  */
 export function applyAgentSettings(actor: string, runId: string, changes: Record<string, unknown>): SettingChange[] {
   checkSettingsPatch(changes, () => {
-    throw new HttpError(403, "This change needs the vault passphrase: the human makes it in Settings.");
+    throw new HttpError(403, "This change needs the Godmode password: the human makes it in Settings.");
   });
   const before = getSettings();
   const next = updateSettings(changes as never);

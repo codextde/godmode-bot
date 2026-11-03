@@ -197,7 +197,7 @@ export function registerVaultRoutes(app: Hono): void {
     if (!vault.isInitialized()) throw badRequest("Vault not initialized");
     if (!verifyVaultPassphrase(passphrase)) {
       audit("user", "vault.grant_failed", null, { ip });
-      throw badRequest("Wrong passphrase");
+      throw badRequest("Wrong password");
     }
     resetLoginAttempts(key);
     audit("user", "vault.grant", null, { ip });
