@@ -590,8 +590,10 @@ export function redactionEpoch(): string {
 export const SECRET_MASK = "••••••••";
 
 /** `redact` regardless of the setting: the diagnostic log is meant to be shared. */
-function maskKnownSecrets(text: string): string {
+export function maskKnownSecrets(text: string): string {
   return knownSecrets.replace(text, SECRET_MASK);
 }
 
 setSecretMasker(maskKnownSecrets);
+
+export const maskSecrets = maskKnownSecrets;

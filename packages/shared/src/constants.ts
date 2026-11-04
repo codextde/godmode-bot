@@ -178,3 +178,6 @@ export const MAX_MESSAGE_ATTACHMENT_BYTES = 250 * 1024 * 1024;
 
 /** Placeholder the API returns/accepts for stored secret values (MCP env/headers): sending it back keeps the stored value. */
 export const SECRET_MASK = "********";
+
+/** Start of a chat's share code (a gzipped `.godmode-chat` file in base64url) for pasting into a message. */
+export const CHAT_SHARE_CODE_PREFIX = "godmode-chat:1:";

@@ -17,7 +17,8 @@ import { ArrowUp, AudioLines, Loader2, Mic, Paperclip, SlidersHorizontal, Square
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import type { SlashCommand } from "@godmode/shared";
-import { parseSlashCommand } from "@godmode/shared";
+import { CHAT_SHARE_CODE_PREFIX, parseSlashCommand } from "@godmode/shared";
+import { isChatFile, openChatImport, readChatFile } from "@/stores/chatImport";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -202,6 +203,12 @@ export function Composer({
 
   const addFiles = useCallback(async (files: File[]) => {
     if (files.length === 0 || disabledRef.current) return;
+    const shared = files.find(isChatFile);
+    if (shared) {
+      openChatImport({ data: await readChatFile(shared), name: shared.name });
+      files = files.filter((f) => f !== shared);
+      if (!files.length) return;
+    }
     const read = await readAttachments(files, totalBytes(attachmentsRef.current), toast.warning);
     if (read.length) setAttachments((prev) => [...prev, ...read]);
   }, [setAttachments]);
@@ -357,8 +364,13 @@ export function Composer({
   const onPaste = (e: ClipboardEvent<HTMLTextAreaElement>) => {
     const files = Array.from(e.clipboardData.files ?? []);
     if (files.length === 0) {
-      if (!largePasteAsFile) return;
       const pasted = e.clipboardData.getData("text/plain");
+      if (!text.trim() && pasted.trim().startsWith(CHAT_SHARE_CODE_PREFIX)) {
+        e.preventDefault();
+        openChatImport({ data: pasted.trim() });
+        return;
+      }
+      if (!largePasteAsFile) return;
       if (new TextEncoder().encode(pasted).length < LARGE_PASTE_BYTES && text.length + pasted.length <= MAX_MESSAGE_CHARS) return;
       e.preventDefault();
       void pasteTextAsFile(pasted);

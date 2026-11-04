@@ -1,4 +1,5 @@
 import type { CSSProperties, ReactNode } from "react";
+import { ImportChatDialog } from "@/components/chat/import-chat";
 import { useEffect, useState } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -313,6 +314,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
       </SidebarInset>
       <CommandPalette />
+      <ImportChatDialog />
       <ShortcutsDialog />
     </SidebarProvider>
   );
