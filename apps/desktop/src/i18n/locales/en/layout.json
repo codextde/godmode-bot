@@ -340,7 +340,8 @@
       "system": "System",
       "logs": "Logs",
       "about": "About"
-    }
+    },
+    "importChat": "Import chat…"
   },
   "recent": {
     "title": "Recent",
@@ -460,7 +461,8 @@
     "filterLabel": "Filter chats: {{source}}",
     "filterLabelTab": "Filter chats: {{source}}, {{tab}}",
     "startedBy": "Started by",
-    "status": "Status"
+    "status": "Status",
+    "importChat": "Import chat…"
   },
   "deviceStatus": {
     "thisMac": "This Mac",

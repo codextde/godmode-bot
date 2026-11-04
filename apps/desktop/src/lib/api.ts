@@ -1,4 +1,4 @@
-import type { DreamAllResult, McpApp, DeviceGroup, DeviceGroupPatch, DeviceInvite, HandoffInput, HandoffResult, JoinGroupInput, MoveChatInput, RetireRunnerInput, RetireRunnerResult,
+import type { SharedChatPreview, DreamAllResult, McpApp, DeviceGroup, DeviceGroupPatch, DeviceInvite, HandoffInput, HandoffResult, JoinGroupInput, MoveChatInput, RetireRunnerInput, RetireRunnerResult,
   AndroidAssignInput,
   SearchResults,
   HexStatus,
@@ -713,6 +713,12 @@ export const api = {
     discard: (id: string) => request<{ ok: true }>("DELETE", `/api/conversations/${id}`, undefined, { keepalive: true }),
     /** A chat on a runner moves to this computer, with its Claude session; the runner drops its copy. */
     moveHere: (id: string) => post<Conversation>(`/api/conversations/${id}/move-here`),
+    /** The chat as a `.godmode-chat` file (gzipped JSON) a colleague imports; `context`: with the agent's Claude session. */
+    exportFile: (id: string, opts: { context: boolean; files: boolean }) =>
+      request<Blob>("GET", `/api/conversations/${id}/export?context=${opts.context ? 1 : 0}&files=${opts.files ? 1 : 0}`),
+    shareCode: (id: string) => post<{ code: string; messages: number; withContext: boolean }>(`/api/conversations/${id}/share-code`),
+    previewImport: (data: string) => post<SharedChatPreview>("/api/conversations/import/preview", { data }),
+    import: (input: { data: string; agentId: string; workspaceId?: string | null; projectId?: string | null }) => post<Conversation>("/api/conversations/import", input),
     /** To another computer of the group or a runner (`to`; null = the primary / this computer). `force`: also while it works. */
     move: (id: string, input: MoveChatInput) => post<Conversation>(`/api/conversations/${id}/move`, input),
     /** While the agent works in the chat the message joins its queue (`queued`) instead of starting a run. */

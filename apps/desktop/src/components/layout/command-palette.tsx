@@ -1,4 +1,5 @@
 import { useEffect, useState, type KeyboardEvent } from "react";
+import { openChatImport } from "@/stores/chatImport";
 import { useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -52,6 +53,7 @@ import {
   SquareKanban,
   Workflow,
   type LucideIcon,
+  FileUp,
 } from "lucide-react";
 import {
   CommandDialog,
@@ -370,6 +372,15 @@ export function CommandPalette() {
           </CommandItem>
           <CommandItem onSelect={() => go("/?private=1")}>
             <Ghost /> {t("palette.newPrivateChat")} <CommandShortcut>⇧{modKey}N</CommandShortcut>
+          </CommandItem>
+          <CommandItem
+            value={`import chat share godmode-chat ${t("palette.importChat")}`}
+            onSelect={() => {
+              setOpen(false);
+              openChatImport();
+            }}
+          >
+            <FileUp /> {t("palette.importChat")}
           </CommandItem>
           <CommandItem onSelect={() => go("/agents/new")}>
             <Plus /> {t("palette.createAgent")}

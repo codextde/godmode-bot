@@ -2150,3 +2150,14 @@ export interface Bootstrap {
     unreadChats: number;
   };
 }
+
+/** What a `.godmode-chat` file or share code holds, read before it is imported. */
+export interface SharedChatPreview {
+  title: string;
+  agentName: string;
+  exportedAt: ISODate;
+  messages: number;
+  files: number;
+  /** It carries the agent's Claude session: the new chat continues with the whole context. */
+  withContext: boolean;
+}

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { Agent, Conversation, ConversationWithMessages } from "@godmode/shared";
-import { Archive, ArchiveRestore, AudioLines, ChevronRight, Cpu, Ellipsis, HeartPulse, Laptop, Moon, Pencil, Pin, PinOff, Share2, SquareKanban, Trash2, Plug, Workflow, X } from "lucide-react";
+import { Archive, ArchiveRestore, AudioLines, ChevronRight, Cpu, Ellipsis, HeartPulse, Laptop, Moon, Pencil, Pin, PinOff, Send, Share2, SquareKanban, Trash2, Plug, Workflow, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -19,6 +19,7 @@ import { AgentAvatar } from "@/components/common";
 import type { AgentMood } from "@/components/chat/conversation-mood";
 import { PLATFORMS } from "@/components/messaging/platform";
 import { DeleteChatDialog, useArchiveChat } from "@/components/chat/chat-actions";
+import { ShareChatDialog } from "@/components/chat/share-chat";
 import { PrivateChatBadge } from "@/components/chat/private-chat";
 import { useEffectiveModel } from "@/components/chat/model-picker";
 import { useModelLabel } from "@/components/runs/run-status";
@@ -66,6 +67,7 @@ export function ConversationHeader({
   const { isMobile, state } = useSidebar();
   const [editing, setEditing] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [sharing, setSharing] = useState(false);
   const id = conversation.id;
 
   const update = useMutation({
@@ -258,6 +260,9 @@ export function ConversationHeader({
               <DropdownMenuItem onClick={() => setArchived(conversation, !conversation.archived)}>
                 {conversation.archived ? <ArchiveRestore /> : <Archive />} {conversation.archived ? t("header.unarchive") : t("header.archive")}
               </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setSharing(true)}>
+                <Send /> {t("share.menu")}
+              </DropdownMenuItem>
               {move && (
                 <DropdownMenuItem disabled={!!move.blocked} title={move.blocked ?? undefined} onClick={move.onSelect}>
                   <Laptop /> {move.label ?? (isMac ? t("header.moveToMac") : t("header.moveToComputer"))}
@@ -272,6 +277,7 @@ export function ConversationHeader({
         )}
       </div>
 
+      {!conversation.private && <ShareChatDialog conversation={conversation} open={sharing} onOpenChange={setSharing} />}
       <DeleteChatDialog
         chat={conversation}
         open={confirmDelete}

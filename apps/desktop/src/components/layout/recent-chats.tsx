@@ -4,7 +4,7 @@ import { differenceInCalendarDays, formatDistanceToNowStrict } from "date-fns";
 import type { Agent, Conversation, Workspace } from "@godmode/shared";
 import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Trans, useTranslation } from "react-i18next";
-import { AlarmClock, Archive, Bot, CheckCheck, ChevronDown, CircleCheck, CircleDot, MessagesSquare, Pin, PinOff, Trash2, Workflow, Zap } from "lucide-react";
+import { AlarmClock, Archive, Bot, CheckCheck, ChevronDown, CircleCheck, CircleDot, FileUp, MessagesSquare, Pin, PinOff, Trash2, Workflow, Zap } from "lucide-react";
 import { toast } from "sonner";
 import {
   SidebarGroup,
@@ -30,6 +30,7 @@ import { LiveDot } from "@/components/aicss/Motion";
 import { NavSectionHeader } from "@/components/layout/nav-section-header";
 import { AgentAvatar, colorGradient } from "@/components/common";
 import { useArchiveChat, useDeleteChat } from "@/components/chat/chat-actions";
+import { openChatImport } from "@/stores/chatImport";
 import { chatStatus } from "@/components/chat/chat-status";
 import { AnimatedTitle } from "@/components/chat/animated-title";
 import { api, errorMessage } from "@/lib/api";
@@ -665,6 +666,11 @@ function RecentFilter({
             </DropdownMenuItem>
           </>
         )}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={() => openChatImport()}>
+          <FileUp />
+          {t("recent.importChat")}
+        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );
