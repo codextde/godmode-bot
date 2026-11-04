@@ -1,4 +1,4 @@
-import { PRICING } from '@/config/site';
+import { orderPlan, PRICING } from '@/config/site';
 
 export type EmailKind = 'welcome' | 'day3' | 'trial_ending';
 
@@ -38,10 +38,7 @@ const firstName = (name: string | null) => {
 const longDate = (ms: number) =>
   new Date(ms).toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'UTC' });
 
-function price(o: LifecycleOrder) {
-  const plan = o.plan === 'yearly' ? PRICING.plans.yearly : PRICING.plans.monthly;
-  return `$${plan.price}/${plan.interval}`;
-}
+const price = (o: LifecycleOrder) => orderPlan(o.plan).label;
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 

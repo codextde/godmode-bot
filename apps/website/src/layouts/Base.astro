@@ -25,9 +25,11 @@ const alternates = translated
       { hreflang: 'x-default', href: new URL(basePath(Astro.url.pathname), siteUrl).href },
     ]
   : [];
-// First visit from a German browser on an English page that has a German version: switch once. The language
-// switcher stores the choice in gm_lang, so nobody is sent back and forth.
+// The home page opens in German for everyone except paid ad clicks (their ads are English); other English pages with a
+// German version switch for German browsers.
+// The language switcher stores the choice in gm_lang, so nobody is sent back and forth.
 const autoDe = translated && lang === 'en' ? counterpart(Astro.url.pathname, 'de') : '';
+const autoDeAll = autoDe === '/de';
 const ogImage = new URL(image, Astro.site ?? SITE.url).href;
 
 const jsonLd = {
@@ -41,16 +43,16 @@ const jsonLd = {
   url: Astro.site?.href ?? SITE.url,
   publisher: { '@type': 'Organization', name: 'Codext GmbH', url: 'https://codext.de' },
   offers: [
-    ...(['monthly', 'yearly'] as const).map((plan) => ({
+    ...Object.values(PRICING.plans).map((plan) => ({
       '@type': 'Offer',
-      name: `Godmode ${PRICING.plans[plan].name}`,
-      price: PRICING.plans[plan].price,
+      name: plan.name,
+      price: plan.price,
       priceCurrency: PRICING.currency,
       priceSpecification: {
         '@type': 'UnitPriceSpecification',
-        price: PRICING.plans[plan].price,
+        price: plan.price,
         priceCurrency: PRICING.currency,
-        billingDuration: plan === 'yearly' ? 'P1Y' : 'P1M',
+        billingDuration: 'P1M',
       },
     })),
   ],
@@ -92,11 +94,11 @@ const tracking =
 
     {
       autoDe && (
-        <script is:inline define:vars={{ autoDe }}>
+        <script is:inline define:vars={{ autoDe, autoDeAll }}>
           try {
             var chosen = /(?:^|; )gm_lang=/.test(document.cookie);
             var ref = document.referrer && new URL(document.referrer).host === location.host;
-            var de = /^de\b/i.test((navigator.languages && navigator.languages[0]) || navigator.language || '');
+            var de = (autoDeAll && !/[?&]utm_medium=paid\b/.test(location.search)) || /^de\b/i.test((navigator.languages && navigator.languages[0]) || navigator.language || '');
             if (!chosen && !ref && de && !/[?&]lang=en\b/.test(location.search)) location.replace(autoDe + location.search + location.hash);
           } catch (e) {}
         </script>

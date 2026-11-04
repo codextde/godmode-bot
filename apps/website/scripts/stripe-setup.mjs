@@ -22,31 +22,41 @@ const stripe = new Stripe(key);
 const mode = key.includes('_live_') ? 'LIVE' : 'TEST';
 const webhookApiVersion = process.env.STRIPE_WEBHOOK_API_VERSION ?? '2026-09-30.endive';
 
-// One product per offer; prices are found by lookup_key, products by metadata.godmode_product. The old monthly price
-// (godmode_monthly_usd) stays active so existing subscriptions keep renewing; lifetime prices are retired below.
+// One product per offer; prices are found by lookup_key, products by metadata.godmode_product. The old USD prices
+// (godmode_monthly_usd, godmode_pro_monthly_usd, godmode_pro_yearly_usd) stay active so existing subscriptions keep
+// renewing; lifetime prices are retired below.
 const PRODUCTS = [
   {
-    key: 'pro',
+    key: 'private',
     product: {
-      name: 'Godmode Pro',
-      description: 'Godmode, the AI coworker that works like a human on your computer. Every feature, every update while subscribed.',
+      name: 'Godmode Private',
+      description: 'Godmode, the AI coworker that works like a human on your computer. For personal use.',
     },
     prices: [
       {
-        lookup_key: 'godmode_pro_monthly_usd',
-        unit_amount: 3900,
-        currency: 'usd',
+        lookup_key: 'godmode_private_monthly_eur',
+        unit_amount: 7900,
+        currency: 'eur',
         tax_behavior: 'inclusive',
         recurring: { interval: 'month' },
-        metadata: { plan: 'monthly' },
+        metadata: { plan: 'private' },
       },
+    ],
+  },
+  {
+    key: 'company',
+    product: {
+      name: 'Godmode Company',
+      description: 'Godmode, the AI coworker that works like a human on your computer. For your whole company.',
+    },
+    prices: [
       {
-        lookup_key: 'godmode_pro_yearly_usd',
-        unit_amount: 34800,
-        currency: 'usd',
+        lookup_key: 'godmode_company_monthly_eur',
+        unit_amount: 49900,
+        currency: 'eur',
         tax_behavior: 'inclusive',
-        recurring: { interval: 'year' },
-        metadata: { plan: 'yearly' },
+        recurring: { interval: 'month' },
+        metadata: { plan: 'company' },
       },
     ],
   },

@@ -163,4 +163,13 @@ describe('composeRecovery', () => {
     expect(mail.html).toContain('<a href="https://buy.stripe.com/r/x"');
     expect(mail.text).not.toMatch(/\p{Extended_Pictographic}/u);
   });
+
+  it('quotes the plan the checkout was started on', () => {
+    const mail = composeRecovery(
+      { session_id: 'cs_2', expired_at: T0, plan: 'company', email: 'a@b.co', consent: 'opt_in', recovery_url: 'https://buy.stripe.com/r/y', recovery_expires_at: null },
+      'https://usegodmode.com',
+      'https://usegodmode.com/unsubscribe?t=abc',
+    );
+    expect(mail.text).toContain('Godmode Company, €499/month, cancel anytime');
+  });
 });

@@ -6,14 +6,13 @@ import Footer from '@/components/Footer.astro';
 import Icon from '@/components/ui/Icon.astro';
 import CheckoutButton from '@/components/ui/CheckoutButton.astro';
 import DownloadButton from '@/components/ui/DownloadButton.astro';
-import { PRICING, SITE, yearlySavings } from '@/config/site';
+import { PRICING, SITE, priceLabel, priceLine } from '@/config/site';
 
-const { monthly, yearly } = PRICING.plans;
 const reasons = [
   {
     icon: 'wallet',
     q: 'I don’t want to pay before I’ve tried it.',
-    a: `You don’t have to. Download Godmode and use it free for ${PRICING.freeDays} days: no card, no sign-up. If you keep it after that, it’s $${monthly.price} a month, or $${yearly.perMonth} a month billed yearly.`,
+    a: `You don’t have to. Download Godmode and use it free for ${PRICING.freeDays} days: no card, no sign-up. If you keep it after that, it’s ${priceLine('en')}.`,
   },
   {
     icon: 'shield-question',
@@ -62,7 +61,7 @@ const reasons = [
 
       <div class="mt-10 flex flex-col gap-3 sm:flex-row">
         <DownloadButton source="recovery" />
-        <CheckoutButton plan="yearly" label={`Subscribe yearly — $${yearly.perMonth}/mo, save ${yearlySavings}%`} source="recovery" variant="ghost" size="lg" />
+        <CheckoutButton plan="private" label={`Subscribe for ${priceLabel('private')}`} source="recovery" variant="ghost" size="lg" />
       </div>
       <form data-remind class="lead-form card mt-10 p-6 sm:p-7">
         <p class="text-[17px] font-medium tracking-[-0.015em]">Not today? Get this checkout by email.</p>

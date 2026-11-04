@@ -60,9 +60,8 @@ It works in the websites and programs you already use. No coding, no IT project.
    [claude.ai](https://claude.ai) (or an Anthropic API key). The setup walks you through it.
 3. Tell it your first task.
 
-Godmode is free for 14 days, no card needed. After that it is $39 a month, or $29 a month billed yearly, with a 14-day
+Godmode is free for 14 days, no card needed. After that it is €79 a month for private use or €499 a month for companies, with a 14-day
 money-back guarantee and cancel anytime. Prices and details: [usegodmode.com](https://usegodmode.com/#pricing).
-For a team or company, write to [kontakt@codext.de](mailto:kontakt@codext.de).
 
 Phone: [Godmode on Google Play](https://play.google.com/store/apps/details?id=de.codext.godmode). It pairs with your
 Mac in one scan.

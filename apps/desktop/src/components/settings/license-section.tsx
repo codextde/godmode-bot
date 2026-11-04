@@ -42,6 +42,8 @@ const STATUS = {
 } as const satisfies Record<LicenseStatus, { labelKey: string; tone: "live" | "neutral" | "warning" | "danger" }>;
 
 const PLAN = {
+  private: "license.plan.private",
+  company: "license.plan.company",
   monthly: "license.plan.monthly",
   yearly: "license.plan.yearly",
   lifetime: "license.plan.lifetime",

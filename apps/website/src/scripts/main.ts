@@ -339,7 +339,7 @@ document.querySelectorAll<HTMLElement>('[data-tabs]').forEach((root) => {
 document.querySelectorAll<HTMLFormElement>('form[data-checkout]').forEach((form) => {
   form.addEventListener('submit', () => {
     const picked = new FormData(form).get('plan');
-    const plan = isPlan(picked) ? picked : 'monthly';
+    const plan = isPlan(picked) ? picked : 'private';
     const a = attribution();
     for (const [k, v] of Object.entries(a)) {
       let input = form.querySelector<HTMLInputElement>(`input[name="${k}"]`);

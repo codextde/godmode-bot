@@ -146,7 +146,7 @@ export function licenseBaseUrl(): string {
 }
 
 const iso = (ms: number) => new Date(ms).toISOString();
-const PLANS: readonly string[] = ["monthly", "yearly", "lifetime"];
+const PLANS: readonly string[] = ["private", "company", "monthly", "yearly", "lifetime"];
 /** Statuses of a refused key that once worked; `past_due` and `unpaid` from a server that ended them itself. */
 const ENDED: readonly string[] = ["canceled", "refunded", "expired", "past_due", "unpaid"];
 const END_REASONS: readonly string[] = ["trial_ended", "canceled", "payment_failed", "refunded"];

@@ -1,4 +1,4 @@
-import { PRICING, yearlySavings } from '@/config/site';
+import { eur, PRICING, priceLine, type Plan } from '@/config/site';
 import { render, type Composed } from './lifecycle';
 
 /** Emails to people on the app's free days who left their address in the app (leads with source 'app'). */
@@ -30,7 +30,7 @@ export function dueFreeKinds(l: FreeLead, now: number): FreeEmailKind[] {
   return [];
 }
 
-const checkout = (base: string, plan: 'monthly' | 'yearly', medium: FreeEmailKind) =>
+const checkout = (base: string, plan: Plan, medium: FreeEmailKind) =>
   `${base}/api/checkout?plan=${plan}&trial=0&utm_source=email&utm_medium=${medium}`;
 
 /** Free-days emails in English or German (locale 'de'), written as Daniel. */
@@ -39,9 +39,9 @@ export function composeFree(kind: FreeEmailKind, l: FreeLead, base: string, unsu
   const ends = l.free_ends_at ?? now;
   const date = new Date(ends).toLocaleDateString(de ? 'de-DE' : 'en-US', { month: 'long', day: 'numeric', timeZone: 'UTC' });
   const days = Math.max(1, Math.ceil((ends - now) / DAY));
-  const { monthly, yearly } = PRICING.plans;
+  const privatePrice = eur(PRICING.plans.private.price, de ? 'de' : 'en');
+  const companyPrice = eur(PRICING.plans.company.price, de ? 'de' : 'en');
   const guarantee = PRICING.guaranteeDays;
-  const usd = (n: number) => (de ? `${n} $` : `$${n}`);
   const sign = de ? 'Daniel\nGründer, Godmode' : 'Daniel\nFounder, Godmode';
   const footer = de
     ? `Du bekommst diese Mail, weil du in Godmode um eine Erinnerung vor dem Ende deiner kostenlosen Tage gebeten hast. Abmelden: ${unsubscribeUrl}`
@@ -85,8 +85,9 @@ export function composeFree(kind: FreeEmailKind, l: FreeLead, base: string, unsu
             'Hallo,',
             `kurzer Hinweis: deine kostenlosen Tage mit Godmode enden am ${date}.`,
             'Mit einem Abo läuft alles einfach weiter: deine Agenten, ihre Zeitpläne, deine gespeicherten Logins und deine Chats. Du musst nichts neu einrichten.',
-            `Godmode Pro kostet ${usd(monthly.price)} im Monat oder ${usd(yearly.perMonth)} im Monat bei jährlicher Zahlung. Wenn es sich für dich nicht lohnt, bekommst du dein Geld innerhalb von ${guarantee} Tagen zurück.`,
-            { button: 'Godmode behalten', url: checkout(base, 'monthly', kind) },
+            `Godmode kostet ${priceLine('de')}. Wenn es sich für dich nicht lohnt, bekommst du dein Geld innerhalb von ${guarantee} Tagen zurück.`,
+            { button: 'Godmode behalten', url: checkout(base, 'private', kind) },
+            `Für deine Firma:\n${checkout(base, 'company', kind)}`,
             'Wenn etwas nicht so läuft, wie du gehofft hast, antworte mir. Ich lese jede Antwort.',
             sign,
           ],
@@ -98,8 +99,9 @@ export function composeFree(kind: FreeEmailKind, l: FreeLead, base: string, unsu
             'Hi,',
             `a quick heads-up: your free days with Godmode end on ${date}.`,
             'When you subscribe, everything keeps working: your agents, their schedules, your saved logins and your chats. Nothing to set up again.',
-            `Godmode Pro is ${usd(monthly.price)} a month, or ${usd(yearly.perMonth)} a month billed yearly. If it does not pay off, you get your money back within ${guarantee} days.`,
-            { button: 'Keep Godmode', url: checkout(base, 'monthly', kind) },
+            `Godmode is ${priceLine('en')}. If it does not pay off, you get your money back within ${guarantee} days.`,
+            { button: 'Keep Godmode', url: checkout(base, 'private', kind) },
+            `For your company:\n${checkout(base, 'company', kind)}`,
             'If something is not working the way you hoped, reply and tell me. I read every answer.',
             sign,
           ],
@@ -114,8 +116,8 @@ export function composeFree(kind: FreeEmailKind, l: FreeLead, base: string, unsu
           'Hallo,',
           `deine kostenlosen Tage mit Godmode sind am ${date} zu Ende gegangen.`,
           'Deine Agenten und Automationen sind noch da und warten. Nichts wurde gelöscht. Mit einem Abo machen sie genau da weiter, wo sie aufgehört haben.',
-          { button: `Godmode behalten, ${usd(monthly.price)} im Monat`, url: checkout(base, 'monthly', kind) },
-          `Oder jährlich für ${usd(yearly.perMonth)} im Monat (${usd(yearly.price)} im Jahr, ${yearlySavings} % gespart):\n${checkout(base, 'yearly', kind)}`,
+          { button: `Godmode behalten, ${privatePrice} im Monat`, url: checkout(base, 'private', kind) },
+          `Für deine Firma, ${companyPrice} im Monat:\n${checkout(base, 'company', kind)}`,
           `${guarantee} Tage Geld-zurück-Garantie, jederzeit kündbar.`,
           'Wenn Godmode nicht das Richtige für dich war, würde ich gern wissen, warum. Antworte einfach, eine Zeile reicht.',
           sign,
@@ -128,8 +130,8 @@ export function composeFree(kind: FreeEmailKind, l: FreeLead, base: string, unsu
           'Hi,',
           `your free days with Godmode ended on ${date}.`,
           'Your agents and automations are still there, waiting. Nothing was deleted. Subscribe and they pick up right where they stopped.',
-          { button: `Keep Godmode, ${usd(monthly.price)} a month`, url: checkout(base, 'monthly', kind) },
-          `Or pay yearly: ${usd(yearly.perMonth)} a month (${usd(yearly.price)} a year, save ${yearlySavings}%):\n${checkout(base, 'yearly', kind)}`,
+          { button: `Keep Godmode, ${privatePrice} a month`, url: checkout(base, 'private', kind) },
+          `For your company, ${companyPrice} a month:\n${checkout(base, 'company', kind)}`,
           `${guarantee}-day money-back guarantee. Cancel any time.`,
           'If Godmode was not the right fit, I would love to know why. Just reply, one line is enough.',
           sign,

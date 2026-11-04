@@ -6,7 +6,7 @@ import Icon from '@/components/ui/Icon.astro';
 import Logo from '@/components/ui/Logo.astro';
 import Character from '@/components/ui/Character.astro';
 import WaitlistForm from '@/components/ui/WaitlistForm.astro';
-import { PRICING, SITE } from '@/config/site';
+import { PRICING, SITE, priceLine } from '@/config/site';
 import { href, langOf } from '@/i18n';
 import type { DownloadProps } from './download-request';
 
@@ -17,7 +17,6 @@ const primary = intel ? 'mac-intel' : 'mac';
 const other = intel ? 'mac' : 'mac-intel';
 
 const { freeDays } = PRICING;
-const { monthly, yearly } = PRICING.plans;
 const install = `curl -fsSL ${SITE.url}/install.sh | sh`;
 const pageUrl = `${SITE.url}${href(lang, '/download')}`;
 
@@ -67,7 +66,7 @@ const t = {
       'Check my three competitors’ prices and tell me what changed',
       'Plan next week’s Instagram posts and show me the plan first',
     ],
-    after: `After ${freeDays} days, Godmode asks if you want to keep it: $${monthly.price} a month, or $${yearly.perMonth} a month billed yearly. No card until then. Godmode thinks with Claude, so you sign in with your Claude Pro or Max plan during setup.`,
+    after: `After ${freeDays} days, Godmode asks if you want to keep it: ${priceLine('en')}. No card until then. Godmode thinks with Claude, so you sign in with your Claude Pro or Max plan during setup.`,
     pricing: 'See pricing and FAQ',
     advanced: 'Advanced: always-on version for a spare Mac',
     advancedBody: 'For a Mac that stays on, reached from any browser or your phone. Paste this into Terminal on that Mac. Not sure?',
@@ -122,7 +121,7 @@ const t = {
       'Prüf die Preise meiner drei Konkurrenten und sag mir, was sich geändert hat',
       'Plane die Instagram-Posts für nächste Woche und zeig mir den Plan vorher',
     ],
-    after: `Nach ${freeDays} Tagen fragt Godmode, ob du es behalten willst: $${monthly.price} im Monat oder $${yearly.perMonth} im Monat bei jährlicher Zahlung. Bis dahin brauchst du keine Karte. Godmode denkt mit Claude, deshalb meldest du dich bei der Einrichtung mit deinem Claude-Pro- oder Max-Abo an.`,
+    after: `Nach ${freeDays} Tagen fragt Godmode, ob du es behalten willst: ${priceLine('de')}. Bis dahin brauchst du keine Karte. Godmode denkt mit Claude, deshalb meldest du dich bei der Einrichtung mit deinem Claude-Pro- oder Max-Abo an.`,
     pricing: 'Preise und FAQ ansehen',
     advanced: 'Für Fortgeschrittene: Dauerbetrieb auf einem freien Mac',
     advancedBody: 'Für einen Mac, der immer an bleibt und den du aus jedem Browser oder vom Handy aus erreichst. Füg das im Terminal auf diesem Mac ein. Unsicher?',

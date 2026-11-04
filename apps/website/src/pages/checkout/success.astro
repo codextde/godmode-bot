@@ -2,7 +2,7 @@
 import Base from '@/layouts/Base.astro';
 import Logo from '@/components/ui/Logo.astro';
 import Icon from '@/components/ui/Icon.astro';
-import { FOUNDING, isPlan, PRICING, SITE, type Plan } from '@/config/site';
+import { FOUNDING, orderPlan, PRICING, SITE } from '@/config/site';
 import { stripe } from '@/lib/stripe';
 import { syncSubscription, upsertFromSession } from '@/lib/db';
 import { ORDER_COOKIE, publicId, sign, verify } from '@/lib/signed';
@@ -63,8 +63,7 @@ if (id) {
   }
 }
 
-const metaPlan = session?.metadata?.plan;
-const plan: Plan = isPlan(metaPlan) ? metaPlan : 'monthly';
+const plan = session?.metadata?.plan ?? 'monthly';
 const licenseKey = session?.metadata?.license_key ?? '';
 const email = session?.customer_details?.email ?? '';
 const sub = session && typeof session.subscription === 'object' ? session.subscription : null;
@@ -72,7 +71,7 @@ const trialEnd = sub?.status === 'trialing' && sub.trial_end ? sub.trial_end * 1
 const trialEndText = trialEnd
   ? new Date(trialEnd).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
   : '';
-const offer = PRICING.plans[plan];
+const offer = orderPlan(plan);
 const purchase =
   state === 'paid' && session
     ? {
@@ -170,13 +169,11 @@ const steps = [
                 {trialEnd ? (
                   <>
                     Your {PRICING.trialDays}-day trial is running. You won’t be charged until{' '}
-                    <time class="text-text" datetime={new Date(trialEnd).toISOString()} data-local-date>{trialEndText}</time>{plan === 'yearly' ? `, then $${offer.price} for the year` : `, then $${offer.price} a month`}.
+                    <time class="text-text" datetime={new Date(trialEnd).toISOString()} data-local-date>{trialEndText}</time>{`, then ${offer.label}`}.
                     Cancel anytime in the billing portal.
                   </>
-                ) : plan === 'yearly' ? (
-                  <>Your yearly Godmode Pro plan is active for the next 12 months. A receipt is on its way{email ? ` to ${email}` : ''}.</>
                 ) : (
-                  <>Your Godmode Pro subscription is active. A receipt is on its way{email ? ` to ${email}` : ''}.</>
+                  <>Your {offer.name} subscription is active. A receipt is on its way{email ? ` to ${email}` : ''}.</>
                 )}
               </p>
             </div>

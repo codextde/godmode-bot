@@ -3,7 +3,7 @@
 interface Props {
   title: string;
   data: { label: string; value: number }[];
-  format?: 'number' | 'usd';
+  format?: 'number' | 'eur';
 }
 const { title, data, format = 'number' } = Astro.props;
 const max = Math.max(1, ...data.map((d) => d.value));
@@ -11,7 +11,7 @@ const max = Math.max(1, ...data.map((d) => d.value));
 const pow = 10 ** Math.floor(Math.log10(max));
 const top = Math.ceil(max / pow) * pow;
 const fmt = (v: number) =>
-  format === 'usd' ? `$${v.toLocaleString('en-US', { maximumFractionDigits: 0 })}` : v.toLocaleString('en-US');
+  format === 'eur' ? `€${v.toLocaleString('en-US', { maximumFractionDigits: 0 })}` : v.toLocaleString('en-US');
 const W = 640;
 const H = 180;
 const padL = 44;

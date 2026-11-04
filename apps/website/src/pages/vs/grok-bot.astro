@@ -8,9 +8,8 @@ import Words from '@/components/ui/Words.astro';
 import CheckoutButton from '@/components/ui/CheckoutButton.astro';
 import DownloadButton from '@/components/ui/DownloadButton.astro';
 import ComputerUse from '@/components/sections/ComputerUse.astro';
-import { PRICING, SITE } from '@/config/site';
+import { PRICING, SITE, priceLine } from '@/config/site';
 
-const { monthly, yearly } = PRICING.plans;
 const checked = 'October 22, 2026';
 
 type Mark = 'yes' | 'no' | 'partial';
@@ -82,7 +81,7 @@ const rows: { label: string; us: [Mark, string]; them: [Mark, string] }[] = [
   },
   {
     label: 'Price',
-    us: ['yes', `${PRICING.freeDays} days free with no card, then $${monthly.price}/mo or $${yearly.perMonth}/mo yearly, plus your Claude plan`],
+    us: ['yes', `${PRICING.freeDays} days free with no card, then ${priceLine('en')}, plus your Claude plan`],
     them: ['partial', 'In the X Subscription from $30/mo (Premium; Plus doesn’t include it). Older Cursor and SuperGrok plans keep it'],
   },
 ];
@@ -155,7 +154,7 @@ const faqs = [
   },
   {
     q: 'Is Godmode cheaper than Grok Bot?',
-    a: `No, Grok Bot is cheaper to start. It comes with the X Subscription from $30 a month (Premium; Plus doesn’t include it), and older Cursor and SuperGrok plans keep it. Its usage comes out of a weekly pool shared with the rest of your plan, then paid top-ups. Godmode is $${monthly.price} a month, or $${yearly.perMonth} a month billed yearly, after ${PRICING.freeDays} free days with no card, plus the Claude plan or API key you already have. You pay more for agents that work on your own computer with the logins you already have.`,
+    a: `No, Grok Bot is cheaper to start. It comes with the X Subscription from $30 a month (Premium; Plus doesn’t include it), and older Cursor and SuperGrok plans keep it. Its usage comes out of a weekly pool shared with the rest of your plan, then paid top-ups. Godmode is ${priceLine('en')}, after ${PRICING.freeDays} free days with no card, plus the Claude plan or API key you already have. You pay more for agents that work on your own computer with the logins you already have.`,
   },
   {
     q: 'Doesn’t Grok Bot use Claude now?',
@@ -404,13 +403,13 @@ const jsonLd = {
         <div class="card p-8 text-center sm:p-14" data-reveal>
           <h2 class="mx-auto max-w-[18ch] text-[clamp(28px,4vw,48px)] leading-[1.05] font-semibold tracking-[-0.04em]">Keep your logins. Lose the busywork.</h2>
           <p class="mx-auto mt-4 max-w-[540px] text-muted">
-            Free for {PRICING.freeDays} days. No card, no sign-up. Then ${monthly.price}/month, or ${yearly.perMonth}/month billed yearly.
+            Free for {PRICING.freeDays} days. No card, no sign-up. Then {priceLine('en')}.
           </p>
           <div class="mt-8 flex justify-center">
             <DownloadButton source="vs_grok_final" />
           </div>
           <p class="mt-5 text-[14px]">
-            <CheckoutButton plan="monthly" label="Already sure? Subscribe now" source="vs_grok_final" variant="link" />
+            <CheckoutButton plan="private" label="Already sure? Subscribe now" source="vs_grok_final" variant="link" />
           </p>
         </div>
       </div>

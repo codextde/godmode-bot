@@ -5,7 +5,7 @@ import Footer from '@/components/Footer.astro';
 import Icon from '@/components/ui/Icon.astro';
 import Words from '@/components/ui/Words.astro';
 import Character from '@/components/ui/Character.astro';
-import { FOUNDER, LEGAL, PRICING, SETUP, SITE, setupPrice } from '@/config/site';
+import { FOUNDER, LEGAL, PRICING, SETUP, SITE, priceLabel, setupPrice } from '@/config/site';
 import { href, langOf } from '@/i18n';
 
 const lang = langOf(Astro.url);
@@ -70,7 +70,7 @@ const t = {
       'Invoice from Codext GmbH after the intro call, nothing up front',
       'Remote via screen sharing, wherever you are',
     ],
-    priceSep: `Not included: the Godmode subscription ($${PRICING.plans.monthly.price} a month per Mac, or $${PRICING.plans.yearly.perMonth} billed yearly) and your Claude plan.`,
+    priceSep: `Not included: the Godmode Company subscription (${priceLabel('company')}) and your Claude plan.`,
     formH: 'Request your setup',
     formLead: 'Tell us a little about your work. We reply within one business day with times for the free intro call.',
     name: 'Your name',
@@ -156,7 +156,7 @@ const t = {
       'Rechnung von der Codext GmbH nach dem Kennenlernen, keine Vorauszahlung',
       'Remote per Bildschirmfreigabe, egal wo du bist',
     ],
-    priceSep: `Nicht enthalten: das Godmode-Abo ($${PRICING.plans.monthly.price} im Monat pro Mac oder $${PRICING.plans.yearly.perMonth} bei jährlicher Zahlung) und dein Claude-Abo.`,
+    priceSep: `Nicht enthalten: das Godmode-Abo für Firmen (${priceLabel('company', 'de')}) und dein Claude-Abo.`,
     formH: 'Einrichtung anfragen',
     formLead: 'Erzähl uns kurz von deiner Arbeit. Wir melden uns innerhalb eines Werktags mit Terminen für das kostenlose Kennenlernen.',
     name: 'Dein Name',

@@ -43,7 +43,7 @@ export const GET: APIRoute = async ({ url, request }) => {
 
   const { valid, status, reason } = licenseVerdict(row, Date.now());
   const subscription = row.mode === 'subscription' && !row.comp;
-  const plan = row.plan === 'yearly' || row.plan === 'monthly' ? row.plan : 'lifetime';
+  const plan = ['private', 'company', 'monthly', 'yearly'].includes(row.plan) ? row.plan : 'lifetime';
   const owes = subscription && (row.sub_status === 'past_due' || row.sub_status === 'unpaid');
   return Response.json(
     {
