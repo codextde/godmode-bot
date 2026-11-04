@@ -1628,6 +1628,7 @@ describe("settings tools", () => {
         "phone.callOwner",
         "phone.language",
         "phone.voiceId",
+        "phone.callerName",
         "memory.autoCommit",
         "memory.reflectAfterRun",
         "memory.injectMemory",
