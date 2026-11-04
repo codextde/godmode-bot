@@ -15,6 +15,7 @@ import {
   getMcpServer,
   listMcpServers,
   mcpServerSecrets,
+  agentInChatWorkspace,
   mcpServersForAgent,
   updateMcpServer,
 } from "../src/integrations/mcpServers";
@@ -250,6 +251,14 @@ describe("mcpServersForAgent scoping", () => {
     expect(Object.keys(b)).toEqual(expect.arrayContaining(["ws-two-tool", "explicit", "pinned-b", "global-tool"]));
     expect(Object.keys(b)).not.toContain("pinned-a");
     expect(Object.keys(b)).not.toContain("disabled-tool");
+  });
+
+  test("global agent in a workspace chat also gets that workspace's servers", async () => {
+    const inChat = await mcpServersForAgent(agentInChatWorkspace(agentModel({ id: "agt_global", workspaceId: null }), "ws_one"));
+    expect(Object.keys(inChat)).toEqual(expect.arrayContaining(["ws-one-tool", "global-tool"]));
+    expect(Object.keys(inChat)).not.toContain("ws-two-tool");
+    const own = await mcpServersForAgent(agentInChatWorkspace(agentModel({ id: "agt_b", workspaceId: "ws_two" }), "ws_one"));
+    expect(Object.keys(own)).not.toContain("ws-one-tool");
   });
 
   test("servers whose secrets need the locked vault are skipped, others stay", async () => {

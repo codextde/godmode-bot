@@ -2178,6 +2178,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     browserProfileId: runProfileOf(job),
     ssh: ssh.length > 0,
     android: phones.length > 0,
+    workspaceId,
   });
   // The human's plugins (Plugins page). Dreams and condition checks are small jobs with a fixed shape: they load none.
   const mods = dreaming || job.trigger === "check" || !settings.plugins.enabled ? null : await modsForRun(agent, job.runId, (text) => job.acc.addNotice("warning", text));

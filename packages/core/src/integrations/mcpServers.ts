@@ -340,6 +340,11 @@ export function mcpServerInAgentScope(
   return server.workspaceId === null || (agent.workspaceId !== null && server.workspaceId === agent.workspaceId);
 }
 
+/** The agent as seen in a chat of `workspaceId`: a global agent takes the chat's workspace, so it also reaches that workspace's servers. */
+export function agentInChatWorkspace<T extends Pick<Agent, "workspaceId">>(agent: T, workspaceId: string | null): T {
+  return agent.workspaceId || !workspaceId ? agent : { ...agent, workspaceId };
+}
+
 /** Custom servers that apply to `agent`, in a stable order. Explicit ids (`mcpServerIds`) never widen the scope. */
 export function mcpServerRowsForAgent(agent: Pick<Agent, "id" | "workspaceId" | "inheritMcp" | "mcpServerIds">): McpServer[] {
   const pinnedIds = new Set(agent.mcpServerIds ?? []);
