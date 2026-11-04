@@ -12,7 +12,7 @@ import { paletteBlurb } from "@/lib/palettes";
 import { modKey, notifyDesktop } from "@/lib/desktop";
 import { errorMessage } from "@/lib/api";
 import { useSetInterfaceMode } from "@/lib/mode";
-import { useUi, type FollowUpMode, type ToolCallView } from "@/stores/ui";
+import { useUi, type EnterKey, type FollowUpMode, type ToolCallView } from "@/stores/ui";
 import { useLanguage } from "@/i18n/language";
 import { ModePicker } from "./mode-picker";
 import { PalettePicker } from "./palette-picker";
@@ -36,6 +36,8 @@ export function GeneralSection({ settings }: { settings: Settings }) {
   const setToolCallView = useUi((s) => s.setToolCallView);
   const followUpMode = useUi((s) => s.followUpMode);
   const setFollowUpMode = useUi((s) => s.setFollowUpMode);
+  const enterKey = useUi((s) => s.enterKey);
+  const setEnterKey = useUi((s) => s.setEnterKey);
   const largePasteAsFile = useUi((s) => s.largePasteAsFile);
   const setLargePasteAsFile = useUi((s) => s.setLargePasteAsFile);
   const mcpApps = useUi((s) => s.mcpApps);
@@ -164,7 +166,18 @@ export function GeneralSection({ settings }: { settings: Settings }) {
             ]}
           />
         </SettingRow>
-        <SettingRow label={t("general.chat.followUp")} description={t("general.chat.followUpDescription", { shortcut: `${modKey}↵` })}>
+        <SettingRow label={t("general.chat.enterKey")} description={t("general.chat.enterKeyDescription", { shortcut: `${modKey}↵` })}>
+          <Segmented<EnterKey>
+            aria-label={t("general.chat.enterKey")}
+            value={enterKey}
+            onChange={setEnterKey}
+            options={[
+              { value: "send", label: t("general.chat.enterSend") },
+              { value: "newLine", label: t("general.chat.enterNewLine") },
+            ]}
+          />
+        </SettingRow>
+        <SettingRow label={t("general.chat.followUp")} description={t("general.chat.followUpDescription", { shortcut: enterKey === "newLine" ? `⇧${modKey}↵` : `${modKey}↵` })}>
           <Segmented<FollowUpMode>
             aria-label={t("general.chat.followUp")}
             value={followUpMode}

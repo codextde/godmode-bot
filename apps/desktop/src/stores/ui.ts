@@ -16,6 +16,9 @@ export type InboxView = "list" | "board";
 export type ToolCallView = "cards" | "compact";
 export type FollowUpMode = "queue" | "steer";
 
+/** What Enter does in a chat: send (Shift+Enter is a new line), or a new line (Cmd/Ctrl+Enter sends). */
+export type EnterKey = "send" | "newLine";
+
 export type WorkspacesSort = "name" | "active" | "attention";
 
 interface UiState {
@@ -64,6 +67,7 @@ interface UiState {
   reduceAnimations: boolean;
   toolCallView: ToolCallView;
   followUpMode: FollowUpMode;
+  enterKey: EnterKey;
   largePasteAsFile: boolean;
   mcpApps: boolean;
   /** Show the frame rate meter on top of the window. */
@@ -107,6 +111,7 @@ interface UiState {
   setReduceAnimations: (v: boolean) => void;
   setToolCallView: (v: ToolCallView) => void;
   setFollowUpMode: (v: FollowUpMode) => void;
+  setEnterKey: (v: EnterKey) => void;
   setLargePasteAsFile: (v: boolean) => void;
   setMcpApps: (v: boolean) => void;
   setFpsMeter: (v: boolean) => void;
@@ -147,6 +152,7 @@ export const useUi = create<UiState>()(
       reduceAnimations: false,
       toolCallView: "cards",
       followUpMode: "queue",
+      enterKey: "send",
       largePasteAsFile: true,
       mcpApps: false,
       fpsMeter: false,
@@ -194,6 +200,7 @@ export const useUi = create<UiState>()(
       setReduceAnimations: (reduceAnimations) => set({ reduceAnimations }),
       setToolCallView: (toolCallView) => set({ toolCallView }),
       setFollowUpMode: (followUpMode) => set({ followUpMode }),
+      setEnterKey: (enterKey) => set({ enterKey }),
       setLargePasteAsFile: (largePasteAsFile) => set({ largePasteAsFile }),
       setMcpApps: (mcpApps) => set({ mcpApps }),
       setFpsMeter: (fpsMeter) => set({ fpsMeter }),
@@ -231,6 +238,7 @@ export const useUi = create<UiState>()(
         reduceAnimations: s.reduceAnimations,
         toolCallView: s.toolCallView,
         followUpMode: s.followUpMode,
+        enterKey: s.enterKey,
         largePasteAsFile: s.largePasteAsFile,
         mcpApps: s.mcpApps,
         fpsMeter: s.fpsMeter,
@@ -238,3 +246,11 @@ export const useUi = create<UiState>()(
     },
   ),
 );
+
+/** What a key press in a chat text field does: send, send the other way (queue/steer) or nothing. */
+export function sendKey(e: { key: string; shiftKey: boolean; metaKey: boolean; ctrlKey: boolean; nativeEvent: { isComposing: boolean } }): "send" | "opposite" | null {
+  if (e.key !== "Enter" || e.nativeEvent.isComposing) return null;
+  const mod = e.metaKey || e.ctrlKey;
+  if (useUi.getState().enterKey === "newLine") return mod ? (e.shiftKey ? "opposite" : "send") : null;
+  return e.shiftKey ? null : mod ? "opposite" : "send";
+}

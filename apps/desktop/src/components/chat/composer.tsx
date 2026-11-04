@@ -25,7 +25,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { Kbd } from "@/components/common";
 import { useDictation, useVoiceSettings } from "@/hooks/use-voice";
 import { useVoiceSession, stopSpeaking } from "@/lib/voice";
-import { useUi } from "@/stores/ui";
+import { sendKey, useUi } from "@/stores/ui";
 import { modKey } from "@/lib/desktop";
 import { loadDraft, saveDraft, useDraft } from "@/lib/drafts";
 import { errorMessage, isLicenseRequired } from "@/lib/api";
@@ -154,6 +154,7 @@ export function Composer({
   const setVoiceMode = useUi((s) => s.setVoiceMode);
   const steerByDefault = useUi((s) => s.followUpMode === "steer");
   const largePasteAsFile = useUi((s) => s.largePasteAsFile);
+  const enterIsNewLine = useUi((s) => s.enterKey === "newLine");
   const armVoice = useVoiceSession((s) => s.arm);
 
   // Revoke thumbnails on unmount, unless they stay in the draft
@@ -334,9 +335,10 @@ export function Composer({
         return;
       }
     }
-    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+    const send = sendKey(e);
+    if (send) {
       e.preventDefault();
-      void submit(e.metaKey || e.ctrlKey);
+      void submit(send === "opposite");
     } else if (e.key === "ArrowUp" && !text && !attachments.length && onRecall?.()) {
       e.preventDefault();
     } else if (e.key === "Escape" && dictation.active) {
@@ -555,8 +557,16 @@ export function Composer({
                 exit={reduce ? undefined : { opacity: 0 }}
                 className="hidden shrink-0 items-center gap-1 pr-1 text-[11px] whitespace-nowrap text-muted-foreground @2xl/composer:flex"
               >
-                <Kbd>⇧</Kbd>
-                <Kbd>↵</Kbd> {t("composer.newLine")}
+                {enterIsNewLine ? (
+                  <>
+                    <Kbd>{modKey}↵</Kbd> {t("composer.sendHint")}
+                  </>
+                ) : (
+                  <>
+                    <Kbd>⇧</Kbd>
+                    <Kbd>↵</Kbd> {t("composer.newLine")}
+                  </>
+                )}
               </motion.span>
             )}
           </AnimatePresence>
@@ -603,11 +613,12 @@ export function Composer({
               <TooltipContent>
                 {blocked ?? (
                   <>
-                    {sendHint ?? (running ? t(steerByDefault ? "composer.steerMessage" : "composer.queueMessage") : t("composer.send"))} <Kbd>↵</Kbd>
+                    {sendHint ?? (running ? t(steerByDefault ? "composer.steerMessage" : "composer.queueMessage") : t("composer.send"))} <Kbd>{enterIsNewLine ? `${modKey}↵` : "↵"}</Kbd>
                     {running && !sendHint && (
                       <>
                         <span className="opacity-40"> · </span>
-                        {t(steerByDefault ? "composer.queueMessage" : "composer.steerMessage")} <Kbd>{modKey}↵</Kbd>
+                        {t(steerByDefault ? "composer.queueMessage" : "composer.steerMessage")} {enterIsNewLine && <Kbd>⇧</Kbd>}
+                        <Kbd>{modKey}↵</Kbd>
                       </>
                     )}
                   </>

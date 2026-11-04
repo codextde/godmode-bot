@@ -60,11 +60,19 @@ const GROUPS = [
   },
 ] as const;
 
+/** The chat keys when Enter makes a new line (Settings > General > Chat). */
+const NEW_LINE_KEYS: Record<string, readonly string[]> = {
+  "shortcuts.rows.send": [`${modKey}↵`],
+  "shortcuts.rows.newLine": ["↵"],
+  "shortcuts.rows.sendOpposite": ["⇧", `${modKey}↵`],
+};
+
 /** Every keyboard shortcut on one page: `?` anywhere outside a text field, or "Keyboard shortcuts" in search. */
 export function ShortcutsDialog() {
   const { t } = useTranslation("layout");
   const open = useUi((s) => s.shortcutsOpen);
   const setOpen = useUi((s) => s.setShortcutsOpen);
+  const enterIsNewLine = useUi((s) => s.enterKey === "newLine");
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent className="max-h-[85vh] overflow-y-auto calm-motion:data-[state=closed]:animate-none calm-motion:data-[state=open]:animate-none sm:max-w-xl" overlayClassName="calm-motion:data-[state=closed]:animate-none calm-motion:data-[state=open]:animate-none">
@@ -83,7 +91,7 @@ export function ShortcutsDialog() {
                   <div key={r.what} className="flex items-center justify-between gap-3 text-[13px]">
                     <dt className="min-w-0 text-foreground/85">{t(r.what, { key: modKey })}</dt>
                     <dd className="flex shrink-0 items-center gap-1">
-                      {r.keys.map((k, i) => (
+                      {((enterIsNewLine && NEW_LINE_KEYS[r.what]) || r.keys).map((k: string, i: number) => (
                         <Fragment key={i}>
                           {i > 0 && g.id === "goTo" && <span className="text-[11px] text-muted-foreground">{t("shortcuts.then")}</span>}
                           <Kbd>{k}</Kbd>
