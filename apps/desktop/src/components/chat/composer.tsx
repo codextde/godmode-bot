@@ -25,6 +25,7 @@ import { Kbd } from "@/components/common";
 import { useDictation, useVoiceSettings } from "@/hooks/use-voice";
 import { useVoiceSession, stopSpeaking } from "@/lib/voice";
 import { useUi } from "@/stores/ui";
+import { modKey } from "@/lib/desktop";
 import { loadDraft, saveDraft, useDraft } from "@/lib/drafts";
 import { errorMessage, isLicenseRequired } from "@/lib/api";
 import { useEasyMode } from "@/lib/mode";
@@ -40,6 +41,8 @@ export interface ComposerSubmit {
   attachments: { name: string; mime: string; data: string }[];
   /** The text was (at least partly) dictated */
   voice: boolean;
+  /** The agent is working and should stop and start on this message right away instead of taking it between two steps. */
+  steer?: boolean;
 }
 
 export interface ComposerHandle {
@@ -139,6 +142,7 @@ export function Composer({
   const voiceSettings = useVoiceSettings();
   const voiceEnabled = voiceSettings?.enabled ?? true;
   const setVoiceMode = useUi((s) => s.setVoiceMode);
+  const steerByDefault = useUi((s) => s.followUpMode === "steer");
   const armVoice = useVoiceSession((s) => s.arm);
 
   // Revoke thumbnails on unmount, unless they stay in the draft
@@ -263,8 +267,9 @@ export function Composer({
     textareaRef.current?.focus({ preventScroll: true });
   };
 
-  const submit = async () => {
+  const submit = async (opposite = false) => {
     if (!canSend) return;
+    const steer = !!running && steerByDefault !== opposite;
     if (dictation.active) dictation.cancel();
     const content = text.trim();
     const sent = attachments;
@@ -275,7 +280,7 @@ export function Composer({
     filesDraft.discard();
     voiceRef.current = false;
     try {
-      await onSubmit({ content, attachments: sent.map(({ name, mime, data }) => ({ name, mime, data })), voice });
+      await onSubmit({ content, attachments: sent.map(({ name, mime, data }) => ({ name, mime, data })), voice, ...(steer && { steer }) });
       sent.forEach((a) => a.previewUrl && URL.revokeObjectURL(a.previewUrl));
     } catch (err) {
       if (textKey && content) {
@@ -314,7 +319,7 @@ export function Composer({
     }
     if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
-      void submit();
+      void submit(e.metaKey || e.ctrlKey);
     } else if (e.key === "ArrowUp" && !text && !attachments.length && onRecall?.()) {
       e.preventDefault();
     } else if (e.key === "Escape" && dictation.active) {
@@ -495,7 +500,7 @@ export function Composer({
                 className="hidden min-w-0 items-center gap-2 pr-1.5 text-xs text-muted-foreground @xl/composer:flex"
               >
                 <WorkingTicks count={9} className="text-brand-strong" />
-                <span className="truncate">{transcribing ? t("composer.transcribing") : t("composer.workingQueued")}</span>
+                <span className="truncate">{transcribing ? t("composer.transcribing") : t(steerByDefault ? "composer.workingSteer" : "composer.workingQueued")}</span>
               </motion.span>
             )}
             {!running && !transcribing && focused && text.length > 0 && (
@@ -542,9 +547,9 @@ export function Composer({
                 <Button
                   type="button"
                   size="icon"
-                  onClick={() => void submit()}
+                  onClick={(e) => void submit(e.metaKey || e.ctrlKey)}
                   disabled={!canSend}
-                  aria-label={blocked ?? sendHint ?? (running ? t("composer.queueMessage") : t("composer.sendMessage"))}
+                  aria-label={blocked ?? sendHint ?? (running ? t(steerByDefault ? "composer.steerMessage" : "composer.queueMessage") : t("composer.sendMessage"))}
                   className="ml-0.5 size-8 rounded-lg transition-[background-color,scale] active:scale-95 disabled:bg-secondary disabled:text-muted-foreground disabled:opacity-100 disabled:shadow-none"
                 >
                   {busy ? <Loader2 className="size-4 animate-spin" /> : <ArrowUp className="size-[18px]" strokeWidth={2.4} />}
@@ -553,7 +558,13 @@ export function Composer({
               <TooltipContent>
                 {blocked ?? (
                   <>
-                    {sendHint ?? (running ? t("composer.queueMessage") : t("composer.send"))} <Kbd>↵</Kbd>
+                    {sendHint ?? (running ? t(steerByDefault ? "composer.steerMessage" : "composer.queueMessage") : t("composer.send"))} <Kbd>↵</Kbd>
+                    {running && !sendHint && (
+                      <>
+                        <span className="opacity-40"> · </span>
+                        {t(steerByDefault ? "composer.queueMessage" : "composer.steerMessage")} <Kbd>{modKey}↵</Kbd>
+                      </>
+                    )}
                   </>
                 )}
               </TooltipContent>

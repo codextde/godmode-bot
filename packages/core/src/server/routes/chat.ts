@@ -77,6 +77,7 @@ const sendSchema = z.object({
   attachments: z.array(attachmentSchema).optional(),
   voice: z.boolean().optional(),
   queue: z.boolean().optional(),
+  steer: z.boolean().optional(),
   queueId: z
     .string()
     .regex(/^qmsg_[A-Za-z0-9]{16}$/)
@@ -211,7 +212,7 @@ export function registerChatRoutes(app: Hono): void {
   app.post("/api/conversations/:id/messages", async (c) => {
     const id = c.req.param("id");
     getConversationSummary(id); // 404 early, before parsing a potentially large body
-    const { queue, queueId, ...input } = await body(c, sendSchema);
+    const { queue, queueId, steer, ...input } = await body(c, sendSchema);
     // The chat waits for the human's answer: this message is that answer, and the run that asked continues with it.
     await untilAsked(id);
     const answered = answerByMessage(id, input, answererOf(c));
@@ -222,7 +223,7 @@ export function registerChatRoutes(app: Hono): void {
       settle();
       return c.json(sent, 201);
     }
-    const outcome = await submitMessage(id, { ...input, queueId });
+    const outcome = await submitMessage(id, { ...input, queueId, steer });
     settle();
     return c.json(outcome, "queued" in outcome ? 202 : 201);
   });

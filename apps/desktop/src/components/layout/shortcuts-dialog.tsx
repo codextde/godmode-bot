@@ -44,6 +44,7 @@ const GROUPS = [
     rows: [
       { keys: ["↵"], what: "shortcuts.rows.send" },
       { keys: ["⇧", "↵"], what: "shortcuts.rows.newLine" },
+      { keys: [`${modKey}↵`], what: "shortcuts.rows.sendOpposite" },
       { keys: ["/"], what: "shortcuts.rows.commands" },
       { keys: ["↑"], what: "shortcuts.rows.editLast" },
       { keys: [`${modKey}L`], what: "shortcuts.rows.quote" },

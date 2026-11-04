@@ -9,10 +9,10 @@ import { useTheme } from "@/components/theme-provider";
 import { THEME_SHORTCUT } from "@/components/layout/theme-toggle";
 import { isTauri } from "@/lib/core";
 import { paletteBlurb } from "@/lib/palettes";
-import { notifyDesktop } from "@/lib/desktop";
+import { modKey, notifyDesktop } from "@/lib/desktop";
 import { errorMessage } from "@/lib/api";
 import { useSetInterfaceMode } from "@/lib/mode";
-import { useUi, type ToolCallView } from "@/stores/ui";
+import { useUi, type FollowUpMode, type ToolCallView } from "@/stores/ui";
 import { useLanguage } from "@/i18n/language";
 import { ModePicker } from "./mode-picker";
 import { PalettePicker } from "./palette-picker";
@@ -34,6 +34,8 @@ export function GeneralSection({ settings }: { settings: Settings }) {
   const setReduceAnimations = useUi((s) => s.setReduceAnimations);
   const toolCallView = useUi((s) => s.toolCallView);
   const setToolCallView = useUi((s) => s.setToolCallView);
+  const followUpMode = useUi((s) => s.followUpMode);
+  const setFollowUpMode = useUi((s) => s.setFollowUpMode);
   const fpsMeter = useUi((s) => s.fpsMeter);
   const setFpsMeter = useUi((s) => s.setFpsMeter);
 
@@ -155,6 +157,17 @@ export function GeneralSection({ settings }: { settings: Settings }) {
             options={[
               { value: "cards", label: t("general.chat.cards") },
               { value: "compact", label: t("general.chat.compact") },
+            ]}
+          />
+        </SettingRow>
+        <SettingRow label={t("general.chat.followUp")} description={t("general.chat.followUpDescription", { shortcut: `${modKey}↵` })}>
+          <Segmented<FollowUpMode>
+            aria-label={t("general.chat.followUp")}
+            value={followUpMode}
+            onChange={setFollowUpMode}
+            options={[
+              { value: "queue", label: t("general.chat.queue") },
+              { value: "steer", label: t("general.chat.steer") },
             ]}
           />
         </SettingRow>

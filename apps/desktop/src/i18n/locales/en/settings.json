@@ -41,7 +41,11 @@
       "toolCalls": "Tool calls",
       "toolCallsDescription": "Cards show each step with its command and keep the steps open while the agent works. Compact folds every group into one muted line; click it for the steps.",
       "cards": "Cards",
-      "compact": "Compact"
+      "compact": "Compact",
+      "followUp": "While the agent works",
+      "followUpDescription": "Queue hands your message to the agent between two of its steps. Steer stops what it is doing and starts on your message right away. {{shortcut}} sends the other way.",
+      "queue": "Queue",
+      "steer": "Steer"
     },
     "summaries": {
       "title": "AI summaries",

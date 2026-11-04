@@ -334,6 +334,8 @@ export interface SendMessageInput {
   voice?: boolean;
   /** While the agent works in this chat, put the message in the chat's queue instead of starting a run of its own. */
   queue?: boolean;
+  /** While the agent works in this chat, stop what it is doing and start on this message right away instead of handing it over between two steps. */
+  steer?: boolean;
   /** Id of the queued message, chosen by the client so the queue can show it before the answer arrives. */
   queueId?: ID;
 }

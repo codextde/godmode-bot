@@ -108,7 +108,7 @@ function enqueue(conversationId: string, input: SendMessageInput): QueuedMessage
 
 /**
  * A message from the human: straight to the agent when the chat is idle, into the queue while the agent works or its run
- * is paused.
+ * is paused. With `steer`, the agent stops what it is doing and starts on the queue right away.
  */
 export async function submitMessage(conversationId: string, input: SendMessageInput): Promise<SendMessageOutcome> {
   const busy = activeRunForConversation(conversationId) !== null;
@@ -128,7 +128,10 @@ export async function submitMessage(conversationId: string, input: SendMessageIn
     }
     return { queued };
   }
-  if (busy) return { queued };
+  if (busy) {
+    if (input.steer) void sendQueuedNow(conversationId).catch(() => undefined);
+    return { queued };
+  }
   // Messages left over from before (a stopped run, a restart) go first, in the same turn. When the run can't start, the
   // message stays queued.
   const started = await startQueued(conversationId).catch(() => null);
