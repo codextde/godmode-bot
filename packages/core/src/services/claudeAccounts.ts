@@ -9,6 +9,10 @@
  * Runs use the default account (Godmode's, or the workspace's own choice). With auto-switch on, a run starts on another
  * account once the default is at the switch threshold, and a run that hits a usage limit continues right away on an
  * account with room left instead of waiting for the reset.
+ *
+ * The accounts and their tokens are shared with the other computers of a device group (remote/snapshot.ts, replica.ts).
+ * A refresh spends the refresh token, so the primary refreshes for the group; only while it is away a computer refreshes
+ * by itself (remote/claudeTokens.ts).
  */
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
@@ -22,10 +26,10 @@ import {
   type WorkspaceClaudeAccounts,
 } from "@godmode/shared";
 import { config } from "../config";
-import { all, deleteMeta, get, getMeta, insert, run, setMeta, update } from "../db";
+import { all, get, getMeta, insert, run, setMeta, update } from "../db";
 import { bus } from "../events/bus";
 import { logger } from "../log";
-import { badRequest, childEnv, newId, notFound, now, parseJson } from "../util";
+import { HttpError, badRequest, childEnv, newId, notFound, now, parseJson } from "../util";
 import { getAppSecret, isUnlocked, rememberSecret, setAppSecret } from "../vault/vault";
 import { claudeConfigDir } from "./claudeUpdate";
 import { claudeUsage, keychainService, parseCredentials, parseUsage } from "./claudeUsage";
@@ -33,6 +37,8 @@ import { resolveClaudeBinary, runCommand, stripAnsi, toolPath } from "./doctor";
 import { notify } from "./notifications";
 import { getSettings } from "./settings";
 import { forwardedClaudeLogin } from "../remote/claudeLogin";
+import { computerAway, keepPrimaryTokens, primaryConnected, pullFromSecondaries, tokensFromPrimary } from "../remote/claudeTokens";
+import { groupRole, isPrimary, isSecondary } from "../remote/group";
 
 const log = logger("claude-accounts");
 
@@ -53,7 +59,8 @@ const USAGE_WAIT_MS = 5_000;
 const LIMIT_FALLBACK_MS = 60 * 60_000;
 const LOGIN_TIMEOUT_MS = 10 * 60_000;
 const KEEPALIVE_MS = 30 * 60_000;
-const DEFAULT_META = "claude.accounts.default";
+/** A refresh whatever the token's lifetime: a run was refused with it. */
+const ALWAYS_MS = 365 * 24 * 60 * 60_000;
 const SYSTEM_LIMIT_META = "claude.accounts.system_limited";
 const URL_RE = /https:\/\/\S+/;
 const CANCELLED = "Cancelled.";
@@ -66,6 +73,7 @@ interface AccountRow {
   plan: string | null;
   limited_until: string | null;
   needs_sign_in: number;
+  is_default: number;
   last_used_at: string | null;
   created_at: string;
 }
@@ -102,7 +110,8 @@ function remember(block: OAuthBlock) {
   rememberSecret(block.refreshToken);
 }
 
-const secretKey = (id: string) => `claude_account:${id}`;
+const SECRET_PREFIX = "claude_account:";
+const secretKey = (id: string) => `${SECRET_PREFIX}${id}`;
 const usageCache = new Map<string, { at: number; value: ClaudeUsage }>();
 let usageRefresh: Promise<void> | null = null;
 let usageRefreshedAt = 0;
@@ -113,7 +122,7 @@ function changed() {
 }
 
 function rows(): AccountRow[] {
-  return all<AccountRow>("SELECT * FROM claude_accounts ORDER BY created_at");
+  return all<AccountRow>("SELECT * FROM claude_accounts ORDER BY created_at, id");
 }
 
 /** Whether accounts besides the system one exist: without them nothing here changes how runs start. */
@@ -152,9 +161,7 @@ function systemIdentity(): Identity {
 /* ------------------------------------------------------------------ */
 
 function defaultId(): string {
-  const id = getMeta(DEFAULT_META);
-  if (id && (id === SYSTEM_CLAUDE_ACCOUNT || get("SELECT id FROM claude_accounts WHERE id = ?", id))) return id;
-  return SYSTEM_CLAUDE_ACCOUNT;
+  return get<{ id: string }>("SELECT id FROM claude_accounts WHERE is_default = 1 ORDER BY created_at, id LIMIT 1")?.id ?? SYSTEM_CLAUDE_ACCOUNT;
 }
 
 function limitedUntil(row: AccountRow | null): string | null {
@@ -211,8 +218,8 @@ export function claudeAccountsState(): ClaudeAccountsState {
 
 export function setDefaultClaudeAccount(id: string): ClaudeAccount[] {
   if (id !== SYSTEM_CLAUDE_ACCOUNT && !get("SELECT id FROM claude_accounts WHERE id = ?", id)) throw notFound("Claude account");
-  if (id === SYSTEM_CLAUDE_ACCOUNT) deleteMeta(DEFAULT_META);
-  else setMeta(DEFAULT_META, id);
+  run("UPDATE claude_accounts SET is_default = 0 WHERE is_default = 1 AND id != ?", id);
+  run("UPDATE claude_accounts SET is_default = 1 WHERE id = ?", id);
   changed();
   return listClaudeAccounts();
 }
@@ -223,7 +230,6 @@ export function removeClaudeAccount(id: string): ClaudeAccount[] {
   run("DELETE FROM claude_accounts WHERE id = ?", id);
   setAppSecret(secretKey(id), null);
   usageCache.delete(id);
-  if (getMeta(DEFAULT_META) === id) deleteMeta(DEFAULT_META);
   // Workspaces that chose it: without it, the rest of their choice (or Godmode's) applies.
   for (const ws of all<{ id: string; claude_accounts: string }>("SELECT id, claude_accounts FROM workspaces WHERE claude_accounts IS NOT NULL")) {
     const next = cleanWorkspaceAccounts(parseJson<WorkspaceClaudeAccounts | null>(ws.claude_accounts, null));
@@ -232,6 +238,50 @@ export function removeClaudeAccount(id: string): ClaudeAccount[] {
   bus.changed("workspaces");
   changed();
   return listClaudeAccounts();
+}
+
+/**
+ * Both computers signed in the same subscription while apart: on every computer the older account stays, with whichever
+ * tokens were refreshed last (the others are likely spent).
+ */
+function mergeSameAccounts() {
+  if (!isUnlocked()) return;
+  const kept = new Map<string, AccountRow>();
+  for (const r of rows()) {
+    if (!r.email) continue;
+    const keep = kept.get(r.email);
+    if (!keep) {
+      kept.set(r.email, r);
+      continue;
+    }
+    const theirs = readTokens(r.id);
+    const ours = readTokens(keep.id);
+    if (theirs && (!ours || (ours.expiresAt ?? 0) < (theirs.expiresAt ?? 0))) {
+      setAppSecret(secretKey(keep.id), JSON.stringify(theirs));
+      run("UPDATE claude_accounts SET needs_sign_in = 0 WHERE id = ?", keep.id);
+    }
+    if (r.is_default) run("UPDATE claude_accounts SET is_default = 1 WHERE id = ?", keep.id);
+    run("UPDATE workspaces SET claude_accounts = replace(claude_accounts, ?, ?) WHERE instr(claude_accounts, ?) > 0", r.id, keep.id, r.id);
+    removeClaudeAccount(r.id);
+  }
+}
+
+/** Accounts or their tokens came from another computer of the group; new tokens are a new chance for a signed-out account. */
+export function claudeAccountsArrived(accounts: string[], secrets: string[]) {
+  const tokens = secrets.filter((key) => key.startsWith(SECRET_PREFIX)).map((key) => key.slice(SECRET_PREFIX.length));
+  if (!accounts.length && !tokens.length) return;
+  mergeSameAccounts();
+  for (const id of tokens) {
+    run("UPDATE claude_accounts SET needs_sign_in = 0 WHERE id = ?", id);
+    usageCache.delete(id);
+  }
+  changed();
+  void refreshClaudeUsage();
+}
+
+/** Leaving a device group: the tokens are the group's, and two computers on their own would spend them against each other. */
+export function forgetGroupClaudeAccounts() {
+  for (const r of rows()) removeClaudeAccount(r.id);
 }
 
 /** A workspace's choice with accounts that no longer exist left out; null when nothing is left. */
@@ -261,12 +311,12 @@ function readTokens(id: string): OAuthBlock | null {
   }
 }
 
-function markSignedOut(id: string, why: string) {
+function markSignedOut(id: string, why: string, quiet = false) {
   const row = get<AccountRow>("SELECT * FROM claude_accounts WHERE id = ?", id);
   if (!row || row.needs_sign_in) return;
   run("UPDATE claude_accounts SET needs_sign_in = 1 WHERE id = ?", id);
   log.warn(`Claude account ${id} needs a new sign-in: ${why}`);
-  notify("warning", `Sign in to ${row.email ?? "a Claude account"} again`, "Its sign-in ran out, so runs use your other Claude accounts for now.", "/settings/accounts");
+  if (!quiet) notify("warning", `Sign in to ${row.email ?? "a Claude account"} again`, "Its sign-in ran out, so runs use your other Claude accounts for now.", "/settings/accounts");
   changed();
 }
 
@@ -278,25 +328,57 @@ export async function noteClaudeAccountSignedOut(id: string): Promise<void> {
   if (id === SYSTEM_CLAUDE_ACCOUNT || id === FORWARDED_CLAUDE_ACCOUNT) return;
   const block = readTokens(id);
   if (!block) return;
-  await refreshOnce(id, block);
+  await refreshOnce(id, block, ALWAYS_MS);
 }
 
-function refreshOnce(id: string, block: OAuthBlock): Promise<OAuthBlock | null> {
+function refreshOnce(id: string, block: OAuthBlock, aheadMs: number): Promise<OAuthBlock | null> {
   let pending = refreshing.get(id);
   if (!pending) {
-    pending = refreshTokens(id, block).finally(() => refreshing.delete(id));
+    pending = refreshTokens(id, block, aheadMs).finally(() => refreshing.delete(id));
     refreshing.set(id, pending);
   }
   return pending;
 }
 
-async function refreshTokens(id: string, block: OAuthBlock): Promise<OAuthBlock | null> {
+function lastsFor(block: OAuthBlock, aheadMs: number): boolean {
+  return typeof block.expiresAt !== "number" || block.expiresAt - Date.now() > aheadMs;
+}
+
+async function refreshTokens(id: string, held: OAuthBlock, aheadMs: number): Promise<OAuthBlock | null> {
+  // The server spends the old refresh token: only refresh when the new one can be saved.
+  if (!isUnlocked()) return null;
+  let block = held;
+  let allPulled = true;
+  if (isSecondary()) {
+    const answer = await tokensFromPrimary(id, aheadMs);
+    if (answer === null) {
+      markSignedOut(id, "signed out on the primary", true);
+      return null;
+    }
+    if (answer) {
+      const next = JSON.parse(answer) as OAuthBlock;
+      // What this computer holds may be the newer one, not with the primary yet.
+      if ((next.expiresAt ?? 0) <= (block.expiresAt ?? 0)) return block;
+      keepPrimaryTokens(() => setAppSecret(secretKey(id), answer));
+      return readTokens(id);
+    }
+    // The primary is there but gave no answer: it may be spending this very token, so wait while this one still works.
+    if (primaryConnected() && lastsFor(block, MIN_LIFETIME_MS)) return block;
+  }
+  if (isPrimary()) {
+    allPulled = await pullFromSecondaries();
+    const latest = readTokens(id);
+    if (latest && latest.refreshToken !== block.refreshToken) {
+      if (lastsFor(latest, aheadMs)) return latest;
+      block = latest;
+    }
+    // A computer may still hold newer tokens, which would make this refresh token a spent one.
+    if (!allPulled && lastsFor(block, MIN_LIFETIME_MS)) return block;
+  }
   if (!block.refreshToken) {
     markSignedOut(id, "no refresh token");
     return null;
   }
-  // The server spends the old refresh token: only refresh when the new one can be saved.
-  if (!isUnlocked()) return null;
   try {
     const res = await fetch(TOKEN_URL, {
       method: "POST",
@@ -306,7 +388,8 @@ async function refreshTokens(id: string, block: OAuthBlock): Promise<OAuthBlock 
     });
     const body = (await res.json().catch(() => ({}))) as { access_token?: string; refresh_token?: string; expires_in?: number; error?: string };
     if (!res.ok) {
-      if (body.error === "invalid_grant") markSignedOut(id, "refresh token rejected");
+      // With a computer away that one may hold the newer tokens: they clear this when they arrive.
+      if (body.error === "invalid_grant") markSignedOut(id, "refresh token rejected", !allPulled || computerAway());
       else log.warn(`refreshing Claude account ${id} failed`, { status: res.status, error: body.error });
       return null;
     }
@@ -323,6 +406,7 @@ async function refreshTokens(id: string, block: OAuthBlock): Promise<OAuthBlock 
     // The old refresh token is spent now: the new one is saved before anything else.
     setAppSecret(secretKey(id), JSON.stringify(next));
     remember(next);
+    changed();
     return next;
   } catch (err) {
     log.warn(`refreshing Claude account ${id} failed`, { error: err instanceof Error ? err.message : String(err) });
@@ -336,9 +420,28 @@ async function accessToken(id: string, aheadMs = runAheadMs()): Promise<string |
   if (!block) return null;
   const expires = typeof block.expiresAt === "number" ? block.expiresAt : null;
   if (expires === null || expires - Date.now() > aheadMs) return block.accessToken;
-  const fresh = await refreshOnce(id, block);
+  const fresh = await refreshOnce(id, block, aheadMs);
   if (fresh && typeof fresh.expiresAt === "number" && fresh.expiresAt - Date.now() > MIN_LIFETIME_MS) return fresh.accessToken;
   return expires > Date.now() + MIN_LIFETIME_MS ? block.accessToken : null;
+}
+
+/**
+ * Another computer of the group asks for a working token of this account. Null when it is signed out here, undefined
+ * when this computer doesn't know it yet: then the one asking keeps what it has.
+ */
+export async function tokensForComputer(id: string, aheadMs: number): Promise<string | null | undefined> {
+  if (!isUnlocked()) throw new HttpError(423, "The vault is locked.", "vault_locked");
+  // Signed out here maybe only because the one asking has the newer tokens.
+  if (get("SELECT id FROM claude_accounts WHERE id = ? AND needs_sign_in = 1", id)) await pullFromSecondaries();
+  const row = get<AccountRow>("SELECT * FROM claude_accounts WHERE id = ?", id);
+  const block = row ? readTokens(id) : null;
+  if (!block) return undefined;
+  if (row!.needs_sign_in) return null;
+  if (lastsFor(block, aheadMs)) return JSON.stringify(block);
+  const fresh = await refreshOnce(id, block, aheadMs);
+  if (fresh) return JSON.stringify(fresh);
+  // The refresh failed for now (no network): what is left of this token is still better than nothing.
+  return get<AccountRow>("SELECT * FROM claude_accounts WHERE id = ? AND needs_sign_in = 0", id) ? JSON.stringify(block) : null;
 }
 
 /* ------------------------------------------------------------------ */
@@ -427,8 +530,10 @@ function usable(a: ClaudeAccount): boolean {
 
 /** The order in which a run tries the accounts it may use. */
 function ranked(candidates: ClaudeAccount[]): ClaudeAccount[] {
-  const list = candidates.filter(usable);
-  if (!getSettings().runner.accountAutoSwitch) return list;
+  // This computer's own login may never have been signed in: its accounts come from the rest of the group.
+  const signedOut = groupRole() ? candidates.filter((a) => a.system && a.needsSignIn) : [];
+  const list = candidates.filter((a) => usable(a) && !signedOut.includes(a));
+  if (!getSettings().runner.accountAutoSwitch) return [...list, ...signedOut];
   const threshold = getSettings().runner.accountSwitchPercent ?? 90;
   const room = (a: ClaudeAccount) => !a.limitedUntil && (binding(a.usage) ?? 0) < threshold;
   const [def, ...rest] = list;
@@ -439,7 +544,7 @@ function ranked(candidates: ClaudeAccount[]): ClaudeAccount[] {
   const open = list.filter((a) => !room(a) && !a.limitedUntil).sort(byUse);
   // All at their limit: the one that resets first.
   const limited = list.filter((a) => a.limitedUntil).sort((x, y) => Date.parse(x.limitedUntil!) - Date.parse(y.limitedUntil!));
-  return [...free, ...open, ...limited];
+  return [...free, ...open, ...limited, ...signedOut];
 }
 
 /**
@@ -682,7 +787,7 @@ function saveAccount(block: OAuthBlock, who: Identity, accountId: string | null)
   remember(block);
   const fields = { email: who.email, name: who.name, organization: who.organization, plan: block.subscriptionType ?? null, needs_sign_in: 0 };
   if (existing) update("claude_accounts", id, fields);
-  else insert("claude_accounts", { id, ...fields, limited_until: null, last_used_at: null, created_at: now() });
+  else insert("claude_accounts", { id, ...fields, is_default: 0, limited_until: null, last_used_at: null, created_at: now() });
   usageCache.delete(id);
   changed();
   return id;
@@ -699,6 +804,7 @@ export function startClaudeAccounts() {
   if (keepalive || config().role === "runner") return;
   keepalive = setInterval(() => {
     if (!isUnlocked()) return;
+    mergeSameAccounts();
     for (const r of rows()) if (!r.needs_sign_in) void accessToken(r.id, KEEPALIVE_AHEAD_MS).catch(() => null);
   }, KEEPALIVE_MS);
   keepalive.unref?.();

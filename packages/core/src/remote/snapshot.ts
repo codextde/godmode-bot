@@ -22,6 +22,7 @@ import { bus } from "../events/bus";
 import { logger } from "../log";
 import { listActiveRuns } from "../runner/runner";
 import { workingDirectoryProblem } from "../services/folders";
+import { claudeAccountsArrived } from "../services/claudeAccounts";
 import { applyRuntimeSettings } from "../services/runtime";
 import { auditSettings } from "../services/agentSettings";
 import { DEFAULT_SETTINGS, getSettings, resetSettingsCache } from "../services/settings";
@@ -66,6 +67,8 @@ export const SETUP_TABLES: TableSpec[] = [
   { table: "credentials", own: ["last_used_at"], entity: "credentials" },
   { table: "totp", own: ["last_used_at"], entity: "totp" },
   { table: "secrets", own: [], entity: "settings" },
+  // Its tokens are in `secrets`. How each computer gets on with the account stays its own.
+  { table: "claude_accounts", own: ["limited_until", "needs_sign_in", "last_used_at"], entity: "claude-accounts" },
   { table: "mcp_servers", own: [], entity: "mcp-servers" },
   { table: "composio_connections", own: [], entity: "composio" },
   { table: "api_tools", own: ["last_used_at"], entity: "api-tools" },
@@ -167,6 +170,9 @@ const DEVICE_SKIPPED = new Set(["vms"]);
  */
 export const LEAN_SKIPPED = new Set(["credentials", "totp", "secrets", "composio_connections", "api_tools", "ssh_servers", "browser_profiles", "vms"]);
 
+/** Only for the computers of a device group: a runner works with the login it is sent. */
+const DEVICE_ONLY = new Set(["claude_accounts"]);
+
 /** Sealed columns (`*_enc`) of the tables a lean copy keeps: left empty. */
 const SEALED = /_enc$/;
 
@@ -174,7 +180,7 @@ function collect(opts: SnapshotOptions = {}): Parts {
   const tables: Record<string, Row[]> = {};
   for (const spec of TABLES) {
     if (opts.device && DEVICE_SKIPPED.has(spec.table)) continue;
-    if (opts.lean && LEAN_SKIPPED.has(spec.table)) {
+    if ((opts.lean && LEAN_SKIPPED.has(spec.table)) || (!opts.device && DEVICE_ONLY.has(spec.table))) {
       tables[spec.table] = [];
       continue;
     }
@@ -576,6 +582,7 @@ async function apply(s: ConfigSnapshot): Promise<{ digest: string; warnings: str
   }
 
   if (!pending) setMeta(DIGEST_KEY, s.digest);
+  if (primary) claudeAccountsArrived([...touched.get("claude_accounts")!], [...touched.get("secrets")!]);
   for (const entity of changed) bus.changed(entity);
   for (const warning of warnings) log.warn(warning);
   log.info(`setup ${s.digest.slice(0, 12)} applied${pending ? " as far as agents with active runs allow" : ""}`);

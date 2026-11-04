@@ -31,7 +31,7 @@ const MIRRORED = [
   "agents",
   "credentials",
   "totp",
-  "secrets",
+  "secrets", "claude_accounts",
   "mcp_servers",
   "composio_connections",
   "api_tools",

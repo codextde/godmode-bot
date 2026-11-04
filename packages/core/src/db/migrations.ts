@@ -1982,4 +1982,16 @@ ALTER TABLE offers ADD COLUMN project_id TEXT;
 UPDATE agents SET permissions = json_set(permissions, '$.canManageAgents', json('true'), '$.allowDelegation', json('true')) WHERE json_valid(permissions);
 `,
   },
+  {
+    id: 120,
+    name: "claude_accounts_default",
+    sql: /* sql */ `
+-- On the row, so the default travels with the accounts to the other computers of a device group.
+ALTER TABLE claude_accounts ADD COLUMN is_default INTEGER NOT NULL DEFAULT 0;
+-- A secondary takes its primary's default.
+UPDATE claude_accounts SET is_default = 1 WHERE id = (SELECT value FROM meta WHERE key = 'claude.accounts.default')
+  AND NOT EXISTS (SELECT 1 FROM meta WHERE key = 'link.group.role' AND value = 'secondary');
+DELETE FROM meta WHERE key = 'claude.accounts.default';
+`,
+  },
 ];

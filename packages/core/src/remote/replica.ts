@@ -73,6 +73,7 @@ const STATE: Omit<ReplicaTable, "setup">[] = [
 
 /** VMs are machines of the computer they were made on. */
 const NOT_SHARED = new Set(["vms"]);
+const LATE_TABLES = new Set(["claude_accounts"]);
 
 
 let tablesCache: ReplicaTable[] | null = null;
@@ -186,6 +187,7 @@ export function ensureReplica(): void {
     });
   }
   if (getMeta("replica.backfilled") !== "1") backfill(tables);
+  noteLateTables(tables);
   // A crash in the middle of writing another computer's changes must not make this computer's own writes look like theirs.
   sql("UPDATE replica_ctx SET origin = NULL, at = NULL WHERE id = 1");
   ensured = getDb();
@@ -214,6 +216,28 @@ function backfill(tables: ReplicaTable[]): void {
     sql("UPDATE replica_seq SET n = ? WHERE id = 1", n);
     setMeta("replica.backfilled", "1");
   });
+}
+
+/**
+ * Tables that became shared after the backfill: each computer's rows were never copies, so they go to the others (as
+ * old as can be, so any real change wins over them).
+ */
+function noteLateTables(tables: ReplicaTable[]): void {
+  for (const t of tables.filter((x) => LATE_TABLES.has(x.table))) {
+    const done = `replica.backfilled.${t.table}`;
+    if (getMeta(done) === "1") continue;
+    tx(() => {
+      for (const r of all<Record<string, unknown>>(`SELECT ${t.key.map(q).join(", ")} FROM ${q(t.table)}`)) {
+        sql("UPDATE replica_seq SET n = n + 1 WHERE id = 1");
+        sql(
+          "INSERT OR IGNORE INTO replica_rows (tbl, pk, seq, at, deleted, origin) VALUES (?, ?, (SELECT n FROM replica_seq WHERE id = 1), '1970-01-01T00:00:00.000Z', 0, NULL)",
+          t.table,
+          t.key.map((k) => String(r[k])).join(KEY_SEP),
+        );
+      }
+      setMeta(done, "1");
+    });
+  }
 }
 
 /** Tests open several databases one after another. */
@@ -366,13 +390,14 @@ function keyParts(t: ReplicaTable, pk: string): string[] {
  * What `peer` hasn't seen: every change after `after` that didn't come from it. `setup: false` leaves the setup out (a
  * secondary gets that as the snapshot). Pulling after N also says the peer has everything up to N.
  */
-export function changesFor(peer: string, after: number, opts: { setup: boolean; limit?: number }): ReplicaPage {
+export function changesFor(peer: string, after: number, opts: { setup: boolean; limit?: number; table?: string }): ReplicaPage {
   ensureReplica();
   ackFrom(peer, after);
   const limit = Math.min(Math.max(opts.limit ?? PULL_LIMIT, 1), 2000);
   const rows = all<{ tbl: string; pk: string; seq: number; at: string; deleted: number; origin: string | null }>(
-    "SELECT tbl, pk, seq, at, deleted, origin FROM replica_rows WHERE seq > ? ORDER BY seq LIMIT ?",
+    `SELECT tbl, pk, seq, at, deleted, origin FROM replica_rows WHERE seq > ?${opts.table ? " AND tbl = ?" : ""} ORDER BY seq LIMIT ?`,
     after,
+    ...(opts.table ? [opts.table] : []),
     limit + 1,
   );
   const more = rows.length > limit;

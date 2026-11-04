@@ -5,14 +5,14 @@ import { join } from "node:path";
 import { SYSTEM_CLAUDE_ACCOUNT, type Agent } from "@godmode/shared";
 import { invocations, makeAgent, setupEnv, until, type TestEnv } from "./fixtures/runner-harness";
 import * as vault from "../src/vault/vault";
-import { getMeta, insert, run as sql } from "../src/db";
+import { get, getMeta, insert, run as sql } from "../src/db";
 import { updateAgent } from "../src/agents/service";
 import { getConversation, startChat } from "../src/services/conversations";
 import { listNotifications } from "../src/services/notifications";
 import { startPauses, stopPauses } from "../src/services/pauses";
 import { updateSettings } from "../src/services/settings";
 import { createWorkspace, getWorkspace, updateWorkspace } from "../src/services/workspaces";
-import { accountForRun, cleanWorkspaceAccounts, listClaudeAccounts, refreshClaudeUsage, removeClaudeAccount, setDefaultClaudeAccount } from "../src/services/claudeAccounts";
+import { accountForRun, claudeAccountsArrived, cleanWorkspaceAccounts, listClaudeAccounts, refreshClaudeUsage, removeClaudeAccount, setDefaultClaudeAccount } from "../src/services/claudeAccounts";
 import { getRun, waitForRun } from "../src/runner/runner";
 
 let env: TestEnv;
@@ -225,5 +225,56 @@ describe("Claude accounts", () => {
     expect(cleanWorkspaceAccounts({ ids: [], defaultId: "x" })).toBeNull();
     expect(cleanWorkspaceAccounts({ ids: ["nope"], defaultId: "nope" })).toBeNull();
     expect(cleanWorkspaceAccounts({ ids: [SYSTEM_CLAUDE_ACCOUNT, SYSTEM_CLAUDE_ACCOUNT], defaultId: "gone" })).toEqual({ ids: [SYSTEM_CLAUDE_ACCOUNT], defaultId: SYSTEM_CLAUDE_ACCOUNT });
+  });
+
+  test("the default travels with the account row", () => {
+    addAccount("cla_a", "a@example.com", "tok-a");
+    setDefaultClaudeAccount("cla_a");
+    expect(get<{ is_default: number }>("SELECT is_default FROM claude_accounts WHERE id = 'cla_a'")?.is_default).toBe(1);
+    setDefaultClaudeAccount(SYSTEM_CLAUDE_ACCOUNT);
+    expect(listClaudeAccounts().find((a) => a.isDefault)?.id).toBe(SYSTEM_CLAUDE_ACCOUNT);
+  });
+
+  test("tokens from another computer sign a signed-out account in again", () => {
+    addAccount("cla_a", "a@example.com", "tok-a");
+    sql("UPDATE claude_accounts SET needs_sign_in = 1 WHERE id = 'cla_a'");
+    claudeAccountsArrived([], ["anthropic_api_key"]);
+    expect(listClaudeAccounts().find((a) => a.id === "cla_a")?.needsSignIn).toBe(true);
+    claudeAccountsArrived([], ["claude_account:cla_a"]);
+    expect(listClaudeAccounts().find((a) => a.id === "cla_a")?.needsSignIn).toBe(false);
+  });
+
+  test("the same subscription signed in on two computers becomes the older account, with its uses", async () => {
+    addAccount("cla_old", "same@example.com", "tok-old", Date.now() + 9 * 3600_000);
+    sql("UPDATE claude_accounts SET created_at = '2026-01-01T00:00:00.000Z' WHERE id = 'cla_old'");
+    addAccount("cla_new", "same@example.com", "tok-new");
+    addAccount("cla_other", "other@example.com", "tok-other");
+    setDefaultClaudeAccount("cla_new");
+    const ws = createWorkspace({ name: "Merged accounts" });
+    updateWorkspace(ws.id, { claudeAccounts: { ids: ["cla_new", "cla_other"], defaultId: "cla_new" } });
+
+    claudeAccountsArrived(["cla_new"], []);
+
+    expect(listClaudeAccounts().map((a) => a.id)).toEqual([SYSTEM_CLAUDE_ACCOUNT, "cla_old", "cla_other"]);
+    expect(listClaudeAccounts().find((a) => a.isDefault)?.id).toBe("cla_old");
+    expect(getWorkspace(ws.id).claudeAccounts).toEqual({ ids: ["cla_old", "cla_other"], defaultId: "cla_old" });
+    expect(vault.getAppSecret("claude_account:cla_new")).toBeNull();
+    expect(vault.getAppSecret("claude_account:cla_old")).toContain("tok-old");
+  });
+
+  test("merging keeps the tokens refreshed last, also when the older account has none", () => {
+    addAccount("cla_old", "same@example.com", "tok-old", Date.now() + 3600_000);
+    sql("UPDATE claude_accounts SET created_at = '2026-01-01T00:00:00.000Z' WHERE id = 'cla_old'");
+    addAccount("cla_new", "same@example.com", "tok-new", Date.now() + 7200_000);
+    claudeAccountsArrived(["cla_new"], []);
+    expect(vault.getAppSecret("claude_account:cla_old")).toContain("tok-new");
+
+    addAccount("cla_bare", "bare@example.com", "tok-bare");
+    sql("UPDATE claude_accounts SET created_at = '2026-01-01T00:00:00.000Z' WHERE id = 'cla_bare'");
+    vault.setAppSecret("claude_account:cla_bare", null);
+    addAccount("cla_full", "bare@example.com", "tok-full");
+    claudeAccountsArrived(["cla_full"], []);
+    expect(listClaudeAccounts().filter((a) => a.email === "bare@example.com").map((a) => a.id)).toEqual(["cla_bare"]);
+    expect(vault.getAppSecret("claude_account:cla_bare")).toContain("tok-full");
   });
 });

@@ -13,6 +13,7 @@ import { storeMemoryBase } from "../../remote/runners";
 import { MAX_UPDATE_BYTES, applyUpdate, downloadUpdate, receiveChunk } from "../../remote/selfUpdate";
 import { applySnapshot, type ConfigSnapshot } from "../../remote/snapshot";
 import { audit } from "../../services/audit";
+import { tokensForComputer } from "../../services/claudeAccounts";
 import { installUpdates } from "../../services/maintenance";
 import { checkUpdates } from "../../services/updates";
 import { resetDoctorCache, runCommand, toolPath } from "../../services/doctor";
@@ -173,11 +174,20 @@ export function registerLinkRoutes(app: Hono): void {
     return c.json(changesFor(peer, Number.isFinite(after) && after >= 0 ? after : 0, { setup: c.req.query("setup") !== "0", ...(limit > 0 ? { limit } : {}) }));
   });
 
+  app.get("/api/link/replica/claude-accounts", (c) => c.json(changesFor(groupPeer(c), 0, { setup: true, table: "claude_accounts" })));
+
   app.post("/api/link/replica/ack", async (c) => {
     const peer = groupPeer(c);
     const { after } = await body(c, z.object({ after: z.number().int().min(0) }));
     ackFrom(peer, after);
     return c.json({ ok: true as const });
+  });
+
+  // A working token of a Claude account: the primary refreshes for the group (remote/claudeTokens.ts).
+  app.post("/api/link/claude-accounts/:id/tokens", async (c) => {
+    groupPeer(c);
+    const { aheadMs } = await body(c, z.object({ aheadMs: z.number().int().min(0) }));
+    return c.json({ tokens: await tokensForComputer(c.req.param("id"), aheadMs) });
   });
 
   // Chats of this computer that the calling one took over while this one was away: they live there now.
