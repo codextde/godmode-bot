@@ -768,15 +768,16 @@ function ToolStep({
     </span>
   );
   // Keyed by content: streaming deltas re-create `block` on every token, but the edit itself rarely changes.
+  const pictureOnly = hasPicture(block) && !failed && !(block.result ?? "").trim();
   const editKey = FILE_EDIT_TOOLS.has(block.name) ? JSON.stringify(block.input) : "";
   const edit = useMemo(() => (editKey ? fileEditOf(block.name, JSON.parse(editKey)) : null), [editKey, block.name]);
 
   const header = (
     <button
       type="button"
-      onClick={() => setOpen((o) => !o)}
-      aria-expanded={open}
-      className={cn("group flex w-full items-center gap-2.5 text-left", standalone ? "px-3 py-2.5" : "py-1.5")}
+      onClick={pictureOnly ? undefined : () => setOpen((o) => !o)}
+      aria-expanded={pictureOnly ? undefined : open}
+      className={cn("group flex w-full items-center gap-2.5 text-left", standalone ? "px-3 py-2.5" : "py-1.5", pictureOnly && "cursor-default")}
     >
       {standalone && iconEl}
       <span className="min-w-0 flex-1">
@@ -794,14 +795,14 @@ function ToolStep({
       {edit && !running && !failed && !easy && <DiffStat rows={edit.rows} />}
       {failed && <span className="shrink-0 text-[11px] font-medium text-destructive">{easy ? t("blocks.didntWork") : t("common:status.failed")}</span>}
       {incomplete && <span className="shrink-0 text-[11px] text-muted-foreground">{easy ? t("blocks.didntFinish") : t("blocks.noResult")}</span>}
-      <ChevronRight className={cn("size-4 shrink-0 text-muted-foreground opacity-60 transition group-hover:opacity-100", open && "rotate-90")} />
+      {!pictureOnly && <ChevronRight className={cn("size-4 shrink-0 text-muted-foreground opacity-60 transition group-hover:opacity-100", open && "rotate-90")} />}
     </button>
   );
 
   const body = (
     <>
       {hasPicture(block) && <Screenshot picture={block} alt={meta.title} />}
-      <Collapse open={open}>{easy ? <EasyStepDetails block={block} edit={edit} /> : <ToolDetails block={block} edit={edit} />}</Collapse>
+      {!pictureOnly && <Collapse open={open}>{easy ? <EasyStepDetails block={block} edit={edit} /> : <ToolDetails block={block} edit={edit} />}</Collapse>}
     </>
   );
 
@@ -809,7 +810,7 @@ function ToolStep({
     return (
       <div className={cn("rounded-xl border bg-card shadow-card transition", failed && "border-destructive/30", running && "full-motion:glow-border")}>
         {header}
-        <div className={cn((block.image || open) && "px-3 pb-3")}>{body}</div>
+        <div className={cn((hasPicture(block) || open) && "px-3 pb-3")}>{body}</div>
       </div>
     );
   }
