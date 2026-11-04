@@ -45,7 +45,9 @@
       "followUp": "While the agent works",
       "followUpDescription": "Queue hands your message to the agent between two of its steps. Steer stops what it is doing and starts on your message right away. {{shortcut}} sends the other way.",
       "queue": "Queue",
-      "steer": "Steer"
+      "steer": "Steer",
+      "mcpApps": "MCP app views",
+      "mcpAppsDescription": "When a tool of your MCP servers comes with its own view (MCP Apps), show it in the chat, ready to click. Tools that change data ask first."
     },
     "summaries": {
       "title": "AI summaries",

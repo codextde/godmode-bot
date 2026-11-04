@@ -25,6 +25,8 @@ import { cn } from "@/lib/utils";
 import { EASE_OUT, useReduceAnimations } from "@/lib/motion";
 import { useLive } from "@/stores/live";
 import { useUi } from "@/stores/ui";
+import { useChatScope } from "./local-files";
+import { McpAppSlot, mcpServerOf } from "./mcp-app-view";
 import { intlLocale, t as translate } from "@/i18n";
 import { useLocale } from "@/i18n/language";
 import { Markdown } from "./markdown";
@@ -234,7 +236,7 @@ export function MessageBlocks({
           case "question":
             return <QuestionCard key={item.key} question={viewOfBlock(item.block)} streaming={streaming && item.block.status === "open"} />;
           case "tools":
-            return <ToolGroup key={item.key} steps={item.steps} ctx={ctx} streaming={active} />;
+            return <ToolItems key={item.key} steps={item.steps} ctx={ctx} streaming={active} />;
           case "missing-login":
             return <MissingLoginCard key={item.key} block={item.block} />;
           case "delegate":
@@ -492,6 +494,24 @@ function summarize(metas: ToolMeta[]): string {
   const parts = [...counts].map(([k, count]) => (k === "plan" ? translate("chat:blocks.summary.plan") : translate(`chat:blocks.summary.${k}`, { count })));
   const text = new Intl.ListFormat(intlLocale(), { type: "conjunction" }).format(parts);
   return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+function ToolItems({ steps, ctx, streaming }: { steps: Step[]; ctx: ToolContext; streaming: boolean }) {
+  const enabled = useUi((s) => s.mcpApps);
+  const { conversationId, runnerId } = useChatScope();
+  const apps =
+    enabled && conversationId && !runnerId
+      ? steps.flatMap((s) => (s.type === "tool" && s.block.result !== undefined && !s.block.isError && mcpServerOf(s.block.name) ? [s.block] : []))
+      : [];
+  if (!apps.length) return <ToolGroup steps={steps} ctx={ctx} streaming={streaming} />;
+  return (
+    <>
+      <ToolGroup steps={steps} ctx={ctx} streaming={streaming} />
+      {apps.map((b) => (
+        <McpAppSlot key={b.id} conversationId={conversationId!} block={b} />
+      ))}
+    </>
+  );
 }
 
 function ToolGroup(props: { steps: Step[]; ctx: ToolContext; streaming: boolean }) {

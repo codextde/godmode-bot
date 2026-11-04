@@ -21,7 +21,7 @@ const framePolicy = (filesFrom: string) => [
   "form-action 'none'",
 ].join("; ");
 
-const FRAME_HTML = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><script>
+export const FRAME_HTML = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><script>
 (function () {
   window.addEventListener("message", function (e) {
     if (e.source !== window.parent) return;

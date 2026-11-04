@@ -366,6 +366,10 @@ const RULES: [methods: string, path: string, rule: Rule][] = [
   ["POST", "/api/human-tasks/:id/close", A],
   // The sandbox page is framed by the app on the computer; the cloud never frames a computer's pages.
   ["GET", "/api/artifacts/frame", refused(COMPUTER_ONLY)],
+  ["GET", "/api/mcp-apps/frame", refused(COMPUTER_ONLY)],
+  ["GET", "/api/conversations/:id/mcp-app", refused(COMPUTER_ONLY)],
+  ["POST", "/api/conversations/:id/mcp-app/call", refused(COMPUTER_ONLY)],
+  ["POST", "/api/conversations/:id/mcp-app/read", refused(COMPUTER_ONLY)],
   ["GET", "/api/artifact-files/:key/:name", refused(COMPUTER_ONLY)],
   ["POST", "/api/artifacts/:id/files/:name/open", refused(COMPUTER_ONLY)],
   ["POST", "/api/artifacts/:id/files/:name/reveal", refused(COMPUTER_ONLY)],

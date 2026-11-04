@@ -13,6 +13,8 @@ import { registerCardRoutes } from "./routes/cards";
 import { registerWorkspaceRoutes } from "./routes/workspaces";
 import { registerAgentRoutes } from "./routes/agents";
 import { registerChatRoutes } from "./routes/chat";
+import { registerMcpAppRoutes } from "./routes/mcpApps";
+import { serveMcpAppFrame } from "./mcpAppFrame";
 import { registerMissingLoginRoutes } from "./routes/missingLogins";
 import { registerMemoryRoutes } from "./routes/memory";
 import { registerQuestionRoutes } from "./routes/questions";
@@ -116,6 +118,10 @@ export function createApp() {
     await next();
     c.res.headers.delete("X-Frame-Options");
   });
+  app.use("/api/mcp-apps/frame", async (c, next) => {
+    await next();
+    c.res.headers.delete("X-Frame-Options");
+  });
   app.use(`${ARTIFACT_FILES_PATH}/*`, async (c, next) => {
     await next();
     c.res.headers.delete("X-Frame-Options");
@@ -165,6 +171,7 @@ export function createApp() {
   app.get("/api/health", (c) => c.json({ ok: true, name: "godmode-bot" }));
   // The sandbox artifacts run in: a page without data, framed by the app.
   app.get("/api/artifacts/frame", serveArtifactFrame);
+  app.get("/api/mcp-apps/frame", serveMcpAppFrame);
   // What the sandbox shows of an artifact's files: it has no login, the secret in the path is the credential.
   app.get(`${ARTIFACT_FILES_PATH}/:key/:name`, async (c) => {
     const here = await serveArtifactFile(c.req.param("key"), c.req.param("name"), { range: c.req.header("range"), ifNoneMatch: c.req.header("if-none-match") });
@@ -198,6 +205,7 @@ export function createApp() {
   registerWorkspaceRoutes(app);
   registerAgentRoutes(app);
   registerChatRoutes(app);
+  registerMcpAppRoutes(app);
   registerMissingLoginRoutes(app);
   registerMemoryRoutes(app);
   registerQuestionRoutes(app);

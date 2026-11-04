@@ -1,4 +1,4 @@
-import type { DeviceGroup, DeviceGroupPatch, DeviceInvite, HandoffInput, HandoffResult, JoinGroupInput, MoveChatInput, RetireRunnerInput, RetireRunnerResult,
+import type { McpApp, DeviceGroup, DeviceGroupPatch, DeviceInvite, HandoffInput, HandoffResult, JoinGroupInput, MoveChatInput, RetireRunnerInput, RetireRunnerResult,
   AndroidAssignInput,
   SearchResults,
   HexStatus,
@@ -716,6 +716,9 @@ export const api = {
     move: (id: string, input: MoveChatInput) => post<Conversation>(`/api/conversations/${id}/move`, input),
     /** While the agent works in the chat the message joins its queue (`queued`) instead of starting a run. */
     send: (id: string, input: SendMessageInput) => post<SendMessageOutcome>(`/api/conversations/${id}/messages`, { ...input, queue: true }),
+    mcpApp: (id: string, tool: string) => get<{ app: McpApp | null }>(`/api/conversations/${id}/mcp-app`, { tool }),
+    mcpAppCall: (id: string, input: { server: string; name: string; arguments: Record<string, unknown> }) => post<unknown>(`/api/conversations/${id}/mcp-app/call`, input),
+    mcpAppRead: (id: string, input: { server: string; uri: string }) => post<unknown>(`/api/conversations/${id}/mcp-app/read`, input),
     queue: {
       edit: (id: string, messageId: string, content: string) => patch<QueuedMessage>(`/api/conversations/${id}/queue/${messageId}`, { content }),
       remove: (id: string, messageId: string) => del<{ ok: true }>(`/api/conversations/${id}/queue/${messageId}`),
