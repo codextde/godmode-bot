@@ -12,7 +12,7 @@ import type { Agent } from "@godmode/shared";
 import { ANDROID_MCP_NAME, BROWSER_MCP_NAME, COMPUTER_MCP_NAME, CUA_MCP_NAME, GODMODE_MCP_NAME, SSH_MCP_NAME, VM_MCP_NAME } from "@godmode/shared";
 import { config, isLoopbackHost } from "../config";
 import { browserMcpServer } from "../browser/manager";
-import { mcpServersForAgent } from "../integrations/mcpServers";
+import { agentInChatWorkspace, mcpServersForAgent } from "../integrations/mcpServers";
 import { guestBrowserServer, guestCuaServer } from "../vm/guest";
 import { getSettings } from "../services/settings";
 import { leanRunner } from "../config";
@@ -56,6 +56,8 @@ export async function buildMcpConfig(
     ssh?: boolean;
     /** The run may control Android phones. */
     android?: boolean;
+    /** The workspace the chat works in: a global agent also gets its MCP servers. */
+    workspaceId?: string | null;
   } = {},
 ): Promise<McpConfigFile> {
   const servers: Record<string, McpServerJson> = {};
@@ -66,7 +68,7 @@ export async function buildMcpConfig(
   }
 
   try {
-    const external = await mcpServersForAgent(agent);
+    const external = await mcpServersForAgent(agentInChatWorkspace(agent, opts.workspaceId ?? null));
     for (const [name, server] of Object.entries(external)) {
       // "cua" is only taken in a VM run (the human may have their own Cua Driver server for runs on this computer).
       if ([GODMODE_MCP_NAME, BROWSER_MCP_NAME, COMPUTER_MCP_NAME, VM_MCP_NAME, SSH_MCP_NAME, ANDROID_MCP_NAME].includes(name) || (opts.vm && name === CUA_MCP_NAME)) {

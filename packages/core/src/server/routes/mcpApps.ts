@@ -1,10 +1,15 @@
 import type { Hono } from "hono";
 import { getAgent } from "../../agents/service";
 import { appForTool, callAppTool, readAppResource } from "../../integrations/mcpApps";
+import { agentInChatWorkspace } from "../../integrations/mcpServers";
 import { getConversationSummary } from "../../services/conversations";
+import { projectOfChat, workspaceOfChat } from "../../services/projects";
 import { body, z } from "../validate";
 
-const agentOf = (conversationId: string) => getAgent(getConversationSummary(conversationId).agentId);
+const agentOf = (conversationId: string) => {
+  const agent = getAgent(getConversationSummary(conversationId).agentId);
+  return agentInChatWorkspace(agent, workspaceOfChat(conversationId, agent, projectOfChat(conversationId, agent)));
+};
 
 const callSchema = z.object({
   server: z.string().min(1).max(200),
