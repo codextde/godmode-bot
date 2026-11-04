@@ -1,7 +1,7 @@
 # Godmode website
 
 The sales site for Godmode — https://usegodmode.com. Astro 7 on Cloudflare Workers, Stripe Checkout for
-Godmode Pro (free for 14 days in the app, then $39/month or $348/year), a D1 database for orders and cookieless analytics, and an admin dashboard.
+Godmode Pro (free for 14 days in the app, then €79/month private or €499/month company), a D1 database for orders and cookieless analytics, and an admin dashboard.
 
 ```
 src/config/site.ts        prices, guarantee, links, legal details, tracking IDs — edit here first
@@ -67,9 +67,9 @@ The site runs live on the Codext GmbH Stripe account (restricted key "Godmode We
 ## Plans
 
 Prices, the trial length and the guarantee live in `src/config/site.ts`; the Stripe prices are found by lookup key
-(`godmode_pro_monthly_usd`, `godmode_pro_yearly_usd`). Lifetime is no longer sold: `/api/checkout?plan=lifetime`
+(`godmode_private_monthly_eur`, `godmode_company_monthly_eur`). Lifetime is no longer sold: `/api/checkout?plan=lifetime`
 answers 410 / redirects to pricing, and `pnpm stripe:setup` deactivates the old lifetime prices (never deletes them).
-Licenses sold earlier (lifetime, and the $50 monthly plan, whose price stays active so it keeps renewing) stay valid.
+Licenses sold earlier (lifetime, and the old $50, $39 and $348 plans, whose prices stay active so they keep renewing) stay valid.
 Free licenses can be issued from `/admin` and don't count toward revenue.
 
 ## Abandoned checkouts

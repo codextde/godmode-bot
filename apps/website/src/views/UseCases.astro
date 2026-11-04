@@ -5,14 +5,13 @@ import Footer from '@/components/Footer.astro';
 import Icon from '@/components/ui/Icon.astro';
 import Words from '@/components/ui/Words.astro';
 import DownloadButton from '@/components/ui/DownloadButton.astro';
-import { PRICING } from '@/config/site';
+import { PRICING, priceLine } from '@/config/site';
 import { href, langOf } from '@/i18n';
 import { GROUPS, HOW, type How } from './use-cases-data';
 
 const lang = langOf(Astro.url);
 const total = GROUPS.reduce((n, g) => n + g.items.length, 0);
 const { freeDays } = PRICING;
-const { monthly, yearly } = PRICING.plans;
 
 const t = {
   en: {
@@ -31,7 +30,7 @@ const t = {
     playbookTitle: '25 ready-made automations',
     playbookBody: 'Tasks that run on a schedule. Copy, paste, done.',
     ctaTitle: 'Which one is first for you?',
-    ctaBody: `Free for ${freeDays} days. No card, no sign-up. Then $${monthly.price}/month, or $${yearly.perMonth}/month billed yearly.`,
+    ctaBody: `Free for ${freeDays} days. No card, no sign-up. Then ${priceLine('en')}.`,
   },
   de: {
     title: `${total} Alltagsaufgaben für deinen KI-Kollegen`,
@@ -49,7 +48,7 @@ const t = {
     playbookTitle: '25 fertige Automationen',
     playbookBody: 'Aufgaben, die nach Zeitplan laufen. Kopieren, einfügen, fertig.',
     ctaTitle: 'Womit fängst du an?',
-    ctaBody: `${freeDays} Tage kostenlos. Ohne Karte, ohne Anmeldung. Danach $${monthly.price}/Monat oder $${yearly.perMonth}/Monat bei jährlicher Zahlung.`,
+    ctaBody: `${freeDays} Tage kostenlos. Ohne Karte, ohne Anmeldung. Danach ${priceLine('de')}.`,
   },
 }[lang];
 ---

@@ -1441,6 +1441,8 @@
       "expired": "Ended"
     },
     "plan": {
+      "private": "Private",
+      "company": "Company",
       "monthly": "Monthly",
       "yearly": "Yearly",
       "lifetime": "Lifetime"

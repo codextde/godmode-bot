@@ -25,8 +25,8 @@ async function readInput(request: Request): Promise<Record<string, string>> {
   return Object.fromEntries([...form.entries()].map(([k, v]) => [k, typeof v === 'string' ? v : '']));
 }
 
-/** Unknown or missing plans fall back to the monthly trial. */
-const planFrom = (v: unknown): Plan => (isPlan(v) ? v : 'monthly');
+/** Unknown or missing plans, and the old monthly and yearly links, fall back to Private. */
+const planFrom = (v: unknown): Plan => (isPlan(v) ? v : 'private');
 
 /** Plans that were sold once and aren't any more (old app builds and links may still ask for them). */
 const RETIRED = new Set(['lifetime']);
@@ -41,7 +41,7 @@ const isBot = (request: Request) => BOTS.test(request.headers.get('user-agent') 
 
 export const POST: APIRoute = async ({ request, url, cookies }) => {
   const wantsJson = (request.headers.get('accept') ?? '').includes('application/json');
-  let plan: Plan = 'monthly';
+  let plan: Plan = 'private';
   if (isBot(request)) {
     return wantsJson
       ? Response.json({ error: 'not_a_browser' }, { status: 403 })
@@ -129,7 +129,7 @@ export const POST: APIRoute = async ({ request, url, cookies }) => {
           }
         : {}),
       // Shown in the customer portal, so subscribers can always find their key there.
-      description: `Godmode Pro${founding ? ' Founding' : ''} — ${plan === 'yearly' ? 'Yearly' : 'Monthly'} · License ${licenseKey}`,
+      description: `${PRICING.plans[plan].name}${founding ? ' Founding' : ''} · License ${licenseKey}`,
     };
 
     const session = await stripe().checkout.sessions.create(params);
@@ -150,7 +150,7 @@ export const POST: APIRoute = async ({ request, url, cookies }) => {
   }
 };
 
-// A plain GET (e.g. a link in an ad, an email or the app) starts checkout too: /api/checkout?plan=yearly.
+// A plain GET (e.g. a link in an ad, an email or the app) starts checkout too: /api/checkout?plan=company.
 // Add trial=0 to charge today without a Stripe trial: website buttons do, and the app's end-of-free-period screen should.
 // Link previewers and scanners get the pricing section instead of a Stripe session.
 export const GET: APIRoute = async (ctx) => {

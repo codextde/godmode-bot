@@ -54,15 +54,15 @@ describe('composeFree', () => {
   test('the reminder counts the days left and links a checkout without a card trial', () => {
     const mail = composeFree('free_ending', lead({ free_ends_at: NOW + 2 * DAY }), 'https://usegodmode.com', unsub, NOW);
     expect(mail.subject).toBe('Your free Godmode ends in 2 days');
-    expect(mail.text).toContain('https://usegodmode.com/api/checkout?plan=monthly&trial=0&utm_source=email&utm_medium=free_ending');
-    expect(mail.text).toContain('$39 a month, or $29 a month billed yearly');
+    expect(mail.text).toContain('https://usegodmode.com/api/checkout?plan=private&trial=0&utm_source=email&utm_medium=free_ending');
+    expect(mail.text).toContain('€79/month for private use or €499/month for companies');
     expect(composeFree('free_ending', lead({ free_ends_at: NOW + 3_600_000 }), 'https://usegodmode.com', unsub, NOW).subject).toBe('Your free Godmode ends tomorrow');
   });
 
-  test('German for locale de, and the ended note offers yearly too', () => {
+  test('German for locale de, and the ended note offers the company plan too', () => {
     const mail = composeFree('free_ended', lead({ locale: 'de', free_ends_at: NOW - DAY }), 'https://usegodmode.com', unsub, NOW);
     expect(mail.subject).toBe('Deine Agenten warten auf dich');
     expect(mail.text).toContain('Nichts wurde gelöscht');
-    expect(mail.text).toContain('plan=yearly&trial=0&utm_source=email&utm_medium=free_ended');
+    expect(mail.text).toContain('plan=company&trial=0&utm_source=email&utm_medium=free_ended');
   });
 });

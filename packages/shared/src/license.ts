@@ -35,15 +35,12 @@ export function licenseKeyFromDeepLink(link: string): string | null {
 /** How long a new install without a key runs free. */
 export const LICENSE_FREE_DAYS = 14;
 
-/** Godmode Pro's prices in USD, as sold on usegodmode.com (keep in step with the site's PRICING). */
+/** Monthly prices in EUR, as sold on usegodmode.com (keep in step with the site's PRICING). */
 export const LICENSE_PRICING = {
   guaranteeDays: 14,
-  monthly: { perMonth: 39, price: 39 },
-  yearly: { perMonth: 29, price: 348 },
+  private: { price: 79 },
+  company: { price: 499 },
 } as const;
-
-/** What the yearly plan saves against twelve months, in percent (rounded down). */
-export const LICENSE_YEARLY_SAVINGS = Math.floor((1 - LICENSE_PRICING.yearly.price / (LICENSE_PRICING.monthly.price * 12)) * 100);
 
 /** GET /api/license/usage: what Godmode did on this computer so far, for the end of the free trial. */
 export interface LicenseUsage {
@@ -70,7 +67,7 @@ export interface LicenseUsage {
  */
 export type LicenseStatus = "active" | "trial" | "past_due" | "grace" | "unverified" | "missing" | "invalid" | "expired";
 
-export type LicensePlan = "monthly" | "yearly" | "lifetime";
+export type LicensePlan = "private" | "company" | "monthly" | "yearly" | "lifetime";
 
 /** Why an `expired` key stopped working: its trial ended, the subscription was cancelled, a payment failed for good, or it was refunded. */
 export type LicenseEndReason = "trial_ended" | "canceled" | "payment_failed" | "refunded";

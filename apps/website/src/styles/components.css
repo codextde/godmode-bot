@@ -524,8 +524,6 @@ html.menu-open { overflow: hidden; }
 .seg input { position: absolute; opacity: 0; pointer-events: none; }
 .seg input:checked + label { color: var(--text); background: var(--surface); box-shadow: var(--shadow-sm), 0 0 0 1px var(--line) inset; }
 .seg input:focus-visible + label { outline: 2px solid var(--brand); outline-offset: 2px; }
-[data-price-card]:has(input[value="yearly"]:checked) [data-show="monthly"],
-[data-price-card]:has(input[value="monthly"]:checked) [data-show="yearly"] { display: none; }
 
 /* Final CTA ---------------------------------------------------------------------------------- */
 .final-glow {

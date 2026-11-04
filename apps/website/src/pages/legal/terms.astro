@@ -2,7 +2,7 @@
 import Legal from '@/layouts/Legal.astro';
 import { COUPON, FOUNDING, LEGAL, PRICING, SITE } from '@/config/site';
 
-const { monthly, yearly } = PRICING.plans;
+const { private: privatePlan, company } = PRICING.plans;
 ---
 
 <Legal title="Terms of sale & license" description="Terms for buying and using Godmode — free trial and Godmode Pro subscriptions.">
@@ -21,12 +21,12 @@ const { monthly, yearly } = PRICING.plans;
   <h2>2. Plans</h2>
   <ul>
     <li>
-      <strong>Godmode Pro, monthly</strong> — ${monthly.price} per month, billed in advance and renewing automatically every
-      month until cancelled.
+      <strong>Godmode Private</strong> — €{privatePlan.price} per month, billed in advance and renewing automatically every
+      month until cancelled. For personal, non-commercial use.
     </li>
     <li>
-      <strong>Godmode Pro, yearly</strong> — ${yearly.price} per year, billed in advance and renewing automatically every
-      year until cancelled.
+      <strong>Godmode Company</strong> — €{company.price} per month, billed in advance and renewing automatically every
+      month until cancelled. For business and professional use by one company, on all of its Macs.
     </li>
   </ul>
   <p>
@@ -35,10 +35,10 @@ const { monthly, yearly } = PRICING.plans;
   </p>
   <p>
     <strong>Billing.</strong> A subscription started with “billed today” at checkout is charged right away for the first
-    month or year and renews automatically after that. Checkout links that include a free trial start with a free
+    month and renews automatically after that. Checkout links that include a free trial start with a free
     {PRICING.trialDays}-day trial: you add a payment method, nothing is charged during the trial, and if you cancel before
     it ends you pay nothing. If you don’t cancel, your subscription starts automatically when the trial ends and the first
-    month or year is charged then. Checkout shows which of the two applies before you pay.
+    month is charged then. Checkout shows which of the two applies before you pay.
   </p>
   <p>
     <strong>Cancelling a subscription.</strong> You can cancel anytime in the billing portal or by email. Access continues
@@ -46,11 +46,11 @@ const { monthly, yearly } = PRICING.plans;
     period, except under the money-back guarantee below.
   </p>
   <p>
-    Lifetime licenses sold earlier stay valid on the terms that applied when they were bought, as does the earlier $50
-    monthly plan.
+    Lifetime licenses sold earlier stay valid on the terms that applied when they were bought, as do the earlier $50
+    monthly, $39 monthly and $348 yearly plans.
   </p>
   <p>
-    Prices are in US dollars. Applicable sales tax or VAT is shown at checkout. Payment is processed by Stripe.
+    Prices are in euros. Applicable sales tax or VAT is shown at checkout. Payment is processed by Stripe.
   </p>
 
   <h2>3. License</h2>

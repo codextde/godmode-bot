@@ -8,14 +8,13 @@ import Logo from '@/components/ui/Logo.astro';
 import Words from '@/components/ui/Words.astro';
 import CheckoutButton from '@/components/ui/CheckoutButton.astro';
 import DownloadButton from '@/components/ui/DownloadButton.astro';
-import { PRICING, SITE } from '@/config/site';
+import { PRICING, SITE, priceLine } from '@/config/site';
 import icon from '@/assets/showcase/radiowelle/icon.png';
 import player from '@/assets/showcase/radiowelle/01-player.png';
 import home from '@/assets/showcase/radiowelle/02-home.png';
 import search from '@/assets/showcase/radiowelle/03-search.png';
 import library from '@/assets/showcase/radiowelle/04-library.png';
 
-const { monthly, yearly } = PRICING.plans;
 
 const prompt = [
   'fully develop and publish the App to AppStore and PlayStore, it should be the best Radio App on the Market mainly German Radio but can be used worldwide with multilanguage support and the most common radio stations in the contry already included, start with germany and then we can do the rest later',
@@ -236,13 +235,13 @@ const faqs = [
         <div class="card p-8 text-center sm:p-14" data-reveal>
           <h2 class="mx-auto max-w-[18ch] text-[clamp(28px,4vw,48px)] leading-[1.05] font-semibold tracking-[-0.04em]">What would you ship with one message?</h2>
           <p class="mx-auto mt-4 max-w-[560px] text-muted">
-            Free for {PRICING.freeDays} days, no card. Then ${monthly.price}/month, or ${yearly.perMonth}/month billed yearly.
+            Free for {PRICING.freeDays} days, no card. Then {priceLine('en')}.
           </p>
           <div class="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
             <DownloadButton source="showcase_radiowelle_final" />
           </div>
           <p class="mt-5 text-[13.5px] text-muted">
-            <CheckoutButton plan="monthly" label="Already sure? Subscribe now" source="showcase_radiowelle_final" variant="link" />
+            <CheckoutButton plan="private" label="Already sure? Subscribe now" source="showcase_radiowelle_final" variant="link" />
           </p>
         </div>
       </div>

@@ -2,10 +2,9 @@
 import Words from '../ui/Words.astro';
 import WaitlistForm from '../ui/WaitlistForm.astro';
 import Icon from '../ui/Icon.astro';
-import { PRICING, SETUP, SITE, setupPrice } from '@/config/site';
+import { PRICING, SETUP, SITE, priceLine, setupPrice } from '@/config/site';
 import { href, langOf } from '@/i18n';
 
-const { monthly, yearly } = PRICING.plans;
 const lang = langOf(Astro.url);
 type Item = { key: string; q: string; a: string; waitlist?: boolean; link?: [string, string] };
 
@@ -39,7 +38,7 @@ const faqs = ({
     {
       key: 'after',
       q: `What happens after ${PRICING.freeDays} days?`,
-      a: `Godmode asks if you want to keep it. Pick monthly ($${monthly.price} a month) or yearly ($${yearly.perMonth} a month, billed $${yearly.price} once a year). If you don’t, nothing is charged, because you never gave us a card. Everything you set up stays on your Mac, so you can pick up where you left off.`,
+      a: `Godmode asks if you want to keep it. It’s ${priceLine('en')}. If you don’t keep it, nothing is charged, because you never gave us a card. Everything you set up stays on your Mac, so you can pick up where you left off.`,
     },
     {
       key: 'card',
@@ -76,7 +75,7 @@ const faqs = ({
     {
       key: 'team',
       q: 'Can my team use it?',
-      a: `Yes. Each person installs Godmode on their own Mac and gets the same ${PRICING.freeDays} free days. For several people on one invoice, email ${SITE.email} and we’ll set it up with you.`,
+      a: `Yes. Each person installs Godmode on their own Mac and gets the same ${PRICING.freeDays} free days. The Company plan covers your whole company on one invoice.`,
     },
     {
       key: 'cancel',
@@ -113,7 +112,7 @@ const faqs = ({
     {
       key: 'after',
       q: `Was passiert nach ${PRICING.freeDays} Tagen?`,
-      a: `Godmode fragt dich, ob du ihn behalten willst. Monatlich ($${monthly.price} im Monat) oder jährlich ($${yearly.perMonth} im Monat, einmal im Jahr $${yearly.price}). Wenn nicht, wird nichts abgebucht, denn du hast uns nie eine Karte gegeben. Alles, was du eingerichtet hast, bleibt auf deinem Mac, du kannst also jederzeit weitermachen.`,
+      a: `Godmode fragt dich, ob du ihn behalten willst. Das kostet ${priceLine('de')}. Wenn nicht, wird nichts abgebucht, denn du hast uns nie eine Karte gegeben. Alles, was du eingerichtet hast, bleibt auf deinem Mac, du kannst also jederzeit weitermachen.`,
     },
     {
       key: 'card',
@@ -150,7 +149,7 @@ const faqs = ({
     {
       key: 'team',
       q: 'Kann mein Team es nutzen?',
-      a: `Ja. Jede Person installiert Godmode auf ihrem eigenen Mac und bekommt dieselben ${PRICING.freeDays} kostenlosen Tage. Für mehrere Leute auf einer Rechnung schreib an ${SITE.email}, und wir richten es mit dir ein.`,
+      a: `Ja. Jede Person installiert Godmode auf ihrem eigenen Mac und bekommt dieselben ${PRICING.freeDays} kostenlosen Tage. Der Firmen-Tarif gilt für eure ganze Firma, auf einer Rechnung.`,
     },
     {
       key: 'cancel',

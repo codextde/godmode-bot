@@ -1,5 +1,5 @@
 import type Stripe from 'stripe';
-import { PRICING } from '@/config/site';
+import { orderPlan, PRICING } from '@/config/site';
 import { render, type Composed } from './lifecycle';
 
 const HOUR = 3_600_000;
@@ -75,11 +75,11 @@ export function recoveryDue(r: RecoveryRow, h: RecoveryHistory, now: number): bo
 }
 
 export function composeRecovery(r: RecoveryRow, base: string, unsubscribeUrl: string): Composed {
-  const plan = r.plan === 'yearly' ? PRICING.plans.yearly : PRICING.plans.monthly;
+  const plan = orderPlan(r.plan);
   return render('Your Godmode checkout', [
     'Hi,',
     "saw you started the Godmode checkout but didn't finish it. Anything that stopped you?",
-    `If it was just timing, here is your checkout again (Pro ${plan.interval === 'year' ? 'Yearly' : 'Monthly'}, $${plan.price}/${plan.interval}, cancel anytime, ${PRICING.guaranteeDays}-day money-back guarantee):\n${r.recovery_url}`,
+    `If it was just timing, here is your checkout again (${plan.name}, ${plan.label}, cancel anytime, ${PRICING.guaranteeDays}-day money-back guarantee):\n${r.recovery_url}`,
     `Or try it without a card first. The download runs free for ${PRICING.freeDays} days:\n${base}/download`,
     "And if something didn't make sense or felt off, just reply. It comes straight to me.",
     'Daniel\nFounder, Godmode',

@@ -4,7 +4,7 @@ import { motion } from "motion/react";
 import { ArrowUpRight, Check, KeyRound } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import { LICENSE_PRICING, LICENSE_SITE, LICENSE_YEARLY_SAVINGS, isLicenseKey, normalizeLicenseKey, type LicenseState } from "@godmode/shared";
+import { LICENSE_PRICING, LICENSE_SITE, isLicenseKey, normalizeLicenseKey, type LicenseState } from "@godmode/shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,12 +16,12 @@ import { cn } from "@/lib/utils";
 import { noteCheckoutOpened } from "./deep-link";
 
 export type LicenseSource = "gate" | "onboarding" | "settings" | "banner" | "sidebar";
-export type CheckoutPlan = "monthly" | "yearly";
+export type CheckoutPlan = "private" | "company";
 
 export const SUPPORT_MAIL = "kontakt@codext.de";
 
 /** Straight to a paid plan: the free trial in the app replaces the card trial (`trial=0`). */
-export function checkoutUrl(source: LicenseSource, plan: CheckoutPlan = "monthly"): string {
+export function checkoutUrl(source: LicenseSource, plan: CheckoutPlan = "private"): string {
   return `${LICENSE_SITE}/api/checkout?plan=${plan}&trial=0&utm_source=app&utm_medium=${source}`;
 }
 
@@ -138,14 +138,7 @@ export function KeyDivider({ className }: { className?: string }) {
   );
 }
 
-/** "$39/month" or "$348/year", in the app's language. */
-export function usePrice() {
-  const { t } = useTranslation("license");
-  return (plan: CheckoutPlan) =>
-    plan === "yearly" ? t("plans.perYear", { price: LICENSE_PRICING.yearly.price }) : t("plans.perMonth", { price: LICENSE_PRICING.monthly.price });
-}
-
-/** Monthly or yearly, and the button that opens the checkout in the browser. */
+/** Private or company, and the button that opens the checkout in the browser. */
 export function PlanPicker({
   source,
   cta,
@@ -159,18 +152,11 @@ export function PlanPicker({
   className?: string;
 }) {
   const { t } = useTranslation("license");
-  const price = usePrice();
-  const [plan, setPlan] = useState<CheckoutPlan>("monthly");
+  const [plan, setPlan] = useState<CheckoutPlan>("private");
   const [opened, setOpened] = useState(false);
-  const options: { plan: CheckoutPlan; title: string; perMonth: number; note: string; badge?: string }[] = [
-    { plan: "monthly", title: t("plans.monthly"), perMonth: LICENSE_PRICING.monthly.perMonth, note: t("plans.billedMonthly") },
-    {
-      plan: "yearly",
-      title: t("plans.yearly"),
-      perMonth: LICENSE_PRICING.yearly.perMonth,
-      note: t("plans.billedYearly", { price: LICENSE_PRICING.yearly.price }),
-      badge: t("plans.save", { percent: LICENSE_YEARLY_SAVINGS }),
-    },
+  const options: { plan: CheckoutPlan; title: string; note: string }[] = [
+    { plan: "private", title: t("plans.private"), note: t("plans.privateNote") },
+    { plan: "company", title: t("plans.company"), note: t("plans.companyNote") },
   ];
 
   return (
@@ -201,10 +187,9 @@ export function PlanPicker({
                   {selected && <Check className="size-2.5" strokeWidth={3.5} />}
                 </span>
                 <span className="text-[13px] font-medium">{o.title}</span>
-                {o.badge && <span className="ml-auto rounded-full bg-brand-soft px-2 py-0.5 text-[11px] font-medium text-brand-strong">{o.badge}</span>}
               </span>
               <span className="mt-2 flex items-baseline gap-1">
-                <span className="text-[26px] leading-none font-semibold tracking-[-0.03em] tabular-nums">{t("plans.amount", { price: o.perMonth })}</span>
+                <span className="text-[26px] leading-none font-semibold tracking-[-0.03em] tabular-nums">{t("plans.amount", { price: LICENSE_PRICING[o.plan].price })}</span>
                 <span className="text-[13px] text-muted-foreground">{t("plans.month")}</span>
               </span>
               <span className="mt-1 block text-xs text-muted-foreground">{o.note}</span>
@@ -225,7 +210,7 @@ export function PlanPicker({
       >
         <span>{cta === "keep" ? t("plans.keep") : t("plans.subscribe")}</span>
         <span className="font-normal opacity-60">·</span>
-        <span className="font-normal opacity-85">{price(plan)}</span>
+        <span className="font-normal opacity-85">{t("plans.perMonth", { price: LICENSE_PRICING[plan].price })}</span>
         <ArrowUpRight className="opacity-70" />
       </Button>
       <p className="mt-3 text-center text-xs leading-relaxed text-pretty text-muted-foreground">

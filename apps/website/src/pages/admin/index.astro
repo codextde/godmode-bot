@@ -6,7 +6,7 @@ import { checkAdmin } from '@/lib/auth';
 import { db, insertComp } from '@/lib/db';
 import { minLivemode } from '@/lib/entitlement';
 import { newLicenseKey } from '@/lib/license';
-import { PRICING } from '@/config/site';
+import { isPlan, PRICING } from '@/config/site';
 
 export const prerender = false;
 
@@ -73,14 +73,14 @@ const [visitorsRow, stepRows, orderRows, allTime, daily, dailyRev, sources, sour
     one(
       `SELECT SUM(CASE WHEN plan = 'lifetime' AND status = 'paid' AND COALESCE(comp, 0) = 0 THEN 1 ELSE 0 END) AS lifetime,
               SUM(CASE WHEN comp = 1 AND status = 'paid' THEN 1 ELSE 0 END) AS comps,
-              SUM(CASE WHEN status = 'paid' AND currency = 'usd' AND COALESCE(comp, 0) = 0 THEN amount_total ELSE 0 END) AS revenue
+              SUM(CASE WHEN status = 'paid' AND currency = 'eur' AND COALESCE(comp, 0) = 0 THEN amount_total ELSE 0 END) AS revenue
        FROM orders WHERE livemode = ?`,
       liveFlag,
     ),
     all(`SELECT day, COUNT(DISTINCT visitor) AS v FROM events WHERE day >= ? AND type = 'pageview' GROUP BY day ORDER BY day`, sinceDay),
     all(
       `SELECT strftime('%Y-%m-%d', paid_at / 1000, 'unixepoch') AS day, SUM(amount_total) AS amount FROM orders
-       WHERE status = 'paid' AND paid_at >= ? AND livemode = ? AND currency = 'usd' GROUP BY day ORDER BY day`,
+       WHERE status = 'paid' AND paid_at >= ? AND livemode = ? AND currency = 'eur' GROUP BY day ORDER BY day`,
       sinceMs,
       liveFlag,
     ),
@@ -150,16 +150,16 @@ const appsToday = n(
 const step = (k: string) => n(stepRows.find((r) => r.step === k)?.v);
 const paidOrders = orderRows.filter((r) => r.status === 'paid');
 const paidCount = paidOrders.reduce((s, r) => s + n(r.c), 0);
-const revenueUsd = paidOrders.filter((r) => r.currency === 'usd').reduce((s, r) => s + n(r.amount), 0) / 100;
-const otherCurrencies = paidOrders.filter((r) => r.currency && r.currency !== 'usd');
+const revenueEur = paidOrders.filter((r) => r.currency === 'eur').reduce((s, r) => s + n(r.amount), 0) / 100;
+const otherCurrencies = paidOrders.filter((r) => r.currency && r.currency !== 'eur');
 const refunded = orderRows.filter((r) => r.status === 'refunded').reduce((s, r) => s + n(r.c), 0);
 const openCheckouts = orderRows.reduce((s, r) => s + n(r.c), 0);
-const { monthly, yearly } = PRICING.plans;
+const { private: privatePlan, company } = PRICING.plans;
 // MRR counts paying subscriptions only (not trials). Legacy orders that were charged at checkout count at that price.
 const monthlyValue = (r: Row) => {
-  const paidAtCheckout = r.currency === 'usd' && n(r.amount_total) > 0 ? n(r.amount_total) / 100 : 0;
-  if (r.plan === 'yearly') return (paidAtCheckout || yearly.price) / 12;
-  return paidAtCheckout || monthly.price;
+  const paidAtCheckout = n(r.amount_total) > 0 ? n(r.amount_total) / 100 : 0;
+  if (r.plan === 'yearly') return (paidAtCheckout || 348) / 12;
+  return paidAtCheckout || (isPlan(r.plan) ? PRICING.plans[r.plan].price : 39);
 };
 const paying = subs.filter((r) => r.sub_status !== 'trialing');
 const mrr = paying.reduce((s, r) => s + monthlyValue(r), 0);
@@ -196,7 +196,7 @@ const sourceRows = sources.map((s) => {
     amount: n(o?.amount) / 100,
   };
 });
-const money = (v: number, cur = 'usd') =>
+const money = (v: number, cur = 'eur') =>
   v.toLocaleString('en-US', { style: 'currency', currency: cur.toUpperCase(), maximumFractionDigits: 0 });
 const date = (ms: unknown) => new Date(n(ms)).toISOString().slice(0, 16).replace('T', ' ');
 const ago = (ms: number) => {
@@ -226,7 +226,7 @@ const q = (days: number, mode = live ? 'live' : 'test') => `?days=${days}&mode=$
       <section class="grid gap-3 md:grid-cols-[1.3fr_1fr_1fr_1fr]">
         <div class="card p-6">
           <p class="text-[13px] text-muted">Revenue · last {range} days</p>
-          <p class="mt-2 text-[52px] leading-none font-semibold tracking-[-0.05em]">{money(revenueUsd)}</p>
+          <p class="mt-2 text-[52px] leading-none font-semibold tracking-[-0.05em]">{money(revenueEur)}</p>
           <p class="mt-3 text-[12.5px] text-dim">
             {money(n(allTime.revenue) / 100)} all time
             {otherCurrencies.map((r) => ` · ${money(n(r.amount) / 100, String(r.currency))}`)}
@@ -254,8 +254,9 @@ const q = (days: number, mode = live ? 'live' : 'test') => `?days=${days}&mode=$
         <div class="card p-6">
           <p class="text-[13px] text-muted">Active licenses by plan</p>
           <dl class="mt-4 space-y-2.5 text-[13.5px]">
-            <div class="flex justify-between"><dt class="text-text-2">Pro monthly · ${monthly.price}</dt><dd class="tabular-nums">{payingBy('monthly')}</dd></div>
-            <div class="flex justify-between"><dt class="text-text-2">Pro yearly · ${yearly.price}</dt><dd class="tabular-nums">{payingBy('yearly')}</dd></div>
+            <div class="flex justify-between"><dt class="text-text-2">Private · €{privatePlan.price}</dt><dd class="tabular-nums">{payingBy('private')}</dd></div>
+            <div class="flex justify-between"><dt class="text-text-2">Company · €{company.price}</dt><dd class="tabular-nums">{payingBy('company')}</dd></div>
+            {payingBy('monthly') + payingBy('yearly') > 0 && <div class="flex justify-between"><dt class="text-text-2">Pro (legacy USD)</dt><dd class="tabular-nums">{payingBy('monthly') + payingBy('yearly')}</dd></div>}
             {legacyLifetime > 0 && <div class="flex justify-between"><dt class="text-text-2">Lifetime (legacy)</dt><dd class="tabular-nums">{legacyLifetime}</dd></div>}
             <div class="flex justify-between"><dt class="text-text-2">In trial</dt><dd class="tabular-nums">{n(trials.running)}</dd></div>
             <div class="flex justify-between"><dt class="text-muted">Free (comp)</dt><dd class="tabular-nums text-muted">{n(allTime.comps)}</dd></div>
@@ -301,7 +302,7 @@ const q = (days: number, mode = live ? 'live' : 'test') => `?days=${days}&mode=$
 
       <section class="mt-3 grid gap-3 lg:grid-cols-2">
         <Bars title="Visitors per day" data={visitorsByDay} />
-        <Bars title="Revenue per day (USD)" data={revenueByDay} format="usd" />
+        <Bars title="Revenue per day (EUR)" data={revenueByDay} format="eur" />
       </section>
 
       <section class="mt-3 grid gap-3 lg:grid-cols-[1fr_1fr]">
@@ -386,7 +387,7 @@ const q = (days: number, mode = live ? 'live' : 'test') => `?days=${days}&mode=$
                   {o.repeat_trial ? <span class="chip chip-warn ml-1.5">repeat trial</span> : null}
                 </td>
                 <td><span class:list={['chip', o.status === 'paid' && 'chip-brand']}>{o.sub_status && o.sub_status !== 'active' ? o.sub_status : o.status}</span></td>
-                <td class="text-right tabular-nums">{o.amount_total != null ? money(n(o.amount_total) / 100, String(o.currency ?? 'usd')) : '—'}</td>
+                <td class="text-right tabular-nums">{o.amount_total != null ? money(n(o.amount_total) / 100, String(o.currency ?? 'eur')) : '—'}</td>
                 <td class="pl-4 text-text-2">{o.email ?? '—'}</td>
                 <td class="text-muted">{o.country ?? '—'}</td>
                 <td class="text-muted">{o.utm_source ?? (o.twclid ? 'x (click id)' : '—')}{o.utm_campaign ? ` · ${o.utm_campaign}` : ''}</td>

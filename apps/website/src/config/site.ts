@@ -24,34 +24,32 @@ export const SITE = {
  */
 export const siteBase = (origin: string) => (import.meta.env.DEV ? origin : SITE.url.replace(/\/$/, ''));
 
-/** Plans on sale. Older orders may also carry `lifetime` (licenses sold before, and free licenses from /admin). */
-export type Plan = 'monthly' | 'yearly';
+/** Plans on sale. Older orders may also carry `monthly`, `yearly` (USD) or `lifetime` (also free licenses from /admin). */
+export type Plan = 'private' | 'company';
 
-export const isPlan = (v: unknown): v is Plan => v === 'monthly' || v === 'yearly';
+export const isPlan = (v: unknown): v is Plan => v === 'private' || v === 'company';
 
 export const PRICING = {
-  currency: 'USD',
+  currency: 'EUR',
   /** Free period of the downloaded app: no card, no sign-up. The main offer on every page. */
   freeDays: 14,
   /** Stripe trial for checkouts that don't pass trial=0 (old links). Website buttons always pass trial=0. */
   trialDays: 14,
   guaranteeDays: 14,
   plans: {
-    monthly: {
-      id: 'monthly' as Plan,
-      name: 'Pro Monthly',
-      price: 39,
-      perMonth: 39,
+    private: {
+      id: 'private' as Plan,
+      name: 'Godmode Private',
+      price: 79,
       interval: 'month',
-      lookupKey: 'godmode_pro_monthly_usd',
+      lookupKey: 'godmode_private_monthly_eur',
     },
-    yearly: {
-      id: 'yearly' as Plan,
-      name: 'Pro Yearly',
-      price: 348,
-      perMonth: 29,
-      interval: 'year',
-      lookupKey: 'godmode_pro_yearly_usd',
+    company: {
+      id: 'company' as Plan,
+      name: 'Godmode Company',
+      price: 499,
+      interval: 'month',
+      lookupKey: 'godmode_company_monthly_eur',
     },
   },
 } as const;
@@ -89,13 +87,24 @@ export const COUPON = {
 
 export const foundingOpen = (taken: number, now = Date.now()) => now < FOUNDING.end && taken < FOUNDING.seats;
 
-/** Percent saved by paying yearly instead of monthly, rounded down so the claim is never overstated. */
-export const yearlySavings = Math.floor((1 - PRICING.plans.yearly.price / (PRICING.plans.monthly.price * 12)) * 100);
+/** "€79" / "79 €" */
+export const eur = (amount: number, lang: 'en' | 'de' = 'en') => (lang === 'de' ? `${amount} €` : `€${amount}`);
 
-/** Short price line for a plan, e.g. "$39/month" or "$348/year". */
-export function priceLabel(plan: Plan): string {
-  const p = PRICING.plans[plan];
-  return `$${p.price}/${p.interval}`;
+/** Short price line for a plan, e.g. "€79/month" or "79 €/Monat". */
+export function priceLabel(plan: Plan, lang: 'en' | 'de' = 'en'): string {
+  return `${eur(PRICING.plans[plan].price, lang)}/${lang === 'de' ? 'Monat' : 'month'}`;
+}
+
+/** Both prices in one phrase, for copy that isn't the pricing section. */
+export const priceLine = (lang: 'en' | 'de') =>
+  lang === 'de'
+    ? `${priceLabel('private', 'de')} privat oder ${priceLabel('company', 'de')} für Firmen`
+    : `${priceLabel('private')} for private use or ${priceLabel('company')} for companies`;
+
+/** The plan an order was sold on. Subscriptions from before the EUR plans keep renewing at their USD price. */
+export function orderPlan(plan: string | null | undefined): { name: string; label: string } {
+  if (isPlan(plan)) return { name: PRICING.plans[plan].name, label: priceLabel(plan) };
+  return plan === 'yearly' ? { name: 'Pro Yearly', label: '$348/year' } : { name: 'Pro Monthly', label: '$39/month' };
 }
 
 /**
@@ -143,7 +152,7 @@ export const LEGAL = {
   phone: '+49 7904 5203106',
   email: 'kontakt@codext.de',
   // Bump by hand only when the legal texts change.
-  updated: 'November 1, 2026',
+  updated: 'November 4, 2026',
 } as const;
 
 export const TRACKING = {
