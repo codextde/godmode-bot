@@ -288,11 +288,11 @@ describe("agent access", () => {
     subdomainLogin = createCredential({ name: "Gist", url: "https://gist.github.com", username: "gist", workspaceId: "ws_a" }).id;
   });
 
-  test("scoping: global agent sees only global logins", () => {
+  test("scoping: global agent sees global and every workspace's logins", () => {
     const ids = credentialsForAgent(makeAgent(null)).map((c) => c.id);
     expect(ids).toContain(globalLogin);
-    expect(ids).not.toContain(wsALogin);
-    expect(ids).not.toContain(wsBLogin);
+    expect(ids).toContain(wsALogin);
+    expect(ids).toContain(wsBLogin);
     expect(credentialsForAgent(makeAgent(null)).every((c) => c.password === undefined)).toBe(true);
   });
 
@@ -355,7 +355,7 @@ describe("agent access", () => {
     expect(revealForAgent(agent, globalLogin)).toMatchObject({ username: "me", password: "gh-pass", url: "https://github.com/login" });
     expect(revealForAgent(agent, subdomainLogin).password).toBeNull();
     expect(httpStatus(() => revealForAgent(agent, wsBLogin))).toBe(403);
-    expect(httpStatus(() => revealForAgent(makeAgent(null), wsALogin))).toBe(403);
+    expect(revealForAgent(makeAgent(null), wsALogin).password).toBe("gh-work-pass");
     expect(httpStatus(() => revealForAgent(makeAgent("ws_a", { credentialIds: [globalLogin] }), wsALogin))).toBe(403);
     expect(httpStatus(() => revealForAgent(agent, "cred_missing"))).toBe(404);
   });
