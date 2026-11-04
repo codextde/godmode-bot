@@ -339,7 +339,8 @@
       "devices": "Geräte",
       "system": "System",
       "logs": "Logs",
-      "about": "Über"
+      "about": "Über",
+      "sshKeys": "SSH-Schlüssel"
     },
     "importChat": "Chat importieren…"
   },

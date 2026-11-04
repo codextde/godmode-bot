@@ -98,7 +98,8 @@ const TABLES = SETUP_TABLES;
 // android: the phones plugged into this computer and the adb that reaches them.
 // phone: calls are placed and read back by this computer only.
 // power: whether this Mac stays awake with its lid closed.
-export const LOCAL_SETTINGS = new Set(["server", "mobile", "cloud", "diagnostics", "maintenance", "selfRepair", "android", "phone", "power", "onboardingComplete"]);
+// sshKeys: the key manager works on this computer's own ~/.ssh.
+export const LOCAL_SETTINGS = new Set(["server", "mobile", "cloud", "diagnostics", "maintenance", "selfRepair", "android", "phone", "power", "sshKeys", "onboardingComplete"]);
 /** A runner's vault is opened by a sync, not by a human with the passphrase: it must not lock itself in between. */
 const RUNNER_SETTINGS: Record<string, string[]> = { security: ["autoLockMinutes"] };
 /** VM ids become Tart VM names and folder names. */

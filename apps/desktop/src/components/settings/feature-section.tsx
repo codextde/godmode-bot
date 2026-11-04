@@ -9,7 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { useSettingsPatch } from "./settings-kit";
 
-export const FEATURES = ["activity", "artifacts", "integrations", "plugins", "messaging", "phone", "cards", "vm", "ssh", "android"] as const;
+export const FEATURES = ["activity", "artifacts", "integrations", "plugins", "messaging", "phone", "cards", "vm", "ssh", "sshKeys", "android"] as const;
 export type Feature = (typeof FEATURES)[number];
 
 export const featureOn = (settings: Pick<Settings, Feature> | undefined, feature: Feature) => !!settings?.[feature].enabled;
@@ -25,6 +25,7 @@ export const FEATURE_SECTION: Record<Feature, string> = {
   cards: "cards",
   vm: "vms",
   ssh: "ssh",
+  sshKeys: "ssh-keys",
   android: "android",
 };
 
@@ -35,6 +36,7 @@ export const PAGE_FEATURE: Record<string, Feature> = {
   "/vault/cards": "cards",
   "/vms": "vm",
   "/ssh": "ssh",
+  "/vault/ssh-keys": "sshKeys",
 };
 
 export const pageOn = (settings: Pick<Settings, Feature> | undefined, path: string) => {

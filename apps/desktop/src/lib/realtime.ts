@@ -74,6 +74,7 @@ const ENTITY_KEYS: Record<EntityName, readonly unknown[][]> = {
   vms: [qk.vms],
   "ssh-servers": [qk.sshServers],
   "ssh-godmode": [qk.sshGodmode],
+  "ssh-keys": [qk.sshKeys],
   // Phones plugged in or out, renamed, assigned.
   android: [qk.android],
   mods: [qk.mods],

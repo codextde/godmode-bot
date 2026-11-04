@@ -144,6 +144,15 @@
     "pointFiles": "Uploads und Downloads innerhalb der Ordner des Laufs",
     "linkDescription": "Füge Server hinzu und wähle die Agenten, die sie nutzen dürfen."
   },
+  "sshKeys": {
+    "title": "SSH-Schlüssel",
+    "summary": "Die Schlüssel in ~/.ssh auf diesem Computer, in einer einfachen Liste.",
+    "offNote": "Solange es aus ist, lässt Godmode ~/.ssh in Ruhe und Agenten bekommen diese Tools nicht.",
+    "pointSee": "Typ, Fingerabdruck, Kommentar und die Hosts, die jeden Schlüssel nutzen",
+    "pointCreate": "Neue Schlüssel, Import, Umbenennen, Parken und Löschen in den Papierkorb",
+    "pointAgent": "In ssh-agent laden und zu deinen Servern hinzufügen",
+    "linkDescription": "Unter Passwörter, neben deinen Logins."
+  },
   "cards": {
     "title": "Karten",
     "titleEasy": "Zahlungskarten",
@@ -457,7 +466,8 @@
       "cleanup": "Aufräumen",
       "logs": "Logs",
       "about": "Über",
-      "accounts": "Claude-Konten"
+      "accounts": "Claude-Konten",
+      "sshKeys": "SSH-Schlüssel"
     },
     "easy": {
       "general": "Allgemein",
@@ -484,7 +494,8 @@
       "computer": "Computersteuerung",
       "connect": "Claude Code & MCP",
       "system": "Systemcheck",
-      "accounts": "Claude-Konten"
+      "accounts": "Claude-Konten",
+      "sshKeys": "SSH-Schlüssel"
     },
     "groups": {
       "preferences": "Einstellungen",

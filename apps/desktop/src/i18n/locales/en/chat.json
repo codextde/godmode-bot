@@ -212,7 +212,12 @@
       "readArtifact": "Read an artifact",
       "lookedAtArtifacts": "Looked at its artifacts",
       "reportedBlocked": "Reported what it needs",
-      "macPassword": "Mac password"
+      "macPassword": "Mac password",
+      "sshKeysListed": "Checked the SSH keys",
+      "sshKeyCreated": "Created an SSH key",
+      "sshKeyChanged": "Changed an SSH key",
+      "sshKeyDeleted": "Moved an SSH key to the Trash",
+      "sshKeyInstalled": "Added an SSH key to a server"
     },
     "builtin": {
       "ranCommand": "Ran a command",
