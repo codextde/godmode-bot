@@ -15,7 +15,7 @@ export interface ClaudeMdContext {
 }
 
 /** Folders of installed packages and Xcode build caches an agent may create anywhere in its workspace. */
-export const INSTALLED_FOLDERS = ["node_modules", ".venv", "__pycache__", "DerivedData", "Intermediates.noindex", "ModuleCache.noindex", "Index.noindex"] as const;
+export const INSTALLED_FOLDERS = ["node_modules", ".venv", "__pycache__", "DerivedData", "Intermediates.noindex", "ModuleCache.noindex", "Index.noindex", "CompilationCache.noindex", "SDKStatCaches.noindex", "SDKExplicitPrecompiledModules"] as const;
 
 /**
  * Rules every agent repository's .gitignore must contain (re-added to existing repos when missing).

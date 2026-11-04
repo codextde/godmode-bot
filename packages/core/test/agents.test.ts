@@ -431,7 +431,7 @@ describe("gitignore", () => {
     writeFileSync(join(agent.repoPath, ".omc", "state", "sessions", "s1.json"), "{}");
     mkdirSync(join(agent.repoPath, ".omc", "skills"), { recursive: true });
     writeFileSync(join(agent.repoPath, ".omc", "skills", "deploy.md"), "# Deploy");
-    for (const pkg of ["workspace/check/node_modules/left-pad", "workspace/check/node_modules/.bin", "workspace/tool/.venv/lib", "workspace/tool/dd/Build/Intermediates.noindex/App.build"]) {
+    for (const pkg of ["workspace/check/node_modules/left-pad", "workspace/check/node_modules/.bin", "workspace/tool/.venv/lib", "workspace/tool/dd/Build/Intermediates.noindex/App.build", "workspace/tool/dd/CompilationCache.noindex/generic"]) {
       mkdirSync(join(agent.repoPath, pkg), { recursive: true });
       writeFileSync(join(agent.repoPath, pkg, "index.js"), "1");
     }
@@ -443,7 +443,7 @@ describe("gitignore", () => {
 
     await ensureAgentRepo(agent);
     const gitignore = readFileSync(join(agent.repoPath, ".gitignore"), "utf8");
-    expect(gitignore).toContain("build/\n# Added by Godmode Bot\nworkspace/uploads/\n/runs/\n.omc/state/\n.DS_Store\nnode_modules/\n.venv/\n__pycache__/\nDerivedData/\nIntermediates.noindex/\nModuleCache.noindex/\nIndex.noindex/\n");
+    expect(gitignore).toContain("build/\n# Added by Godmode Bot\nworkspace/uploads/\n/runs/\n.omc/state/\n.DS_Store\nnode_modules/\n.venv/\n__pycache__/\nDerivedData/\nIntermediates.noindex/\nModuleCache.noindex/\nIndex.noindex/\nCompilationCache.noindex/\nSDKStatCaches.noindex/\nSDKExplicitPrecompiledModules/\n");
     const files = await headFiles(agent.repoPath);
     expect(files).not.toContain("workspace/uploads/old.pdf");
     expect(files.filter((f) => f.startsWith("runs/"))).toEqual([]);
@@ -570,6 +570,35 @@ describe("git helpers", () => {
     const files = await git.listFiles({ fs: await import("node:fs"), dir, ref: "HEAD" });
     expect(files).toEqual(expect.arrayContaining(["a.bin", "b.bin", "c.bin", "huge.bin", "many/0.txt", "many/500.txt"]));
     expect(files.length).toBe(505);
+    expect(await repo.commitAll(dir, "clean")).toBeNull();
+  });
+
+  test("commitAll leaves files too big to read out and still commits the rest", async () => {
+    const dir = join(dataDir, "too-big-repo");
+    await repo.initRepo(dir);
+    writeFileSync(join(dir, "cache.bin"), "small");
+    writeFileSync(join(dir, "notes.md"), "1");
+    await repo.commitAll(dir, "first");
+    const git = (await import("isomorphic-git")).default;
+    const nodeFs = await import("node:fs");
+    const blob = async (filepath: string) => {
+      const oid = await git.resolveRef({ fs: nodeFs, dir, ref: "HEAD" });
+      return Buffer.from((await git.readBlob({ fs: nodeFs, dir, oid, filepath })).blob).toString("utf8");
+    };
+
+    truncateSync(join(dir, "cache.bin"), repo.MAX_COMMIT_FILE_BYTES + 1);
+    writeFileSync(join(dir, "new.bin"), "");
+    truncateSync(join(dir, "new.bin"), repo.MAX_COMMIT_FILE_BYTES + 1);
+    writeFileSync(join(dir, "notes.md"), "2");
+    expect(await repo.commitAll(dir, "second")).not.toBeNull();
+    expect(await blob("notes.md")).toBe("2");
+    expect(await blob("cache.bin")).toBe("small");
+    expect(await git.listFiles({ fs: nodeFs, dir, ref: "HEAD" })).not.toContain("new.bin");
+
+    writeFileSync(join(dir, "cache.bin"), "small again");
+    expect(await repo.commitAll(dir, "third")).not.toBeNull();
+    expect(await blob("cache.bin")).toBe("small again");
+    expect(await git.listFiles({ fs: nodeFs, dir, ref: "HEAD" })).not.toContain("new.bin");
     expect(await repo.commitAll(dir, "clean")).toBeNull();
   });
 
