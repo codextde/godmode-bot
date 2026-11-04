@@ -245,7 +245,7 @@ describe("Claude accounts", () => {
   });
 
   test("the same subscription signed in on two computers becomes the older account, with its uses", async () => {
-    addAccount("cla_old", "same@example.com", "tok-old");
+    addAccount("cla_old", "same@example.com", "tok-old", Date.now() + 9 * 3600_000);
     sql("UPDATE claude_accounts SET created_at = '2026-01-01T00:00:00.000Z' WHERE id = 'cla_old'");
     addAccount("cla_new", "same@example.com", "tok-new");
     addAccount("cla_other", "other@example.com", "tok-other");
