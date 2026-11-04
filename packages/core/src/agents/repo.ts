@@ -18,6 +18,7 @@ export const GIT_AUTHOR = { name: "Godmode Bot", email: "bot@godmode.local" };
 export const MAX_FILE_BYTES = 2 * 1024 * 1024;
 const ADD_BATCH_BYTES = 64 * 1024 * 1024;
 const ADD_BATCH_FILES = 500;
+export const MAX_COMMIT_FILE_BYTES = 1024 * 1024 * 1024;
 
 /* ------------------------------------------------------------------ */
 /* Per-repository mutex                                                */
@@ -139,13 +140,21 @@ async function addInBatches(dir: string, files: string[], cache: object): Promis
   if (batch.length) await git.add({ fs, dir, filepath: batch, cache });
 }
 
+/**
+ * isomorphic-git reads a file whole to hash it, and one read too big for memory (Xcode's sparse cache files reach many GB
+ * during a build) fails the commit of everything else. Such a file stays out of the status, so git never reads it.
+ */
+function fitsInCommit(dir: string, filepath: string): boolean {
+  return (fs.lstatSync(join(dir, filepath), { throwIfNoEntry: false })?.size ?? 0) <= MAX_COMMIT_FILE_BYTES;
+}
+
 async function stageAndCommit(dir: string, message: string): Promise<string | null> {
   const cache = {};
   const indexSecond = await stat(join(dir, ".git", "index")).then(
     (s) => Math.floor(s.mtimeMs / 1000),
     () => null,
   );
-  let matrix: StatusRow[] = await git.statusMatrix({ fs, dir, cache });
+  let matrix: StatusRow[] = await git.statusMatrix({ fs, dir, cache, filter: (filepath) => fitsInCommit(dir, filepath) });
   if (indexSecond !== null) matrix = await recheckRacyFiles(dir, matrix, indexSecond, cache);
   const toAdd: string[] = [];
   const toRemove: string[] = [];
@@ -209,7 +218,7 @@ async function recheckRacyFiles(dir: string, matrix: StatusRow[], indexSecond: n
   }
   if (!racy.length) return matrix;
   await addInBatches(dir, racy, cache);
-  const fresh = new Map((await git.statusMatrix({ fs, dir, filepaths: racy, cache })).map((row) => [row[0], row]));
+  const fresh = new Map((await git.statusMatrix({ fs, dir, filepaths: racy, cache, filter: (filepath) => fitsInCommit(dir, filepath) })).map((row) => [row[0], row]));
   return matrix.map((row) => fresh.get(row[0]) ?? row);
 }
 
