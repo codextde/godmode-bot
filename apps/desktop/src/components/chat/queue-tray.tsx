@@ -13,6 +13,8 @@ import { Kbd } from "@/components/common";
 import { api, ApiRequestError, errorMessage, isLicenseRequired } from "@/lib/api";
 import { pendingQueued } from "@/lib/pending-queue";
 import { qk } from "@/lib/queryKeys";
+import { modKey } from "@/lib/desktop";
+import { sendKey, useUi } from "@/stores/ui";
 import { cn } from "@/lib/utils";
 import { EASE_OUT } from "@/lib/motion";
 import { CommandText } from "./slash-commands";
@@ -319,9 +321,11 @@ function QueueEditor({ text, onChange, onClose }: { text: string; onChange: (tex
     el.setSelectionRange(el.value.length, el.value.length);
   }, []);
 
+  const enterIsNewLine = useUi((s) => s.enterKey === "newLine");
+
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.nativeEvent.isComposing) return;
-    if (e.key === "Enter" && !e.shiftKey) {
+    if (sendKey(e)) {
       e.preventDefault();
       onClose(true, true);
     } else if (e.key === "Escape") {
@@ -343,7 +347,7 @@ function QueueEditor({ text, onChange, onClose }: { text: string; onChange: (tex
         className="mt-px block min-w-0 flex-1 resize-none bg-transparent py-0.5 text-[13px] leading-snug outline-none"
       />
       <span className="hidden shrink-0 items-center gap-1 pb-0.5 text-[11px] whitespace-nowrap text-muted-foreground @lg:flex">
-        <Kbd>↵</Kbd> {t("queue.hintSave")} <Kbd>esc</Kbd> {t("queue.hintCancel")}
+        <Kbd>{enterIsNewLine ? `${modKey}↵` : "↵"}</Kbd> {t("queue.hintSave")} <Kbd>esc</Kbd> {t("queue.hintCancel")}
       </span>
     </div>
   );

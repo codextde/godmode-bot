@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useNow } from "@/components/vault/use-now";
 import { ApiRequestError, api, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
+import { sendKey } from "@/stores/ui";
 import { cn } from "@/lib/utils";
 import { useLocale } from "@/i18n/language";
 import { Markdown } from "./markdown";
@@ -303,7 +304,7 @@ export function QuestionCard({
             value={text}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+              if (sendKey(e)) {
                 e.preventDefault();
                 if (text.trim() && answerable && !busy) send("text", { text: text.trim() });
               }

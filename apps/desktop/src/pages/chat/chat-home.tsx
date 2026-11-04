@@ -117,6 +117,7 @@ export default function ChatHome() {
   const markVoiceRun = useVoiceSession((s) => s.markVoiceRun);
   const voiceMode = useUi((s) => s.voiceMode);
   const hideSuggestions = useUi((s) => s.hideSuggestions);
+  const enterIsNewLine = useUi((s) => s.enterKey === "newLine");
   const setHideSuggestions = useUi((s) => s.setHideSuggestions);
   const hideAllSuggestions = () => {
     setHideSuggestions(true);
@@ -236,6 +237,17 @@ export default function ChatHome() {
   const now = new Date();
 
   const ready = available.length;
+
+  const enterHints = enterIsNewLine ? (
+    <>
+      <Kbd>{modKey}↵</Kbd> {t("home.hint.send")} <span className="opacity-40">·</span> <Kbd>↵</Kbd> {t("composer.newLine")}
+    </>
+  ) : (
+    <>
+      <Kbd>↵</Kbd> {t("home.hint.send")} <span className="opacity-40">·</span> <Kbd>⇧</Kbd>
+      <Kbd>↵</Kbd> {t("composer.newLine")}
+    </>
+  );
 
   return (
     <ChatDropZone onFiles={(files) => composerRef.current?.addFiles(files)} disabled={voiceMode} className="relative min-h-full">
@@ -421,13 +433,11 @@ export default function ChatHome() {
         <motion.p {...fade(0.24, reduce)} className="mt-5 hidden items-center gap-1.5 text-xs text-muted-foreground @3xl:flex">
           {easy ? (
             <>
-              <Kbd>↵</Kbd> {t("home.hint.send")} <span className="opacity-40">·</span> <Kbd>⇧</Kbd>
-              <Kbd>↵</Kbd> {t("composer.newLine")} <span className="opacity-40">·</span> {t("home.hint.dropAnywhere")}
+              {enterHints} <span className="opacity-40">·</span> {t("home.hint.dropAnywhere")}
             </>
           ) : (
             <>
-              <Kbd>↵</Kbd> {t("home.hint.send")} <span className="opacity-40">·</span> <Kbd>⇧</Kbd>
-              <Kbd>↵</Kbd> {t("composer.newLine")} <span className="opacity-40">·</span> <Kbd>/</Kbd> {t("home.hint.commands")} <span className="opacity-40">·</span>{" "}
+              {enterHints} <span className="opacity-40">·</span> <Kbd>/</Kbd> {t("home.hint.commands")} <span className="opacity-40">·</span>{" "}
               <Kbd>{modKey}K</Kbd> {t("home.hint.search")} <span className="opacity-40">·</span> {t("home.hint.dropAnywhere")} <span className="opacity-40">·</span> <Kbd>?</Kbd>{" "}
               {t("home.hint.shortcuts")}
             </>
