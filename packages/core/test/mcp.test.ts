@@ -1613,6 +1613,7 @@ describe("settings tools", () => {
         "vm.idleStopMinutes",
         "artifacts.enabled",
         "voice.enabled",
+        "voice.dictation",
         "voice.autoSpeak",
         "voice.language",
         "voice.sttModel",

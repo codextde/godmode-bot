@@ -149,6 +149,7 @@ export function Composer({
 
   const voiceSettings = useVoiceSettings();
   const voiceEnabled = voiceSettings?.enabled ?? true;
+  const dictationEnabled = voiceSettings?.dictation ?? true;
   const setVoiceMode = useUi((s) => s.setVoiceMode);
   const steerByDefault = useUi((s) => s.followUpMode === "steer");
   const largePasteAsFile = useUi((s) => s.largePasteAsFile);
@@ -369,7 +370,7 @@ export function Composer({
   };
 
   const toggleDictation = () => {
-    if (!voiceEnabled) return;
+    if (!dictationEnabled) return;
     if (!dictation.supported) {
       toast.error(t("composer.voiceUnsupported"));
       return;
@@ -509,7 +510,7 @@ export function Composer({
           </ToolbarButton>
         )}
 
-        {voiceEnabled && (
+        {dictationEnabled && (
           <ToolbarButton
             label={dictation.active ? t("composer.stopDictation") : t("composer.dictate")}
             onClick={toggleDictation}

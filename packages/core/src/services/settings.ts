@@ -85,6 +85,7 @@ export const DEFAULT_SETTINGS: Settings = {
   ssh: { enabled: false },
   voice: {
     enabled: true,
+    dictation: true,
     sttProvider: "browser",
     ttsProvider: "browser",
     autoSpeak: true,

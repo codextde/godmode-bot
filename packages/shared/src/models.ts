@@ -1529,6 +1529,7 @@ export type TtsProvider = "browser" | "openai" | "elevenlabs";
 
 export interface VoiceSettings {
   enabled: boolean;
+  dictation: boolean;
   sttProvider: SttProvider;
   ttsProvider: TtsProvider;
   /** Auto-speak assistant replies when message was dictated */
