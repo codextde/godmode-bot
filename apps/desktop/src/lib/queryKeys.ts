@@ -144,6 +144,7 @@ export const qk = {
   calls: ["calls"] as unknown[],
   callList: (limit: number) => ["calls", "list", limit],
   call: (id: string) => ["calls", "detail", id],
+  callPin: ["calls", "pin"] as unknown[],
   /** Not under ["calls"]: it asks ElevenLabs, which shouldn't happen on every call event. */
   callSetup: ["call-setup"] as unknown[],
   /** A call's recording; its own root so call events don't download it again. */

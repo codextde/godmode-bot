@@ -423,6 +423,11 @@ export async function recentCalls(agentId: string, sinceUnix: number): Promise<{
   return (out?.conversations ?? []).map((c) => ({ id: c.conversation_id, direction: c.direction ?? null, status: c.status }));
 }
 
+/** Removes the call from ElevenLabs, with its transcript and recording. */
+export async function deleteCall(conversationId: string): Promise<void> {
+  await api("DELETE", `/v1/convai/conversations/${encodeURIComponent(conversationId)}`);
+}
+
 export async function callAudio(conversationId: string): Promise<Response> {
   return raw("GET", `/v1/convai/conversations/${encodeURIComponent(conversationId)}/audio`);
 }

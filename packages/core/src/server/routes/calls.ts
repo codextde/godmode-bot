@@ -2,6 +2,8 @@ import type { Hono } from "hono";
 import { body, z } from "../validate";
 import { callSetup, getCall, importNumber, listCalls, ownerCallRefusal, placeCall } from "../../calls/calls";
 import { callAudio } from "../../calls/elevenlabs";
+import { ownerPinStatus, removeOwnerPin, setOwnerPin } from "../../calls/pin";
+import { bus } from "../../events/bus";
 import { HttpError } from "../../util";
 
 const placeSchema = z.object({
@@ -50,6 +52,21 @@ export function registerCallRoutes(app: Hono): void {
       }),
       201,
     );
+  });
+
+  app.get("/api/calls/pin", (c) => c.json(ownerPinStatus()));
+
+  app.put("/api/calls/pin", async (c) => {
+    const { pin } = await body(c, z.object({ pin: z.string().max(20) }));
+    setOwnerPin(pin);
+    bus.changed("calls");
+    return c.json(ownerPinStatus());
+  });
+
+  app.delete("/api/calls/pin", (c) => {
+    removeOwnerPin();
+    bus.changed("calls");
+    return c.json(ownerPinStatus());
   });
 
   app.get("/api/calls/:id", (c) => c.json(getCall(c.req.param("id"))));

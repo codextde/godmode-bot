@@ -1994,4 +1994,15 @@ UPDATE claude_accounts SET is_default = 1 WHERE id = (SELECT value FROM meta WHE
 DELETE FROM meta WHERE key = 'claude.accounts.default';
 `,
   },
+  {
+    id: 121,
+    name: "phone_calls_owner_pin",
+    sql: /* sql */ `
+-- The caller said the owner's phone PIN, or a wrong one.
+ALTER TABLE phone_calls ADD COLUMN owner_verified INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE phone_calls ADD COLUMN pin_wrong INTEGER NOT NULL DEFAULT 0;
+-- The PIN was said on this call: the provider's copy gets deleted.
+ALTER TABLE phone_calls ADD COLUMN purge_pending INTEGER NOT NULL DEFAULT 0;
+`,
+  },
 ];

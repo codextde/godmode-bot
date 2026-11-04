@@ -38,6 +38,8 @@
     "recording": "Die Aufnahme läuft in Godmode auf deinem Computer.",
     "caller": "Anrufer",
     "them": "Gegenüber",
-    "transcript": "Transkript"
+    "transcript": "Transkript",
+    "pinVerified": "PIN bestätigt",
+    "pinWrong": "Falsche PIN"
   }
 }

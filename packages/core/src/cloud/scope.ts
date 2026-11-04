@@ -446,6 +446,8 @@ const RULES: [methods: string, path: string, rule: Rule][] = [
   ["GET", "/api/calls/setup", A],
   ["POST", "/api/calls/test", A],
   ["POST", "/api/calls/numbers", refused(COMPUTER_ONLY)],
+  ["GET", "/api/calls/pin", A],
+  ["PUT|DELETE", "/api/calls/pin", refused(COMPUTER_ONLY)],
   ["GET", "/api/calls/:id", A],
   ["GET", "/api/calls/:id/audio", "owner"],
   ["GET", "/api/folders", A],

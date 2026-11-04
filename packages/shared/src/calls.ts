@@ -65,6 +65,10 @@ export interface PhoneCall {
   hasAudio: boolean;
   /** An incoming call from the owner's own number (by caller ID, which can be spoofed). */
   fromOwner: boolean;
+  /** The caller said the owner's phone PIN: this is the owner, from whatever phone. */
+  ownerVerified: boolean;
+  /** Someone said a wrong PIN on this call. */
+  pinWrong: boolean;
   error: string | null;
   createdAt: ISODate;
   endedAt: ISODate | null;
@@ -101,6 +105,21 @@ export interface CallSetup {
   ready: boolean;
   /** What stands in the way, in plain words ([] when ready). */
   problems: string[];
+}
+
+export const OWNER_PIN_LENGTH = 6;
+
+export interface OwnerPinStatus {
+  set: boolean;
+  /** Too many wrong tries: no PIN counts until then. A new PIN ends it. */
+  lockedUntil: ISODate | null;
+}
+
+/** All one digit, a run up or down, or a repeated pair or triple. */
+export function isWeakOwnerPin(pin: string): boolean {
+  if (/^(\d)\1+$/.test(pin) || /^(\d\d)\1+$/.test(pin) || /^(\d{3})\1+$/.test(pin)) return true;
+  const steps = new Set([...pin].slice(1).map((d, i) => (Number(d) - Number(pin[i]) + 10) % 10));
+  return steps.size === 1 && (steps.has(1) || steps.has(9));
 }
 
 export interface PlaceCallInput {

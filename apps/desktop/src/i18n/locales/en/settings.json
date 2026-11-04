@@ -870,6 +870,25 @@
       "instructions": "Instructions",
       "instructionsDescription": "Who answers and how: your business, what to ask callers, what to promise.",
       "instructionsPlaceholder": "You answer for Studio Berg, a hair salon in Hamburg. Take the caller's name, what they need and when they're free. Don't confirm appointments; say we'll call back today."
+    },
+    "pin": {
+      "title": "Phone PIN",
+      "description": "Say it on a call and Godmode does what you ask, from any phone. Without it, callers can only leave a message.",
+      "label": "PIN",
+      "on": "On. Say it digit by digit. Godmode checks it after the call, so the voice never knows it.",
+      "off": "Off. Calls from your number can only start work you still approve in the app.",
+      "set": "Set PIN",
+      "change": "Change",
+      "remove": "Remove",
+      "choose": "Choose 6 digits",
+      "repeat": "Repeat them",
+      "weak": "Too easy to guess. Pick another one.",
+      "mismatch": "Those didn't match. Start again.",
+      "saved": "Phone PIN is on",
+      "removed": "Phone PIN is off",
+      "removeTitle": "Remove the phone PIN?",
+      "removeDescription": "Calls from your number can then start work again without a PIN.",
+      "locked": "Locked until {{time}} after too many wrong tries. A new PIN unlocks it."
     }
   },
   "cleanup": {

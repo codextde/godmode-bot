@@ -35,14 +35,20 @@ export function CallStatusPill({ status, className }: { status: CallStatus; clas
 }
 
 /** An incoming call from the owner's own number. */
-export function OwnerCallBadge({ className }: { className?: string }) {
+const CALLER_BADGE = {
+  pinVerified: "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+  pinWrong: "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+  ownerCall: "border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-300",
+} as const;
+
+/** Who the caller proved to be: the PIN says more than the caller ID. */
+export function CallerBadge({ call, className }: { call: Pick<PhoneCall, "ownerVerified" | "pinWrong" | "fromOwner">; className?: string }) {
   const { t } = useTranslation("calls");
+  const kind = call.ownerVerified ? "pinVerified" : call.pinWrong ? "pinWrong" : call.fromOwner ? "ownerCall" : null;
+  if (!kind) return null;
   return (
-    <span
-      title={t("ownerCall.title")}
-      className={cn("inline-flex items-center rounded-[5px] border border-sky-500/30 bg-sky-500/10 px-1.5 py-0.5 text-[11px] font-medium whitespace-nowrap text-sky-700 dark:text-sky-300", className)}
-    >
-      {t("ownerCall.label")}
+    <span title={t(`${kind}.title`)} className={cn("inline-flex items-center rounded-[5px] border px-1.5 py-0.5 text-[11px] font-medium whitespace-nowrap", CALLER_BADGE[kind], className)}>
+      {t(`${kind}.label`)}
     </span>
   );
 }

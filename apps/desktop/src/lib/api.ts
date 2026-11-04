@@ -155,6 +155,7 @@ import type { SharedChatPreview, DreamAllResult, McpApp, DeviceGroup, DeviceGrou
   PasswordImportPreview,
   PasswordImportResult,
   PhoneCall,
+  OwnerPinStatus,
   PlaceCallInput,
   ImportCallNumberInput,
   QueuedMessage,
@@ -1126,6 +1127,9 @@ export const api = {
     /** Calls the owner's number (409 with the reason when it can't). */
     test: () => post<PhoneCall>("/api/calls/test"),
     audio: (id: string) => fetchBlob(`/api/calls/${id}/audio`),
+    pin: () => get<OwnerPinStatus>("/api/calls/pin"),
+    setPin: (pin: string) => put<OwnerPinStatus>("/api/calls/pin", { pin }),
+    removePin: () => del<OwnerPinStatus>("/api/calls/pin"),
   },
 };
 

@@ -870,6 +870,25 @@
       "instructions": "Anweisungen",
       "instructionsDescription": "Wer abnimmt und wie: dein Geschäft, was Anrufer gefragt werden, was zugesagt werden darf.",
       "instructionsPlaceholder": "Du gehst für Studio Berg ran, einen Friseursalon in Hamburg. Nimm Namen, Anliegen und Zeitfenster des Anrufers auf. Bestätige keine Termine; sag, dass wir heute zurückrufen."
+    },
+    "pin": {
+      "title": "Telefon-PIN",
+      "description": "Sag sie im Anruf und Godmode macht, was du sagst, von jedem Telefon aus. Ohne sie können Anrufer nur eine Nachricht hinterlassen.",
+      "label": "PIN",
+      "on": "An. Sag sie Ziffer für Ziffer. Godmode prüft sie nach dem Anruf, die Stimme kennt sie nie.",
+      "off": "Aus. Anrufe von deiner Nummer können nur Arbeit starten, die du noch in der App freigibst.",
+      "set": "PIN festlegen",
+      "change": "Ändern",
+      "remove": "Entfernen",
+      "choose": "Wähle 6 Ziffern",
+      "repeat": "Noch einmal eingeben",
+      "weak": "Zu leicht zu erraten. Nimm eine andere.",
+      "mismatch": "Das passt nicht zusammen. Fang noch einmal an.",
+      "saved": "Telefon-PIN ist an",
+      "removed": "Telefon-PIN ist aus",
+      "removeTitle": "Telefon-PIN entfernen?",
+      "removeDescription": "Anrufe von deiner Nummer können dann wieder ohne PIN Arbeit starten.",
+      "locked": "Gesperrt bis {{time}} nach zu vielen falschen Versuchen. Eine neue PIN hebt die Sperre auf."
     }
   },
   "cleanup": {
