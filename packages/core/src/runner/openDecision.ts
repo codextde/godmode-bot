@@ -115,15 +115,18 @@ interface Heading {
   label: string;
   /** Text after the label on the same line ("**Decision for you:** Should I …?"). */
   rest: string;
+  indent: number;
+  listed: boolean;
 }
 
 function headingOf(raw: string, line: number): Heading | null {
   const md = /^\s{0,3}(#{1,6})\s+(.+?)\s*#*\s*$/.exec(raw);
-  if (md) return { line, level: md[1]!.length, label: plain(md[2]!), rest: "" };
+  if (md) return { line, level: md[1]!.length, label: plain(md[2]!), rest: "", indent: 0, listed: false };
   const bold = /^\s*(?:[-*•]\s+|\d+[.)]\s+)?(?:\*\*|__)(.{2,80}?)(?:\*\*|__)\s*[:：]?\s*(.*)$/.exec(raw);
-  if (bold) return { line, level: 7, label: plain(bold[1]!), rest: bold[2]!.trim() };
+  const indent = /^\s*/.exec(raw)![0].length;
+  if (bold) return { line, level: 7, label: plain(bold[1]!), rest: bold[2]!.trim(), indent, listed: /^\s*(?:[-*•]\s|\d+[.)]\s)/.test(raw) };
   const label = /^\s*([^.!?:\n]{3,80})[:：]\s*$/.exec(raw);
-  if (label) return { line, level: 8, label: plain(label[1]!), rest: "" };
+  if (label) return { line, level: 8, label: plain(label[1]!), rest: "", indent, listed: false };
   return null;
 }
 
@@ -171,8 +174,60 @@ function titleOf(section: string): string {
 function bodyOf(section: string, title: string): string {
   const text = section.trim();
   if (plain(text) === title) return "";
-  const rest = text.startsWith(title) ? text.slice(title.length).trim() : text;
+  const rest = text.startsWith(title) ? text.slice(title.length).replace(/^[:：]/, "").trim() : text;
   return rest.length > BODY_MAX ? `${rest.slice(0, BODY_MAX - 1)}…` : rest;
+}
+
+const OPTION_LABEL = /^(?:(?:options?|choices?|variante|möglichkeit)\s*)?(?:[a-z]|\d+)?[.):]?$/i;
+const INTRODUCES = /[:：]\s*(?:\*\*|__)?\s*$/;
+
+/** Without the indent a nested list gave the section's lines, so it reads as Markdown of its own. */
+function dedent(lines: string[]): string[] {
+  const indents = lines.filter((l) => l.trim()).map((l) => /^\s*/.exec(l)![0].length);
+  const by = indents.length ? Math.min(...indents) : 0;
+  return lines.map((l) => l.slice(by));
+}
+
+const LIST_ITEM = /^\s*(?:[-*+•]\s|\d+[.)]\s)/;
+
+/** Where the section ends. The options it offers belong to it, whatever marks they wear; the next label doesn't. */
+function sectionEnd(h: Heading, headings: Heading[], lines: string[]): number {
+  let afterIntro = INTRODUCES.test(h.rest);
+  let inList = false;
+  for (const o of headings) {
+    if (o.line <= h.line) continue;
+    if (o.level > h.level) continue;
+    if (o.level < 7) return o.line;
+    if (OPTION_LABEL.test(o.label)) continue;
+    const before = lines.slice(h.line + 1, o.line).filter((l) => l.trim()).at(-1);
+    const introduced = !!before && INTRODUCES.test(before);
+    afterIntro ||= introduced;
+    if (afterIntro && !o.listed) continue;
+    const opened = !before ? !!h.rest : introduced || inList;
+    if (o.listed && (o.indent > h.indent || (!h.listed && opened))) {
+      inList = true;
+      afterIntro = false;
+      continue;
+    }
+    return o.line;
+  }
+  return lines.length;
+}
+
+/** The list a bare closing question chooses from, with the line that introduces it. */
+function choicesBefore(paragraphs: string[]): string {
+  const taken: string[] = [];
+  for (const p of paragraphs.slice(0, -1).reverse()) {
+    const lines = p.split("\n");
+    if (lines.some((l) => LIST_ITEM.test(l))) {
+      taken.unshift(p);
+      if (LIST_ITEM.test(lines[0]!)) continue;
+    } else if (INTRODUCES.test(lines.at(-1)!) || taken.length) {
+      taken.unshift(p);
+    }
+    break;
+  }
+  return taken.join("\n\n");
 }
 
 /**
@@ -190,8 +245,7 @@ export function detectOpenDecision(text: string, human = ""): OpenDecision | nul
   let saidNothing = false;
   for (const h of headings) {
     if (!h.label || !patterns.some((re) => re.test(h.label))) continue;
-    const next = headings.find((o) => o.line > h.line && o.level <= h.level);
-    const section = [h.rest, ...lines.slice(h.line + 1, next?.line ?? lines.length)].join("\n").trim();
+    const section = [h.rest, ...dedent(lines.slice(h.line + 1, sectionEnd(h, headings, lines)))].join("\n").trim();
     const said = plain(section.split("\n").find((l) => l.trim()) ?? "");
     // "nothing new from this run. You may want to …" goes on without asking: still nothing.
     const all = sentences(section);
@@ -217,5 +271,6 @@ export function detectOpenDecision(text: string, human = ""): OpenDecision | nul
   const asked = sentences(last).at(-1);
   if (!asked || !(isQuestion(asked) ? ASKS : WAITS).some((re) => re.test(asked)) || !forTheHuman(asked)) return null;
   const title = shorten(asked, TITLE_MAX);
-  return { title, body: bodyOf(last, title) };
+  const body = bodyOf(last, title);
+  return { title, body: body || choicesBefore(paragraphs).slice(0, BODY_MAX) };
 }

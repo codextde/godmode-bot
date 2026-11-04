@@ -114,6 +114,50 @@ describe("a decision left open in an answer", () => {
     }
   });
 
+  test("the options stay with the question", () => {
+    const nested = detectOpenDecision(
+      [
+        "The sync is ready.",
+        "",
+        "- **Checks:** green.",
+        "- **Decision for you: Touch ID, held back.** Today the fingerprint unlocks the vault. Upstream goes further.",
+        "",
+        "  Your options:",
+        "  1. **Leave it out:** I merge the PR as is.",
+        "  2. **Take it (my recommendation):** I add it first, then merge.",
+      ].join("\n"),
+    );
+    expect(nested?.title).toBe("Today the fingerprint unlocks the vault.");
+    expect(nested?.body).toBe(
+      "Upstream goes further.\n\nYour options:\n1. **Leave it out:** I merge the PR as is.\n2. **Take it (my recommendation):** I add it first, then merge.",
+    );
+
+    for (const answer of [
+      "**Decision for you:** Which host?\n\n1. **Old:** cheap\n2. **New:** fast",
+      "**Decision for you:** Which host?\n\n**Option A:** cheap\n\n**Option B:** fast",
+      "**Decision for you:** Pick a host:\n\n**Old:** cheap\n\n**New:** fast",
+    ]) {
+      const found = detectOpenDecision(answer, "Dana");
+      expect(`${found?.title}\n${found?.body}`).toContain("cheap");
+      expect(`${found?.title}\n${found?.body}`).toContain("fast");
+    }
+  });
+
+  test("the next label still ends the section", () => {
+    expect(detectOpenDecision("**Decision for you:** Which host?\n\nI checked three.\n\n- **Files:** report.pdf")?.body).toBe("I checked three.");
+    expect(detectOpenDecision("- **Decision for you:** Keep the price or go to 49 EUR?\n- **Files:** report.pdf")).toEqual({
+      title: "Keep the price or go to 49 EUR?",
+      body: "",
+    });
+  });
+
+  test("a closing question keeps the list it chooses from", () => {
+    const found = detectOpenDecision("Two hosts fit:\n\n- Old: cheap\n- New: fast\n\nWhich one do you want?");
+    expect(found).toEqual({ title: "Which one do you want?", body: "Two hosts fit:\n\n- Old: cheap\n- New: fast" });
+    expect(detectOpenDecision("Two hosts fit:\n- Old: cheap\n- New: fast\n\nWhich one do you want?")?.body).toBe("Two hosts fit:\n- Old: cheap\n- New: fast");
+    expect(detectOpenDecision("I drafted the newsletter.\n\nShould I send it to the whole list on Monday?")?.body).toBe("");
+  });
+
   test("long questions are cut, Markdown marks dropped", () => {
     const found = detectOpenDecision(`## Your call\n\n- **Should** I move \`main\` to the [new host](https://x.example) ${"and keep the old one running ".repeat(12)}?`);
     expect(found!.title.startsWith("Should I move main to the new host and keep")).toBe(true);
