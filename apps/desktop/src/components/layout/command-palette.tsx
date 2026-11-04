@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type KeyboardEvent } from "react";
 import { useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -76,6 +76,7 @@ import { api } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { cloudContext } from "@/lib/core";
 import { modKey } from "@/lib/desktop";
+import { cn } from "cn";
 import { AgentAvatar } from "@/components/common";
 import { useHandoff } from "@/components/devices/device-parts";
 import { EASY_PAGES, MODE_LABEL, useInterfaceMode, useSetInterfaceMode } from "@/lib/mode";
@@ -124,6 +125,45 @@ function wordFilter(value: string, search: string, keywords?: string[]): number 
   return words.every((w) => (UNSPACED.test(w) ? text.includes(w) : new RegExp(`(^|[^\\p{L}\\p{N}])${w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "u").test(text))) ? 1 : 0;
 }
 
+const KINDS = ["all", "chats", "tickets", "agents", "automations", "workspaces", "commands"] as const;
+type Kind = (typeof KINDS)[number];
+
+function TypeTabs({ kind, onKind }: { kind: Kind; onKind: (k: Kind) => void }) {
+  const { t } = useTranslation("layout");
+  return (
+    <div role="tablist" aria-label={t("palette.typesLabel")} className="flex gap-1 overflow-x-auto border-b px-3 py-2">
+      {KINDS.map((k) => (
+        <button
+          key={k}
+          type="button"
+          role="tab"
+          aria-selected={kind === k}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => onKind(k)}
+          className={cn(
+            "shrink-0 rounded-md px-2.5 py-1 text-sm transition-colors",
+            kind === k ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:text-foreground",
+          )}
+        >
+          {t(`palette.types.${k}`)}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function Hints() {
+  const { t } = useTranslation("layout");
+  const key = "rounded border px-1 font-mono text-[10px] leading-4 text-muted-foreground";
+  return (
+    <div className="flex items-center gap-4 border-t px-3 py-2 text-xs text-muted-foreground">
+      <span className="flex items-center gap-1.5">{t("palette.hints.open")} <kbd className={key}>↵</kbd></span>
+      <span className="flex items-center gap-1.5">{t("palette.hints.switchType")} <kbd className={key}>←</kbd><kbd className={key}>→</kbd></span>
+      <span className="ml-auto flex items-center gap-1.5">{t("palette.hints.close")} <kbd className={key}>Esc</kbd></span>
+    </div>
+  );
+}
+
 export function CommandPalette() {
   const { t } = useTranslation(["layout", "common"]);
   const open = useUi((s) => s.commandOpen);
@@ -146,6 +186,9 @@ export function CommandPalette() {
   const startChat = useStartAgentChat();
   const devices = useHandoff();
   const [q, setQ] = useState("");
+  const [kind, setKind] = useState<Kind>("all");
+  const show = (k: Kind) => kind === "all" || kind === k;
+  const listing = kind !== "all";
   const query = q.trim().toLowerCase();
   const searching = query.length > 0;
   const [deferred, setDeferred] = useState("");
@@ -154,7 +197,10 @@ export function CommandPalette() {
     return () => clearTimeout(t);
   }, [q]);
   useEffect(() => {
-    if (!open) setQ("");
+    if (!open) {
+      setQ("");
+      setKind("all");
+    }
   }, [open]);
   const { data: found, isPlaceholderData: foundBefore } = useQuery({
     queryKey: qk.search(deferred),
@@ -164,8 +210,21 @@ export function CommandPalette() {
     staleTime: 5_000,
   });
   const { data: waiting = [] } = useQuery({ queryKey: qk.attention, queryFn: api.attention, enabled: open, staleTime: 2_000 });
-  const { data: tasks = [] } = useQuery({ queryKey: qk.taskList("all"), queryFn: () => api.tasks.list({ workspaceId: "all" }), enabled: open && searching });
-  const { data: routines = [] } = useQuery({ queryKey: qk.routineList("all"), queryFn: () => api.routines.list({}), enabled: open && searching });
+  const { data: tasks = [] } = useQuery({ queryKey: qk.taskList("all"), queryFn: () => api.tasks.list({ workspaceId: "all" }), enabled: open && (searching || kind === "tickets") });
+  const { data: routines = [] } = useQuery({ queryKey: qk.routineList("all"), queryFn: () => api.routines.list({}), enabled: open && (searching || kind === "automations") });
+
+  const step = (by: number) => setKind((k) => KINDS[(KINDS.indexOf(k) + by + KINDS.length) % KINDS.length]!);
+  const onInputKey = (e: KeyboardEvent<HTMLInputElement>) => {
+    const el = e.currentTarget;
+    if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey || el.selectionStart !== el.selectionEnd) return;
+    if (e.key === "ArrowRight" && el.selectionEnd === el.value.length) {
+      e.preventDefault();
+      step(1);
+    } else if (e.key === "ArrowLeft" && el.selectionStart === 0) {
+      e.preventDefault();
+      step(-1);
+    }
+  };
 
   const go = (to: string) => {
     setOpen(false);
@@ -175,29 +234,36 @@ export function CommandPalette() {
   // Tickets by number ("#12", "12") or title; automations by name or what they do. Capped: the list stays short.
   const number = /^#?(\d+)$/.exec(query)?.[1];
   const fresh = searching && deferred === q.trim() && !foundBefore ? (found ?? null) : null;
-  const ticketHits = searching
+  const ticketHits = !show("tickets")
+    ? []
+    : !searching && listing
+      ? [...tasks].sort((a, b) => b.number - a.number).slice(0, 100).map((t) => ({ id: t.id, number: t.number, title: t.title, snippet: null as string | null }))
+      : searching
     ? number
       ? tasks.filter((t) => String(t.number).startsWith(number)).sort((a, b) => a.number - b.number).slice(0, 8).map((t) => ({ id: t.id, number: t.number, title: t.title, snippet: null as string | null }))
       : fresh
         ? fresh.tasks
         : tasks.filter((t) => wordFilter(t.title, q) > 0).slice(0, 8).map((t) => ({ id: t.id, number: t.number, title: t.title, snippet: null as string | null }))
     : [];
-  const routineHits = searching ? routines.filter((r) => wordFilter(`${r.name} ${r.prompt}`, q) > 0).slice(0, 6) : [];
-  const chatHits = !searching
-    ? conversations.slice(0, 50).map((c) => ({ id: c.id, title: c.title, snippet: c.preview ? c.preview : null, messageId: null as string | null, marked: false }))
+  const routineHits = !show("automations") ? [] : !searching && listing ? routines : searching ? routines.filter((r) => wordFilter(`${r.name} ${r.prompt}`, q) > 0).slice(0, 6) : [];
+  const chatHits = !show("chats")
+    ? []
+    : !searching
+    ? conversations.slice(0, listing ? 200 : 50).map((c) => ({ id: c.id, title: c.title, snippet: c.preview ? c.preview : null, messageId: null as string | null, marked: false }))
     : fresh
       ? fresh.chats.map((c) => ({ id: c.id, title: c.title, snippet: c.snippet, messageId: c.titleMatch && !c.snippet ? null : c.messageId, marked: true }))
       : conversations.filter((c) => wordFilter(c.title, q) > 0).map((c) => ({ id: c.id, title: c.title, snippet: null as string | null, messageId: null as string | null, marked: false }));
-  const noteHits = fresh?.notes ?? [];
+  const noteHits = kind === "all" ? (fresh?.notes ?? []) : [];
   const agentName = (id: string) => agents.find((a) => a.id === id)?.name ?? "";
 
   return (
     <CommandDialog open={open} onOpenChange={setOpen} filter={wordFilter} title={t("common:actions.search")} description={t("palette.description")}>
-      <CommandInput placeholder={t("palette.placeholder")} value={q} onValueChange={setQ} />
+      <CommandInput placeholder={t("palette.placeholder")} value={q} onValueChange={setQ} onKeyDown={onInputKey} />
+      <TypeTabs kind={kind} onKind={setKind} />
       {fresh?.corrected && <div className="px-3 pt-2 text-xs text-muted-foreground">{t("palette.showingFor", { query: fresh.corrected })}</div>}
-      <CommandList>
+      <CommandList className="max-h-[min(420px,60vh)]">
         <CommandEmpty>{t("palette.empty")}</CommandEmpty>
-        {waiting.length > 0 && (
+        {kind === "all" && waiting.length > 0 && (
           <>
             <CommandGroup heading={t("palette.groups.waiting")}>
               {(searching ? waiting : waiting.slice(0, 5)).map((item) => {
@@ -215,7 +281,7 @@ export function CommandPalette() {
             <CommandSeparator />
           </>
         )}
-        {searching && workspaces.length > 0 && (
+        {show("workspaces") && (searching || listing) && workspaces.length > 0 && (
           <CommandGroup heading={t("palette.groups.switchWorkspace")}>
             {workspaces.map((w) => (
               <CommandItem
@@ -296,6 +362,8 @@ export function CommandPalette() {
             ))}
           </CommandGroup>
         )}
+        {show("commands") && (
+        <>
         <CommandGroup heading={t("palette.groups.actions")}>
           <CommandItem onSelect={() => go("/")}>
             <MessageSquarePlus /> {t("shell.newChat")} <CommandShortcut>{modKey}N</CommandShortcut>
@@ -498,7 +566,7 @@ export function CommandPalette() {
             <Settings /> {t("common:words.settings")} <CommandShortcut>{modKey},</CommandShortcut>
           </CommandItem>
         </CommandGroup>
-        {searching && (
+        {(searching || listing) && (
           <>
             <CommandSeparator />
             <CommandGroup heading={t("common:words.settings")}>
@@ -511,7 +579,9 @@ export function CommandPalette() {
             </CommandGroup>
           </>
         )}
-        {agents.length > 0 && (
+        </>
+        )}
+        {show("agents") && agents.length > 0 && (
           <>
             <CommandSeparator />
             <CommandGroup heading={t("nav.agents")}>
@@ -544,6 +614,7 @@ export function CommandPalette() {
           </>
         )}
       </CommandList>
+      <Hints />
     </CommandDialog>
   );
 }

@@ -258,6 +258,21 @@
     }
   },
   "palette": {
+    "types": {
+      "all": "All",
+      "chats": "Chats",
+      "tickets": "Tickets",
+      "agents": "Agents",
+      "automations": "Automations",
+      "workspaces": "Workspaces",
+      "commands": "Commands"
+    },
+    "typesLabel": "Filter by type",
+    "hints": {
+      "open": "Open",
+      "switchType": "Switch type",
+      "close": "Close"
+    },
     "description": "Find what waits for you, chats, tickets, automations, agents, settings and actions",
     "placeholder": "Search chats, tickets, automations, settings… or type a command",
     "empty": "No results.",
