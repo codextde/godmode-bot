@@ -50,7 +50,7 @@ export function PalettePicker({ value, mode, onChange }: { value: Palette; mode:
               </span>
             </span>
             <span className="flex items-center gap-1.5 border-t px-2.5 py-2 text-xs font-medium">
-              <span className="min-w-0 flex-1 truncate">{paletteLabel(id)}</span>
+              <span className="min-w-0 flex-1 truncate" style={{ fontFamily: def.style?.fontSans, letterSpacing: def.style?.tracking }}>{paletteLabel(id)}</span>
               {active && <Check className="size-3.5 shrink-0" />}
             </span>
           </button>

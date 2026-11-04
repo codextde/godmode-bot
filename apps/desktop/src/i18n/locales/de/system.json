@@ -46,7 +46,8 @@
     "rose": { "label": "Rosé", "blurb": "Zartes Rosa mit Himbeer-Akzent" },
     "forest": { "label": "Wald", "blurb": "Moos, Farn und Rinde" },
     "ocean": { "label": "Ozean", "blurb": "Meerglas und tiefes Wasser" },
-    "dracula": { "blurb": "Violette Nacht und ein heller Tag dazu", "label": "Dracula" }
+    "dracula": { "blurb": "Violette Nacht und ein heller Tag dazu", "label": "Dracula" },
+    "vercel": { "label": "Vercel", "blurb": "Unbunt mit Geist, Schattenrahmen und einem Blau" }
   },
   "password": {
     "strength": {

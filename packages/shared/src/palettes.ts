@@ -13,11 +13,31 @@ export interface Seeds {
   sidebar: string;
 }
 
+export interface PaletteShadows {
+  card?: string;
+  float?: string;
+}
+
+export interface PaletteStyle {
+  radius?: string;
+  fontSans?: string;
+  fontMono?: string;
+  fontScale?: number;
+  fontFeatures?: string;
+  tracking?: string;
+  headingTracking?: string;
+  strongWeight?: number;
+  border?: number;
+  ring?: "brand";
+  shadows?: { light?: PaletteShadows; dark?: PaletteShadows };
+}
+
 export interface PaletteDef {
   label: string;
   blurb: string;
   light: Seeds;
   dark: Seeds;
+  style?: PaletteStyle;
 }
 
 export const DEFAULT_PALETTE: Palette = "paper";
@@ -70,6 +90,32 @@ export const PALETTE_DEFS: Record<Palette, PaletteDef> = {
     blurb: "Purple night, and a pale day to match",
     light: { background: "#f8f8f2", foreground: "#282a36", card: "#ffffff", muted: "#eeeef5", mutedForeground: "#6272a4", primary: "#282a36", brand: "#7c5cdb", sidebar: "#f1f1f6" },
     dark: { background: "#282a36", foreground: "#f8f8f2", card: "#2f3241", muted: "#383a4a", mutedForeground: "#a4acc8", primary: "#bd93f9", brand: "#bd93f9", sidebar: "#21222c" },
+  },
+  vercel: {
+    label: "Vercel",
+    blurb: "Achromatic Geist, shadow borders and one blue",
+    light: { background: "#fafafa", foreground: "#171717", card: "#ffffff", muted: "#f2f2f2", mutedForeground: "#4d4d4d", primary: "#171717", brand: "#0072f5", sidebar: "#fafafa" },
+    dark: { background: "#0a0a0a", foreground: "#ededed", card: "#111111", muted: "#1f1f1f", mutedForeground: "#a1a1a1", primary: "#ededed", brand: "#52aeff", sidebar: "#000000" },
+    style: {
+      radius: "0.375rem",
+      fontSans: '"Geist Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif',
+      fontMono: '"Geist Mono Variable", ui-monospace, SFMono-Regular, "Roboto Mono", Menlo, monospace',
+      fontFeatures: '"liga"',
+      headingTracking: "-0.02em",
+      strongWeight: 600,
+      border: 8,
+      ring: "brand",
+      shadows: {
+        light: {
+          card: "0 0 0 1px #00000014, 0 2px 2px #0000000a",
+          float: "0 0 0 1px #00000014, 0 1px 1px #00000005, 0 4px 8px -4px #0000000a, 0 16px 24px -8px #0000000f",
+        },
+        dark: {
+          card: "0 0 0 1px #ffffff1a",
+          float: "0 0 0 1px #ffffff24, 0 1px 1px #00000040, 0 16px 24px -8px #00000099",
+        },
+      },
+    },
   },
 };
 

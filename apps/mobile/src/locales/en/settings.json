@@ -128,6 +128,10 @@
         "dracula": {
           "label": "Dracula",
           "blurb": "Purple night, and a pale day to match"
+        },
+        "vercel": {
+          "label": "Vercel",
+          "blurb": "Achromatic Geist, shadow borders and one blue"
         }
       }
     },

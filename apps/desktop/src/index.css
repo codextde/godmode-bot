@@ -122,8 +122,8 @@
 }
 
 @theme inline {
-  --font-sans: "Geist Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-mono: "Geist Mono Variable", ui-monospace, "SF Mono", Menlo, monospace;
+  --font-sans: var(--gm-font-sans, "Geist Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif);
+  --font-mono: var(--gm-font-mono, "Geist Mono Variable", ui-monospace, "SF Mono", Menlo, monospace);
 
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -249,9 +249,13 @@
   #root {
     height: 100%;
   }
+  html {
+    font-size: calc(100% * var(--gm-font-scale, 1));
+  }
   body {
     @apply bg-background text-foreground font-sans antialiased;
-    font-feature-settings: "ss01", "cv11";
+    font-feature-settings: var(--gm-font-features, "ss01", "cv11");
+    letter-spacing: var(--gm-tracking, normal);
     -webkit-font-smoothing: antialiased;
     overscroll-behavior: none;
   }
@@ -259,6 +263,11 @@
   h2,
   h3 {
     text-wrap: balance;
+    letter-spacing: var(--gm-heading-tracking, inherit);
+  }
+  b,
+  strong {
+    font-weight: var(--gm-strong-weight, bolder);
   }
   ::selection {
     background: color-mix(in oklab, var(--brand) 26%, transparent);
