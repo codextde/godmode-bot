@@ -199,6 +199,7 @@ function checkPhonePatch(value: unknown): void {
     if (v !== undefined && (typeof v !== "string" || v.length > max)) throw badRequest(`phone.${key} must be text of at most ${max} characters`);
   };
   for (const key of ["numberId", "voiceId", "llm", "inboundAgentId"]) text(key, 200);
+  text("callerName", 60);
   text("inboundGreeting", 500);
   text("inboundInstructions", 6000);
   if (typeof phone.ownerNumber === "string" && phone.ownerNumber.trim()) {

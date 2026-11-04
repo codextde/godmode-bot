@@ -844,6 +844,7 @@
       "gone": "A voice that's gone",
       "stopSample": "Stop the sample",
       "playSample": "Play a sample",
+      "name": "Name",
       "model": "Model",
       "modelDescription": "Talks on the call. Faster models keep the pauses short.",
       "language": "Language",

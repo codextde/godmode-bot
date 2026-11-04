@@ -190,8 +190,9 @@ describe("the owner calling in", () => {
 
   test("the greeting is in the line's language unless the human wrote one", () => {
     const p = getSettings().phone;
-    expect(inboundGreeting({ ...p, inboundGreeting: "", language: "de" })).toBe("Hallo, hier ist die Assistenz von Daniel Ehrhardt. Wie kann ich helfen?");
-    expect(inboundGreeting({ ...p, inboundGreeting: "", language: "en" })).toBe("Hello, this is Daniel Ehrhardt's assistant. How can I help you?");
+    expect(inboundGreeting({ ...p, inboundGreeting: "", language: "de" })).toBe("Büro Daniel Ehrhardt, hier ist Alex. Was kann ich für Sie tun?");
+    expect(inboundGreeting({ ...p, inboundGreeting: "", language: "en" })).toBe("Daniel Ehrhardt's office, this is Alex. How can I help you?");
+    expect(inboundGreeting({ ...p, inboundGreeting: "", callerName: "Stephan", language: "de" })).toBe("Büro Daniel Ehrhardt, hier ist Stephan. Was kann ich für Sie tun?");
     expect(inboundGreeting({ ...p, inboundGreeting: " Servus! ", language: "en" })).toBe("Servus!");
   });
 
@@ -305,7 +306,10 @@ describe("placing a call", () => {
     expect(override.prompt.prompt).toContain("Never claim to be Daniel Ehrhardt");
     expect(override.first_message).toBe("");
     expect(override.prompt.prompt).toContain("The other person picks up and speaks first");
-    expect(override.prompt.prompt).toContain("Guten Tag, hier ist das Büro von Daniel Ehrhardt.");
+    expect(override.prompt.prompt).toContain("Guten Tag, hier ist Alex aus dem Büro von Daniel Ehrhardt.");
+    expect(override.prompt.prompt).toContain("Your name is Alex. Don't call yourself an assistant");
+    expect(override.prompt.prompt).toContain("say honestly that you are an AI voice");
+    expect(override.prompt.prompt).not.toContain("digital assistant");
     expect(override.prompt.prompt).toContain('say only "Hallo?"');
     expect(override.language).toBe("de");
 
@@ -389,7 +393,7 @@ describe("placing a call", () => {
     await placeCall({ to: "+4930445", goal: "Ask about opening hours", language: "en", purpose: "task" });
     const left = sentTo("/v1/convai/twilio/outbound-call").map((s) => (s.json!.conversation_initiation_client_data as { dynamic_variables: Record<string, string> }).dynamic_variables.voicemail_message);
     expect(left).toEqual([defaultVoicemail({ purpose: "task", language: "de", agentName: "x" }), defaultVoicemail({ purpose: "task", language: "en", agentName: "x" })]);
-    expect(left[0]).toBe("Guten Tag, hier ist das Büro von Daniel Ehrhardt. Daniel Ehrhardt meldet sich bald noch einmal bei Ihnen. Vielen Dank und auf Wiederhören.");
+    expect(left[0]).toBe("Guten Tag, hier ist Alex aus dem Büro von Daniel Ehrhardt. Daniel Ehrhardt meldet sich bald noch einmal bei Ihnen. Vielen Dank und auf Wiederhören.");
     expect(left[1]).not.toContain("opening hours");
     expect(defaultVoicemail({ purpose: "question", language: "de", agentName: "Caller" })).toBe("Hi Daniel, hier ist Godmode. Caller braucht eine Entscheidung von dir, die Frage wartet in der Godmode-App.");
   });
@@ -451,10 +455,11 @@ describe("placing a call", () => {
   test("the voice waits for the callee and says a short hello after 3 s of silence", async () => {
     const body = agentBody({ name: "x", prompt: "p", firstMessage: "", language: "de", llm: "m", voiceId: "", maxSeconds: 60 });
     expect(body.conversation_config.turn.initial_wait_time).toBe(3);
+    expect(body.conversation_config.tts).toEqual({ model_id: "eleven_v4_turbo", expressive_mode: true });
     await placeCall({ to: "+4930555", goal: "Ask about opening hours", language: "en", purpose: "task" });
     const agentOverride = (sentTo("/v1/convai/twilio/outbound-call")[0]!.json!.conversation_initiation_client_data as { conversation_config_override: { agent: { first_message: string; prompt: { prompt: string } } } }).conversation_config_override.agent;
     expect(agentOverride.first_message).toBe("");
-    expect(agentOverride.prompt.prompt).toContain("Good day, this is Daniel Ehrhardt's office.");
+    expect(agentOverride.prompt.prompt).toContain("Good day, this is Alex from Daniel Ehrhardt's office.");
     expect(agentOverride.prompt.prompt).toContain('say only "Hello?"');
   });
 

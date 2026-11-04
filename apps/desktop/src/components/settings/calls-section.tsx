@@ -381,6 +381,9 @@ function VoiceGroup({ settings, setup }: { settings: Settings; setup: CallSetup 
           {playing ? <Square /> : <Play />}
         </Button>
       </SettingRow>
+      <SettingRow label={t("calls.voice.name")} htmlFor="calls-name">
+        <CommitInput id="calls-name" className="w-56" maxLength={60} value={p.callerName} placeholder="Alex" onCommit={(callerName) => patch({ phone: { callerName: callerName.trim() } })} />
+      </SettingRow>
       <SettingRow label={t("calls.voice.model")} htmlFor="calls-llm" description={t("calls.voice.modelDescription")}>
         <Select value={p.llm} onValueChange={(llm) => patch({ phone: { llm } })}>
           <SelectTrigger id="calls-llm" className="w-56 font-mono text-[13px]">

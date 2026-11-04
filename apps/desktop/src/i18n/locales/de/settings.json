@@ -844,6 +844,7 @@
       "gone": "Eine Stimme, die es nicht mehr gibt",
       "stopSample": "Hörprobe stoppen",
       "playSample": "Hörprobe abspielen",
+      "name": "Name",
       "model": "Modell",
       "modelDescription": "Spricht im Anruf. Schnellere Modelle halten die Pausen kurz.",
       "language": "Sprache",

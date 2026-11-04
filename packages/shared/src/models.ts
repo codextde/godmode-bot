@@ -1697,6 +1697,8 @@ export interface PhoneSettings {
   quietTo: string;
   /** ElevenLabs voice ("" = ElevenLabs' default). */
   voiceId: string;
+  /** The name the voice introduces itself with ("" = Alex). */
+  callerName: string;
   /** Model that talks on the call (an ElevenLabs LLM id). */
   llm: string;
   /** Language a call starts in when the agent doesn't name one (ISO 639-1). */
