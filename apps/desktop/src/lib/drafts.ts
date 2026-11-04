@@ -15,6 +15,17 @@ interface Stored {
 }
 
 const memory = new Map<string, Stored>();
+const listeners = new Map<string, Set<() => void>>();
+
+function subscribe(key: string, fn: () => void) {
+  const set = listeners.get(key) ?? new Set();
+  set.add(fn);
+  listeners.set(key, set);
+  return () => {
+    set.delete(fn);
+    if (!set.size) listeners.delete(key);
+  };
+}
 
 export type DraftPersist = boolean | "local";
 
@@ -76,6 +87,7 @@ export function loadDraft<T>(key: string | undefined, fallback: T): T {
 export function saveDraft(key: string, value: unknown, base: unknown, persist: DraftPersist = true) {
   const stored = { base, value };
   memory.set(key, stored);
+  listeners.get(key)?.forEach((fn) => fn());
   if (!persist) return;
   try {
     (persist === "local" ? local() : session())?.setItem(PREFIX + key, JSON.stringify(stored));
@@ -127,6 +139,17 @@ export function useDraft<T>(key: string | undefined, initial: T, { persist = tru
     if (same(value, initialRef.current)) clearDraft(key);
     else saveDraft(key, value, initialRef.current, persist);
   }, [key, value, persist]);
+
+  useEffect(() => {
+    if (!key) return;
+    return subscribe(key, () =>
+      setState((s) => {
+        if (s.key !== key) return s;
+        const next = loadDraft(key, s.base);
+        return same(next, s.value) ? s : { ...s, value: next };
+      }),
+    );
+  }, [key]);
 
   const setValue: Dispatch<SetStateAction<T>> = useCallback(
     (action) => setState((s) => ({ ...s, value: typeof action === "function" ? (action as (prev: T) => T)(s.value) : action })),
