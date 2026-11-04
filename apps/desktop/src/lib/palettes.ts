@@ -11,8 +11,11 @@ export const paletteBlurb = (p: Palette): string => t(`system:palettes.${p}.blur
 
 const mix = (color: string, pct: number, into = "transparent") => `color-mix(in srgb, ${color} ${pct}%, ${into})`;
 
-export function paletteTokens(s: Seeds, mode: Mode): Record<string, string> {
+export function paletteTokens(s: Seeds, mode: Mode, style?: PaletteStyle): Record<string, string> {
   const fg = s.foreground;
+  const border = style?.border ?? 9;
+  const ring = style?.ring === "brand" ? s.brand : mix(fg, 28);
+  const shadows = style?.shadows?.[mode];
   return {
     "--background": s.background,
     "--foreground": fg,
@@ -28,9 +31,9 @@ export function paletteTokens(s: Seeds, mode: Mode): Record<string, string> {
     "--muted-foreground": s.mutedForeground,
     "--accent": mix(fg, 4, s.muted),
     "--accent-foreground": fg,
-    "--border": mix(fg, 9),
-    "--input": mix(fg, 13),
-    "--ring": mix(fg, 28),
+    "--border": mix(fg, border),
+    "--input": mix(fg, border + 4),
+    "--ring": ring,
     "--brand": s.brand,
     "--brand-strong": mode === "light" ? mix(s.brand, 72, "black") : mix(s.brand, 88, "white"),
     "--brand-soft": mix(s.brand, 13),
@@ -42,8 +45,10 @@ export function paletteTokens(s: Seeds, mode: Mode): Record<string, string> {
     "--sidebar-primary-foreground": s.background,
     "--sidebar-accent": mix(fg, 6),
     "--sidebar-accent-foreground": fg,
-    "--sidebar-border": mix(fg, 8),
-    "--sidebar-ring": mix(fg, 28),
+    "--sidebar-border": mix(fg, border - 1),
+    "--sidebar-ring": ring,
+    ...(shadows?.card ? { "--gm-shadow-card": shadows.card } : {}),
+    ...(shadows?.float ? { "--gm-shadow-float": shadows.float } : {}),
   };
 }
 
@@ -56,6 +61,8 @@ export function styleTokens(style: PaletteStyle | undefined): Record<string, str
   if (style.fontScale) tokens["--gm-font-scale"] = String(style.fontScale);
   if (style.fontFeatures) tokens["--gm-font-features"] = style.fontFeatures;
   if (style.tracking) tokens["--gm-tracking"] = style.tracking;
+  if (style.headingTracking) tokens["--gm-heading-tracking"] = style.headingTracking;
+  if (style.strongWeight) tokens["--gm-strong-weight"] = String(style.strongWeight);
   return tokens;
 }
 
@@ -68,5 +75,5 @@ export function paletteCss(id: Palette): string {
   if (id === DEFAULT_PALETTE) return "";
   const def = PALETTE_DEFS[id];
   const sel = `:root[data-palette="${id}"]`;
-  return block(sel, { ...styleTokens(def.style), ...paletteTokens(def.light, "light") }) + block(`${sel}.dark`, paletteTokens(def.dark, "dark"));
+  return block(sel, { ...styleTokens(def.style), ...paletteTokens(def.light, "light", def.style) }) + block(`${sel}.dark`, paletteTokens(def.dark, "dark", def.style));
 }

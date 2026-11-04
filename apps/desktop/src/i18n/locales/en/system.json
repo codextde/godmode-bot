@@ -47,7 +47,7 @@
     "forest": { "label": "Forest", "blurb": "Moss, fern and bark" },
     "ocean": { "label": "Ocean", "blurb": "Sea glass and deep water" },
     "dracula": { "blurb": "Purple night, and a pale day to match", "label": "Dracula" },
-    "vercel": { "label": "Vercel", "blurb": "Stark black and white, Geist and crisp corners" }
+    "vercel": { "label": "Vercel", "blurb": "Achromatic Geist, shadow borders and one blue" }
   },
   "password": {
     "strength": {

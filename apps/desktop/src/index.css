@@ -263,6 +263,11 @@
   h2,
   h3 {
     text-wrap: balance;
+    letter-spacing: var(--gm-heading-tracking, inherit);
+  }
+  b,
+  strong {
+    font-weight: var(--gm-strong-weight, bolder);
   }
   ::selection {
     background: color-mix(in oklab, var(--brand) 26%, transparent);
