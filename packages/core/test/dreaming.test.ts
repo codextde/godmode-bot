@@ -9,7 +9,7 @@ import { getMeta, get, insert, setMeta } from "../src/db";
 import { MIGRATIONS } from "../src/db/migrations";
 import { getSettings, updateSettings } from "../src/services/settings";
 import { createConversation, getConversation, sendMessage, transcriptPath } from "../src/services/conversations";
-import { writeAgentFile } from "../src/agents/service";
+import { updateAgent, writeAgentFile } from "../src/agents/service";
 import { cancelRun, getRun, waitForRun } from "../src/runner/runner";
 import { callTool, listToolsFor } from "../src/mcp/tools";
 import { getAccessToken } from "../src/server/auth";
@@ -34,6 +34,7 @@ import {
   pendingActivity,
   revertDream,
   startDream,
+  dreamAll,
 } from "../src/memory/dreaming";
 import { NOTE_MAX_BYTES, diffSnapshots, isMemoryPath, longNotes, memoryChars, memoryForPrompt, memoryOutgrew, snapshotMemory } from "../src/memory/files";
 import { applyTidy, canUndoWorkspace, undoWorkspace, workspaceChangedSince, workspaceInventory, workspacePath } from "../src/memory/workspace";
@@ -1267,4 +1268,28 @@ describe("reliability", () => {
     const later = staleDreamers(getSettings(), new Date(Date.now() + 4 * 86_400_000)).find((s) => s.agent.id === agent.id);
     expect(later).toMatchObject({ days: 4, exchanges: 3, lastError: null });
   });
+
+  test("dream all starts the agents with something new and says why the others wait", async () => {
+    const fresh = await makeAgent({ name: "Fresh news" });
+    addExchange(fresh, conversationFor(fresh), { prompt: "I moved to Leipzig", result: "REMEMBER: lives in Leipzig" });
+    const quiet = await makeAgent({ name: "Quiet" });
+    const off = await makeAgent({ name: "Switched off" });
+    addExchange(off, conversationFor(off), { prompt: "hello" });
+    await updateAgent(off.id, { enabled: false });
+
+    const result = await dreamAll();
+    const mine = result.started.find((s) => s.agentId === fresh.id);
+    expect(mine).toMatchObject({ name: "Fresh news", exchanges: 1 });
+    expect(result.skipped.find((s) => s.agentId === quiet.id)?.reason).toBe("nothing_new");
+    expect(result.skipped.find((s) => s.agentId === off.id)?.reason).toBe("disabled");
+    expect((await dreamAll()).skipped.find((s) => s.agentId === fresh.id)?.reason).toBe("dreaming");
+    for (const s of result.started) {
+      const dream = dreamOverview(s.agentId).active ?? dreamOverview(s.agentId).dreams[0]!;
+      if (s.agentId === fresh.id) expect((await dreamToEnd(dream)).status).toBe("succeeded");
+      else {
+        await until(() => !!getDream(dream.id).runId, 10_000, "dream run");
+        await cancelRun(getDream(dream.id).runId!);
+      }
+    }
+  }, 60_000);
 });

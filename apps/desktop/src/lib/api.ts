@@ -1,4 +1,4 @@
-import type { McpApp, DeviceGroup, DeviceGroupPatch, DeviceInvite, HandoffInput, HandoffResult, JoinGroupInput, MoveChatInput, RetireRunnerInput, RetireRunnerResult,
+import type { DreamAllResult, McpApp, DeviceGroup, DeviceGroupPatch, DeviceInvite, HandoffInput, HandoffResult, JoinGroupInput, MoveChatInput, RetireRunnerInput, RetireRunnerResult,
   AndroidAssignInput,
   SearchResults,
   HexStatus,
@@ -660,6 +660,7 @@ export const api = {
     overview: (agentId: string) => get<DreamOverview>(`/api/agents/${agentId}/dreams`),
     /** Dream now (409 when the agent is disabled or already dreaming). Cancel via `runs.cancel(dream.runId)`. */
     start: (agentId: string) => post<Dream>(`/api/agents/${agentId}/dreams`),
+    all: () => post<DreamAllResult>("/api/dreams/all"),
     get: (id: string) => get<DreamDetail>(`/api/dreams/${id}`),
     /** Put the memory files back the way they were before the dream (409 when they were edited since). */
     revert: (id: string) => post<Dream>(`/api/dreams/${id}/revert`),

@@ -899,6 +899,11 @@ export interface AgentMemory extends MemorySize {
 }
 
 /** Dreaming status of one agent. */
+export interface DreamAllResult {
+  started: { agentId: string; name: string; exchanges: number }[];
+  skipped: { agentId: string; name: string; reason: "disabled" | "dreaming" | "busy" | "nothing_new" | "held" | "failed"; error?: string }[];
+}
+
 export interface DreamOverview {
   /** Dreaming is switched on in Settings → Memory. */
   enabled: boolean;

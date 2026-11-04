@@ -31,7 +31,7 @@ beforeAll(async () => {
   updateSettings({ integrations: { enabled: true } });
   const ts = new Date().toISOString();
   insert("agents", { id: "agt_apps", workspace_id: null, name: "Apps", slug: "apps", repo_path: join(dataDir, "agents", "apps"), created_at: ts, updated_at: ts });
-  createMcpServer({ name: "Orders", transport: "stdio", command: process.execPath, args: [FIXTURE], env: { FAKE_MODE: "app" } });
+  createMcpServer({ workspaceId: null, agentId: null, name: "Orders", transport: "stdio", command: process.execPath, args: [FIXTURE], env: { FAKE_MODE: "app" } });
   agent = getAgent("agt_apps");
 });
 

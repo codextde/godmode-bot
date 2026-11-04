@@ -132,11 +132,39 @@ export function MemorySection({ settings }: { settings: Settings }) {
   );
 }
 
+function DreamAllRow() {
+  const { t } = useTranslation("settings");
+  const qc = useQueryClient();
+  const dreamAll = useMutation({
+    mutationFn: () => api.dreams.all(),
+    onSuccess: (r) => {
+      qc.invalidateQueries({ queryKey: qk.dreams });
+      const busy = r.skipped.filter((s) => s.reason === "busy").map((s) => s.name);
+      const failed = r.skipped.filter((s) => s.reason === "failed");
+      const names = r.started.map((s) => s.name).join(", ");
+      if (r.started.length) toast.success(t("memory.dreaming.allStarted", { count: r.started.length, names }));
+      else toast(t("memory.dreaming.allNone"));
+      if (busy.length) toast(t("memory.dreaming.allBusy", { names: busy.join(", ") }));
+      for (const f of failed) toast.error(t("memory.dreaming.allFailed", { name: f.name, error: f.error ?? "" }));
+    },
+    onError: (err) => toast.error(errorMessage(err)),
+  });
+  return (
+    <SettingRow label={t("memory.dreaming.all")} description={t("memory.dreaming.allDescription")}>
+      <Button variant="outline" size="sm" disabled={dreamAll.isPending} onClick={() => dreamAll.mutate()}>
+        {dreamAll.isPending ? <Loader2 className="animate-spin" /> : <MoonStar />}
+        {t("memory.dreaming.allButton")}
+      </Button>
+    </SettingRow>
+  );
+}
+
 function DreamingGroup({ dreaming: d, onChange }: { dreaming: DreamingSettings; onChange: (patch: Partial<DreamingSettings>) => void }) {
   const { t } = useTranslation("settings");
   const off = !d.enabled;
   return (
     <SettingsGroup title={t("memory.dreaming.title")} icon={<MoonStar />} description={t("memory.dreaming.description")}>
+      <DreamAllRow />
       <SettingRow label={t("memory.dreaming.enabled")} htmlFor="dream-enabled" description={t("memory.dreaming.enabledDescription")}>
         <Switch id="dream-enabled" checked={d.enabled} onCheckedChange={(enabled) => onChange({ enabled })} />
       </SettingRow>

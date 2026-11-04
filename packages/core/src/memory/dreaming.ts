@@ -35,6 +35,7 @@ import { dirname, join } from "node:path";
 import { Cron } from "croner";
 import { RUN_SHUT_DOWN, memoryBudget } from "@godmode/shared";
 import type {
+  DreamAllResult,
   Agent,
   Dream,
   DreamChange,
@@ -1183,6 +1184,45 @@ export async function sweep(at = new Date()): Promise<string[]> {
     }
   }
   return started;
+}
+
+export async function dreamAll(): Promise<DreamAllResult> {
+  const settings = getSettings();
+  const result: DreamAllResult = { started: [], skipped: [] };
+  if (licenseBlocks()) throw conflict("Dreaming needs a license");
+  const busy = new Set(listActiveRuns().map((r) => r.agentId));
+  for (const agent of listAgents({ workspaceId: "all" })) {
+    const skip = (reason: DreamAllResult["skipped"][number]["reason"], error?: string) =>
+      result.skipped.push({ agentId: agent.id, name: agent.name, reason, ...(error ? { error } : {}) });
+    if (!agent.enabled) {
+      skip("disabled");
+      continue;
+    }
+    if (activeDreamRow(agent.id) || starting.has(agent.id)) {
+      skip("dreaming");
+      continue;
+    }
+    const pending = pendingActivity(agent.id);
+    if (pending.exchanges === 0 && !memoryOverflowing(agent, settings)) {
+      skip("nothing_new");
+      continue;
+    }
+    if (busy.has(agent.id)) {
+      skip("busy");
+      continue;
+    }
+    if (standInHold(agent.id)) {
+      skip("held");
+      continue;
+    }
+    try {
+      await startDream(agent.id, "manual");
+      result.started.push({ agentId: agent.id, name: agent.name, exchanges: pending.exchanges });
+    } catch (err) {
+      skip("failed", err instanceof Error ? err.message : String(err));
+    }
+  }
+  return result;
 }
 
 /** Retry the scheduled dreams that waited for their agent to be idle. */

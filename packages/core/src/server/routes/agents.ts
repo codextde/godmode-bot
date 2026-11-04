@@ -35,7 +35,7 @@ import { rotateWebhookToken } from "../../automations/webhooks";
 import { startChat } from "../../services/conversations";
 import { continueAgent, pauseAgent } from "../../services/pauses";
 import { beatNow, heartbeatState } from "../../services/heartbeats";
-import { dreamOverview, getDream, isDreaming, revertDream, startDream } from "../../memory/dreaming";
+import { dreamOverview, getDream, isDreaming, revertDream, dreamAll, startDream } from "../../memory/dreaming";
 import { isMemoryPath } from "../../memory/files";
 import { MAX_MEMORY_EDIT_BYTES, readAgentMemory, writeAgentMemory } from "../../memory/editor";
 import { resolveRepoPath } from "../../agents/repo";
@@ -375,6 +375,7 @@ export function registerAgentRoutes(app: Hono): void {
 
   app.post("/api/agents/:id/dreams", async (c) => c.json(await startDream(c.req.param("id"), "manual")));
 
+  app.post("/api/dreams/all", async (c) => c.json(await dreamAll()));
   app.get("/api/dreams/:id", (c) => {
     const dream = getDream(c.req.param("id"));
     // A phone reads MEMORY.md, as in its memory editor; the agent's other files stay on the computer.
