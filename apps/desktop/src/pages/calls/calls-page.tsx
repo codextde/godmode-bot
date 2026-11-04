@@ -8,7 +8,7 @@ import { CircleCheck, CircleX, MessagesSquare, Phone, PhoneIncoming, PhoneOutgoi
 import type { Agent, CallPurpose, PhoneCall } from "@godmode/shared";
 import { isCallActive } from "@godmode/shared";
 import { AgentAvatar, EmptyState, PageBody, PageHeader } from "@/components/common";
-import { CallStatusPill, OwnerCallBadge, callName, formatCallCost, formatCallTime } from "@/components/calls/call-parts";
+import { CallStatusPill, CallerBadge, callName, formatCallCost, formatCallTime } from "@/components/calls/call-parts";
 import { NewCallDialog } from "@/components/calls/new-call-dialog";
 import { QueryError } from "@/components/integrations/query-error";
 import { Button } from "@/components/ui/button";
@@ -189,7 +189,7 @@ function CallRow({ call: c, agent, selected, onSelect }: { call: PhoneCall; agen
         <span className="mt-0.5 block truncate text-xs text-muted-foreground">{c.goal || (inbound ? t("row.incomingCall") : t("row.noGoal"))}</span>
         <span className="mt-2 flex min-w-0 items-center gap-2 text-[11px] text-muted-foreground">
           <CallStatusPill status={c.status} />
-          {c.fromOwner && <OwnerCallBadge />}
+          <CallerBadge call={c} />
           {c.durationSecs != null && <span className="tabular-nums">{formatCallTime(c.durationSecs)}</span>}
           {agentName && (
             <span className="flex min-w-0 items-center gap-1">
@@ -246,7 +246,7 @@ function CallDetail({ call: c, agent }: { call: PhoneCall; agent?: Agent }) {
         <Fact label={t("detail.status")}>
           <span className="flex flex-wrap items-center gap-1.5">
             <CallStatusPill status={c.status} />
-            {c.fromOwner && <OwnerCallBadge />}
+            <CallerBadge call={c} />
           </span>
         </Fact>
         <Fact label={t("detail.duration")}>{active && c.durationSecs == null ? <LiveTimer since={c.createdAt} /> : formatCallTime(c.durationSecs)}</Fact>

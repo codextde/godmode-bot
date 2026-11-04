@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import type { Agent, MessageBlock, PhoneCall } from "@godmode/shared";
+import type { Agent, ApiTool, MessageBlock, PhoneCall } from "@godmode/shared";
 import { makeAgent, setupEnv, until, type TestEnv } from "./fixtures/runner-harness";
 import { get, setMeta, run as sql } from "../src/db";
 import { callTool, listToolsFor } from "../src/mcp/tools";
@@ -14,6 +14,9 @@ import { checkSettingsPatch } from "../src/services/settingsPatch";
 import * as vault from "../src/vault/vault";
 import { agentBody, parseConversation } from "../src/calls/elevenlabs";
 import { callingCode } from "../src/calls/numbers";
+import { callApiTool } from "../src/integrations/apiToolRequest";
+import { checkSpokenPin, joinCallerTurns, maskPin, ownerPinStatus, pinRequired, removeOwnerPin, setOwnerPin, spokenPins } from "../src/calls/pin";
+import { isWeakOwnerPin } from "@godmode/shared";
 import { __lookForInboundForTests, callerNumber, defaultVoicemail, getCall, inboundGreeting, inboundPrompt, inboundResultPrompt, inQuietHours, isOwnerNumber, listCalls, ownerCallRefusal, placeCall, startCalls, stopCalls, tick } from "../src/calls/calls";
 import { getSettings } from "../src/services/settings";
 import { listNotifications } from "../src/services/notifications";
@@ -36,6 +39,8 @@ const fake = {
   calls: new Map<string, Record<string, unknown>>(),
   list: [] as { conversation_id: string; direction: string; status: string }[],
   next: 0,
+  failDelete: false,
+  failRead: false,
   numbers: [{ phone_number: "+4930111222", label: "Main", phone_number_id: "pn_1", provider: "twilio" }],
 };
 
@@ -76,8 +81,14 @@ function respond(method: string, path: string, json: Record<string, unknown> | n
   }
   if (method === "GET" && path.startsWith("/v1/convai/conversations?")) return ok({ conversations: fake.list, has_more: false });
   if (method === "GET" && path.startsWith("/v1/convai/conversations/")) {
+    if (fake.failRead) return new Response("down", { status: 500 });
     const c = fake.calls.get(path.split("/").pop()!);
     return c ? ok(c) : Response.json({ detail: "not found" }, { status: 404 });
+  }
+  if (method === "DELETE" && path.startsWith("/v1/convai/conversations/")) {
+    if (fake.failDelete) return new Response("nope", { status: 500 });
+    fake.calls.delete(path.split("/").pop()!);
+    return ok({});
   }
   if (method === "GET" && path.startsWith("/v2/voices")) return ok({ voices: [{ voice_id: "v1", name: "Anna", labels: { gender: "female" } }] });
   if (method === "GET" && path === "/v1/convai/llm/list") return ok({ llms: [{ llm: "claude-opus-5-5" }, { llm: "gpt-4o-2024-05-13" }] });
@@ -220,6 +231,8 @@ describe("the owner calling in", () => {
       costUsd: null,
       hasAudio: true,
       fromOwner: true,
+      ownerVerified: false,
+      pinWrong: false,
       error: null,
       createdAt: new Date().toISOString(),
       endedAt: new Date().toISOString(),
@@ -613,5 +626,270 @@ describe("incoming calls", () => {
     expect(note?.body).toBe("Reminder about taxes");
     updateSettings({ phone: { inboundAgentId: "" } });
     fake.list = [];
+  });
+});
+
+describe("the owner's phone PIN", () => {
+  const PIN = "482915";
+  const line = (n: string, direction = "inbound") => ({ phone_call: { direction, external_number: n, call_result: "answered" } });
+  const caller = (...said: string[]) => said.map((text, i) => ({ speaker: "other" as const, text, at: i }));
+
+  beforeEach(() => {
+    removeOwnerPin();
+    fake.failDelete = false;
+    fake.list = [];
+    updateSettings({ phone: { answerInbound: true, inboundAgentId: agent.id } });
+    setMeta("calls.inboundSince", "1");
+  });
+
+  afterAll(() => {
+    removeOwnerPin();
+    stopCalls();
+  });
+
+  async function incoming(id: string, from: string, said: string[], data: Record<string, string> = {}) {
+    fake.list = [{ conversation_id: id, direction: "inbound", status: "done" }];
+    fakeCall(id, "done", [["agent", "Hallo"], ...said.map((s): [string, string] => ["user", s])], data, line(from));
+    __lookForInboundForTests();
+    await tick();
+    await tick();
+    fake.list = [];
+    return listCalls().find((c) => c.providerCallId === id)!;
+  }
+
+  async function runOf(call: PhoneCall) {
+    await until(() => !!getCall(call.id).conversationId, 10_000, "inbound chat");
+    const run = listRuns({ conversationId: getCall(call.id).conversationId! })[0]!;
+    await waitForRun(run.id, 10_000);
+    return run;
+  }
+
+  test("weak PINs are refused and the PIN is stored only as a hash in the vault", () => {
+    for (const weak of ["000000", "123456", "654321", "890123", "121212", "123123"]) expect(isWeakOwnerPin(weak)).toBe(true);
+    expect(isWeakOwnerPin(PIN)).toBe(false);
+    expect(() => setOwnerPin("12345")).toThrow(/6 digits/);
+    expect(() => setOwnerPin("111111")).toThrow(/too easy/);
+    updateSettings({ phone: { ownerNumber: "+4915111482915" } });
+    expect(() => setOwnerPin(PIN)).toThrow(/too easy/);
+    updateSettings({ phone: { ownerNumber: "+4915111111111" } });
+    setOwnerPin(PIN);
+    expect(ownerPinStatus()).toEqual({ set: true, lockedUntil: null });
+    expect(vault.getAppSecret("calls.owner_pin")).not.toContain(PIN);
+    expect(JSON.stringify(getSettings())).not.toContain("owner_pin");
+  });
+
+  test("numbers are read however speech recognition writes them", () => {
+    const digits = (text: string) => spokenPins(text).map((r) => r.digits);
+    for (const said of ["482915", "4 8 2 9 1 5", "48 29 15", "48-29-15", "vier acht zwei neun eins fünf", "vier 8 zwei, neun. eins fünf", "Vier... acht... zwei... neun... eins... fünf", "vier… acht… zwei… neun… eins… fünf", "achtundvierzig neunundzwanzig fünfzehn", "vierhundertzweiundachtzig neunhundertfünfzehn", "forty eight twenty nine fifteen", "four hundred eighty two nine hundred fifteen", "four eight two nine one five"]) {
+      expect(digits(`Mein Code ist ${said} danke`)).toEqual([PIN]);
+    }
+    expect(digits("482915. One more thing, send the invoice.")).toEqual([PIN]);
+    expect(digits("Mein Code ist 482915, eins noch: ruf Jens an.")).toContain(PIN);
+    expect(digits("4 8 2 9 1 5. Zwei Sachen noch")).toContain(PIN);
+    expect(digits("oh 482915")).toContain(PIN);
+    expect(digits("482915 482915")).toEqual([PIN, PIN]);
+    expect(digits("ein Code für eine Frau")).toEqual([]);
+    expect(digits("0 1 7 1 5 5 5 1 2 3 4")).toEqual([]);
+    expect(digits("Ruf mich an unter 0171 555 1234")).toEqual([]);
+    expect(digits("vier acht zwei äh neun eins fünf")).toEqual([PIN]);
+    expect(digits("four hundred and eighty two nine hundred and fifteen")).toEqual([PIN]);
+    expect(digits("one oh two nine three eight")).toEqual(["102938"]);
+    const known = { pin: PIN };
+    expect(maskPin("Code 4 8 2 9 1 5, und 7 Stück", known)).toBe("Code ••••••, und 7 Stück");
+    expect(maskPin("Code 482915. Und noch etwas", known)).toBe("Code ••••••. Und noch etwas");
+    expect(maskPin("Code vier acht zwei äh neun eins fünf", known)).toBe("Code ••••••");
+    expect(maskPin("erst 4 8 2 dann 9 1 5", known)).toBe("erst •••••• dann ••••••");
+    expect(maskPin("4 8 2 9 1 5 7 7", known)).toBe("••••••");
+    expect(maskPin("Ruf 0171 555 1234 an, Rechnung 29", known)).toBe("Ruf 0171 555 1234 an, Rechnung 29");
+    expect(maskPin("Bestellung 111222", null)).toBe("Bestellung 111222");
+    expect(maskPin("Bestellung 111222", "all")).toBe("Bestellung ••••••");
+    expect(maskPin("Teil 4 8 2 äh 9 1", "all")).toBe("Teil ••••••");
+    expect(maskPin("Nummer 01715551234", "all")).toBe("Nummer ••••••");
+    expect(joinCallerTurns(caller("4 8 2", "9 1 5")).map((t) => t.text)).toEqual(["4 8 2 9 1 5"]);
+    const pause = [...caller("48 29"), { speaker: "agent" as const, text: "Mhm.", at: 1 }, ...caller("15")];
+    expect(joinCallerTurns(pause).map((t) => t.text)).toEqual(["48 29 15"]);
+    expect(digits(joinCallerTurns(pause)[0]!.text)).toEqual([PIN]);
+    expect(() => spokenPins("the constructor five toString hasOwnProperty")).not.toThrow();
+    expect(spokenPins("the constructor five")).toEqual([]);
+  });
+
+  test("a list read out on one call, a long run of digits or the voice saying it never pass", () => {
+    setOwnerPin(PIN);
+    expect(checkSpokenPin(caller(`0000004829150000`)).verified).toBe(false);
+    expect(checkSpokenPin([{ speaker: "agent", text: PIN, at: 0 }]).verified).toBe(false);
+    const list = checkSpokenPin(caller("100000", "100001", "100002", PIN));
+    expect(list.verified).toBe(false);
+    expect(list.wrong).toBe(3);
+    expect(list.mask).toBe("all");
+    expect(list.purge).toBe(true);
+    expect(checkSpokenPin(caller(PIN)).verified).toBe(true);
+  });
+
+  test("a PIN split by a longer voice turn counts, a run with extra digits doesn't waste a try", () => {
+    setOwnerPin(PIN);
+    const split = [...caller("4 8 2"), { speaker: "agent" as const, text: "Ich höre, bitte weiter sprechen.", at: 1 }, ...caller("9 1 5")];
+    expect(checkSpokenPin(split).verified).toBe(true);
+    const extra = checkSpokenPin(caller("4 8 2 9 1 5 7 7"));
+    expect(extra.verified).toBe(true);
+    expect(extra.wrong).toBe(0);
+  });
+
+  test("wrong tries lock the PIN, also for the right one; a new PIN unlocks it", () => {
+    setOwnerPin(PIN);
+    expect(checkSpokenPin(caller("100000", "100001", "100002")).lockedNow).toBe(false);
+    const fifth = checkSpokenPin(caller("100003", "100004"));
+    expect(fifth.lockedNow).toBe(true);
+    const lockedFor = Date.parse(ownerPinStatus().lockedUntil!) - Date.now();
+    expect(lockedFor).toBeGreaterThan(59 * 60_000);
+    expect(lockedFor).toBeLessThanOrEqual(60 * 60_000);
+    const locked = checkSpokenPin(caller(PIN));
+    expect(locked.verified).toBe(false);
+    expect(locked.mask).toBe("all");
+    setOwnerPin("739164");
+    expect(ownerPinStatus().lockedUntil).toBeNull();
+    expect(checkSpokenPin(caller("739164")).verified).toBe(true);
+  });
+
+  test("wrong tries are forgotten after a quiet week", () => {
+    setOwnerPin(PIN);
+    checkSpokenPin(caller("100000", "100001", "100002"));
+    checkSpokenPin(caller("100003"));
+    setMeta("calls.pinLastFail", String(Date.now() - 8 * 86_400_000));
+    expect(checkSpokenPin(caller("100004")).lockedNow).toBe(false);
+    expect(ownerPinStatus().lockedUntil).toBeNull();
+  });
+
+  test("with a PIN set, agents can't read call records through an ElevenLabs API tool", async () => {
+    const tool = { name: "ElevenLabs", baseUrl: "https://api.elevenlabs.io", auth: { in: "header", name: "xi-api-key", prefix: "" }, envVar: null } as unknown as ApiTool;
+    const places = { allowedDirs: [], saveDir: env.stateDir } as unknown as Parameters<typeof callApiTool>[3];
+    setOwnerPin(PIN);
+    await expect(callApiTool(tool, "sk_test", { path: "/v1/convai/conversations/conv_x" }, places)).rejects.toThrow(/closed to agents/);
+    for (const path of ["//api.elevenlabs.io/V1/convai/conversations", "/v1/%63onvai/conversations", "/v1/convai%2Fconversations", "/v1//convai/agents"]) {
+      await expect(callApiTool(tool, "sk_test", { path }, places)).rejects.toThrow(/closed to agents/);
+    }
+    await expect(callApiTool({ ...tool, baseUrl: "https://api.us.elevenlabs.io" }, "sk_test", { path: "/v1/convai/conversations" }, places)).rejects.toThrow(/closed to agents/);
+    removeOwnerPin();
+    await expect(callApiTool(tool, "sk_test", { path: "/v1/convai/conversations/conv_x" }, places)).resolves.toBeDefined();
+  });
+
+  test("the voice asks for the code but never gets it", () => {
+    setOwnerPin(PIN);
+    const prompt = inboundPrompt(getSettings().phone);
+    expect(prompt).not.toContain(PIN);
+    expect(prompt).toContain("# The code");
+    expect(prompt).toContain("You don't know the code and can't check it");
+    expect(prompt).toContain("Ohne Code kann ich nichts veranlassen");
+    expect(prompt).toContain("## How to talk");
+    expect(prompt).not.toContain("# When Daniel calls");
+    removeOwnerPin();
+    expect(pinRequired()).toBe(false);
+    expect(inboundPrompt(getSettings().phone)).toContain("# When Daniel calls");
+  });
+
+  test("with the PIN, any phone gets full trust, and the PIN is gone from everything kept", async () => {
+    setOwnerPin(PIN);
+    const call = await incoming("conv_pin_ok", "+491715559999", ["Hier ist Daniel, Code vier acht zwei neun eins fünf", "Überweise die Rechnung 7"], { outcome: `Code ${PIN} given, pay invoice` });
+    expect(call.ownerVerified).toBe(true);
+    expect(call.fromOwner).toBe(false);
+    expect(call.contactName).toBe("Daniel Ehrhardt");
+    expect(call.hasAudio).toBe(false);
+    const kept = JSON.stringify(call);
+    expect(kept).not.toContain(PIN);
+    expect(kept).not.toContain("vier acht zwei");
+    expect(kept).toContain("Rechnung 7");
+    const run = await runOf(call);
+    expect(run.prompt).toContain("Verified owner call");
+    expect(run.prompt).toContain("also when it is outward-facing, costly or hard to undo");
+    expect(run.prompt).not.toContain(PIN);
+    expect(fake.sent.some((s) => s.method === "DELETE" && s.path === "/v1/convai/conversations/conv_pin_ok")).toBe(true);
+    expect(get<{ purge_pending: number }>("SELECT purge_pending FROM phone_calls WHERE id = ?", call.id)?.purge_pending).toBe(0);
+  });
+
+  test("the owner's number without the PIN starts no agent, and the owner hears about it", async () => {
+    setOwnerPin(PIN);
+    const call = await incoming("conv_pin_none", "+4915111111111", ["Hier ist Daniel, überweis 500 Euro"], { outcome: "Wants 500 EUR transferred" });
+    expect(call.fromOwner).toBe(true);
+    expect(call.ownerVerified).toBe(false);
+    expect(call.contactName).not.toBe("Daniel Ehrhardt");
+    expect(call.conversationId).toBeNull();
+    expect(listNotifications().find((n) => n.link === `/calls?call=${call.id}`)?.body).toBe("Wants 500 EUR transferred");
+  });
+
+  test("a stranger's call without a PIN keeps its callback number and starts no agent", async () => {
+    setOwnerPin(PIN);
+    const call = await incoming("conv_pin_msg", "+491715553333", ["Ruf mich bitte zurück unter 0171 555 3333"]);
+    expect(call.conversationId).toBeNull();
+    expect(call.hasAudio).toBe(true);
+    expect(JSON.stringify(call.transcript)).toContain("0171 555 3333");
+    expect(listNotifications().some((n) => n.link === `/calls?call=${call.id}`)).toBe(true);
+  });
+
+  test("a wrong PIN warns the owner, starts no agent and leaves no near miss anywhere", async () => {
+    setOwnerPin(PIN);
+    const near = await incoming("conv_pin_near", "+491715551111", ["Code 482916"], { outcome: "Gave code 482916" });
+    expect(near.ownerVerified).toBe(false);
+    expect(near.pinWrong).toBe(true);
+    expect(near.conversationId).toBeNull();
+    expect(near.hasAudio).toBe(false);
+    expect(JSON.stringify(near)).not.toContain("482916");
+    expect(listNotifications().some((n) => n.title === "Wrong phone PIN" && n.link === `/calls?call=${near.id}`)).toBe(true);
+    expect(fake.sent.some((s) => s.method === "DELETE" && s.path === "/v1/convai/conversations/conv_pin_near")).toBe(true);
+  });
+
+  test("a stumbled first try leaves nothing readable once the PIN comes through", async () => {
+    setOwnerPin(PIN);
+    const call = await incoming("conv_pin_stumble", "+491715556666", ["Code vier acht zwei äh", "neun eins"], {});
+    expect(call.ownerVerified).toBe(false);
+    const fixed = await incoming("conv_pin_stumble2", "+491715556666", ["Code vier acht zwei", "Äh, nochmal von vorn: 482915"], { outcome: "Sagte vier acht zwei, dann den Code" });
+    expect(fixed.ownerVerified).toBe(true);
+    expect(JSON.stringify(fixed)).not.toContain("vier acht zwei");
+    await runOf(fixed);
+  });
+
+  test("a call that can't be read any more is still deleted at ElevenLabs", async () => {
+    setOwnerPin(PIN);
+    fake.list = [{ conversation_id: "conv_pin_stale", direction: "inbound", status: "in-progress" }];
+    fakeCall("conv_pin_stale", "in-progress", [["user", `Code ${PIN}`]], {}, line("+491715557777"));
+    __lookForInboundForTests();
+    await tick();
+    fake.list = [];
+    const call = listCalls().find((c) => c.providerCallId === "conv_pin_stale")!;
+    sql("UPDATE phone_calls SET created_at = ? WHERE id = ?", new Date(Date.now() - 91 * 60_000).toISOString(), call.id);
+    fake.failRead = true;
+    await tick();
+    fake.failRead = false;
+    expect(getCall(call.id).status).toBe("failed");
+    expect(fake.sent.some((s) => s.method === "DELETE" && s.path === "/v1/convai/conversations/conv_pin_stale")).toBe(true);
+  });
+
+  test("a caller's words can't stop calls from being read", async () => {
+    setOwnerPin(PIN);
+    const odd = await incoming("conv_pin_odd", "+491715554444", ["the constructor five toString"]);
+    expect(odd.status).toBe("done");
+    const next = await incoming("conv_pin_next", "+491715555555", [`Code ${PIN}`]);
+    expect(next.ownerVerified).toBe(true);
+    await runOf(next);
+  });
+
+  test("the PIN is masked while the call runs and the delete at ElevenLabs is tried again", async () => {
+    setOwnerPin(PIN);
+    fake.failDelete = true;
+    fake.list = [{ conversation_id: "conv_pin_live", direction: "inbound", status: "in-progress" }];
+    fakeCall("conv_pin_live", "in-progress", [["user", `Code ${PIN}`]], {}, line("+491715552222"));
+    __lookForInboundForTests();
+    await tick();
+    const live = listCalls().find((c) => c.providerCallId === "conv_pin_live")!;
+    expect(live.ownerVerified).toBe(false);
+    expect(JSON.stringify(live.transcript)).not.toContain(PIN);
+
+    fake.list = [];
+    fakeCall("conv_pin_live", "done", [["user", `Code ${PIN}`]], {}, line("+491715552222"));
+    await tick();
+    expect(getCall(live.id).ownerVerified).toBe(true);
+    expect(get<{ purge_pending: number }>("SELECT purge_pending FROM phone_calls WHERE id = ?", live.id)?.purge_pending).toBe(1);
+    fake.failDelete = false;
+    await tick();
+    expect(get<{ purge_pending: number }>("SELECT purge_pending FROM phone_calls WHERE id = ?", live.id)?.purge_pending).toBe(0);
+    await runOf(getCall(live.id));
   });
 });

@@ -38,6 +38,8 @@
     "recording": "The recording plays in Godmode on your computer.",
     "caller": "Caller",
     "them": "Them",
-    "transcript": "Transcript"
+    "transcript": "Transcript",
+    "pinVerified": "PIN verified",
+    "pinWrong": "Wrong PIN"
   }
 }

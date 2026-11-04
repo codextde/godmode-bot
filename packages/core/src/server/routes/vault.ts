@@ -22,6 +22,7 @@ import { updateSettings } from "../../services/settings";
 import { clientIp as relayedClientIp, isLocalRequest, isRelayed, rateLimitLogin, resetLoginAttempts, setDashboardPassword, type CloudRelayEnv } from "../auth";
 import { issueGrant, requireGrant, requirePasswordGrant, verifyVaultPassphrase } from "../grants";
 import { body, z } from "../validate";
+import { OWNER_PIN_SECRET } from "../../calls/pin";
 import { badRequest, HttpError } from "../../util";
 import { noteAnthropicKeyChanged } from "../../services/claudeLogin";
 
@@ -272,7 +273,7 @@ export function registerVaultRoutes(app: Hono): void {
     const stored = new Map(
       all<{ key: string; updated_at: string }>("SELECT key, updated_at FROM secrets").map((r) => [r.key, r.updated_at] as const),
     );
-    const extra = [...stored.keys()].filter((k) => !WELL_KNOWN_SECRETS.includes(k)).sort();
+    const extra = [...stored.keys()].filter((k) => !WELL_KNOWN_SECRETS.includes(k) && k !== OWNER_PIN_SECRET).sort();
     return c.json(
       [...WELL_KNOWN_SECRETS, ...extra].map((key) => ({ key, set: stored.has(key), updatedAt: stored.get(key) ?? null })),
     );

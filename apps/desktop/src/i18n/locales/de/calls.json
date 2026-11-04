@@ -13,7 +13,7 @@
     "failed": "Fehlgeschlagen"
   },
   "ownerCall": {
-    "title": "Kam von deiner eigenen Nummer: Anliegen gehen als deine an deinen Agenten",
+    "title": "Kam von deiner eigenen Nummer",
     "label": "Eigener Anruf"
   },
   "marker": {
@@ -79,5 +79,13 @@
     "label": "Transkript",
     "caller": "Anrufer",
     "them": "Gegenüber"
+  },
+  "pinVerified": {
+    "title": "Der Anrufer hat deine PIN gesagt: Anliegen gehen als deine an deinen Agenten",
+    "label": "PIN bestätigt"
+  },
+  "pinWrong": {
+    "title": "Jemand hat in diesem Anruf eine falsche PIN gesagt. Für diese Person wurde nichts gemacht.",
+    "label": "Falsche PIN"
   }
 }

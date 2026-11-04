@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, AudioLines, CircleCheck, Hash, Phone, PhoneCall, PhoneIncoming, PhoneOutgoing, Play, Plus, RefreshCw, Square, UserRound } from "lucide-react";
+import { ArrowRight, AudioLines, CircleCheck, Hash, KeyRound, Phone, PhoneCall, PhoneIncoming, PhoneOutgoing, Play, Plus, RefreshCw, Square, UserRound } from "lucide-react";
 import { toast } from "sonner";
 import { Trans, useTranslation } from "react-i18next";
 import type { CallSetup, PhoneSettings, Settings } from "@godmode/shared";
-import { isClockTime, toE164 } from "@godmode/shared";
+import { OWNER_PIN_LENGTH, isClockTime, isWeakOwnerPin, toE164 } from "@godmode/shared";
 import { AgentAvatar } from "@/components/common";
 import { CALL_LANGUAGES } from "@/components/calls/call-parts";
+import { ConfirmDialog } from "@/components/integrations/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -149,6 +150,8 @@ export function CallsSection({ settings }: { settings: Settings }) {
             </div>
           </SettingRow>
         </SettingsGroup>
+
+        <PinGroup />
 
         <VoiceGroup settings={settings} setup={s} />
 
@@ -321,6 +324,140 @@ function NumberGroup({ settings, setup, loading }: { settings: Settings; setup: 
         </form>
       )}
     </SettingsGroup>
+  );
+}
+
+function PinGroup() {
+  const { t } = useTranslation(["settings", "common"]);
+  const qc = useQueryClient();
+  const status = useQuery({ queryKey: qk.callPin, queryFn: api.calls.pin });
+  const [entering, setEntering] = useState(false);
+  const [first, setFirst] = useState("");
+  const [value, setValue] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [removing, setRemoving] = useState(false);
+  const isSet = !!status.data?.set;
+  const lockedUntil = status.data?.lockedUntil;
+
+  const reset = () => {
+    setEntering(false);
+    setFirst("");
+    setValue("");
+    setError(null);
+  };
+  const save = useMutation({
+    mutationFn: api.calls.setPin,
+    onSuccess: (next) => {
+      qc.setQueryData(qk.callPin, next);
+      toast.success(t("calls.pin.saved"));
+      reset();
+    },
+    onError: (e) => {
+      setFirst("");
+      setValue("");
+      toastApiError(e, t("calls.pin.title"), qc);
+    },
+  });
+  const remove = useMutation({
+    mutationFn: api.calls.removePin,
+    onSuccess: (next) => {
+      qc.setQueryData(qk.callPin, next);
+      toast.success(t("calls.pin.removed"));
+    },
+    onError: (e) => toastApiError(e, t("calls.pin.title"), qc),
+  });
+
+  const enter = (next: string) => {
+    setValue(next);
+    if (next) setError(null);
+    if (next.length < OWNER_PIN_LENGTH) return;
+    setValue("");
+    if (!first) {
+      if (isWeakOwnerPin(next)) setError(t("calls.pin.weak"));
+      else setFirst(next);
+    } else if (next === first) save.mutate(next);
+    else {
+      setFirst("");
+      setError(t("calls.pin.mismatch"));
+    }
+  };
+
+  return (
+    <SettingsGroup title={t("calls.pin.title")} icon={<KeyRound />} description={t("calls.pin.description")}>
+      {entering ? (
+        <SettingRow label={first ? t("calls.pin.repeat") : t("calls.pin.choose")} description={error ? <span className="text-destructive">{error}</span> : undefined}>
+          <div className="flex items-center gap-2">
+            <PinField key={first ? "repeat" : "choose"} value={value} disabled={save.isPending} label={first ? t("calls.pin.repeat") : t("calls.pin.choose")} invalid={!!error} onChange={enter} />
+            <Button size="sm" variant="ghost" className="text-muted-foreground" onClick={reset}>
+              {t("common:actions.cancel")}
+            </Button>
+          </div>
+        </SettingRow>
+      ) : (
+        <SettingRow label={t("calls.pin.label")} description={isSet ? t("calls.pin.on") : t("calls.pin.off")}>
+          {isSet ? (
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="outline" onClick={() => setEntering(true)}>
+                {t("calls.pin.change")}
+              </Button>
+              <Button size="sm" variant="ghost" className="text-muted-foreground" onClick={() => setRemoving(true)}>
+                {t("calls.pin.remove")}
+              </Button>
+            </div>
+          ) : (
+            <Button size="sm" variant="outline" disabled={status.isPending} onClick={() => setEntering(true)}>
+              {t("calls.pin.set")}
+            </Button>
+          )}
+        </SettingRow>
+      )}
+      {lockedUntil && (
+        <div className="py-4">
+          <Callout tone="warning" title={t("calls.pin.locked", { time: new Date(lockedUntil).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) })} />
+        </div>
+      )}
+      <ConfirmDialog
+        open={removing}
+        onOpenChange={setRemoving}
+        title={t("calls.pin.removeTitle")}
+        description={t("calls.pin.removeDescription")}
+        confirmLabel={t("calls.pin.remove")}
+        onConfirm={() => remove.mutate()}
+      />
+    </SettingsGroup>
+  );
+}
+
+/** One input over six boxes: paste, backspace and the password manager's silence come with it. */
+function PinField({ value, label, disabled, invalid, onChange }: { value: string; label: string; disabled: boolean; invalid: boolean; onChange: (value: string) => void }) {
+  return (
+    <div className="relative flex gap-1.5">
+      <input
+        autoFocus
+        type="password"
+        inputMode="numeric"
+        autoComplete="off"
+        data-1p-ignore
+        data-lpignore="true"
+        aria-label={label}
+        aria-invalid={invalid}
+        disabled={disabled}
+        value={value}
+        maxLength={OWNER_PIN_LENGTH}
+        onChange={(e) => onChange(e.target.value.replace(/\D/g, "").slice(0, OWNER_PIN_LENGTH))}
+        className="peer absolute inset-0 z-10 w-full cursor-text opacity-0"
+      />
+      {Array.from({ length: OWNER_PIN_LENGTH }, (_, i) => (
+        <span
+          key={i}
+          aria-hidden
+          data-current={i === value.length || undefined}
+          className="grid size-9 place-items-center rounded-md border border-input bg-background text-base transition-colors peer-focus:data-current:border-ring peer-focus:data-current:ring-2 peer-focus:data-current:ring-ring/30 peer-aria-invalid:border-destructive/60"
+        >
+          {i < value.length ? "•" : ""}
+        </span>
+      ))}
+    </div>
   );
 }
 

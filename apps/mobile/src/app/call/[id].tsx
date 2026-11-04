@@ -75,7 +75,7 @@ function CallDetail({ call: c }: { call: PhoneCall }) {
         </T>
         <Row style={{ gap: 6, marginTop: 4 }}>
           <CallStatusBadge status={c.status} />
-          {c.fromOwner ? <Badge label={t("detail.ownerCall")} /> : null}
+          {c.ownerVerified ? <Badge label={t("detail.pinVerified")} /> : c.pinWrong ? <Badge label={t("detail.pinWrong")} /> : c.fromOwner ? <Badge label={t("detail.ownerCall")} /> : null}
         </Row>
       </View>
 

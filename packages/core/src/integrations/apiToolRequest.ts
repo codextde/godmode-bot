@@ -9,6 +9,7 @@
 import { closeSync, constants, existsSync, fstatSync, lstatSync, mkdirSync, openSync, readFileSync, realpathSync, statSync, writeSync } from "node:fs";
 import { basename, dirname, extname, join, relative, resolve, sep } from "node:path";
 import type { ApiTool, ApiToolTestResult } from "@godmode/shared";
+import { pinRequired } from "../calls/pin";
 import { noteId, tagged } from "../runner/prompt";
 import { badRequest, HttpError, slugify } from "../util";
 import { redact } from "../vault/vault";
@@ -506,6 +507,16 @@ function suggestedName(res: Response): string | null {
  * Send one request for an agent. Never throws for HTTP errors (they come back with `ok: false`); throws HttpError for
  * requests that aren't allowed (outside the address, files outside the run's folders, bad arguments).
  */
+function isElevenLabsCallRecord(url: URL): boolean {
+  const host = url.hostname.toLowerCase().replace(/\.$/, "");
+  if (host !== "elevenlabs.io" && !host.endsWith(".elevenlabs.io")) return false;
+  try {
+    return /^\/+v\d+\/+convai(\/|$)/.test(decodeURIComponent(url.pathname).toLowerCase());
+  } catch {
+    return true;
+  }
+}
+
 export async function callApiTool(tool: ApiTool, key: string | null, call: ApiCall, places: CallPlaces): Promise<ApiCallResult> {
   if (!tool.baseUrl) {
     throw badRequest(
@@ -517,6 +528,9 @@ export async function callApiTool(tool: ApiTool, key: string | null, call: ApiCa
   const method = call.method ?? "GET";
   if (!METHODS.includes(method)) throw badRequest(`Unsupported method ${method}`);
   const url = resolveApiUrl(tool.baseUrl, call.path ?? "");
+  if (pinRequired() && isElevenLabsCallRecord(url)) {
+    throw new HttpError(403, "ElevenLabs' phone agents and call records are closed to agents: they may hold the owner's phone PIN. Use the phone_call and phone_calls tools.", "forbidden");
+  }
   for (const [name, value] of Object.entries(call.query ?? {})) {
     if (tool.auth.in === "query" && name === tool.auth.name) continue;
     url.searchParams.set(name, String(value));

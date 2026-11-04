@@ -13,7 +13,7 @@
     "failed": "Failed"
   },
   "ownerCall": {
-    "title": "Came from your own number: its requests go to your agent as yours",
+    "title": "Came from your own number",
     "label": "Owner call"
   },
   "marker": {
@@ -79,5 +79,13 @@
     "label": "Transcript",
     "caller": "Caller",
     "them": "Them"
+  },
+  "pinVerified": {
+    "title": "The caller said your PIN: requests go to your agent as yours",
+    "label": "PIN verified"
+  },
+  "pinWrong": {
+    "title": "Someone said a wrong PIN on this call. Nothing was done for them.",
+    "label": "Wrong PIN"
   }
 }

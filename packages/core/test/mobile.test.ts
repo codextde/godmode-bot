@@ -204,6 +204,9 @@ describe("device scope", () => {
     expect(deviceMayCall("GET", "/api/calls/call_4f9Kd81LmQ2xYz0a")).toBe(true);
     expect(deviceMayCall("GET", "/api/calls/call_4f9Kd81LmQ2xYz0a/audio")).toBe(false);
     expect(deviceMayCall("GET", "/api/calls/setup")).toBe(false);
+    expect(deviceMayCall("GET", "/api/calls/pin")).toBe(false);
+    expect(deviceMayCall("PUT", "/api/calls/pin")).toBe(false);
+    expect(deviceMayCall("DELETE", "/api/calls/pin")).toBe(false);
     expect(deviceMayCall("GET", "/api/calls/numbers")).toBe(false);
     expect(deviceMayCall("POST", "/api/calls")).toBe(false);
     expect(deviceMayCall("POST", "/api/calls/test")).toBe(false);
