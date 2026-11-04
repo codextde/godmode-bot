@@ -1078,6 +1078,7 @@ Passwords -> SSH keys (`/vault/ssh-keys`), switch `settings.sshKeys.enabled`, of
 * **Delete** uses `/usr/bin/trash` (macOS 15+). Without it, or with a borrowed `HOME` (tests), the files go to `~/.ssh/trash/<timestamp>/`.
 * **ssh-agent** goes through `ssh-add`, so any agent works. A passphrase reaches it through a one-shot `SSH_ASKPASS` helper reading a 0600 file in a 0700 temp folder: never in an argument or the environment, and a wrong one fails at once.
 * **Add to server** appends the public key to `authorized_keys` over the saved server's connection (`execForHuman`), matched on the whole key data of lines that aren't comments, so it lands once. Agents reach only the servers of their own run.
+* **Per computer:** the switch isn't mirrored to runners or device-group computers, and a secondary answers these routes itself: each Mac shows its own keys.
 * **Remote:** all routes are `secrets` in `cloud/scope.ts`, the list is hidden from viewers. `sshKeys` isn't a settings group the cloud may change.
 
 ## Plugins

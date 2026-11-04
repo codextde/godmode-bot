@@ -229,6 +229,14 @@ describe("a device group, end to end", () => {
     await until(() => !!get("SELECT id FROM agents WHERE id = ?", created.body.id), 30_000, "the setup copy");
   }, 60_000);
 
+  test("the SSH key manager and its switch stay with each computer", async () => {
+    expect((await here("/api/settings", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ sshKeys: { enabled: true } }) })).status).toBe(200);
+    expect((await onPrimary<{ sshKeys: { enabled: boolean } }>("/api/settings")).body.sshKeys.enabled).toBe(false);
+    expect((await onPrimary("/api/ssh/key-manager")).status).toBe(403);
+    expect((await here<{ dir: string }>("/api/ssh/key-manager")).status).toBe(200);
+    expect((await here("/api/settings", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ sshKeys: { enabled: false } }) })).status).toBe(200);
+  });
+
   test("the chat this computer had before joining shows up on the primary, with the primary's agent", async () => {
     await until(
       async () => (await onPrimary<Conversation[]>("/api/conversations?limit=100")).body.some((c) => c.id === beforeJoinChat && c.runnerId === selfId),

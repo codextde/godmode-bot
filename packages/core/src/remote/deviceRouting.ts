@@ -46,6 +46,7 @@ const LOCAL: RegExp[] = [
   /^\/api\/license(\/|$)/,
   /^\/api\/voice\//,
   /^\/api\/ssh\/local-keys$/,
+  /^\/api\/ssh\/key-manager(\/|$)/,
   /^\/api\/browser\/(chrome-profiles|profile-use)/,
   /^\/api\/browser\/profiles\/[A-Za-z0-9_-]{1,100}\/(launch|stop|import|bot-check)$/,
 ];
@@ -54,7 +55,7 @@ const LOCAL: RegExp[] = [
 const BROWSER_INPUT = /^\/api\/browser\/profiles\/[A-Za-z0-9_-]{1,100}\/(input|navigate)$/;
 
 /** Settings that describe this computer: kept and changed here, never the primary's. */
-const OWN_SECTIONS = new Set(["server", "mobile", "cloud", "diagnostics", "maintenance", "android", "vm", "power"]);
+const OWN_SECTIONS = new Set(["server", "mobile", "cloud", "diagnostics", "maintenance", "android", "vm", "power", "sshKeys"]);
 
 const MAX_BODY = 64 * 1024 * 1024;
 
