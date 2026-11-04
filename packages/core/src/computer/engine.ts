@@ -2,7 +2,8 @@
  * One interface over the ways Godmode controls a computer:
  *  - desktop / display: the real mouse and keyboard (macOS: Godmode's native helper, every display;
  *    Windows/Linux: Cua Driver, primary display),
- *  - window: one app window in the background (Cua Driver, with the native helper as fallback on macOS),
+ *  - window: one app window in the background (Cua Driver, with the native helper as fallback on macOS), for a window
+ *    shared in the chat and for the app a desktop run works in,
  *  - tab: one tab of a Godmode browser (CDP).
  *
  * Coordinates are in the engine's "frame space": global points for desktops and windows (top-left origin),
@@ -53,6 +54,8 @@ export interface PointerOptions {
 /** Short, model-facing description of what happened. */
 export interface Outcome {
   detail: string;
+  /** openApp: the app's process, when the platform says. */
+  pid?: number;
 }
 
 export interface UiElement {
@@ -107,8 +110,10 @@ export interface ComputerEngine {
   elements?(query?: string): Promise<{ elements: UiElement[]; note: string | null }>;
   clickElement?(token: string, opts: PointerOptions): Promise<Outcome>;
   typeInto?(token: string, text: string, opts: { foreground?: boolean }): Promise<Outcome>;
-  /** Desktop shares: apps and windows. */
-  openApp?(name: string): Promise<Outcome>;
+  /** Window shares: run an item of the app's menu bar in the background. */
+  menu?(path: string[]): Promise<Outcome>;
+  /** Desktop shares: apps and windows. `background`: start or wake the app without bringing it forward. */
+  openApp?(name: string, opts?: { background?: boolean }): Promise<Outcome>;
   windows?(): Promise<WindowSummary[]>;
   focusWindow?(id: number): Promise<Outcome>;
   dispose(): Promise<void>;

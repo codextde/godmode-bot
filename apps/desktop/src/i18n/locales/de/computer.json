@@ -3,7 +3,7 @@
   "control": {
     "window": "Wird im Hintergrund gesteuert – Maus und Tastatur bleiben bei dir.",
     "tab": "Wird im Hintergrund gesteuert, im Browser von Godmode.",
-    "desktop": "Nutzt deine echte Maus und Tastatur – du siehst alles, was der Agent tut."
+    "desktop": "Apps bleiben im Hintergrund, mit einem Godmode-Zeiger. Deine echte Maus und Tastatur nur, wenn ein Schritt sie braucht."
   },
   "setup": {
     "allowTitle": "Erlaube Godmode in den Systemeinstellungen",
@@ -77,7 +77,7 @@
     "noTabMatch": "Kein Tab passt zu „{{query}}“.",
     "noteWindow": "Der Agent steuert nur dieses Fenster, im Hintergrund – Maus und Tastatur bleiben bei dir.",
     "noteTab": "Der Agent steuert nur diesen Tab im Browser von Godmode, im Hintergrund.",
-    "noteScreen": "Der Agent nutzt deine echte Maus und Tastatur auf dem geteilten Bildschirm. Du kannst ihn jederzeit stoppen.",
+    "noteScreen": "Apps bleiben im Hintergrund, mit einem Godmode-Zeiger. Der Agent nutzt deine echte Maus und Tastatur nur, wenn ein Schritt sie braucht. Du kannst ihn jederzeit stoppen.",
     "title": "Mit {{name}} teilen",
     "description": "Wähle, was der Agent in diesem Chat sehen und steuern darf. Beende das Teilen, wann immer du willst.",
     "tabWindow": "Fenster",

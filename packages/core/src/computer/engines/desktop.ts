@@ -234,10 +234,10 @@ export class HelperDesktopEngine implements ComputerEngine {
     }
   }
 
-  async openApp(name: string): Promise<Outcome> {
+  async openApp(name: string, opts: { background?: boolean } = {}): Promise<Outcome> {
     try {
-      const r = await (await this.helper()).call<{ pid: number | null; path: string }>("openApp", { name, activate: true }, 30_000);
-      return { detail: `Opened ${r.path.split(/[\\/]/).pop()?.replace(/\.app$/, "") ?? name}` };
+      const r = await (await this.helper()).call<{ pid: number | null; path: string }>("openApp", { name, activate: !opts.background }, 30_000);
+      return { detail: `Opened ${r.path.split(/[\\/]/).pop()?.replace(/\.app$/, "") ?? name}`, ...(r.pid ? { pid: r.pid } : {}) };
     } catch (err) {
       if (!(err instanceof HelperError && err.code === "unsupported")) throw engineErrorFrom(err);
       // Linux: apps are launched through Cua Driver.
@@ -514,8 +514,8 @@ class AutoDesktopEngine implements ComputerEngine {
   async cursor() {
     return (await this.optional("cursor"))();
   }
-  async openApp(name: string) {
-    return (await this.optional("openApp"))(name);
+  async openApp(name: string, opts?: { background?: boolean }) {
+    return (await this.optional("openApp"))(name, opts);
   }
   async windows() {
     return (await this.optional("windows"))();

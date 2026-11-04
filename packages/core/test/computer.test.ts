@@ -421,6 +421,18 @@ describe("Cua Driver calls", () => {
     }
   });
 
+  test("a window's elements are asked for in the format that carries them", async () => {
+    const cua = await getCuaDriver();
+    const state = await cua.windowState(70, 7, { screenshot: false, maxDimension: 0 });
+    expect(state.elements.map((e) => e.element_token)).toEqual(["s1:0"]);
+  });
+
+  test("a menu item goes to the window's app by its path", async () => {
+    const cua = await getCuaDriver();
+    await cua.invokeMenu(win, ["Show", "Show Next Chat"]);
+    expect(calls().at(-1)).toMatchObject({ name: "invoke_menu", pid: 70, window_id: 7, path: ["Show", "Show Next Chat"] });
+  });
+
   test("pixels the driver refuses for lack of a screenshot are sent once more, after a new screenshot", async () => {
     const cua = await getCuaDriver();
     await cua.windowShot(70, 7, 1280);
@@ -466,13 +478,12 @@ describe("computer MCP server", () => {
   test("tools depend on what is shared", async () => {
     const desktop = share({ kind: "desktop" }, DISPLAYS);
     const d = await toolNames(desktop.token);
-    expect(d.map((t) => t.name)).toEqual(["computer", "computer_info", "computer_windows", "computer_open_app"]);
-    expect(Object.keys(d[0]!.inputSchema.properties)).toContain("display");
-    expect(Object.keys(d[0]!.inputSchema.properties)).not.toContain("element");
+    expect(d.map((t) => t.name)).toEqual(["computer", "computer_info", "computer_ui", "computer_menu", "computer_windows", "computer_open_app"]);
+    expect(Object.keys(d[0]!.inputSchema.properties)).toEqual(expect.arrayContaining(["display", "element", "foreground"]));
 
     const win = share({ kind: "window", windowId: 7, pid: 70, app: "Notes", title: "" }, [{ view: "window:70:7", label: "Notes", frame: { x: 100, y: 50, width: 1000, height: 500 } }]);
     const w = await toolNames(win.token);
-    expect(w.map((t) => t.name)).toEqual(["computer", "computer_info", "computer_ui"]);
+    expect(w.map((t) => t.name)).toEqual(["computer", "computer_info", "computer_ui", "computer_menu"]);
     expect(Object.keys(w[0]!.inputSchema.properties)).toContain("element");
     expect(Object.keys(w[0]!.inputSchema.properties)).not.toContain("foreground");
 
@@ -533,7 +544,6 @@ describe("computer MCP server", () => {
     expect(textOf(await call(token, "computer", { action: "left_click", coordinate: [5000, 5] }))).toContain("outside the screenshot");
     expect(textOf(await call(token, "computer", { action: "screenshot", display: "9" }))).toContain('No display "9"');
     expect(textOf(await call(token, "computer", { action: "key", text: "ctrl+warp" }))).toContain("Unknown key");
-    expect(textOf(await call(token, "computer", { action: "left_click", element: "s1:2" }))).toContain("coordinate [x, y] is required");
 
     const info = textOf(await call(token, "computer_info", {}));
     expect(info).toContain("display 1: Built-in Retina Display, 1512×982 at (0, 0), primary");
@@ -713,7 +723,7 @@ describe("runner integration", () => {
     await waitForRun(first.run.id, 20_000);
     expect(done.status).toBe("succeeded");
     const summary = JSON.parse(done.result!.replace(/^COMPUTER /, ""));
-    expect(summary.tools).toEqual(["computer", "computer_info", "computer_windows", "computer_open_app"]);
+    expect(summary.tools).toEqual(["computer", "computer_info", "computer_ui", "computer_menu", "computer_windows", "computer_open_app"]);
     expect(activeRunForConversation(a.id)).toBeNull();
   });
 

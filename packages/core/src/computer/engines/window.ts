@@ -1,6 +1,7 @@
 /**
  * Window shares — like sharing a single window with ChatGPT: the agent sees and controls one app window in the
- * background. Its input goes to that window's process; the human's cursor and focus stay where they are.
+ * background. Its input goes to that window's process; the human's cursor and focus stay where they are. A run with
+ * the whole desktop works the same way in the app it opened (see `workInWindow`).
  *
  * Cua Driver does the work (accessibility-first: element tokens, AX text insertion, background pointer events).
  * On macOS Godmode's native helper backs it up: it captures windows quickly for the live view, and it delivers
@@ -79,6 +80,8 @@ export class WindowEngine implements ComputerEngine {
   /** Cua Driver is being downloaded: asked again by the next action (on macOS the native helper acts meanwhile). */
   private cuaPending: string | null = null;
   private cursorShown = false;
+  /** Where the agent cursor last pointed (window-local), so keys and menus show up there. */
+  private pointed: Point | null = null;
 
   constructor(
     readonly target: WindowTarget,
@@ -295,6 +298,8 @@ export class WindowEngine implements ComputerEngine {
 
   private helperPointer(h: NativeHelper, params: Record<string, unknown>) {
     if (this.opts.agentCursor) this.cursorShown = true;
+    const b = this.lastBounds?.rect;
+    if (b && typeof params.x === "number" && typeof params.y === "number") this.pointed = { x: (params.toX as number ?? params.x) - b.x, y: (params.toY as number ?? params.y) - b.y };
     return h.call<{ method: string; chromium?: boolean; cameToFront?: boolean }>("pointer", { pid: this.target.pid, window: this.target.windowId, cursor: !!this.opts.agentCursor, ...params });
   }
 
@@ -303,6 +308,7 @@ export class WindowEngine implements ComputerEngine {
    * the helper draws the cursor for its own input.
    */
   private async pointAt(p: Point, click: boolean): Promise<void> {
+    this.pointed = p;
     if (!this.opts.agentCursor) return;
     const helper = await this.helper();
     if (!helper) return;
@@ -313,6 +319,14 @@ export class WindowEngine implements ComputerEngine {
     } catch (err) {
       log.debug(`agent cursor: ${errorMessage(err)}`);
     }
+  }
+
+  /** Input with no point of its own (keys, typing, menus): the agent cursor shows up where it last was. */
+  private async present(click: boolean, fallback?: Point): Promise<void> {
+    if (!this.opts.agentCursor) return;
+    const size = this.pointed || fallback ? null : await this.size().catch(() => null);
+    const p = this.pointed ?? fallback ?? (size ? { x: size.width / 2, y: size.height / 2 } : null);
+    if (p) await this.pointAt(p, click);
   }
 
   /**
@@ -336,9 +350,10 @@ export class WindowEngine implements ComputerEngine {
       if (r.method === "ax") return `${verb} (pressed the element via accessibility)`;
       if (r.method === "ax-focus") return `${verb} (focused the text field — type now)`;
       const front = r.cameToFront ? " The app came to the front — the human may notice." : "";
+      const otherwise = `use a computer_ui element, computer_menu or keys${this.opts.allowForeground ? ", or retry with foreground: true" : ""}`;
       return r.chromium
-        ? `${verb} (sent as background mouse events — the web page of a background Chrome/Electron window often ignores those; check the next screenshot and click by computer_ui element if nothing changed)${front}`
-        : `${verb} (background)${front}`;
+        ? `${verb} (sent as background mouse events — the web page of a background Chrome/Electron window often ignores those; check the next screenshot and ${otherwise} if nothing changed)${front}`
+        : `${verb} (background; some apps ignore background clicks — if the next screenshot shows no change, ${otherwise})${front}`;
     };
     const viaCua = async (cua: CuaDriverClient) => {
       await this.pointAt(p, true);
@@ -434,6 +449,7 @@ export class WindowEngine implements ComputerEngine {
   }
 
   async keys(_view: string, combos: KeyCombo[], opts: { foreground?: boolean }): Promise<Outcome> {
+    await this.present(true);
     const details: string[] = [];
     let keyWindow = false;
     let chromium = false;
@@ -475,6 +491,7 @@ export class WindowEngine implements ComputerEngine {
   }
 
   async type(_view: string, text: string, opts: { foreground?: boolean }): Promise<Outcome> {
+    await this.present(false);
     const web = await this.webInput("type", { text }, opts.foreground);
     if (web.handled) return { detail: `Typed ${[...text].length} characters into the focused field (via accessibility)` };
     await this.ensureKeyWindow(opts.foreground);
@@ -583,6 +600,20 @@ export class WindowEngine implements ComputerEngine {
     return this.withElement(token, (cua, t) => cua.typeText(this.ref, text, { element: t, delivery: this.delivery(opts.foreground) }), `Typed ${[...text].length} characters`);
   }
 
+  async menu(path: string[]): Promise<Outcome> {
+    const cua = await this.cua();
+    if (!cua) throw this.noCua("Menus need Cua Driver.");
+    // The menu bar isn't part of the window: the cursor marks the title bar.
+    const size = this.pointed ? null : await this.size().catch(() => null);
+    await this.present(true, size ? { x: size.width / 2, y: 14 } : undefined);
+    try {
+      return { detail: describe(await cua.invokeMenu(this.ref, path), `Chose ${path.join(" > ")}`) };
+    } catch (err) {
+      const e = engineErrorFrom(err);
+      throw e.code === "gone" ? this.gone() : e;
+    }
+  }
+
   async dispose(): Promise<void> {
     if (!this.cursorShown) return;
     this.cursorShown = false;
@@ -596,8 +627,8 @@ export class WindowEngine implements ComputerEngine {
  * Cua Driver when that is missing: in the background on macOS, where the native helper acts meanwhile, else waiting
  * for it a little.
  */
-export function windowEngine(target: WindowTarget, opts: { agent?: boolean } = {}): WindowEngine {
+export function windowEngine(target: WindowTarget, opts: { agent?: boolean; allowForeground?: boolean } = {}): WindowEngine {
   const s = getSettings().computer;
   const download: CuaDownload = !opts.agent ? "never" : process.platform === "darwin" ? "background" : "wait";
-  return new WindowEngine(target, { useCua: s.useCuaDriver, allowForeground: s.allowForeground, agentCursor: !!opts.agent && s.agentCursor, download });
+  return new WindowEngine(target, { useCua: s.useCuaDriver, allowForeground: opts.allowForeground ?? s.allowForeground, agentCursor: !!opts.agent && s.agentCursor, download });
 }

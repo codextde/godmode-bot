@@ -3,7 +3,7 @@
   "control": {
     "window": "Controlled in the background — you keep using your mouse and keyboard.",
     "tab": "Controlled in the background, inside Godmode's browser.",
-    "desktop": "Uses your real mouse and keyboard — you'll see everything the agent does."
+    "desktop": "Apps stay in the background with a Godmode cursor. Your real mouse and keyboard only when a step needs them."
   },
   "setup": {
     "allowTitle": "Allow Godmode in System Settings",
@@ -77,7 +77,7 @@
     "noTabMatch": "No tab matches “{{query}}”.",
     "noteWindow": "The agent controls only this window, in the background — your mouse and keyboard stay yours.",
     "noteTab": "The agent controls only this tab of Godmode's browser, in the background.",
-    "noteScreen": "The agent uses your real mouse and keyboard on the shared screen. You can stop it any time.",
+    "noteScreen": "Apps stay in the background with a Godmode cursor. The agent uses your real mouse and keyboard only when a step needs them. You can stop it any time.",
     "title": "Share with {{name}}",
     "description": "Choose what the agent may see and control in this chat. Stop sharing whenever you like.",
     "tabWindow": "Window",

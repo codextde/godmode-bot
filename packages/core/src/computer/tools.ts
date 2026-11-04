@@ -2,22 +2,23 @@
  * The `computer` MCP server (POST /mcp/computer, per-run bearer token): what a run may do with the screen, window or
  * browser tab the human shared. The main tool mirrors the action vocabulary Claude knows from computer use
  * (screenshot, left_click, type, key, scroll, zoom, …); coordinates are pixels of the latest screenshot and are mapped
- * back to the screen by Godmode. Window shares add the window's accessibility elements (`computer_ui`), desktop
- * shares add apps and windows.
+ * back to the screen by Godmode. Windows add their accessibility elements (`computer_ui`) and menus (`computer_menu`).
+ * A desktop run works in one app's window in the background once it opens the app or picks the window; the real mouse
+ * and keyboard are for what can't be done there.
  */
 import { z } from "zod";
 import type { ComputerTarget } from "@godmode/shared";
-import { computerTargetLabel } from "@godmode/shared";
+import { computerTargetLabel, computerView } from "@godmode/shared";
 import { bus } from "../events/bus";
 import { logger } from "../log";
 import { audit } from "../services/audit";
 import { getSettings } from "../services/settings";
 import { sleep } from "../util";
 import type { RunContext } from "../types";
-import { EngineError, errorMessage, type Capture, type PointerOptions } from "./engine";
+import { EngineError, errorMessage, type Capture, type PointerOptions, type ViewInfo, type WindowSummary } from "./engine";
 import { frameToImage, imageToFrame, inImage, regionToFrame, relativeInFrame, type Point, type Shot } from "./geometry";
 import { KeyError, normalizeModifier, parseKeyCombo, parseKeySequence, type Modifier } from "./keys";
-import { assertActive, claimComputer, isGodmodeWindow, RevokedError, runComputer, type RunComputer } from "./service";
+import { activeEngine, activeTarget, assertActive, backgroundWindowsAvailable, claimComputer, isGodmodeWindow, leaveWindow, RevokedError, runComputer, workInWindow, type RunComputer } from "./service";
 import { sleepFor } from "./engine";
 import { isGodmodeAppName } from "./self";
 
@@ -66,12 +67,12 @@ function computerSchema(kind: ComputerTarget["kind"], allowForeground: boolean) 
     region: z.tuple([z.number(), z.number(), z.number(), z.number()]).optional().describe("zoom: [x1, y1, x2, y2] of the latest screenshot"),
     screenshot: z.boolean().optional().describe("Return a new screenshot after the action (default true)"),
     ...(kind === "desktop" ? { display: z.string().optional().describe("Display id (see computer_info). Default: the display of your latest screenshot") } : {}),
-    ...(kind === "window"
+    ...(kind !== "tab"
       ? {
           element: z
             .string()
             .optional()
-            .describe("Element token from computer_ui — click or type into that element through accessibility (most reliable in the background)"),
+            .describe("Element token from computer_ui — click or type into that element through accessibility (most reliable in the background, and text can't land in another field)"),
           ...(allowForeground ? { foreground: z.boolean().optional().describe("Bring the window to the front briefly for this action (only when a background action didn't work)") } : {}),
         }
       : {}),
@@ -83,11 +84,11 @@ type ComputerArgs = z.infer<ReturnType<typeof computerSchema>> & { display?: str
 function describeTarget(target: ComputerTarget): string {
   switch (target.kind) {
     case "desktop":
-      return "the human's entire desktop (every display) with the real mouse and keyboard — the human sees everything you do, and your actions go wherever the pointer and keyboard focus are";
+      return "the human's entire desktop (every display). Until you pick an app you use the real mouse and keyboard, and your actions go wherever the pointer and keyboard focus are";
     case "display":
-      return `one display of the human's computer (${computerTargetLabel(target)}) with the real mouse and keyboard — stay on that display`;
+      return `one display of the human's computer (${computerTargetLabel(target)}) — stay on that display. Until you pick an app you use the real mouse and keyboard`;
     case "window":
-      return `one app window the human shared (${computerTargetLabel(target)}). You work in the background: your input goes only to this window, the human keeps using their mouse and keyboard, and other apps are off limits`;
+      return `one app window (${computerTargetLabel(target)}). You work in the background: your input goes only to this window and the human keeps using their mouse and keyboard`;
     case "tab":
       return `one browser tab the human shared (${computerTargetLabel(target)}), in the background`;
   }
@@ -99,13 +100,18 @@ function toolDescription(target: ComputerTarget, allowForeground: boolean): stri
     `Start with {action:"screenshot"}. Coordinates are pixels of your latest screenshot${target.kind === "desktop" ? " of that display" : ""}; after every action you get a fresh screenshot (pass screenshot:false to skip it).`,
     'Actions: screenshot, left_click, right_click, middle_click, double_click, triple_click (coordinate; hold keys with modifiers:"shift"), mouse_move, left_click_drag (start_coordinate → coordinate), scroll (coordinate, scroll_direction, scroll_amount), type (text), key (text like "Return" or "cmd+c"), hold_key (text, duration), wait (duration), cursor_position, zoom (region — a sharper look; keep using full-screenshot coordinates for actions).',
   ];
-  if (target.kind === "window") {
+  if (target.kind === "desktop" || target.kind === "display") {
     lines.push(
-      'Prefer elements: call computer_ui, then {action:"left_click", element:"<token>"} or {action:"type", element, text} — accessibility actions work even when the window is covered or on another Space. Keyboard shortcuts with cmd/ctrl may not reach a background window; use menus or elements instead.',
+      "To use an app, call computer_open_app or computer_windows with focus first: you then work in its window in the background, the human keeps their mouse and keyboard, and a Godmode cursor shows what you do. Stay on the real mouse only for what can't be done in a window.",
+    );
+  }
+  if (target.kind !== "tab") {
+    lines.push(
+      'In a window, prefer elements: call computer_ui, then {action:"left_click", element:"<token>"} or {action:"type", element, text} — accessibility actions work even when the window is covered or on another Space. Keyboard shortcuts with cmd/ctrl may not reach a background window; use computer_menu or elements instead.',
     );
     if (allowForeground) lines.push("If a background action did nothing, retry it with foreground:true — the window comes to the front briefly.");
   }
-  if (target.kind === "desktop") lines.push("Several displays: pass display (see computer_info) to screenshot or act on another one.");
+  if (target.kind === "desktop") lines.push("Several displays: pass display (see computer_info) to screenshot another one; that also brings you back to the desktop.");
   lines.push("Never type passwords or 2FA codes — ask the human instead of guessing credentials. Never operate Godmode's own window.");
   return lines.join("\n");
 }
@@ -123,6 +129,8 @@ function round(p: Point): string {
 }
 
 async function resolveView(rc: RunComputer, display?: string): Promise<string> {
+  if (display && rc.window) await leaveWindow(rc);
+  if (rc.window) return computerView(rc.window.target);
   if (rc.target.kind === "desktop") {
     if (display) {
       const views = await rc.engine.views();
@@ -142,7 +150,7 @@ async function resolveView(rc: RunComputer, display?: string): Promise<string> {
 
 async function takeShot(rc: RunComputer, view: string): Promise<Capture> {
   const maxEdge = getSettings().computer.screenshotMaxSize;
-  const cap = await rc.engine.capture(view, { maxEdge, purpose: "model", format: "jpeg", quality: 0.8 });
+  const cap = await activeEngine(rc).capture(view, { maxEdge, purpose: "model", format: "jpeg", quality: 0.8 });
   rc.shots.set(view, { width: cap.width, height: cap.height, frame: cap.frame });
   rc.view = view;
   return cap;
@@ -183,6 +191,9 @@ function emitAction(rc: RunComputer, view: string, action: string, p?: Point) {
   bus.emit({ type: "computer.action", view, runId: rc.runId, action, ...(rel ? { x: rel.x, y: rel.y } : {}) });
 }
 
+const NO_WINDOW = "This works in an app's window: call computer_open_app or computer_windows with focus first.";
+const COMPUTER_BUSY = "Another run is using this right now. Go on with what doesn't need the screen and try again in a minute.";
+
 const TYPE_CHUNK = 200;
 
 /** Seconds to let the UI settle before the follow-up screenshot. */
@@ -207,8 +218,8 @@ async function afterAction(rc: RunComputer, view: string, action: Action, detail
 /* ------------------------------------------------------------------ */
 
 async function computerAction(rc: RunComputer, args: ComputerArgs): Promise<ComputerToolResult> {
-  const engine = rc.engine;
   const view = await resolveView(rc, args.display);
+  const engine = activeEngine(rc);
   const foreground = args.foreground === true;
   const pointer = (button: PointerOptions["button"], count: number): PointerOptions => ({ button, count, modifiers: parseModifiers(args.modifiers), foreground });
 
@@ -224,7 +235,7 @@ async function computerAction(rc: RunComputer, args: ComputerArgs): Promise<Comp
       const button = args.action === "right_click" ? "right" : args.action === "middle_click" ? "middle" : "left";
       const count = args.action === "double_click" ? 2 : args.action === "triple_click" ? 3 : 1;
       if (args.element) {
-        if (!engine.clickElement) throw new EngineError("element is only available for a shared window.", "bad_request");
+        if (!engine.clickElement) throw new EngineError(NO_WINDOW, "bad_request");
         const out = await engine.clickElement(args.element, pointer(button, count));
         emitAction(rc, view, args.action);
         return afterAction(rc, view, args.action, out.detail, args.screenshot);
@@ -265,7 +276,7 @@ async function computerAction(rc: RunComputer, args: ComputerArgs): Promise<Comp
       if (!args.text) throw new EngineError("text is required for type.", "bad_request");
       let out;
       if (args.element) {
-        if (!engine.typeInto) throw new EngineError("element is only available for a shared window.", "bad_request");
+        if (!engine.typeInto) throw new EngineError(NO_WINDOW, "bad_request");
         out = await engine.typeInto(args.element, args.text, { foreground });
       } else {
         // Long text goes in chunks, so stopping the share stops the typing.
@@ -334,11 +345,12 @@ async function computerAction(rc: RunComputer, args: ComputerArgs): Promise<Comp
 /* ------------------------------------------------------------------ */
 
 async function uiElements(rc: RunComputer, query?: string): Promise<ComputerToolResult> {
-  if (!rc.engine.elements) return text("computer_ui is only available for a shared window.", true);
+  const engine = activeEngine(rc);
+  if (!engine.elements) return text(NO_WINDOW, true);
   const view = await resolveView(rc);
   if (!rc.shots.get(view)) await takeShot(rc, view).catch(() => null);
   const shot: Shot | undefined = rc.shots.get(view);
-  const { elements, note } = await rc.engine.elements(query);
+  const { elements, note } = await engine.elements(query);
   if (!elements.length) return text(note ?? (query ? `No elements match "${query}".` : "The window exposes no accessibility elements; use screenshots and coordinates."));
   const lines = elements.slice(0, 400).map((e) => {
     const indent = "  ".repeat(Math.min(e.depth, 8));
@@ -354,14 +366,24 @@ async function uiElements(rc: RunComputer, query?: string): Promise<ComputerTool
   });
   const more = elements.length > 400 ? `\n… ${elements.length - 400} more — pass a query to narrow it down.` : "";
   return text(
-    `Elements of ${computerTargetLabel(rc.target)} — use a token as element in computer actions${shot ? "; @(x, y) is the element's center in your latest screenshot" : ""}. Tokens expire when you call computer_ui again.${note ? `\n${note}` : ""}\n${lines.join("\n")}${more}`,
+    `Elements of ${computerTargetLabel(activeTarget(rc))} — use a token as element in computer actions${shot ? "; @(x, y) is the element's center in your latest screenshot" : ""}. Tokens expire when you call computer_ui again.${note ? `\n${note}` : ""}\n${lines.join("\n")}${more}`,
   );
 }
 
+async function menu(rc: RunComputer, path: string[]): Promise<ComputerToolResult> {
+  const engine = activeEngine(rc);
+  if (!engine.menu) return text(NO_WINDOW, true);
+  const view = await resolveView(rc);
+  const out = await engine.menu(path);
+  emitAction(rc, view, "menu");
+  return afterAction(rc, view, "left_click", out.detail, true);
+}
+
 async function info(rc: RunComputer): Promise<ComputerToolResult> {
-  const views = await rc.engine.views();
-  const lines = [`Shared with you: ${describeTarget(rc.target)}.`];
-  if (rc.target.kind === "desktop" || rc.target.kind === "display") {
+  const target = activeTarget(rc);
+  const views = await activeEngine(rc).views();
+  const lines = [`${rc.window ? "You work in" : "Shared with you:"} ${describeTarget(target)}.`];
+  if (target.kind === "desktop" || target.kind === "display") {
     lines.push("Displays (screen points, top-left origin):");
     for (const v of views) {
       const f = v.frame;
@@ -376,25 +398,43 @@ async function info(rc: RunComputer): Promise<ComputerToolResult> {
   return text(lines.join("\n"));
 }
 
-async function windowsTool(rc: RunComputer, focus?: number): Promise<ComputerToolResult> {
+function displayOf(views: ViewInfo[], w: WindowSummary): ViewInfo | undefined {
+  const cx = w.frame.x + w.frame.width / 2;
+  const cy = w.frame.y + w.frame.height / 2;
+  return views.find((v) => cx >= v.frame.x && cy >= v.frame.y && cx < v.frame.x + v.frame.width && cy < v.frame.y + v.frame.height);
+}
+
+/** Work in `w` in the background and show it. */
+async function enterWindow(rc: RunComputer, w: WindowSummary): Promise<ComputerToolResult> {
+  if (isGodmodeWindow(w)) return text("Godmode's own window is off limits.", true);
+  if (rc.target.kind === "display" && !displayOf(await rc.engine.views(), w)) return text(`${w.app} is on another display; stay on ${computerTargetLabel(rc.target)}.`, true);
+  await workInWindow(rc, { id: w.id, pid: w.pid, app: w.app, title: w.title });
+  audit(`agent:${rc.agentId}`, "computer.control", computerTargetLabel(activeTarget(rc)), { runId: rc.runId, kind: "window" });
+  const caption = `You now work in ${w.app} in the background: your input goes only to this window, and it stays where it is.${w.onScreen ? "" : " It is hidden or minimized, so input may not arrive; computer_windows with front:true shows it."}`;
+  return shotContent(await takeShot(rc, computerView(activeTarget(rc))), caption);
+}
+
+async function windowsTool(rc: RunComputer, args: { focus?: number; front?: boolean; desktop?: boolean }): Promise<ComputerToolResult> {
   if (!rc.engine.windows || !rc.engine.focusWindow) return text("Listing windows isn't available here.", true);
-  if (focus !== undefined) {
-    const w = (await rc.engine.windows()).find((x) => x.id === focus);
+  if (args.desktop) {
+    await leaveWindow(rc);
+    return text("Back on the desktop: you use the real mouse and keyboard again.");
+  }
+  if (args.focus !== undefined) {
+    const w = (await rc.engine.windows()).find((x) => x.id === args.focus);
     if (w && isGodmodeWindow(w)) return text("Godmode's own window is off limits.", true);
-    return text(`${(await rc.engine.focusWindow(focus)).detail}.`);
+    if (w && !args.front && backgroundWindowsAvailable()) return enterWindow(rc, w);
+    await leaveWindow(rc);
+    return text(`${(await rc.engine.focusWindow(args.focus)).detail}. You use the real mouse and keyboard.`);
   }
   const views = await rc.engine.views();
   const list = (await rc.engine.windows()).filter((w) => !isGodmodeWindow(w));
-  const onDisplay = (w: { frame: { x: number; y: number; width: number; height: number } }) => {
-    const cx = w.frame.x + w.frame.width / 2;
-    const cy = w.frame.y + w.frame.height / 2;
-    return views.find((v) => cx >= v.frame.x && cy >= v.frame.y && cx < v.frame.x + v.frame.width && cy < v.frame.y + v.frame.height);
-  };
+  const onDisplay = (w: WindowSummary) => displayOf(views, w);
   const shown = rc.target.kind === "display" ? list.filter((w) => !!onDisplay(w)) : list;
   if (!shown.length) return text("No windows are open.");
   return text(
     [
-      "Open windows (pass focus:<id> to bring one to the front):",
+      "Open windows (pass focus:<id> to work in one in the background):",
       ...shown.slice(0, 80).map((w) => {
         const d = onDisplay(w);
         return `- ${w.id}: ${w.app}${w.title ? ` — ${w.title.slice(0, 80)}` : ""}${w.frontmost ? " (frontmost app)" : ""}${!w.onScreen ? " (hidden/minimized)" : d ? ` on display ${d.displayId}` : ""}`;
@@ -414,10 +454,45 @@ interface ToolSpec {
   run: (rc: RunComputer, args: never) => Promise<ComputerToolResult>;
 }
 
+/** A desktop run may use the real mouse anyway, so foreground delivery needs no setting there. */
+function foregroundAllowed(kind: ComputerTarget["kind"]): boolean {
+  return kind === "desktop" || kind === "display" || (kind === "window" && getSettings().computer.allowForeground);
+}
+
+/** The largest window of a just opened app, once it shows one (on-screen windows first: apps keep hidden helpers). */
+async function appWindow(rc: RunComputer, name: string, pid: number | undefined): Promise<WindowSummary | null> {
+  const app = name.replace(/\.app$/i, "").toLowerCase();
+  const area = (w: WindowSummary) => w.frame.width * w.frame.height;
+  for (let i = 0; i < 20; i++) {
+    const mine = ((await rc.engine.windows?.()) ?? []).filter((w) => (pid ? w.pid === pid : w.app.toLowerCase() === app));
+    const visible = mine.filter((w) => w.onScreen);
+    const best = (visible.length ? visible : mine).sort((a, b) => area(b) - area(a))[0];
+    if (best) return best;
+    await sleepFor(250, rc.abort.signal);
+    assertActive(rc);
+  }
+  return null;
+}
+
+async function openApp(rc: RunComputer, name: string): Promise<ComputerToolResult> {
+  if (isGodmodeAppName(name)) return text("Godmode's own app is off limits.", true);
+  if (!rc.engine.openApp) return text("Opening apps isn't available here.", true);
+  if (backgroundWindowsAvailable()) {
+    const out = await rc.engine.openApp(name, { background: true });
+    const w = await appWindow(rc, name, out.pid);
+    if (w) return enterWindow(rc, w);
+    return text(`${out.detail}, but it shows no window yet. Check computer_windows, or bring it forward with computer_windows front:true.`);
+  }
+  if (claimComputer(rc)) return text(COMPUTER_BUSY, true);
+  await leaveWindow(rc);
+  const out = await rc.engine.openApp(name);
+  await sleep(800);
+  return afterAction(rc, await resolveView(rc), "left_click", out.detail, true);
+}
+
 function toolsFor(rc: RunComputer): ToolSpec[] {
-  const s = getSettings().computer;
   const kind = rc.target.kind;
-  const allowForeground = kind === "window" && s.allowForeground;
+  const allowForeground = foregroundAllowed(kind);
   const tools: ToolSpec[] = [
     {
       name: "computer",
@@ -427,40 +502,44 @@ function toolsFor(rc: RunComputer): ToolSpec[] {
     },
     {
       name: "computer_info",
-      description: "What is shared with you: the window, tab or displays (ids, sizes, arrangement) and your latest screenshot size.",
+      description: "What you work in: the window, tab or displays (ids, sizes, arrangement) and your latest screenshot size.",
       schema: z.object({}),
       run: (r) => info(r),
     },
   ];
-  if (kind === "window") {
+  if (kind !== "tab") {
     tools.push({
       name: "computer_ui",
       description:
-        "Accessibility elements of the shared window (buttons, fields, menus, links…) with tokens for computer actions ({action:\"left_click\", element} / {action:\"type\", element, text}). Clicking by element works in the background even when the window is covered. Pass query to filter by role, label or value.",
+        "Accessibility elements of the window you work in (buttons, fields, menus, links…) with tokens for computer actions ({action:\"left_click\", element} / {action:\"type\", element, text}). Clicking by element works in the background even when the window is covered. Pass query to filter by role, label or value.",
       schema: z.object({ query: z.string().max(200).optional().describe('Filter, e.g. "Save" or "AXTextField"') }),
       run: (r, args: { query?: string }) => uiElements(r, args.query),
+    });
+    tools.push({
+      name: "computer_menu",
+      description:
+        'Run an item of the menu bar of the app you work in, in the background, e.g. path ["File", "Save"]. It works where background clicks and shortcuts don\'t reach the app. A path that doesn\'t exist answers with the items of that menu.',
+      schema: z.object({ path: z.array(z.string().min(1).max(200)).min(1).max(6).describe("Menu titles from the menu bar down to the item") }),
+      run: (r, args: { path: string[] }) => menu(r, args.path),
     });
   }
   if (kind === "desktop" || kind === "display") {
     tools.push(
       {
         name: "computer_windows",
-        description: "List the open windows (app, title, display) or bring one to the front with focus:<id>.",
-        schema: z.object({ focus: z.number().int().optional().describe("Window id to bring to the front") }),
-        run: (r, args: { focus?: number }) => windowsTool(r, args.focus),
+        description: "List the open windows (app, title, display), or work in one in the background with focus:<id>: it stays where it is, your input goes only to it.",
+        schema: z.object({
+          focus: z.number().int().optional().describe("Window id to work in"),
+          front: z.boolean().optional().describe("With focus: bring the window to the front instead and use the real mouse and keyboard"),
+          desktop: z.boolean().optional().describe("Leave the window: back to the whole desktop with the real mouse and keyboard"),
+        }),
+        run: (r, args: { focus?: number; front?: boolean; desktop?: boolean }) => windowsTool(r, args),
       },
       {
         name: "computer_open_app",
-        description: "Open (or switch to) an app by name, e.g. \"Safari\", \"Notes\", \"Calculator\".",
+        description: "Open an app by name (e.g. \"Safari\", \"WeChat\") and work in its window in the background: it doesn't come to the front, and your input goes only to it.",
         schema: z.object({ name: z.string().min(1).max(200) }),
-        run: async (r, args: { name: string }) => {
-          if (isGodmodeAppName(args.name)) return text("Godmode's own app is off limits.", true);
-          if (!r.engine.openApp) return text("Opening apps isn't available here.", true);
-          const out = await r.engine.openApp(args.name);
-          await sleep(800);
-          const view = await resolveView(r);
-          return afterAction(r, view, "left_click", out.detail, true);
-        },
+        run: (r, args: { name: string }) => openApp(r, args.name),
       },
     );
   }
@@ -486,7 +565,7 @@ export const COMPUTER_INSTRUCTIONS =
 export function listComputerTools(ctx: RunContext): { name: string; description: string; inputSchema: Record<string, unknown> }[] {
   const rc = runComputer(ctx.runId);
   if (!rc) return [];
-  const allowForeground = rc.target.kind === "window" && getSettings().computer.allowForeground;
+  const allowForeground = foregroundAllowed(rc.target.kind);
   return toolsFor(rc).map((t) => ({
     name: t.name,
     description: t.description,
@@ -509,9 +588,13 @@ export async function callComputerTool(ctx: RunContext, name: string, args: unkn
     try {
       assertActive(rc);
       const parsed = tool.schema.parse(args ?? {});
-      if (name !== "computer_info" && claimComputer(rc)) {
-        return text("Another run is using the computer right now. Go on with what doesn't need the screen and try again in a minute.", true);
-      }
+      // Picking an app or a window needs no turn yet: the run only takes what it then acts on.
+      const free =
+        name === "computer_info" ||
+        name === "computer_open_app" ||
+        (name === "computer_windows" && !(parsed as { front?: boolean }).front) ||
+        ((name === "computer_ui" || name === "computer_menu") && !activeEngine(rc).elements);
+      if (!free && claimComputer(rc)) return text(COMPUTER_BUSY, true);
       if (!audited.has(rc.runId)) {
         audited.add(rc.runId);
         setTimeout(() => audited.delete(rc.runId), 6 * 3600_000).unref?.();

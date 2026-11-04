@@ -12,6 +12,8 @@ import { CUA_DRIVER_SPEC, __resetCuaDriverForTests, installCuaDriver, stopCuaDri
 import { __setUvxForTests } from "../src/services/doctor";
 import { stopHelper } from "../src/computer/helper";
 import { windowEngine } from "../src/computer/engines/window";
+import { attachComputer, claimComputer, detachComputer, holdsComputer, runComputer } from "../src/computer/service";
+import { callComputerTool } from "../src/computer/tools";
 import { updateSettings } from "../src/services/settings";
 
 const suite = process.platform === "darwin" ? describe : describe.skip;
@@ -46,13 +48,23 @@ process.stdin.on("data", (chunk) => {
     appendFileSync(logFile, line + "\\n");
     const s = JSON.parse(readFileSync(scenarioFile, "utf8"));
     switch (msg.cmd) {
-      case "window": reply(msg.id, { id: 7, pid: 70, app: "Slack", bundleId: "com.tinyspeck.slackmacgap", title: "Slack", x: 100, y: 50, width: 800, height: 600, layer: 0, onScreen: true, frontmost: false }); break;
+      case "window": reply(msg.id, msg.window === 8
+        ? { id: 8, pid: 71, app: "Notes", bundleId: null, title: "Notes", x: 0, y: 0, width: 1000, height: 900, layer: 0, onScreen: true, frontmost: true }
+        : { id: 7, pid: 70, app: "Slack", bundleId: "com.tinyspeck.slackmacgap", title: "Slack", x: 100, y: 50, width: 800, height: 600, layer: 0, onScreen: true, frontmost: false }); break;
       case "pointer":
         if (s.pointerError) process.stdout.write(JSON.stringify({ id: msg.id, ok: false, error: "Accessibility permission is missing.", code: s.pointerError }) + "\\n");
         else reply(msg.id, { method: s.pointer, chromium: s.chromium, cameToFront: !!s.cameToFront });
         break;
       case "type": case "key": reply(msg.id, msg.webOnly ? { method: s.webField ? "ax" : null, chromium: s.chromium } : { method: "event", chromium: s.chromium }); break;
       case "ensureKeyWindow": reply(msg.id, { state: "key" }); break;
+      case "displays": reply(msg.id, [{ id: 1, name: "Built-in", x: 0, y: 0, width: 1512, height: 982, scale: 2, primary: true }]); break;
+      case "windows": reply(msg.id, [
+        { id: 6, pid: 70, app: "Slack", bundleId: null, title: "Slack", x: 100, y: 50, width: 280, height: 380, layer: 0, onScreen: false, frontmost: false },
+        { id: 7, pid: 70, app: "Slack", bundleId: null, title: "Slack", x: 100, y: 50, width: 800, height: 600, layer: 0, onScreen: true, frontmost: false },
+        { id: 8, pid: 71, app: "Notes", bundleId: null, title: "Notes", x: 0, y: 0, width: 1000, height: 900, layer: 0, onScreen: true, frontmost: true },
+      ]); break;
+      case "openApp": reply(msg.id, { pid: 70, path: "/Applications/Slack.app" }); break;
+      case "capture": reply(msg.id, { data: "AAAA", format: "jpeg", width: 800, height: 600, x: msg.window === 7 ? 100 : 0, y: msg.window === 7 ? 50 : 0, pointWidth: 800, pointHeight: 600 }); break;
       default: reply(msg.id, { ok: true });
     }
   }
@@ -76,6 +88,9 @@ suite("window shares (macOS helper)", () => {
           .map((l) => JSON.parse(l))
           .filter((c) => c.cmd !== "window")
       : [];
+
+  /** Without the agent cursor showing up. */
+  const inputs = () => calls().filter((c) => c.cmd !== "agentCursor");
 
   beforeAll(async () => {
     env = await setupEnv("godmode-window-");
@@ -102,6 +117,76 @@ suite("window shares (macOS helper)", () => {
     scenario({ pointer: "event", chromium: false, webField: false });
   });
 
+  describe("a desktop run", () => {
+    const ctx = (runId: string) => ({ runId, agentId: "agt_x", conversationId: "cnv_x", workspaceId: null, depth: 0 });
+    const textOf = (r: { content: { type: string; text?: string }[] }) => r.content.map((c) => c.text ?? "").join(" ");
+
+    test("opens an app in the background and works in its largest visible window, with the agent cursor", async () => {
+      const runId = "run_bg_open";
+      attachComputer(runId, "agt_x", "cnv_x", { kind: "desktop" }, "agent");
+      const opened = await callComputerTool(ctx(runId), "computer_open_app", { name: "Slack" });
+      expect(opened.isError).toBeFalsy();
+      expect(textOf(opened)).toContain("You now work in Slack in the background");
+      expect(calls().find((c) => c.cmd === "openApp")).toMatchObject({ name: "Slack", activate: false });
+      expect(calls().some((c) => c.cmd === "activate")).toBe(false);
+      expect(runComputer(runId)?.window?.target).toMatchObject({ kind: "window", pid: 70, windowId: 7 });
+
+      const click = await callComputerTool(ctx(runId), "computer", { action: "left_click", coordinate: [10, 20], screenshot: false });
+      expect(click.isError).toBeFalsy();
+      expect(calls().find((c) => c.cmd === "pointer")).toMatchObject({ pid: 70, window: 7, x: 110, y: 70, cursor: true });
+
+      rmSync(logFile, { force: true });
+      expect((await callComputerTool(ctx(runId), "computer", { action: "type", text: "hi", screenshot: false })).isError).toBeFalsy();
+      expect(calls().find((c) => c.cmd === "agentCursor")).toMatchObject({ window: 7, x: 110, y: 70 });
+      expect(calls().find((c) => c.cmd === "type" && !c.webOnly)).toMatchObject({ text: "hi", pid: 70 });
+      await detachComputer(runId);
+      expect(calls().at(-1)).toMatchObject({ cmd: "agentCursor", hide: true, window: 7 });
+    });
+
+    test("focus works in a window without bringing it forward; front and desktop go back to the real mouse", async () => {
+      const runId = "run_bg_focus";
+      attachComputer(runId, "agt_x", "cnv_x", { kind: "desktop" }, "agent");
+      const entered = await callComputerTool(ctx(runId), "computer_windows", { focus: 8 });
+      expect(textOf(entered)).toContain("You now work in Notes");
+      expect(calls().some((c) => c.cmd === "activate")).toBe(false);
+      expect(runComputer(runId)?.window?.target).toMatchObject({ windowId: 8 });
+
+      expect(textOf(await callComputerTool(ctx(runId), "computer_windows", { desktop: true }))).toContain("real mouse");
+      expect(runComputer(runId)?.window).toBeNull();
+
+      await callComputerTool(ctx(runId), "computer_windows", { focus: 8 });
+      await callComputerTool(ctx(runId), "computer_windows", { focus: 8, front: true });
+      expect(calls().find((c) => c.cmd === "activate")).toMatchObject({ pid: 71, window: 8 });
+      expect(runComputer(runId)?.window).toBeNull();
+      await detachComputer(runId);
+    });
+
+    test("runs in different windows don't wait for each other, and leave the desktop free", async () => {
+      attachComputer("run_a", "agt_x", "cnv_a", { kind: "desktop" }, "agent");
+      attachComputer("run_b", "agt_x", "cnv_b", { kind: "desktop" }, "agent");
+      attachComputer("run_c", "agt_x", "cnv_c", { kind: "desktop" }, "agent");
+      await callComputerTool(ctx("run_a"), "computer_windows", { focus: 7 });
+      await callComputerTool(ctx("run_b"), "computer_windows", { focus: 8 });
+      await callComputerTool(ctx("run_c"), "computer_windows", { focus: 7 });
+      expect(claimComputer(runComputer("run_a")!)).toBeNull();
+      expect(claimComputer(runComputer("run_b")!)).toBeNull();
+      expect(claimComputer(runComputer("run_c")!)?.runId).toBe("run_a");
+      expect(holdsComputer("run_a")).toBe(false);
+      for (const id of ["run_a", "run_b", "run_c"]) await detachComputer(id);
+    });
+
+    test("menus and elements need a window first", async () => {
+      const runId = "run_bg_nowin";
+      attachComputer(runId, "agt_x", "cnv_x", { kind: "desktop" }, "agent");
+      for (const [tool, args] of [["computer_menu", { path: ["File", "Save"] }], ["computer_ui", {}]] as const) {
+        const r = await callComputerTool(ctx(runId), tool, args);
+        expect(r.isError).toBe(true);
+        expect(textOf(r)).toContain("computer_open_app");
+      }
+      await detachComputer(runId);
+    });
+  });
+
   test("an agent's click goes to the helper at the window's global point, with the agent cursor", async () => {
     scenario({ pointer: "ax-focus", chromium: true, webField: false });
     const engine = windowEngine(target, { agent: true });
@@ -115,12 +200,10 @@ suite("window shares (macOS helper)", () => {
     scenario({ pointer: "event", chromium: true, webField: false });
     expect((await engine.click("window:70:7", { x: 10, y: 20 }, { button: "left", count: 1, modifiers: [] })).detail).toContain("background Chrome/Electron window often ignores");
     scenario({ pointer: "event", chromium: false, webField: false });
-    expect((await engine.click("window:70:7", { x: 10, y: 20 }, { button: "right", count: 1, modifiers: [] })).detail).toBe("Right-clicked (background)");
+    expect((await engine.click("window:70:7", { x: 10, y: 20 }, { button: "right", count: 1, modifiers: [] })).detail).toStartWith("Right-clicked (background; some apps ignore background clicks");
 
     scenario({ pointer: "event", chromium: false, webField: false, cameToFront: true });
-    expect((await engine.click("window:70:7", { x: 10, y: 20 }, { button: "left", count: 1, modifiers: [] })).detail).toBe(
-      "Clicked (background) The app came to the front — the human may notice.",
-    );
+    expect((await engine.click("window:70:7", { x: 10, y: 20 }, { button: "left", count: 1, modifiers: [] })).detail).toEndWith("The app came to the front — the human may notice.");
 
     // The cursor it showed goes away with the share (only if it is still over this window).
     await engine.dispose();
@@ -226,12 +309,12 @@ suite("window shares (macOS helper)", () => {
     const engine = windowEngine(target, { agent: true });
     const out = await engine.type("window:70:7", "hello", {});
     expect(out.detail).toBe("Typed 5 characters into the focused field (via accessibility)");
-    expect(calls()).toEqual([expect.objectContaining({ cmd: "type", text: "hello", pid: 70, webOnly: true })]);
+    expect(inputs()).toEqual([expect.objectContaining({ cmd: "type", text: "hello", pid: 70, webOnly: true })]);
 
     rmSync(logFile, { force: true });
     const keys = await engine.keys("window:70:7", [{ key: "a", modifiers: ["cmd"] }, { key: "backspace", modifiers: [] }], {});
     expect(keys.detail).toBe("Pressed (applied to the focused field via accessibility)");
-    expect(calls().map((c) => [c.cmd, c.webOnly])).toEqual([
+    expect(inputs().map((c) => [c.cmd, c.webOnly])).toEqual([
       ["key", true],
       ["key", true],
     ]);
@@ -243,7 +326,7 @@ suite("window shares (macOS helper)", () => {
     const out = await engine.type("window:70:7", "hi", {});
     expect(out.detail).toStartWith("Typed 2 characters (background) — but key events usually don't reach the web page");
     expect(out.detail).not.toContain("foreground: true");
-    expect(calls().map((c) => [c.cmd, c.webOnly ?? false])).toEqual([
+    expect(inputs().map((c) => [c.cmd, c.webOnly ?? false])).toEqual([
       ["type", true],
       ["ensureKeyWindow", false],
       ["type", false],
@@ -275,7 +358,7 @@ suite("window shares (macOS helper)", () => {
     rmSync(logFile, { force: true });
     const shortcut = await engine.keys("window:70:7", [{ key: "z", modifiers: ["cmd"] }], {});
     expect(shortcut.detail).toContain("Shortcuts with cmd/ctrl don't always reach");
-    expect(calls().map((c) => [c.cmd, c.webOnly ?? false])).toEqual([
+    expect(inputs().map((c) => [c.cmd, c.webOnly ?? false])).toEqual([
       ["key", true],
       ["ensureKeyWindow", false],
       ["key", false],
