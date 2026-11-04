@@ -847,6 +847,8 @@
     "workingQueued": "Arbeitet – neue Nachrichten kommen in die Warteschlange",
     "workingSteer": "Arbeitet – eine neue Nachricht unterbricht und startet mit deiner",
     "newLine": "neue Zeile",
+    "pastedAsFile": "Eingefügter Text als Datei angehängt ({{size}})",
+    "pasteInline": "Als Text einfügen",
     "queueMessage": "In die Warteschlange",
     "steerMessage": "Jetzt umlenken",
     "sendMessage": "Nachricht senden",

@@ -64,6 +64,7 @@ interface UiState {
   reduceAnimations: boolean;
   toolCallView: ToolCallView;
   followUpMode: FollowUpMode;
+  largePasteAsFile: boolean;
   mcpApps: boolean;
   /** Show the frame rate meter on top of the window. */
   fpsMeter: boolean;
@@ -106,6 +107,7 @@ interface UiState {
   setReduceAnimations: (v: boolean) => void;
   setToolCallView: (v: ToolCallView) => void;
   setFollowUpMode: (v: FollowUpMode) => void;
+  setLargePasteAsFile: (v: boolean) => void;
   setMcpApps: (v: boolean) => void;
   setFpsMeter: (v: boolean) => void;
 }
@@ -145,6 +147,7 @@ export const useUi = create<UiState>()(
       reduceAnimations: false,
       toolCallView: "cards",
       followUpMode: "queue",
+      largePasteAsFile: true,
       mcpApps: false,
       fpsMeter: false,
       setWorkspace: (workspace, project = null) =>
@@ -191,6 +194,7 @@ export const useUi = create<UiState>()(
       setReduceAnimations: (reduceAnimations) => set({ reduceAnimations }),
       setToolCallView: (toolCallView) => set({ toolCallView }),
       setFollowUpMode: (followUpMode) => set({ followUpMode }),
+      setLargePasteAsFile: (largePasteAsFile) => set({ largePasteAsFile }),
       setMcpApps: (mcpApps) => set({ mcpApps }),
       setFpsMeter: (fpsMeter) => set({ fpsMeter }),
     }),
@@ -227,6 +231,7 @@ export const useUi = create<UiState>()(
         reduceAnimations: s.reduceAnimations,
         toolCallView: s.toolCallView,
         followUpMode: s.followUpMode,
+        largePasteAsFile: s.largePasteAsFile,
         mcpApps: s.mcpApps,
         fpsMeter: s.fpsMeter,
       }),

@@ -46,6 +46,8 @@
       "followUpDescription": "Queue hands your message to the agent between two of its steps. Steer stops what it is doing and starts on your message right away. {{shortcut}} sends the other way.",
       "queue": "Queue",
       "steer": "Steer",
+      "largePaste": "Large pastes as a file",
+      "largePasteDescription": "Text over 32 KB you paste becomes a .txt attachment, so the agent reads only what it needs instead of carrying it all in its context.",
       "mcpApps": "MCP app views",
       "mcpAppsDescription": "When a tool of your MCP servers comes with its own view (MCP Apps), show it in the chat, ready to click. Tools that change data ask first."
     },

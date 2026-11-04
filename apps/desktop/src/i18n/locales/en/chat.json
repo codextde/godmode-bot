@@ -847,6 +847,8 @@
     "workingQueued": "Working — new messages are queued",
     "workingSteer": "Working — a new message stops it and starts on yours",
     "newLine": "new line",
+    "pastedAsFile": "Pasted text attached as a file ({{size}})",
+    "pasteInline": "Paste as text",
     "queueMessage": "Queue message",
     "steerMessage": "Steer now",
     "sendMessage": "Send message",

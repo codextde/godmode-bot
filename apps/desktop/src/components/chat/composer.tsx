@@ -31,7 +31,7 @@ import { errorMessage, isLicenseRequired } from "@/lib/api";
 import { useEasyMode } from "@/lib/mode";
 import { cn } from "@/lib/utils";
 import { EASE_OUT, useReduceAnimations } from "@/lib/motion";
-import { AttachmentTray, readAttachments, totalBytes, type PendingAttachment } from "./attachments";
+import { AttachmentTray, formatBytes, readAttachments, totalBytes, type PendingAttachment } from "./attachments";
 import { LevelBars } from "./voice-visuals";
 import { WorkingTicks } from "@/components/aicss/Motion";
 import { SlashHint, SlashMenu, findCommand, rankCommands, slashOptionId, useSlashCommands } from "./slash-commands";
@@ -95,6 +95,14 @@ function joinText(base: string, add: string): string {
 }
 
 const NO_ATTACHMENTS: PendingAttachment[] = [];
+const LARGE_PASTE_BYTES = 32 * 1024;
+const MAX_MESSAGE_CHARS = 200_000;
+
+const pastedFileName = () => {
+  const d = new Date();
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `pasted-${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}.txt`;
+};
 
 export function Composer({
   onSubmit,
@@ -143,6 +151,7 @@ export function Composer({
   const voiceEnabled = voiceSettings?.enabled ?? true;
   const setVoiceMode = useUi((s) => s.setVoiceMode);
   const steerByDefault = useUi((s) => s.followUpMode === "steer");
+  const largePasteAsFile = useUi((s) => s.largePasteAsFile);
   const armVoice = useVoiceSession((s) => s.arm);
 
   // Revoke thumbnails on unmount, unless they stay in the draft
@@ -328,9 +337,32 @@ export function Composer({
     }
   };
 
+  const pasteTextAsFile = async (pasted: string) => {
+    if (disabledRef.current) return;
+    const [read] = await readAttachments([new File([pasted], pastedFileName(), { type: "text/plain" })], totalBytes(attachmentsRef.current), toast.warning);
+    if (!read) return;
+    setAttachments((prev) => [...prev, read]);
+    toast(t("composer.pastedAsFile", { size: formatBytes(read.size) }), {
+      action: {
+        label: t("composer.pasteInline"),
+        onClick: () => {
+          setAttachments((prev) => prev.filter((a) => a.id !== read.id));
+          setText((cur) => cur + pasted);
+        },
+      },
+    });
+  };
+
   const onPaste = (e: ClipboardEvent<HTMLTextAreaElement>) => {
     const files = Array.from(e.clipboardData.files ?? []);
-    if (files.length === 0) return;
+    if (files.length === 0) {
+      if (!largePasteAsFile) return;
+      const pasted = e.clipboardData.getData("text/plain");
+      if (new TextEncoder().encode(pasted).length < LARGE_PASTE_BYTES && text.length + pasted.length <= MAX_MESSAGE_CHARS) return;
+      e.preventDefault();
+      void pasteTextAsFile(pasted);
+      return;
+    }
     const hasText = e.clipboardData.types.includes("text/plain") && e.clipboardData.getData("text/plain").length > 0;
     if (!hasText) e.preventDefault();
     void addFiles(files);

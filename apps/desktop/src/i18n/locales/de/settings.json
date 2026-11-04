@@ -46,6 +46,8 @@
       "followUpDescription": "Warteschlange gibt deine Nachricht dem Agenten zwischen zwei Schritten. Umlenken unterbricht ihn und startet sofort mit deiner Nachricht. {{shortcut}} sendet andersherum.",
       "queue": "Warteschlange",
       "steer": "Umlenken",
+      "largePaste": "Große Einfügungen als Datei",
+      "largePasteDescription": "Eingefügter Text über 32 KB wird zum .txt-Anhang, damit der Agent nur liest, was er braucht, statt alles im Kontext mitzuschleppen.",
       "mcpApps": "MCP-App-Ansichten",
       "mcpAppsDescription": "Bringt ein Tool deiner MCP-Server eine eigene Ansicht mit (MCP Apps), zeigt der Chat sie zum Anklicken. Tools, die Daten ändern, fragen vorher."
     },
