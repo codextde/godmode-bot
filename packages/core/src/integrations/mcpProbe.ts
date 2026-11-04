@@ -46,9 +46,13 @@ interface JsonRpcMessage {
 
 class ProbeError extends Error {}
 
-const initializeParams = () => ({
+export type McpRequest = (method: string, params?: unknown) => Promise<unknown>;
+export type McpNotify = (method: string, params?: unknown) => Promise<void>;
+export type McpUse<T> = (request: McpRequest, notify: McpNotify) => Promise<T>;
+
+export const initializeParams = (capabilities: Record<string, unknown> = {}) => ({
   protocolVersion: MCP_PROTOCOL_VERSION,
-  capabilities: {},
+  capabilities,
   clientInfo: { name: "godmode-bot", version: VERSION },
 });
 
@@ -179,7 +183,7 @@ function resolveCommand(command: string, env: Record<string, string | undefined>
   return found;
 }
 
-async function probeStdio(target: ProbeTarget, signal: AbortSignal): Promise<string[]> {
+async function probeStdio<T>(target: ProbeTarget, signal: AbortSignal, use: McpUse<T>): Promise<T> {
   // Never hand Godmode's own variables (e.g. GODMODE_TOKEN) to user-configured MCP servers.
   const env = childEnv(target.env ?? {});
   const cmd = resolveCommand(target.command ?? "", env);
@@ -279,8 +283,7 @@ async function probeStdio(target: ProbeTarget, signal: AbortSignal): Promise<str
   };
 
   try {
-    const { tools } = await handshake(request, notify);
-    return tools;
+    return await use(request, notify);
   } finally {
     // Graceful shutdown per spec: close stdin, then SIGTERM, then SIGKILL.
     try {
@@ -340,7 +343,7 @@ async function httpFailure(res: Response, transport: McpTransport): Promise<Prob
 /* Streamable HTTP                                                      */
 /* ------------------------------------------------------------------ */
 
-async function probeHttp(target: ProbeTarget, signal: AbortSignal): Promise<string[]> {
+async function probeHttp<T>(target: ProbeTarget, signal: AbortSignal, use: McpUse<T>): Promise<T> {
   const url = target.url ?? "";
   let sessionId: string | null = null;
   let protocolVersion: string | null = null;
@@ -390,19 +393,17 @@ async function probeHttp(target: ProbeTarget, signal: AbortSignal): Promise<stri
     await res.body?.cancel().catch(() => undefined);
   };
 
-  try {
-    const init = (await request("initialize", initializeParams())) as { protocolVersion?: string } | null;
-    protocolVersion = typeof init?.protocolVersion === "string" ? init.protocolVersion : MCP_PROTOCOL_VERSION;
-    await notify("notifications/initialized");
-    const tools: string[] = [];
-    let cursor: string | null = null;
-    for (let page = 0; page < MAX_TOOL_PAGES; page++) {
-      const { names, nextCursor } = toolNames(await request("tools/list", cursor ? { cursor } : {}));
-      tools.push(...names);
-      if (!nextCursor) break;
-      cursor = nextCursor;
+  const tracked: McpRequest = async (method, params) => {
+    const result = await request(method, params);
+    if (method === "initialize") {
+      const init = result as { protocolVersion?: string } | null;
+      protocolVersion = typeof init?.protocolVersion === "string" ? init.protocolVersion : MCP_PROTOCOL_VERSION;
     }
-    return tools;
+    return result;
+  };
+
+  try {
+    return await use(tracked, notify);
   } finally {
     if (sessionId) {
       // Terminate the session (best effort, don't wait long).
@@ -419,7 +420,7 @@ async function probeHttp(target: ProbeTarget, signal: AbortSignal): Promise<stri
 /* Legacy HTTP+SSE                                                      */
 /* ------------------------------------------------------------------ */
 
-async function probeSse(target: ProbeTarget, signal: AbortSignal): Promise<string[]> {
+async function probeSse<T>(target: ProbeTarget, signal: AbortSignal, use: McpUse<T>): Promise<T> {
   const url = target.url ?? "";
   const streamHeaders = new Headers(target.headers ?? {});
   streamHeaders.set("accept", "text/event-stream");
@@ -486,8 +487,7 @@ async function probeSse(target: ProbeTarget, signal: AbortSignal): Promise<strin
     };
     const notify = (method: string, params?: unknown) => send({ jsonrpc: "2.0", method, ...(params !== undefined ? { params } : {}) });
 
-    const { tools } = await handshake(request, notify);
-    return tools;
+    return await use(request, notify);
   } finally {
     signal.removeEventListener("abort", onAbort);
     stream.abort();
@@ -498,6 +498,12 @@ async function probeSse(target: ProbeTarget, signal: AbortSignal): Promise<strin
 /* ------------------------------------------------------------------ */
 /* Entry points                                                         */
 /* ------------------------------------------------------------------ */
+
+export function withMcpConnection<T>(target: ProbeTarget, signal: AbortSignal, use: McpUse<T>): Promise<T> {
+  if (target.transport === "stdio") return probeStdio(target, signal, use);
+  if (target.transport === "http") return probeHttp(target, signal, use);
+  return probeSse(target, signal, use);
+}
 
 /** Mask env/header values in error text (same minimum length as the vault's redaction). */
 function redactValues(text: string, secrets: string[]): string {
@@ -512,12 +518,7 @@ export async function probeMcpTarget(target: ProbeTarget, timeoutMs = PROBE_TIME
   const timer = setTimeout(() => controller.abort(new ProbeError(`No response within ${timeoutMs / 1000} seconds`)), timeoutMs);
   const secrets = [...Object.values(target.env ?? {}), ...Object.values(target.headers ?? {})];
   try {
-    const run =
-      target.transport === "stdio"
-        ? probeStdio(target, controller.signal)
-        : target.transport === "http"
-          ? probeHttp(target, controller.signal)
-          : probeSse(target, controller.signal);
+    const run = withMcpConnection(target, controller.signal, async (request, notify) => (await handshake(request, notify)).tools);
     const timeout = new Promise<never>((_, reject) =>
       controller.signal.addEventListener("abort", () => reject(new ProbeError(`No response within ${timeoutMs / 1000} seconds`)), { once: true }),
     );

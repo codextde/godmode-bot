@@ -64,6 +64,7 @@ interface UiState {
   reduceAnimations: boolean;
   toolCallView: ToolCallView;
   followUpMode: FollowUpMode;
+  mcpApps: boolean;
   /** Show the frame rate meter on top of the window. */
   fpsMeter: boolean;
   /** Sidebar sections open by default that the human folded. */
@@ -105,6 +106,7 @@ interface UiState {
   setReduceAnimations: (v: boolean) => void;
   setToolCallView: (v: ToolCallView) => void;
   setFollowUpMode: (v: FollowUpMode) => void;
+  setMcpApps: (v: boolean) => void;
   setFpsMeter: (v: boolean) => void;
 }
 
@@ -143,6 +145,7 @@ export const useUi = create<UiState>()(
       reduceAnimations: false,
       toolCallView: "cards",
       followUpMode: "queue",
+      mcpApps: false,
       fpsMeter: false,
       setWorkspace: (workspace, project = null) =>
         set((s) => ({
@@ -188,6 +191,7 @@ export const useUi = create<UiState>()(
       setReduceAnimations: (reduceAnimations) => set({ reduceAnimations }),
       setToolCallView: (toolCallView) => set({ toolCallView }),
       setFollowUpMode: (followUpMode) => set({ followUpMode }),
+      setMcpApps: (mcpApps) => set({ mcpApps }),
       setFpsMeter: (fpsMeter) => set({ fpsMeter }),
     }),
     {
@@ -223,6 +227,7 @@ export const useUi = create<UiState>()(
         reduceAnimations: s.reduceAnimations,
         toolCallView: s.toolCallView,
         followUpMode: s.followUpMode,
+        mcpApps: s.mcpApps,
         fpsMeter: s.fpsMeter,
       }),
     },

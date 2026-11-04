@@ -405,3 +405,10 @@ export async function mcpServersForAgent(agent: Agent): Promise<Record<string, M
   }
   return out;
 }
+
+export function mcpServerForKey(agent: Agent, key: string): McpServer | null {
+  if (!getSettings().integrations.enabled) return null;
+  const taken = new Set(RESERVED_NAMES);
+  for (const server of mcpServerRowsForAgent(agent)) if (uniqueKey(server.name, taken) === key) return server;
+  return null;
+}

@@ -36,6 +36,8 @@ export function GeneralSection({ settings }: { settings: Settings }) {
   const setToolCallView = useUi((s) => s.setToolCallView);
   const followUpMode = useUi((s) => s.followUpMode);
   const setFollowUpMode = useUi((s) => s.setFollowUpMode);
+  const mcpApps = useUi((s) => s.mcpApps);
+  const setMcpApps = useUi((s) => s.setMcpApps);
   const fpsMeter = useUi((s) => s.fpsMeter);
   const setFpsMeter = useUi((s) => s.setFpsMeter);
 
@@ -170,6 +172,9 @@ export function GeneralSection({ settings }: { settings: Settings }) {
               { value: "steer", label: t("general.chat.steer") },
             ]}
           />
+        </SettingRow>
+        <SettingRow label={t("general.chat.mcpApps")} htmlFor="mcp-apps" description={t("general.chat.mcpAppsDescription")}>
+          <Switch id="mcp-apps" checked={mcpApps} onCheckedChange={setMcpApps} />
         </SettingRow>
       </SettingsGroup>
 

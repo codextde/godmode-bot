@@ -340,6 +340,24 @@ export interface SendMessageInput {
   queueId?: ID;
 }
 
+export interface McpAppCsp {
+  connectDomains?: string[];
+  resourceDomains?: string[];
+  frameDomains?: string[];
+  baseUriDomains?: string[];
+}
+
+export interface McpApp {
+  server: string;
+  tool: { name: string; description?: string; inputSchema?: unknown; annotations?: { readOnlyHint?: boolean; title?: string }; _meta?: Record<string, unknown> };
+  uri: string;
+  html: string;
+  csp: McpAppCsp | null;
+  permissions: { camera?: object; microphone?: object; geolocation?: object; clipboardWrite?: object } | null;
+  prefersBorder: boolean | null;
+  appTools: { name: string; readOnly: boolean }[];
+}
+
 export interface SendMessageResult {
   message: Message;
   run: Run;

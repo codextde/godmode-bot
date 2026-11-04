@@ -1327,5 +1327,20 @@
       "amount": "Überweisungs-QR nicht angezeigt: Der Betrag ist ungültig.",
       "purpose": "Überweisungs-QR nicht angezeigt: Der Verwendungszweck ist zu lang (max. 140 Zeichen)."
     }
+  },
+  "mcpApp": {
+    "loading": "Ansicht wird geladen…",
+    "failed": "Die Ansicht konnte nicht geladen werden: {{error}}",
+    "fullscreen": "Vollbild",
+    "exitFullscreen": "Vollbild beenden",
+    "reload": "Neu laden",
+    "askTool": "{{server}} möchte {{tool}} ausführen",
+    "askToolHint": "Dieses Tool kann Daten ändern.",
+    "askMessage": "{{server}} möchte eine Nachricht in den Chat schicken",
+    "askLink": "{{server}} möchte einen Link öffnen",
+    "allow": "Erlauben",
+    "deny": "Ablehnen",
+    "always": "Immer für diese Ansicht",
+    "denied": "Vom Nutzer abgelehnt"
   }
 }

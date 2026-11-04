@@ -1327,5 +1327,20 @@
       "amount": "Payment QR not shown: the amount is not valid.",
       "purpose": "Payment QR not shown: the reference is too long (max. 140 characters)."
     }
+  },
+  "mcpApp": {
+    "loading": "Loading the view…",
+    "failed": "The view couldn't load: {{error}}",
+    "fullscreen": "Full screen",
+    "exitFullscreen": "Exit full screen",
+    "reload": "Reload",
+    "askTool": "{{server}} wants to run {{tool}}",
+    "askToolHint": "This tool can change data.",
+    "askMessage": "{{server}} wants to send a message to the chat",
+    "askLink": "{{server}} wants to open a link",
+    "allow": "Allow",
+    "deny": "Deny",
+    "always": "Always for this view",
+    "denied": "Denied by the user"
   }
 }

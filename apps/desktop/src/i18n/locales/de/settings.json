@@ -45,7 +45,9 @@
       "followUp": "Während der Agent arbeitet",
       "followUpDescription": "Warteschlange gibt deine Nachricht dem Agenten zwischen zwei Schritten. Umlenken unterbricht ihn und startet sofort mit deiner Nachricht. {{shortcut}} sendet andersherum.",
       "queue": "Warteschlange",
-      "steer": "Umlenken"
+      "steer": "Umlenken",
+      "mcpApps": "MCP-App-Ansichten",
+      "mcpAppsDescription": "Bringt ein Tool deiner MCP-Server eine eigene Ansicht mit (MCP Apps), zeigt der Chat sie zum Anklicken. Tools, die Daten ändern, fragen vorher."
     },
     "summaries": {
       "title": "KI-Zusammenfassungen",
