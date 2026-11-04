@@ -39,7 +39,7 @@ import { validateTarget } from "../../computer/service";
 import { sshPlacement, startRemoteChat } from "../../remote/runners";
 import { selfDeviceId } from "../../remote/group";
 import { search } from "../../services/search";
-import { exportChat, importSharedChat, previewSharedChat, shareCode } from "../../services/chatShare";
+import { importSharedChat, previewSharedChat, shareChat } from "../../services/chatShare";
 
 const attachmentSchema = z.object({
   name: z.string().min(1).max(255),
@@ -124,17 +124,10 @@ export function registerChatRoutes(app: Hono): void {
     return c.json(createConversation({ ...input, origin: "chat" }), 201);
   });
 
-  app.get("/api/conversations/:id/export", (c) => {
-    const out = exportChat(c.req.param("id"), { context: c.req.query("context") !== "0", files: c.req.query("files") !== "0" });
-    return c.body(new Uint8Array(out.bytes), 200, {
-      "Content-Type": "application/gzip",
-      "Content-Disposition": `attachment; filename="${encodeURIComponent(out.fileName)}"`,
-      "X-Godmode-File-Name": encodeURIComponent(out.fileName),
-      "Cache-Control": "no-store",
-    });
+  app.post("/api/conversations/:id/share", async (c) => {
+    const opts = await body(c, z.object({ context: z.boolean().default(true), files: z.boolean().default(false), screenshots: z.boolean().default(false) }));
+    return c.json(shareChat(c.req.param("id"), opts));
   });
-
-  app.post("/api/conversations/:id/share-code", (c) => c.json(shareCode(c.req.param("id"))));
 
   const sharedSchema = z.object({ data: z.string().min(1) });
 

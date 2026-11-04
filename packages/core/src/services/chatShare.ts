@@ -1,7 +1,7 @@
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { join, normalize, sep } from "node:path";
 import { randomUUID } from "node:crypto";
-import { gunzipSync, gzipSync } from "node:zlib";
+import { brotliCompressSync, brotliDecompressSync, constants as zlib } from "node:zlib";
 import type { Attachment, Conversation, Message, MessageBlock, SharedChatPreview } from "@godmode/shared";
 import { CHAT_SHARE_CODE_PREFIX } from "@godmode/shared";
 import { insert, run as sql, tx } from "../db";
@@ -14,6 +14,9 @@ import { createConversation, emitConversationUpdated, getConversationSummary, li
 
 const FORMAT = "godmode.chat";
 const VERSION = 1;
+const MAX_TOOL_OUTPUT = 8_000;
+const BEST_COMPRESSION_UNDER = 8 * 1024 * 1024;
+const SCREENSHOT_NOTE = "[screenshot not shared]";
 const MAX_FILE_BYTES = 25 * 1024 * 1024;
 const MAX_FILES_TOTAL = 100 * 1024 * 1024;
 const MAX_IMPORT_BYTES = 512 * 1024 * 1024;
@@ -44,9 +47,16 @@ export interface SharedChat {
   session: { id: string; jsonl: string } | null;
 }
 
-export interface ChatExport {
+export interface ShareOptions {
+  context: boolean;
+  files: boolean;
+  screenshots: boolean;
+}
+
+export interface ChatShare {
+  code: string;
   fileName: string;
-  bytes: Buffer;
+  bytes: number;
   messages: number;
   withContext: boolean;
 }
@@ -70,7 +80,7 @@ function readAttachment(repoPath: string, a: Attachment): Buffer | null {
   }
 }
 
-export function buildSharedChat(conversationId: string, opts: { context: boolean; files: boolean }): SharedChat {
+export function buildSharedChat(conversationId: string, opts: ShareOptions): SharedChat {
   const conv = getConversationSummary(conversationId);
   const agent = getAgent(conv.agentId);
   const files: SharedFile[] = [];
@@ -79,7 +89,7 @@ export function buildSharedChat(conversationId: string, opts: { context: boolean
     role: m.role,
     ...(m.source ? { source: m.source } : {}),
     content: maskSecrets(m.content),
-    blocks: maskDeep(m.blocks),
+    blocks: maskDeep(slimBlocks(m.blocks, opts.screenshots)),
     attachments: m.attachments.map((a) => {
       const bytes = opts.files && !conv.runnerId ? readAttachment(agent.repoPath, a) : null;
       if (!bytes || total + bytes.length > MAX_FILES_TOTAL) return { name: a.name, mime: a.mime, size: a.size, file: null };
@@ -92,7 +102,7 @@ export function buildSharedChat(conversationId: string, opts: { context: boolean
   let session: SharedChat["session"] = null;
   if (opts.context && !conv.runnerId) {
     const h = readHandover(conversationId);
-    if (h.sessionId && h.session) session = { id: h.sessionId, jsonl: maskSecrets(h.session) };
+    if (h.sessionId && h.session) session = { id: h.sessionId, jsonl: maskSecrets(slimSession(h.session, opts.screenshots)) };
   }
   return {
     format: FORMAT,
@@ -110,36 +120,33 @@ function fileNameFor(title: string): string {
   return `${stem}.godmode-chat`;
 }
 
-export function exportChat(conversationId: string, opts: { context: boolean; files: boolean }): ChatExport {
+export function shareChat(conversationId: string, opts: ShareOptions): ChatShare {
   const shared = buildSharedChat(conversationId, opts);
-  audit("user", "chat.export", conversationId, { messages: shared.messages.length, context: !!shared.session });
-  return {
-    fileName: fileNameFor(shared.chat.title),
-    bytes: gzipSync(Buffer.from(JSON.stringify(shared), "utf8"), { level: 9 }),
-    messages: shared.messages.length,
-    withContext: !!shared.session,
-  };
+  const json = Buffer.from(JSON.stringify(shared), "utf8");
+  const packed = brotliCompressSync(json, {
+    params: {
+      [zlib.BROTLI_PARAM_MODE]: zlib.BROTLI_MODE_TEXT,
+      [zlib.BROTLI_PARAM_QUALITY]: json.length <= BEST_COMPRESSION_UNDER ? 11 : 9,
+      [zlib.BROTLI_PARAM_LGWIN]: 24,
+      [zlib.BROTLI_PARAM_SIZE_HINT]: json.length,
+    },
+  });
+  const code = `${CHAT_SHARE_CODE_PREFIX}${packed.toString("base64url")}`;
+  audit("user", "chat.share", conversationId, { messages: shared.messages.length, context: !!shared.session, bytes: code.length });
+  return { code, fileName: fileNameFor(shared.chat.title), bytes: code.length, messages: shared.messages.length, withContext: !!shared.session };
 }
 
-export function shareCode(conversationId: string): { code: string; messages: number; withContext: boolean } {
-  const { bytes, messages, withContext } = exportChat(conversationId, { context: true, files: false });
-  return { code: `${CHAT_SHARE_CODE_PREFIX}${bytes.toString("base64url")}`, messages, withContext };
-}
-
-function decode(data: string): Buffer {
+function decode(data: string, depth = 0): Buffer {
   const text = data.trim();
-  let raw: Buffer;
-  if (text.startsWith(CHAT_SHARE_CODE_PREFIX)) raw = Buffer.from(text.slice(CHAT_SHARE_CODE_PREFIX.length).replace(/\s+/g, ""), "base64url");
-  else if (text.startsWith("{")) return Buffer.from(text, "utf8");
-  else raw = Buffer.from(text.replace(/^data:[^,]*;base64,/, "").replace(/\s+/g, ""), "base64");
-  if (raw[0] === 0x1f && raw[1] === 0x8b) {
+  if (text.startsWith(CHAT_SHARE_CODE_PREFIX)) {
     try {
-      return gunzipSync(raw, { maxOutputLength: MAX_IMPORT_BYTES });
+      return brotliDecompressSync(Buffer.from(text.slice(CHAT_SHARE_CODE_PREFIX.length).replace(/\s+/g, ""), "base64url"), { maxOutputLength: MAX_IMPORT_BYTES });
     } catch {
-      throw badRequest("That share file is damaged or too large.");
+      throw badRequest("That share code is damaged or too large.");
     }
   }
-  return raw;
+  if (depth > 0) return Buffer.from(text, "utf8");
+  return decode(Buffer.from(text.replace(/^data:[^,]*;base64,/, "").replace(/\s+/g, ""), "base64").toString("utf8"), 1);
 }
 
 const ROLES = new Set<Message["role"]>(["user", "assistant", "system"]);
@@ -193,7 +200,10 @@ export function parseSharedChat(data: string): SharedChat {
     });
   }
   const chat = (s.chat ?? {}) as Partial<SharedChat["chat"]>;
-  const session = s.session && typeof s.session === "object" && typeof s.session.id === "string" && typeof s.session.jsonl === "string" ? s.session : null;
+  const session =
+    s.session && typeof s.session === "object" && typeof s.session.id === "string" && typeof s.session.jsonl === "string"
+      ? { id: s.session.id, jsonl: s.session.jsonl }
+      : null;
   return {
     format: FORMAT,
     version: s.version,
@@ -269,9 +279,10 @@ export function importSharedChat(input: { data: string; agentId: string; workspa
   let resumed = false;
   if (shared.session && isSessionJsonl(shared.session.jsonl)) {
     const sessionId = randomUUID();
-    const jsonl = shared.session.jsonl.split(shared.session.id).join(sessionId);
+    const cwd = agent.workingDirectory ?? agent.repoPath;
+    const jsonl = hydrateSession(shared.session.jsonl, sessionId, cwd);
     try {
-      if (writeSession(agent.workingDirectory ?? agent.repoPath, sessionId, jsonl)) {
+      if (writeSession(cwd, sessionId, jsonl)) {
         sql("UPDATE conversations SET claude_session_id = ? WHERE id = ?", sessionId, conv.id);
         resumed = true;
       }
@@ -283,4 +294,118 @@ export function importSharedChat(input: { data: string; agentId: string; workspa
   audit("user", "chat.import", conv.id, { messages: shared.messages.length, context: resumed, from: shared.chat.agentName });
   emitConversationUpdated(conv.id);
   return getConversationSummary(conv.id);
+}
+
+type Json = Record<string, unknown>;
+
+const SESSION_TYPES = new Set(["user", "assistant", "summary"]);
+const SESSION_FIELDS = ["type", "subtype", "uuid", "parentUuid", "logicalParentUuid", "isSidechain", "message", "timestamp", "isMeta", "isCompactSummary", "compactMetadata", "summary", "leafUuid", "content", "level"];
+
+function cut(text: string): string {
+  if (text.length <= MAX_TOOL_OUTPUT) return text;
+  const head = Math.floor(MAX_TOOL_OUTPUT * 0.75);
+  const tail = MAX_TOOL_OUTPUT - head;
+  return `${text.slice(0, head)}\n… [${text.length - MAX_TOOL_OUTPUT} characters not shared] …\n${text.slice(-tail)}`;
+}
+
+function slimContent(content: unknown, screenshots: boolean, inToolResult: boolean): unknown {
+  if (typeof content === "string") return inToolResult ? cut(content) : content;
+  if (!Array.isArray(content)) return content;
+  const out: unknown[] = [];
+  for (const raw of content) {
+    const part = raw as Json | null;
+    if (!part || typeof part !== "object") continue;
+    if (part.type === "thinking" || part.type === "redacted_thinking") continue;
+    if (part.type === "image" && !screenshots) {
+      out.push({ type: "text", text: SCREENSHOT_NOTE });
+      continue;
+    }
+    if (part.type === "tool_result") {
+      out.push({ ...part, content: slimContent(part.content, screenshots, true) });
+      continue;
+    }
+    if (part.type === "text" && inToolResult && typeof part.text === "string") {
+      out.push({ ...part, text: cut(part.text) });
+      continue;
+    }
+    out.push(part);
+  }
+  return out;
+}
+
+export function slimSession(jsonl: string, screenshots: boolean): string {
+  const parentOf = new Map<string, string | null>();
+  const kept: Json[] = [];
+  for (const line of jsonl.split("\n")) {
+    if (!line.trim()) continue;
+    let entry: Json;
+    try {
+      entry = JSON.parse(line) as Json;
+    } catch {
+      continue;
+    }
+    const uuid = typeof entry.uuid === "string" ? entry.uuid : null;
+    const parent = typeof entry.parentUuid === "string" ? entry.parentUuid : null;
+    const compact = entry.type === "system" && entry.subtype === "compact_boundary";
+    let keep = SESSION_TYPES.has(String(entry.type)) || compact;
+    let slim: Json | null = null;
+    if (keep) {
+      slim = Object.fromEntries(SESSION_FIELDS.filter((k) => k in entry).map((k) => [k, entry[k]]));
+      const message = slim.message as Json | undefined;
+      if (message && typeof message === "object") {
+        const content = slimContent(message.content, screenshots, false);
+        if (Array.isArray(content) && !content.length) keep = false;
+        else slim.message = { ...message, content };
+      }
+    }
+    if (uuid) parentOf.set(uuid, keep ? uuid : parent);
+    if (keep && slim) kept.push(slim);
+  }
+  const resolve = (id: string | null): string | null => {
+    const seen = new Set<string>();
+    let cur = id;
+    while (cur && parentOf.has(cur) && parentOf.get(cur) !== cur && !seen.has(cur)) {
+      seen.add(cur);
+      cur = parentOf.get(cur) ?? null;
+    }
+    return cur && parentOf.get(cur) === cur ? cur : null;
+  };
+  return kept
+    .map((e) => {
+      if ("parentUuid" in e) e.parentUuid = resolve(typeof e.parentUuid === "string" ? e.parentUuid : null);
+      if (typeof e.logicalParentUuid === "string") e.logicalParentUuid = resolve(e.logicalParentUuid);
+      return JSON.stringify(e);
+    })
+    .join("\n");
+}
+
+export function hydrateSession(jsonl: string, sessionId: string, dir: string): string {
+  let cwd = dir;
+  try {
+    cwd = realpathSync(dir);
+  } catch {
+    cwd = dir;
+  }
+  return (
+    jsonl
+      .split("\n")
+      .filter((line) => line.trim())
+      .map((line) => {
+        const e = JSON.parse(line) as Json;
+        return JSON.stringify(e.type === "summary" ? e : { ...e, sessionId, cwd, userType: "external", isSidechain: e.isSidechain ?? false });
+      })
+      .join("\n") + "\n"
+  );
+}
+
+export function slimBlocks(blocks: MessageBlock[], screenshots: boolean): MessageBlock[] {
+  return blocks.map((b) => {
+    if (b.type !== "tool_use") return b;
+    const { image, imageUrl: _url, ...rest } = b;
+    return {
+      ...rest,
+      ...(rest.result !== undefined ? { result: cut(rest.result) } : {}),
+      ...(image && screenshots ? { image } : {}),
+    };
+  });
 }

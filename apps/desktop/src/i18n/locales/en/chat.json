@@ -1348,22 +1348,23 @@
   "share": {
     "menu": "Share…",
     "title": "Share chat",
-    "description": "Send it to a colleague: they import it in Godmode and continue with one of their agents. No server in between — just a file or a code.",
+    "description": "One small code your colleague pastes into Godmode (or the same thing as a file). They continue with one of their agents — no server in between.",
     "context": "Include the agent's context",
     "contextHint": "Their agent continues where this one left off, not from a recap.",
     "contextRemote": "This chat works on another computer; its context stays there.",
     "files": "Include attached files",
     "filesHint": "Up to 25 MB each, 100 MB together.",
-    "privacy": "Everything in the chat goes along, including tool output and screenshots. Saved passwords and tokens from the vault are masked.",
+    "privacy": "Long tool output is shortened; saved passwords and tokens are masked.",
     "copyCode": "Copy share code",
-    "codeHint": "A code starting with {{prefix}} — paste it into Godmode's message box to import",
     "saveFile": "Save file…",
     "saved": "Chat saved",
     "savedHint": "Send the file to your colleague; they drop it into Godmode.",
     "copied": "Share code copied",
     "copiedHint": "Your colleague pastes it into Godmode's message box.",
-    "copiedLong": "It's long for a chat message — the file is the safer way for this one.",
-    "error": "Couldn't share the chat"
+    "error": "Couldn't share the chat",
+    "screenshots": "Include screenshots",
+    "screenshotsHint": "Screenshots barely compress; without them the agent knows one was taken.",
+    "long": "Too long for a chat message — send it as a file."
   },
   "import": {
     "title": "Import chat",
