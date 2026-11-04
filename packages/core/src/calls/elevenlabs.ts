@@ -11,7 +11,7 @@ import * as vault from "../vault/vault";
 import { ELEVENLABS_API_KEY_SECRET, ELEVENLABS_BASE_URL } from "../voice/voice";
 
 const TIMEOUT_MS = 30_000;
-const TTS_MODEL = "eleven_flash_v2_5";
+const TTS_MODEL = "eleven_v4_turbo";
 
 export interface ElevenLabsKey {
   key: string;
@@ -173,7 +173,7 @@ export function agentBody(c: AgentConfig) {
           },
         },
       },
-      tts: { model_id: TTS_MODEL, ...(c.voiceId ? { voice_id: c.voiceId } : {}) },
+      tts: { model_id: TTS_MODEL, expressive_mode: true, ...(c.voiceId ? { voice_id: c.voiceId } : {}) },
       conversation: { max_duration_seconds: c.maxSeconds },
       turn: { turn_eagerness: "normal", silence_end_call_timeout: 30, initial_wait_time: 3 },
     },

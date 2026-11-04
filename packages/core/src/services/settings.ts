@@ -107,6 +107,7 @@ export const DEFAULT_SETTINGS: Settings = {
     quietFrom: "22:00",
     quietTo: "07:30",
     voiceId: "",
+    callerName: "",
     llm: "claude-opus-5-5",
     language: "en",
     maxMinutes: 10,
