@@ -5,7 +5,7 @@ import type { Agent } from "@godmode/shared";
 import { CHAT_SHARE_CODE_PREFIX } from "@godmode/shared";
 import { makeAgent, setupEnv, type TestEnv } from "./fixtures/runner-harness";
 import { addMessage, createConversation, getConversationSummary, listMessages } from "../src/services/conversations";
-import { exportChat, importSharedChat, previewSharedChat, shareCode } from "../src/services/chatShare";
+import { importSharedChat, previewSharedChat, shareChat, slimSession } from "../src/services/chatShare";
 import { claudeConfigDir } from "../src/services/claudeUpdate";
 import { run as sql } from "../src/db";
 
@@ -44,13 +44,14 @@ afterAll(async () => {
   await env.close();
 });
 
-test("a chat travels as a file into another agent, with its files and Claude session", () => {
-  const file = exportChat(chatId, { context: true, files: true });
-  expect(file.fileName).toBe("Plenty bug.godmode-chat");
-  const data = file.bytes.toString("base64");
-  expect(previewSharedChat(data)).toMatchObject({ title: "Plenty bug", agentName: "Sender", messages: 2, files: 1, withContext: true });
+test("a chat travels as one code into another agent, with its files and Claude session", () => {
+  const share = shareChat(chatId, { context: true, files: true, screenshots: false });
+  expect(share.fileName).toBe("Plenty bug.godmode-chat");
+  expect(share.code.startsWith(CHAT_SHARE_CODE_PREFIX)).toBe(true);
+  expect(previewSharedChat(share.code)).toMatchObject({ title: "Plenty bug", agentName: "Sender", messages: 2, files: 1, withContext: true });
+  expect(previewSharedChat(Buffer.from(share.code).toString("base64"))).toMatchObject({ messages: 2 });
 
-  const chat = importSharedChat({ data, agentId: to.id });
+  const chat = importSharedChat({ data: `  ${share.code}\n`, agentId: to.id });
   expect(chat.agentId).toBe(to.id);
   expect(chat.title).toBe("Plenty bug");
   const messages = listMessages(chat.id);
@@ -60,15 +61,43 @@ test("a chat travels as a file into another agent, with its files and Claude ses
 
   const sessionId = getConversationSummary(chat.id).claudeSessionId!;
   expect(sessionId).not.toBe(SESSION);
-  const dir = join(claudeConfigDir(), "projects", realpathSync(to.workingDirectory ?? to.repoPath).replace(/[^A-Za-z0-9]/g, "-"));
-  expect(readFileSync(join(dir, `${sessionId}.jsonl`), "utf8")).toContain(`"sessionId":"${sessionId}"`);
+  const cwd = realpathSync(to.workingDirectory ?? to.repoPath);
+  const lines = readFileSync(join(claudeConfigDir(), "projects", cwd.replace(/[^A-Za-z0-9]/g, "-"), `${sessionId}.jsonl`), "utf8").trim().split("\n").map((l) => JSON.parse(l));
+  expect(lines).toHaveLength(1);
+  expect(lines[0]).toMatchObject({ type: "user", sessionId, cwd, message: "hi" });
 });
 
-test("a share code imports the same way and refuses what isn't a chat", () => {
-  const { code } = shareCode(chatId);
-  expect(code.startsWith(CHAT_SHARE_CODE_PREFIX)).toBe(true);
-  const chat = importSharedChat({ data: `  ${code}\n`, agentId: to.id });
-  expect(listMessages(chat.id)).toHaveLength(2);
+test("a slim session keeps the turns, relinks them past what it drops and leaves screenshots and long output behind", () => {
+  const big = "x".repeat(20_000);
+  const jsonl = [
+    { type: "user", uuid: "u1", parentUuid: null, cwd: "/a", message: { role: "user", content: "hello" } },
+    { type: "attachment", uuid: "a1", parentUuid: "u1", attachment: { content: "lots of context" } },
+    { type: "assistant", uuid: "t1", parentUuid: "a1", message: { role: "assistant", content: [{ type: "thinking", thinking: "hm", signature: "sig" }] } },
+    { type: "assistant", uuid: "x1", parentUuid: "t1", requestId: "r", message: { role: "assistant", content: [{ type: "tool_use", id: "tu", name: "Bash", input: {} }] } },
+    {
+      type: "user",
+      uuid: "r1",
+      parentUuid: "x1",
+      toolUseResult: { stdout: big },
+      message: { role: "user", content: [{ type: "tool_result", tool_use_id: "tu", content: [{ type: "text", text: big }, { type: "image", source: { type: "base64", data: "AAAA" } }] }] },
+    },
+    { type: "queue-operation", operation: "enqueue" },
+  ]
+    .map((e) => JSON.stringify(e))
+    .join("\n");
+  const out = slimSession(jsonl, false)
+    .split("\n")
+    .map((l) => JSON.parse(l));
+  expect(out.map((e) => e.uuid)).toEqual(["u1", "x1", "r1"]);
+  expect(out[1].parentUuid).toBe("u1");
+  expect(out[1].requestId).toBeUndefined();
+  expect(out[2].toolUseResult).toBeUndefined();
+  const [text, image] = out[2].message.content[0].content;
+  expect(text.text.length).toBeLessThan(9_000);
+  expect(image).toEqual({ type: "text", text: "[screenshot not shared]" });
+});
+
+test("what isn't a chat is refused", () => {
   expect(() => previewSharedChat("hello")).toThrow();
-  expect(() => previewSharedChat(Buffer.from(JSON.stringify({ format: "godmode.chat", version: 99, messages: [] })).toString("base64"))).toThrow(/newer/);
+  expect(() => previewSharedChat(`${CHAT_SHARE_CODE_PREFIX}AAAA`)).toThrow();
 });
