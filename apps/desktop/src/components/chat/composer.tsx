@@ -26,6 +26,7 @@ import { useDictation, useVoiceSettings } from "@/hooks/use-voice";
 import { useVoiceSession, stopSpeaking } from "@/lib/voice";
 import { useUi } from "@/stores/ui";
 import { loadDraft, saveDraft, useDraft } from "@/lib/drafts";
+import { errorMessage, isLicenseRequired } from "@/lib/api";
 import { useEasyMode } from "@/lib/mode";
 import { cn } from "@/lib/utils";
 import { EASE_OUT, useReduceAnimations } from "@/lib/motion";
@@ -119,7 +120,8 @@ export function Composer({
   const easy = useEasyMode();
   const textKey = draftKey ? `chat:${draftKey}` : undefined;
   const filesKey = draftKey ? `chat:${draftKey}:files` : undefined;
-  const [text, setText, textDraft] = useDraft(textKey, "");
+  const [text, setText, textDraft] = useDraft(textKey, "", { persist: "local" });
+  const [failure, setFailure] = useState<string | null>(null);
   const [attachments, setAttachments, filesDraft] = useDraft(filesKey, NO_ATTACHMENTS, { persist: false });
   const [focused, setFocused] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -268,19 +270,23 @@ export function Composer({
     const sent = attachments;
     const voice = voiceRef.current;
     setMenuForced(false);
+    setFailure(null);
     textDraft.discard();
     filesDraft.discard();
     voiceRef.current = false;
     try {
       await onSubmit({ content, attachments: sent.map(({ name, mime, data }) => ({ name, mime, data })), voice });
       sent.forEach((a) => a.previewUrl && URL.revokeObjectURL(a.previewUrl));
-    } catch {
-      // Restore so nothing is lost, also when the composer is gone by now; the caller shows the error.
-      if (textKey && content && !loadDraft(textKey, "")) saveDraft(textKey, content, "");
+    } catch (err) {
+      if (textKey && content) {
+        const kept = loadDraft(textKey, "");
+        if (!kept.includes(content)) saveDraft(textKey, kept.trim() ? `${content}\n\n${kept}` : content, "", "local");
+      }
       if (filesKey && sent.length && !loadDraft(filesKey, NO_ATTACHMENTS).length) saveDraft(filesKey, sent, NO_ATTACHMENTS, false);
-      setText((cur) => cur || content);
+      setText((cur) => (!cur.trim() ? content : cur.includes(content) ? cur : `${content}\n\n${cur}`));
       setAttachments((cur) => (cur.length ? cur : sent));
       voiceRef.current = voice;
+      if (!isLicenseRequired(err)) setFailure(errorMessage(err));
     }
   };
 
@@ -421,6 +427,7 @@ export function Composer({
         onChange={(e) => {
           setText(e.target.value);
           setMenuForced(false);
+          setFailure(null);
         }}
         onKeyDown={onKeyDown}
         aria-autocomplete={agentId ? "list" : undefined}
@@ -437,6 +444,12 @@ export function Composer({
           size === "lg" ? "min-h-[84px] pt-4 pb-2 text-[15.5px]" : "min-h-[52px] pt-3.5 pb-1.5 text-[15px]",
         )}
       />
+
+      {failure && (
+        <p role="alert" className="px-4 pb-1.5 text-xs text-destructive">
+          {t("composer.sendFailed", { reason: failure })}
+        </p>
+      )}
 
       <div className="flex items-center gap-0.5 px-2 pb-2">
         <input
