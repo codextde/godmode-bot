@@ -13,11 +13,21 @@ export interface Seeds {
   sidebar: string;
 }
 
+export interface PaletteStyle {
+  radius?: string;
+  fontSans?: string;
+  fontMono?: string;
+  fontScale?: number;
+  fontFeatures?: string;
+  tracking?: string;
+}
+
 export interface PaletteDef {
   label: string;
   blurb: string;
   light: Seeds;
   dark: Seeds;
+  style?: PaletteStyle;
 }
 
 export const DEFAULT_PALETTE: Palette = "paper";
@@ -70,6 +80,19 @@ export const PALETTE_DEFS: Record<Palette, PaletteDef> = {
     blurb: "Purple night, and a pale day to match",
     light: { background: "#f8f8f2", foreground: "#282a36", card: "#ffffff", muted: "#eeeef5", mutedForeground: "#6272a4", primary: "#282a36", brand: "#7c5cdb", sidebar: "#f1f1f6" },
     dark: { background: "#282a36", foreground: "#f8f8f2", card: "#2f3241", muted: "#383a4a", mutedForeground: "#a4acc8", primary: "#bd93f9", brand: "#bd93f9", sidebar: "#21222c" },
+  },
+  vercel: {
+    label: "Vercel",
+    blurb: "Stark black and white, Geist and crisp corners",
+    light: { background: "#ffffff", foreground: "#171717", card: "#ffffff", muted: "#f2f2f2", mutedForeground: "#666666", primary: "#171717", brand: "#0070f3", sidebar: "#fafafa" },
+    dark: { background: "#0a0a0a", foreground: "#ededed", card: "#0a0a0a", muted: "#1a1a1a", mutedForeground: "#a1a1a1", primary: "#ededed", brand: "#3291ff", sidebar: "#000000" },
+    style: {
+      radius: "0.375rem",
+      fontSans: '"Geist Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif',
+      fontMono: '"Geist Mono Variable", ui-monospace, "SF Mono", Menlo, monospace',
+      fontFeatures: "normal",
+      tracking: "-0.006em",
+    },
   },
 };
 

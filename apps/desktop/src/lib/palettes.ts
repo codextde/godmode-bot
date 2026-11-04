@@ -1,8 +1,8 @@
-import { DEFAULT_PALETTE, PALETTE_DEFS, type Palette, type PaletteMode, type Seeds } from "@godmode/shared";
+import { DEFAULT_PALETTE, PALETTE_DEFS, type Palette, type PaletteMode, type PaletteStyle, type Seeds } from "@godmode/shared";
 import { t } from "@/i18n";
 
 export { DEFAULT_PALETTE, PALETTE_DEFS, isPalette } from "@godmode/shared";
-export type { PaletteDef, Seeds } from "@godmode/shared";
+export type { PaletteDef, PaletteStyle, Seeds } from "@godmode/shared";
 
 export type Mode = PaletteMode;
 
@@ -47,6 +47,18 @@ export function paletteTokens(s: Seeds, mode: Mode): Record<string, string> {
   };
 }
 
+export function styleTokens(style: PaletteStyle | undefined): Record<string, string> {
+  if (!style) return {};
+  const tokens: Record<string, string> = {};
+  if (style.radius) tokens["--radius"] = style.radius;
+  if (style.fontSans) tokens["--gm-font-sans"] = style.fontSans;
+  if (style.fontMono) tokens["--gm-font-mono"] = style.fontMono;
+  if (style.fontScale) tokens["--gm-font-scale"] = String(style.fontScale);
+  if (style.fontFeatures) tokens["--gm-font-features"] = style.fontFeatures;
+  if (style.tracking) tokens["--gm-tracking"] = style.tracking;
+  return tokens;
+}
+
 const block = (selector: string, tokens: Record<string, string>) =>
   `${selector}{${Object.entries(tokens)
     .map(([k, v]) => `${k}:${v}`)
@@ -56,5 +68,5 @@ export function paletteCss(id: Palette): string {
   if (id === DEFAULT_PALETTE) return "";
   const def = PALETTE_DEFS[id];
   const sel = `:root[data-palette="${id}"]`;
-  return block(sel, paletteTokens(def.light, "light")) + block(`${sel}.dark`, paletteTokens(def.dark, "dark"));
+  return block(sel, { ...styleTokens(def.style), ...paletteTokens(def.light, "light") }) + block(`${sel}.dark`, paletteTokens(def.dark, "dark"));
 }

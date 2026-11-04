@@ -128,6 +128,10 @@
         "dracula": {
           "label": "Dracula",
           "blurb": "Violette Nacht und ein heller Tag dazu"
+        },
+        "vercel": {
+          "label": "Vercel",
+          "blurb": "Klares Schwarz-Weiß, Geist und knappe Ecken"
         }
       }
     },

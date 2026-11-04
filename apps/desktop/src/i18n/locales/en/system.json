@@ -46,7 +46,8 @@
     "rose": { "label": "Rosé", "blurb": "Soft blush with a raspberry accent" },
     "forest": { "label": "Forest", "blurb": "Moss, fern and bark" },
     "ocean": { "label": "Ocean", "blurb": "Sea glass and deep water" },
-    "dracula": { "blurb": "Purple night, and a pale day to match", "label": "Dracula" }
+    "dracula": { "blurb": "Purple night, and a pale day to match", "label": "Dracula" },
+    "vercel": { "label": "Vercel", "blurb": "Stark black and white, Geist and crisp corners" }
   },
   "password": {
     "strength": {
