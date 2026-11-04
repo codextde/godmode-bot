@@ -60,21 +60,41 @@ echo "home:$HOME"
 fetch() { if command -v curl >/dev/null 2>&1; then curl -fsSL "$1"; elif command -v wget >/dev/null 2>&1; then wget -qO- "$1"; else echo "curl or wget is needed to install Godmode" >&2; return 1; fi; }
 have=""
 [ -x "$BIN" ] && have=$("$BIN" version 2>/dev/null | head -n 1)
-if [ "$have" != "$WANT" ]; then
+FALLBACK="$DATA/stable-fallback"
+fell_back() { [ -n "$have" ] && [ "$(cat "$FALLBACK" 2>/dev/null)" = "$WANT" ]; }
+install_godmode() { GODMODE_VERSION="$1" GODMODE_INSTALL_DIR="$HOME/.local/bin" sh "$script" >&2; }
+if [ "$have" != "$WANT" ] && ! fell_back; then
   echo "Installing Godmode $WANT on this server…" >&2
   script="\${TMPDIR:-/tmp}/godmode-install.$$.sh"
   fetch ${shellQuote(INSTALL_URL)} > "$script" || exit 3
-  if ! GODMODE_VERSION="$TAG" GODMODE_INSTALL_DIR="$HOME/.local/bin" sh "$script" >&2; then
-    rm -f "$script"
-    echo "Godmode $WANT has no build for this server ($(uname -s) $(uname -m)) yet." >&2
-    exit 3
+  if install_godmode "$TAG"; then
+    rm -f "$FALLBACK"
+  else
+    case "$TAG" in
+      *-canary.*)
+        echo "Godmode $WANT has no build for this server ($(uname -s) $(uname -m)): installing the latest stable release instead." >&2
+        if ! install_godmode latest; then
+          rm -f "$script"
+          echo "Godmode has no build for this server ($(uname -s) $(uname -m)) yet." >&2
+          exit 3
+        fi
+        mkdir -p "$DATA"
+        printf '%s\n' "$WANT" > "$FALLBACK"
+        ;;
+      *)
+        rm -f "$script"
+        echo "Godmode $WANT has no build for this server ($(uname -s) $(uname -m)) yet." >&2
+        exit 3
+        ;;
+    esac
   fi
   rm -f "$script"
+  have=$("$BIN" version 2>/dev/null | head -n 1)
 fi
 field() { sed -n "s/.*\\"$1\\": *\\([0-9][0-9]*\\).*/\\1/p" "$DATA/runner.json" 2>/dev/null | head -n 1; }
 running() { sed -n 's/.*"version": *"\\([^"]*\\)".*/\\1/p' "$DATA/runner.json" 2>/dev/null | head -n 1; }
 serving() { pid=$(field pid); [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null && [ -n "$(field linkPort)" ]; }
-if serving && [ "$(running)" != "$WANT" ]; then
+if serving && [ "$(running)" != "$have" ]; then
   kill "$pid" 2>/dev/null
   i=0
   while [ $i -lt 20 ] && kill -0 "$pid" 2>/dev/null; do sleep 1; i=$((i + 1)); done

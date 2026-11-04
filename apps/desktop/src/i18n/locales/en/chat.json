@@ -834,6 +834,7 @@
     "hintCancel": "cancel"
   },
   "composer": {
+    "sendFailed": "Not sent — your message is still here. {{reason}}",
     "placeholder": "Ask anything, or give your coworker a task…",
     "voiceUnsupported": "Voice input isn't supported in this browser.",
     "message": "Message",

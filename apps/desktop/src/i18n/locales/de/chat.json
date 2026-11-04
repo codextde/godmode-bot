@@ -834,6 +834,7 @@
     "hintCancel": "abbrechen"
   },
   "composer": {
+    "sendFailed": "Nicht gesendet – deine Nachricht ist noch da. {{reason}}",
     "placeholder": "Frag mich etwas oder gib deinem Kollegen eine Aufgabe…",
     "voiceUnsupported": "Spracheingabe wird in diesem Browser nicht unterstützt.",
     "message": "Nachricht",
