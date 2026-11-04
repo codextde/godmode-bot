@@ -20,6 +20,7 @@ import {
   FilePlus2,
   FileSearch,
   FileText,
+  FileImage,
   FileUp,
   FlagOff,
   FolderKanban,
@@ -130,6 +131,8 @@ function truncate(s: string, n = 64): string {
   const one = s.replace(/\s+/g, " ").trim();
   return one.length > n ? `${one.slice(0, n - 1)}…` : one;
 }
+
+const IMAGE_FILE = /\.(png|jpe?g|gif|webp|bmp|svg|heic|avif|tiff?)$/i;
 
 function basename(p: string): string {
   const parts = p.split(/[\\/]/).filter(Boolean);
@@ -802,7 +805,7 @@ function builtinMeta(tool: string, input: Input): Omit<ToolMeta, "server" | "too
     case "Monitor":
       return { kind: "shell", icon: Terminal, title: t("chat:tools.builtin.checkedOutput") };
     case "Read":
-      return { kind: "file", icon: FileText, title: path ? t("chat:tools.builtin.read", { name: basename(path) }) : t("chat:tools.common.readAFile"), detail: path || undefined };
+      return { kind: "file", icon: IMAGE_FILE.test(path) ? FileImage : FileText, title: path ? t("chat:tools.builtin.read", { name: basename(path) }) : t("chat:tools.common.readAFile"), detail: path || undefined };
     case "Write":
       return { kind: "file", icon: FilePlus2, title: path ? t("chat:tools.builtin.wrote", { name: basename(path) }) : t("chat:tools.builtin.wroteAFile"), detail: path || undefined };
     case "Edit":
