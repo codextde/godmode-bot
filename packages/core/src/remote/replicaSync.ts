@@ -18,6 +18,7 @@ import { ticketsArrived } from "../tasks/service";
 import { get, getMeta, setMeta } from "../db";
 import { groupRole, isSecondary, primaryRunnerId } from "./group";
 import {
+  type ApplyOptions,
   type ApplyResult,
   type ReplicaPage,
   announce,
@@ -108,6 +109,7 @@ async function pullNow(peer: string): Promise<ApplyResult | null> {
     setMeta(replicaPulledKey(peer), String(after));
     if (!res.more) break;
   }
+  await catchUpOnAccounts(peer, l, opts, total);
   // Says how far this computer got: the other one counts what is still waiting for it from there.
   await l.json("POST", "/api/link/replica/ack", { after }, { timeoutMs: 30_000 }).catch(() => undefined);
   mergeResults(total, retryDeferred(peer, opts));
@@ -117,6 +119,19 @@ async function pullNow(peer: string): Promise<ApplyResult | null> {
   if (total.applied || total.failed) log.info("took changes from another computer", { peer: r.name, applied: total.applied, kept: total.kept, deferred: total.deferred, failed: total.failed });
   await afterApply(r.name, total);
   return total;
+}
+
+/**
+ * Once per computer: while one of the two ran an older version, it read past the Claude accounts without knowing them.
+ * An older computer doesn't have the route yet, so this waits for its update.
+ */
+async function catchUpOnAccounts(peer: string, l: ReturnType<typeof link>, opts: ApplyOptions, total: ApplyResult): Promise<void> {
+  const key = `link.replica.accounts.${peer}`;
+  if (getMeta(key)) return;
+  const res = await l.json<ReplicaPage>("GET", "/api/link/replica/claude-accounts", undefined, { timeoutMs: 30_000 }).catch(() => null);
+  if (!res || !Array.isArray(res.changes)) return;
+  mergeResults(total, applyChanges(peer, res.changes, opts));
+  setMeta(key, "1");
 }
 
 /** A change points at a chat this computer doesn't have yet: the mirror fetches it, then the change is tried again. */

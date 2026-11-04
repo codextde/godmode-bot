@@ -37,7 +37,7 @@ import { resolveClaudeBinary, runCommand, stripAnsi, toolPath } from "./doctor";
 import { notify } from "./notifications";
 import { getSettings } from "./settings";
 import { forwardedClaudeLogin } from "../remote/claudeLogin";
-import { computerAway, keepPrimaryTokens, pullFromSecondaries, tokensFromPrimary } from "../remote/claudeTokens";
+import { computerAway, keepPrimaryTokens, primaryConnected, pullFromSecondaries, tokensFromPrimary } from "../remote/claudeTokens";
 import { groupRole, isPrimary, isSecondary } from "../remote/group";
 
 const log = logger("claude-accounts");
@@ -240,8 +240,12 @@ export function removeClaudeAccount(id: string): ClaudeAccount[] {
   return listClaudeAccounts();
 }
 
-/** Both computers signed in the same subscription while apart: on every computer the older account stays. */
+/**
+ * Both computers signed in the same subscription while apart: on every computer the older account stays, with whichever
+ * tokens were refreshed last (the others are likely spent).
+ */
 function mergeSameAccounts() {
+  if (!isUnlocked()) return;
   const kept = new Map<string, AccountRow>();
   for (const r of rows()) {
     if (!r.email) continue;
@@ -249,6 +253,12 @@ function mergeSameAccounts() {
     if (!keep) {
       kept.set(r.email, r);
       continue;
+    }
+    const theirs = readTokens(r.id);
+    const ours = readTokens(keep.id);
+    if (theirs && (!ours || (ours.expiresAt ?? 0) < (theirs.expiresAt ?? 0))) {
+      setAppSecret(secretKey(keep.id), JSON.stringify(theirs));
+      run("UPDATE claude_accounts SET needs_sign_in = 0 WHERE id = ?", keep.id);
     }
     if (r.is_default) run("UPDATE claude_accounts SET is_default = 1 WHERE id = ?", keep.id);
     run("UPDATE workspaces SET claude_accounts = replace(claude_accounts, ?, ?) WHERE instr(claude_accounts, ?) > 0", r.id, keep.id, r.id);
@@ -267,6 +277,11 @@ export function claudeAccountsArrived(accounts: string[], secrets: string[]) {
   }
   changed();
   void refreshClaudeUsage();
+}
+
+/** Leaving a device group: the tokens are the group's, and two computers on their own would spend them against each other. */
+export function forgetGroupClaudeAccounts() {
+  for (const r of rows()) removeClaudeAccount(r.id);
 }
 
 /** A workspace's choice with accounts that no longer exist left out; null when nothing is left. */
@@ -333,6 +348,7 @@ async function refreshTokens(id: string, held: OAuthBlock, aheadMs: number): Pro
   // The server spends the old refresh token: only refresh when the new one can be saved.
   if (!isUnlocked()) return null;
   let block = held;
+  let allPulled = true;
   if (isSecondary()) {
     const answer = await tokensFromPrimary(id, aheadMs);
     if (answer === null) {
@@ -340,17 +356,24 @@ async function refreshTokens(id: string, held: OAuthBlock, aheadMs: number): Pro
       return null;
     }
     if (answer) {
+      const next = JSON.parse(answer) as OAuthBlock;
+      // What this computer holds may be the newer one, not with the primary yet.
+      if ((next.expiresAt ?? 0) <= (block.expiresAt ?? 0)) return block;
       keepPrimaryTokens(() => setAppSecret(secretKey(id), answer));
       return readTokens(id);
     }
+    // The primary is there but gave no answer: it may be spending this very token, so wait while this one still works.
+    if (primaryConnected() && lastsFor(block, MIN_LIFETIME_MS)) return block;
   }
   if (isPrimary()) {
-    await pullFromSecondaries();
+    allPulled = await pullFromSecondaries();
     const latest = readTokens(id);
     if (latest && latest.refreshToken !== block.refreshToken) {
       if (lastsFor(latest, aheadMs)) return latest;
       block = latest;
     }
+    // A computer may still hold newer tokens, which would make this refresh token a spent one.
+    if (!allPulled && lastsFor(block, MIN_LIFETIME_MS)) return block;
   }
   if (!block.refreshToken) {
     markSignedOut(id, "no refresh token");
@@ -366,7 +389,7 @@ async function refreshTokens(id: string, held: OAuthBlock, aheadMs: number): Pro
     const body = (await res.json().catch(() => ({}))) as { access_token?: string; refresh_token?: string; expires_in?: number; error?: string };
     if (!res.ok) {
       // With a computer away that one may hold the newer tokens: they clear this when they arrive.
-      if (body.error === "invalid_grant") markSignedOut(id, "refresh token rejected", computerAway());
+      if (body.error === "invalid_grant") markSignedOut(id, "refresh token rejected", !allPulled || computerAway());
       else log.warn(`refreshing Claude account ${id} failed`, { status: res.status, error: body.error });
       return null;
     }
@@ -402,12 +425,18 @@ async function accessToken(id: string, aheadMs = runAheadMs()): Promise<string |
   return expires > Date.now() + MIN_LIFETIME_MS ? block.accessToken : null;
 }
 
-/** Another computer of the group asks for a working token of this account; null when there is none. */
-export async function tokensForComputer(id: string, aheadMs: number): Promise<string | null> {
+/**
+ * Another computer of the group asks for a working token of this account. Null when it is signed out here, undefined
+ * when this computer doesn't know it yet: then the one asking keeps what it has.
+ */
+export async function tokensForComputer(id: string, aheadMs: number): Promise<string | null | undefined> {
   if (!isUnlocked()) throw new HttpError(423, "The vault is locked.", "vault_locked");
+  // Signed out here maybe only because the one asking has the newer tokens.
+  if (get("SELECT id FROM claude_accounts WHERE id = ? AND needs_sign_in = 1", id)) await pullFromSecondaries();
   const row = get<AccountRow>("SELECT * FROM claude_accounts WHERE id = ?", id);
-  const block = row && !row.needs_sign_in ? readTokens(id) : null;
-  if (!block) return null;
+  const block = row ? readTokens(id) : null;
+  if (!block) return undefined;
+  if (row!.needs_sign_in) return null;
   if (lastsFor(block, aheadMs)) return JSON.stringify(block);
   const fresh = await refreshOnce(id, block, aheadMs);
   if (fresh) return JSON.stringify(fresh);
@@ -775,6 +804,7 @@ export function startClaudeAccounts() {
   if (keepalive || config().role === "runner") return;
   keepalive = setInterval(() => {
     if (!isUnlocked()) return;
+    mergeSameAccounts();
     for (const r of rows()) if (!r.needs_sign_in) void accessToken(r.id, KEEPALIVE_AHEAD_MS).catch(() => null);
   }, KEEPALIVE_MS);
   keepalive.unref?.();

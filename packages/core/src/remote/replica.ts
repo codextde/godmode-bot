@@ -390,13 +390,14 @@ function keyParts(t: ReplicaTable, pk: string): string[] {
  * What `peer` hasn't seen: every change after `after` that didn't come from it. `setup: false` leaves the setup out (a
  * secondary gets that as the snapshot). Pulling after N also says the peer has everything up to N.
  */
-export function changesFor(peer: string, after: number, opts: { setup: boolean; limit?: number }): ReplicaPage {
+export function changesFor(peer: string, after: number, opts: { setup: boolean; limit?: number; table?: string }): ReplicaPage {
   ensureReplica();
   ackFrom(peer, after);
   const limit = Math.min(Math.max(opts.limit ?? PULL_LIMIT, 1), 2000);
   const rows = all<{ tbl: string; pk: string; seq: number; at: string; deleted: number; origin: string | null }>(
-    "SELECT tbl, pk, seq, at, deleted, origin FROM replica_rows WHERE seq > ? ORDER BY seq LIMIT ?",
+    `SELECT tbl, pk, seq, at, deleted, origin FROM replica_rows WHERE seq > ?${opts.table ? " AND tbl = ?" : ""} ORDER BY seq LIMIT ?`,
     after,
+    ...(opts.table ? [opts.table] : []),
     limit + 1,
   );
   const more = rows.length > limit;

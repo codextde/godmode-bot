@@ -168,7 +168,10 @@ const DEVICE_SKIPPED = new Set(["vms"]);
  * What a runner on an SSH server gets without: the vault's contents and whatever only works with a secret, and this
  * computer's VMs. Sent empty, so the runner drops what an earlier copy left there.
  */
-export const LEAN_SKIPPED = new Set(["credentials", "totp", "secrets", "claude_accounts", "composio_connections", "api_tools", "ssh_servers", "browser_profiles", "vms"]);
+export const LEAN_SKIPPED = new Set(["credentials", "totp", "secrets", "composio_connections", "api_tools", "ssh_servers", "browser_profiles", "vms"]);
+
+/** Only for the computers of a device group: a runner works with the login it is sent. */
+const DEVICE_ONLY = new Set(["claude_accounts"]);
 
 /** Sealed columns (`*_enc`) of the tables a lean copy keeps: left empty. */
 const SEALED = /_enc$/;
@@ -177,7 +180,7 @@ function collect(opts: SnapshotOptions = {}): Parts {
   const tables: Record<string, Row[]> = {};
   for (const spec of TABLES) {
     if (opts.device && DEVICE_SKIPPED.has(spec.table)) continue;
-    if (opts.lean && LEAN_SKIPPED.has(spec.table)) {
+    if ((opts.lean && LEAN_SKIPPED.has(spec.table)) || (!opts.device && DEVICE_ONLY.has(spec.table))) {
       tables[spec.table] = [];
       continue;
     }

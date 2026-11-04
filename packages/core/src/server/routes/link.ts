@@ -174,6 +174,8 @@ export function registerLinkRoutes(app: Hono): void {
     return c.json(changesFor(peer, Number.isFinite(after) && after >= 0 ? after : 0, { setup: c.req.query("setup") !== "0", ...(limit > 0 ? { limit } : {}) }));
   });
 
+  app.get("/api/link/replica/claude-accounts", (c) => c.json(changesFor(groupPeer(c), 0, { setup: true, table: "claude_accounts" })));
+
   app.post("/api/link/replica/ack", async (c) => {
     const peer = groupPeer(c);
     const { after } = await body(c, z.object({ after: z.number().int().min(0) }));

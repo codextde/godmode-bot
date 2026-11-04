@@ -261,4 +261,20 @@ describe("Claude accounts", () => {
     expect(vault.getAppSecret("claude_account:cla_new")).toBeNull();
     expect(vault.getAppSecret("claude_account:cla_old")).toContain("tok-old");
   });
+
+  test("merging keeps the tokens refreshed last, also when the older account has none", () => {
+    addAccount("cla_old", "same@example.com", "tok-old", Date.now() + 3600_000);
+    sql("UPDATE claude_accounts SET created_at = '2026-01-01T00:00:00.000Z' WHERE id = 'cla_old'");
+    addAccount("cla_new", "same@example.com", "tok-new", Date.now() + 7200_000);
+    claudeAccountsArrived(["cla_new"], []);
+    expect(vault.getAppSecret("claude_account:cla_old")).toContain("tok-new");
+
+    addAccount("cla_bare", "bare@example.com", "tok-bare");
+    sql("UPDATE claude_accounts SET created_at = '2026-01-01T00:00:00.000Z' WHERE id = 'cla_bare'");
+    vault.setAppSecret("claude_account:cla_bare", null);
+    addAccount("cla_full", "bare@example.com", "tok-full");
+    claudeAccountsArrived(["cla_full"], []);
+    expect(listClaudeAccounts().filter((a) => a.email === "bare@example.com").map((a) => a.id)).toEqual(["cla_bare"]);
+    expect(vault.getAppSecret("claude_account:cla_bare")).toContain("tok-full");
+  });
 });

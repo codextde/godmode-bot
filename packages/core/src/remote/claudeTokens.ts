@@ -19,7 +19,12 @@ function online(id: string): boolean {
   }
 }
 
-/** The account's tokens from the primary as JSON, null when it has none that work, undefined when it can't answer. */
+export function primaryConnected(): boolean {
+  const primary = primaryRunnerId();
+  return !!primary && online(primary);
+}
+
+/** The account's tokens from the primary as JSON, null when it is signed out there, undefined when there is no answer. */
 export async function tokensFromPrimary(id: string, aheadMs: number): Promise<string | null | undefined> {
   const primary = primaryRunnerId();
   if (!primary || !online(primary)) return undefined;
@@ -38,12 +43,12 @@ export function keepPrimaryTokens(write: () => void): void {
   else write();
 }
 
-/** On the primary, before a refresh: a secondary may hold newer tokens. */
-export async function pullFromSecondaries(): Promise<void> {
-  if (!isPrimary()) return;
+/** On the primary, before a refresh: a secondary may hold newer tokens. False when a pull didn't finish in time. */
+export async function pullFromSecondaries(): Promise<boolean> {
+  if (!isPrimary()) return true;
   const peers = listRunners().filter((r) => r.kind === "device" && online(r.id));
-  if (!peers.length) return;
-  await Promise.race([Promise.all(peers.map((r) => pullFrom(r.id).catch(() => null))), new Promise((done) => setTimeout(done, PULL_WAIT_MS))]);
+  const pulled = Promise.all(peers.map((r) => pullFrom(r.id).then((res) => res !== null))).then((all) => all.every(Boolean));
+  return Promise.race([pulled.catch(() => false), new Promise<boolean>((done) => setTimeout(() => done(false), PULL_WAIT_MS))]);
 }
 
 /** A computer of the group can't be reached right now. */

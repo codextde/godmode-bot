@@ -354,6 +354,8 @@ const RULES: [methods: string, path: string, rule: Rule][] = [
   ["POST", "/api/link/devices/away", refused(COMPUTER_ONLY)],
   ["GET", "/api/link/replica/changes", refused(COMPUTER_ONLY)],
   ["POST", "/api/link/replica/ack", refused(COMPUTER_ONLY)],
+  ["GET", "/api/link/replica/claude-accounts", refused(COMPUTER_ONLY)],
+  ["POST", "/api/link/claude-accounts/:id/tokens", refused(COMPUTER_ONLY)],
   ["POST", "/api/link/conversations/:id/send", refused(COMPUTER_ONLY)],
   ["POST", "/api/link/runs/:id/stop", refused(COMPUTER_ONLY)],
   ["GET", "/api/questions", A],

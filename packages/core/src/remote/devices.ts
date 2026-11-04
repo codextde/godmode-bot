@@ -42,6 +42,7 @@ import { logger } from "../log";
 import { computerName } from "../mobile/devices";
 import { activeRunForConversation, cancelRun, listActiveRuns, waitForRun } from "../runner/runner";
 import { setForwarding, setLinkEventFilter, welcomeAll, type WsData } from "../server/ws";
+import { forgetGroupClaudeAccounts } from "../services/claudeAccounts";
 import { audit } from "../services/audit";
 import {
   type RunnerChatState,
@@ -1162,6 +1163,7 @@ function deviceRows() {
 
 /** Back to a Godmode of its own: no more forwarding, the shared services start here again (index.ts listens). */
 function becomeAlone(): void {
+  if (isSecondary()) forgetGroupClaudeAccounts();
   forgetStandIn();
   clearGroup();
   deleteMeta(SELF_META);

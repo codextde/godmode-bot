@@ -11,7 +11,7 @@ import { join } from "node:path";
 import { SYSTEM_CLAUDE_ACCOUNT } from "@godmode/shared";
 import type { AgentQuestion, ClaudeAccountsState, Conversation, DeviceGroup, DeviceInvite, ServerEvent, StartChatResult } from "@godmode/shared";
 import { config, loadConfig } from "../src/config";
-import { all, closeDb, get, openDb, setMeta } from "../src/db";
+import { all, closeDb, get, openDb, run, setMeta } from "../src/db";
 import { ensureDefaultAgent } from "../src/agents/service";
 import { createApp } from "../src/server/app";
 import { getAccessToken } from "../src/server/auth";
@@ -349,7 +349,7 @@ describe("a device group, end to end", () => {
 
     const tokens = await tokensFromPrimary(account.id, 60_000);
     expect(JSON.parse(tokens!).refreshToken).toBe("refresh-login@example.com");
-    expect(await tokensFromPrimary("cla_nope", 60_000)).toBeNull();
+    expect(await tokensFromPrimary("cla_nope", 60_000)).toBeUndefined();
 
     await onPrimary(`/api/claude-accounts/${account.id}`, { method: "DELETE" });
     await until(() => !get("SELECT id FROM claude_accounts WHERE id = ?", account.id) && !getAppSecret(`claude_account:${account.id}`), 30_000, "the account to go here too");
@@ -467,10 +467,13 @@ describe("a device group, end to end", () => {
   }, 150_000);
 
   test("leaving makes both computers a Godmode of their own again", async () => {
+    // The tokens stay with the primary: alone, two computers would spend them against each other.
+    run("INSERT INTO claude_accounts (id, email, created_at) VALUES ('cla_group', 'group@example.com', ?)", new Date().toISOString());
     const left = await here<DeviceGroup>("/api/devices/leave", { method: "POST" });
     expect(left.status).toBe(200);
     expect(left.body.role).toBeNull();
     expect(groupRole()).toBeNull();
+    expect(get("SELECT id FROM claude_accounts WHERE id = 'cla_group'")).toBeNull();
     await until(async () => (await onPrimary<DeviceGroup>("/api/devices")).body.role === null, 20_000, "the primary to be alone");
     expect(existsSync(secondaryDir)).toBe(true);
   }, 60_000);
