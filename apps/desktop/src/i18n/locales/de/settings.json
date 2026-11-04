@@ -41,7 +41,11 @@
       "toolCalls": "Werkzeugaufrufe",
       "toolCallsDescription": "Karten zeigen jeden Schritt mit seinem Befehl und lassen die Schritte offen, solange der Agent arbeitet. Kompakt fasst jede Gruppe in einer dezenten Zeile zusammen; ein Klick zeigt die Schritte.",
       "cards": "Karten",
-      "compact": "Kompakt"
+      "compact": "Kompakt",
+      "followUp": "Während der Agent arbeitet",
+      "followUpDescription": "Warteschlange gibt deine Nachricht dem Agenten zwischen zwei Schritten. Umlenken unterbricht ihn und startet sofort mit deiner Nachricht. {{shortcut}} sendet andersherum.",
+      "queue": "Warteschlange",
+      "steer": "Umlenken"
     },
     "summaries": {
       "title": "KI-Zusammenfassungen",

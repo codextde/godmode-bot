@@ -247,6 +247,7 @@
       "thisList": "Diese Liste",
       "send": "Senden",
       "newLine": "Neue Zeile",
+      "sendOpposite": "Andersherum senden, während der Agent arbeitet (Warteschlange ↔ umlenken)",
       "commands": "Claude-Code-Befehle (/compact, /model, …)",
       "editLast": "Letzte Nachricht bearbeiten, solange sie in der Warteschlange ist",
       "quote": "Markierten Text in der nächsten Nachricht zitieren",

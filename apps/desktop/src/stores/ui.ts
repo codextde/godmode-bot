@@ -14,6 +14,7 @@ export type InboxView = "list" | "board";
 
 /** How a chat shows the agent's tool calls: cards with the steps open while it works, or one muted line each. */
 export type ToolCallView = "cards" | "compact";
+export type FollowUpMode = "queue" | "steer";
 
 export type WorkspacesSort = "name" | "active" | "attention";
 
@@ -62,6 +63,7 @@ interface UiState {
   artifactPanelWidth: number | null;
   reduceAnimations: boolean;
   toolCallView: ToolCallView;
+  followUpMode: FollowUpMode;
   /** Show the frame rate meter on top of the window. */
   fpsMeter: boolean;
   /** Sidebar sections open by default that the human folded. */
@@ -102,6 +104,7 @@ interface UiState {
   setArtifactPanelWidth: (width: number | null) => void;
   setReduceAnimations: (v: boolean) => void;
   setToolCallView: (v: ToolCallView) => void;
+  setFollowUpMode: (v: FollowUpMode) => void;
   setFpsMeter: (v: boolean) => void;
 }
 
@@ -139,6 +142,7 @@ export const useUi = create<UiState>()(
       artifactPanelWidth: null,
       reduceAnimations: false,
       toolCallView: "cards",
+      followUpMode: "queue",
       fpsMeter: false,
       setWorkspace: (workspace, project = null) =>
         set((s) => ({
@@ -183,6 +187,7 @@ export const useUi = create<UiState>()(
       setArtifactPanelWidth: (artifactPanelWidth) => set({ artifactPanelWidth }),
       setReduceAnimations: (reduceAnimations) => set({ reduceAnimations }),
       setToolCallView: (toolCallView) => set({ toolCallView }),
+      setFollowUpMode: (followUpMode) => set({ followUpMode }),
       setFpsMeter: (fpsMeter) => set({ fpsMeter }),
     }),
     {
@@ -217,6 +222,7 @@ export const useUi = create<UiState>()(
         artifactPanelWidth: s.artifactPanelWidth,
         reduceAnimations: s.reduceAnimations,
         toolCallView: s.toolCallView,
+        followUpMode: s.followUpMode,
         fpsMeter: s.fpsMeter,
       }),
     },

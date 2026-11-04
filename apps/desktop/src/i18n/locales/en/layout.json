@@ -247,6 +247,7 @@
       "thisList": "This list",
       "send": "Send",
       "newLine": "New line",
+      "sendOpposite": "Send the other way while the agent works (queue ↔ steer)",
       "commands": "Claude Code commands (/compact, /model, …)",
       "editLast": "Edit your last message while it waits in the queue",
       "quote": "Quote the selected text in your next message",

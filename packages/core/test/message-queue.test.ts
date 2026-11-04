@@ -212,6 +212,18 @@ describe("message queue", () => {
     await expect(sendQueuedNow(conversationId)).rejects.toThrow("Queued message not found");
   });
 
+  test("a steering message stops the agent and starts on it right away", async () => {
+    const started = await busyChat("SLEEP");
+    const conversationId = started.conversation.id;
+    queuedOf(await submitMessage(conversationId, { content: "change of plan", steer: true }));
+
+    expect((await waitForRun(started.run.id, 15_000)).error).toBe("Stopped to start on your queued messages");
+    await until(() => listRuns({ conversationId }).length === 2, 10_000, "the steering run");
+    expect((await waitForRun(listRuns({ conversationId })[0]!.id, 20_000)).status).toBe("succeeded");
+    expect(invocations(env).at(-1)!.prompt.endsWith("change of plan")).toBe(true);
+    expect(listQueue(conversationId)).toEqual([]);
+  });
+
   test("the API queues on request and keeps starting runs otherwise", async () => {
     const started = await busyChat("SLEEP");
     const conversationId = started.conversation.id;
