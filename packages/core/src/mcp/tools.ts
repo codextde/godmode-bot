@@ -176,6 +176,9 @@ import { createMod, findMod, installMod, listMods, updateMod } from "../mods/ser
 import { noteConnectorCall } from "../connect/connectors";
 import { selfRepairCheck } from "../diagnostics/selfRepair";
 import { macPasswordSupported, useMacPassword } from "../services/macPassword";
+import { runSshServerIds } from "../ssh/assignments";
+import { deleteSshKey, generateSshKey, installSshKeyOnServer, listSshKeys, setSshKeyLoaded, updateSshKey } from "../ssh/keyManager";
+import { promptServers } from "../ssh/service";
 import { recallRead, recallSearch } from "../memory/recall";
 import { readTeamMemory, teamBelow } from "../memory/team";
 
@@ -686,6 +689,7 @@ const CARD_FILL: Record<CardField, { kind: CardFillKind; label: string }> = {
 };
 
 /** Paying with a card: the agent has one, and the run is real work (not a condition check or a dream). */
+const mayManageSshKeys = (_agent: Agent, ctx: RunContext) => getSettings().sshKeys.enabled && !isCheckRun(ctx) && !vmOfRun(ctx.runId);
 const mayPay = (agent: Agent, ctx: RunContext) => getSettings().cards.enabled && !isCheckRun(ctx) && hasCardsForAgent(agent);
 
 /** Cards are typed only into Godmode's own browser on this computer, never into a VM (its shell could read the page). */
@@ -1837,6 +1841,76 @@ const TOOLS: ToolDef[] = [
     run: async (args, { agent, ctx }) => {
       const out = await useMacPassword(agent, ctx, args);
       return out.isError ? fail(out.text) : out.text;
+    },
+  }),
+
+  defineTool({
+    name: "ssh_keys_list",
+    description: "List the SSH keys in ~/.ssh of this computer: name, type, fingerprint, comment, public key, whether a passphrase protects it, whether it is on, loaded in ssh-agent, and which ssh config hosts and saved servers use it. Private keys are never shown.",
+    schema: z.object({}),
+    when: mayManageSshKeys,
+    run: async () => {
+      const { dir, agent, keys } = await listSshKeys();
+      return JSON.stringify({ dir, agent, keys: keys.map(({ randomart: _art, servers, ...key }) => ({ ...key, servers: servers.map((s) => s.name) })) }, null, 2);
+    },
+  }),
+
+  defineTool({
+    name: "ssh_key_generate",
+    description: "Create a new SSH key pair in ~/.ssh of this computer and return its public key. Ed25519 unless a server needs something else. The private key stays in the file. A key with a passphrase is for the human to create on the Passwords page.",
+    schema: z.object({
+      name: z.string().min(1).max(100).describe("File name: letters, digits and . _ @ + -"),
+      algorithm: z.enum(["ed25519", "rsa", "ecdsa"]).optional(),
+      bits: z.number().int().optional().describe("RSA: 2048, 3072 or 4096. ECDSA: 256, 384 or 521."),
+      comment: z.string().max(200).optional(),
+    }),
+    when: mayManageSshKeys,
+    run: async (args, { agent }) => {
+      const key = await generateSshKey(args, `agent:${agent.id}`);
+      return `Created ${key.name} (${key.fingerprint}).\nPublic key: ${key.publicKey}`;
+    },
+  }),
+
+  defineTool({
+    name: "ssh_key_update",
+    description: "Change an SSH key in ~/.ssh of this computer. `enabled: false` parks it in ~/.ssh/disabled so ssh stops using it; `in_agent` loads it into ssh-agent or takes it out (a key with a passphrase is for the human to load); `new_name` renames it and repoints IdentityFile lines in ~/.ssh/config, keeping a backup of the config.",
+    schema: z.object({
+      name: z.string().min(1).max(100),
+      new_name: z.string().min(1).max(100).optional(),
+      comment: z.string().max(200).optional(),
+      enabled: z.boolean().optional(),
+      in_agent: z.boolean().optional(),
+    }),
+    when: mayManageSshKeys,
+    run: async ({ name, new_name, comment, enabled, in_agent }, { agent }) => {
+      const { key, configHosts } = await updateSshKey(name, { name: new_name, comment, enabled }, `agent:${agent.id}`);
+      const loaded = in_agent === undefined ? key : await setSshKeyLoaded(key.name, in_agent, undefined, `agent:${agent.id}`);
+      return `${loaded.name}: ${loaded.enabled ? "on" : "off"}, ${loaded.inAgent ? "in ssh-agent" : "not in ssh-agent"}.${configHosts.length ? ` Updated ~/.ssh/config for ${configHosts.join(", ")}.` : ""}`;
+    },
+  }),
+
+  defineTool({
+    name: "ssh_key_delete",
+    description: "Move an SSH key of this computer to the Trash and take it out of ssh-agent. Whatever signs in with it stops working: only when the human asked for exactly this key to go.",
+    schema: z.object({ name: z.string().min(1).max(100) }),
+    when: mayManageSshKeys,
+    run: async ({ name }, { agent }) => {
+      await deleteSshKey(name, `agent:${agent.id}`);
+      return `Moved ${name} to the Trash.`;
+    },
+  }),
+
+  defineTool({
+    name: "ssh_key_install_on_server",
+    description: "Add the public half of an SSH key of this computer to ~/.ssh/authorized_keys on one of the SSH servers this run may use, so the key can sign in there.",
+    schema: z.object({ name: z.string().min(1).max(100), server: z.string().min(1).max(200).describe("Name or id of an SSH server this run may use") }),
+    when: (agent, ctx) => mayManageSshKeys(agent, ctx) && getSettings().ssh.enabled,
+    run: async ({ name, server }, { agent, ctx }) => {
+      const mine = promptServers(runSshServerIds(ctx.conversationId, agent.id));
+      const target = mine.find((s) => s.id === server || s.name === server);
+      if (!target) return fail(`${server} isn't one of the SSH servers this run may use.`);
+      const out = await installSshKeyOnServer(name, target.id, `agent:${agent.id}`);
+      return out.alreadyThere ? `${name} already was on ${out.server}.` : `Added ${name} to ${out.server}.`;
     },
   }),
 

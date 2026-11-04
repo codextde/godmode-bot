@@ -4,6 +4,7 @@ import { assignServer, createServer, deleteServer, execForHuman, getServer, list
 import { disableIdleTimeout } from "../../mcp/http";
 import { installSshGodmode, sshGodmodeStatus } from "../../remote/runners";
 import { listServerFolders } from "../../ssh/folders";
+import { deleteSshKey, generateSshKey, importSshKey, installSshKeyOnServer, listSshKeys, requireSshKeysOn, setSshKeyLoaded, updateSshKey } from "../../ssh/keyManager";
 import { body, z } from "../validate";
 
 const hostKey = z.object({ type: z.string().trim().max(60), fingerprint: z.string().trim().max(100) });
@@ -22,6 +23,18 @@ const fields = {
   shareLogins: z.boolean().optional(),
   hostKey: hostKey.nullable().optional(),
 };
+
+const keyName = z.string().trim().min(1).max(100);
+const passphrase = z.string().min(1).max(1000);
+const generateSchema = z.object({
+  name: keyName,
+  algorithm: z.enum(["ed25519", "rsa", "ecdsa"]).optional(),
+  bits: z.number().int().optional(),
+  comment: z.string().max(200).optional(),
+  passphrase: passphrase.optional(),
+});
+const importSchema = z.object({ name: keyName, key: z.string().min(1).max(256 * 1024) });
+const keyPatchSchema = z.object({ name: keyName.optional(), comment: z.string().max(200).optional(), enabled: z.boolean().optional(), fixPermissions: z.boolean().optional() });
 
 const serverSchema = z.object(fields);
 const patchSchema = z.object(fields).partial();
@@ -82,5 +95,45 @@ export function registerSshRoutes(app: Hono): void {
   app.post("/api/ssh/keys", async (c) => {
     const input = await body(c, z.object({ comment: z.string().trim().max(100).optional() }));
     return c.json(generateKeyPair(input.comment || "godmode"));
+  });
+
+  /** The key manager (Passwords → SSH keys). */
+  app.get("/api/ssh/key-manager", async (c) => {
+    requireSshKeysOn();
+    return c.json(await listSshKeys());
+  });
+
+  app.post("/api/ssh/key-manager", async (c) => {
+    requireSshKeysOn();
+    return c.json(await generateSshKey(await body(c, generateSchema)), 201);
+  });
+
+  app.post("/api/ssh/key-manager/import", async (c) => {
+    requireSshKeysOn();
+    return c.json(await importSshKey(await body(c, importSchema)), 201);
+  });
+
+  app.patch("/api/ssh/key-manager/:name", async (c) => {
+    requireSshKeysOn();
+    return c.json(await updateSshKey(c.req.param("name"), await body(c, keyPatchSchema)));
+  });
+
+  app.delete("/api/ssh/key-manager/:name", async (c) => {
+    requireSshKeysOn();
+    await deleteSshKey(c.req.param("name"));
+    return c.json({ ok: true as const });
+  });
+
+  app.post("/api/ssh/key-manager/:name/agent", async (c) => {
+    requireSshKeysOn();
+    const input = await body(c, z.object({ loaded: z.boolean(), passphrase: passphrase.optional() }));
+    return c.json(await setSshKeyLoaded(c.req.param("name"), input.loaded, input.passphrase));
+  });
+
+  app.post("/api/ssh/key-manager/:name/install", async (c) => {
+    requireSshKeysOn();
+    const input = await body(c, z.object({ serverId: z.string().min(1).max(100) }));
+    disableIdleTimeout(c);
+    return c.json(await installSshKeyOnServer(c.req.param("name"), input.serverId));
   });
 }

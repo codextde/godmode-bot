@@ -406,6 +406,12 @@ const RULES: [methods: string, path: string, rule: Rule][] = [
   ["POST", "/api/ssh/test", sshTest],
   ["GET", "/api/ssh/local-keys", S],
   ["POST", "/api/ssh/keys", S],
+  ["GET", "/api/ssh/key-manager", S],
+  ["POST", "/api/ssh/key-manager", S],
+  ["POST", "/api/ssh/key-manager/import", S],
+  ["PATCH|DELETE", "/api/ssh/key-manager/:name", S],
+  ["POST", "/api/ssh/key-manager/:name/agent", S],
+  ["POST", "/api/ssh/key-manager/:name/install", S],
 
   // Android phones: watched and controlled like a VM. Their settings (adb path, logins on phones) stay on the computer.
   ["GET", "/api/android/status", A],
@@ -489,7 +495,7 @@ const VIEWER_WRITES: [string, string][] = [
   ["POST", "/api/agents/:id/files/inspect"],
 ];
 /** Reads a viewer may not make: pictures of the screen, codes and keys. */
-const VIEWER_HIDDEN_READS = ["/api/computer/thumbnail", "/api/computer/sources", "/api/vms/:id/screenshot", "/api/android/devices/:id/screenshot", "/api/totp/codes", "/api/ssh/local-keys"];
+const VIEWER_HIDDEN_READS = ["/api/computer/thumbnail", "/api/computer/sources", "/api/vms/:id/screenshot", "/api/android/devices/:id/screenshot", "/api/totp/codes", "/api/ssh/local-keys", "/api/ssh/key-manager"];
 
 function pattern(path: string): RegExp {
   const escaped = path.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/:\w+/g, "[^/]+");

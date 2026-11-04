@@ -83,6 +83,7 @@ export const DEFAULT_SETTINGS: Settings = {
   plugins: { enabled: false },
   cards: { enabled: false },
   ssh: { enabled: false },
+  sshKeys: { enabled: false },
   voice: {
     enabled: true,
     dictation: true,

@@ -27,6 +27,7 @@ import {
   Inbox,
   Info,
   Keyboard,
+  Key,
   KeyRound,
   KeySquare,
   Laptop,
@@ -101,6 +102,7 @@ const SETTINGS = [
   { id: "cards", label: "cards", icon: CreditCard, words: "payment credit cards purchases pay feature turn on off" },
   { id: "vms", label: "vms", icon: Box, words: "vm tart macos linux feature turn on off" },
   { id: "ssh", label: "ssh", icon: Server, words: "remote linux servers feature turn on off" },
+  { id: "ssh-keys", label: "sshKeys", icon: Key, words: "ed25519 rsa ssh-agent id_rsa authorized_keys public key feature turn on off" },
   { id: "api-keys", label: "apiKeys", icon: KeyRound, words: "anthropic openai elevenlabs z.ai glm captcha browser-use secrets" },
   { id: "security", label: "security", icon: ShieldCheck, words: "vault godmode password passphrase auto-lock" },
   { id: "files", label: "files", icon: FolderOpen, words: "workspace notes memory cleanup tidy delete bin agents" },
@@ -548,6 +550,11 @@ export function CommandPalette() {
           {on?.ssh.enabled && (
             <CommandItem value={`ssh servers remote linux ${t("nav.ssh")}`} keywords={alias("/ssh", t("nav.ssh"))} onSelect={() => go("/ssh")}>
               <Server /> {named("/ssh", t("nav.ssh"))}
+            </CommandItem>
+          )}
+          {on?.sshKeys.enabled && (
+            <CommandItem value={`ssh keys ed25519 rsa public key agent ${t("palette.settingsSections.sshKeys")}`} onSelect={() => go("/vault/ssh-keys")}>
+              <Key /> {t("palette.settingsSections.sshKeys")}
             </CommandItem>
           )}
           {on?.android.enabled && (

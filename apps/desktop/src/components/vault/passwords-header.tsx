@@ -1,10 +1,11 @@
 import type { ReactNode } from "react";
 import { NavLink } from "react-router";
 import { useQuery } from "@tanstack/react-query";
-import { Fingerprint, KeyRound, Laptop, ShieldCheck } from "lucide-react";
+import { Fingerprint, Key, KeyRound, Laptop, ShieldCheck } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { PageHeader } from "@/components/common";
 import { api } from "@/lib/api";
+import { useSettings } from "@/lib/hooks";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
 
@@ -17,10 +18,14 @@ export function PasswordsHeader({ actions }: { actions?: ReactNode }) {
   const codes = useQuery({ queryKey: qk.totpList("all"), queryFn: () => api.totp.list({ workspaceId: "all" }) });
   const passkeys = useQuery({ queryKey: qk.passkeyList("all"), queryFn: () => api.passkeys.list({ workspaceId: "all" }) });
   const mac = useQuery({ queryKey: qk.macPassword, queryFn: api.macPassword.status });
+  const { data: settings } = useSettings();
+  const sshKeysOn = !!settings?.sshKeys.enabled;
+  const sshKeys = useQuery({ queryKey: qk.sshKeys, queryFn: api.sshKeys.list, enabled: sshKeysOn });
   const tabs = [
     { to: PASSWORD_TABS[0], label: t("header.logins"), icon: <KeyRound />, count: logins.data?.length },
     { to: PASSWORD_TABS[1], label: t("header.codes"), icon: <ShieldCheck />, count: codes.data?.length },
     { to: PASSWORD_TABS[2], label: t("header.passkeys"), icon: <Fingerprint />, count: passkeys.data?.length },
+    ...(sshKeysOn ? [{ to: "/vault/ssh-keys", label: t("header.sshKeys"), icon: <Key />, count: sshKeys.data?.keys.length }] : []),
     ...(mac.data?.supported ? [{ to: "/vault/mac", label: t("header.macPassword"), icon: <Laptop />, count: undefined }] : []),
   ];
   return (

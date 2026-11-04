@@ -1670,6 +1670,11 @@ export interface SshSettings {
   enabled: boolean;
 }
 
+/** The SSH key manager (Passwords → SSH keys): the page and its tools leave ~/.ssh alone while this is off. */
+export interface SshKeySettings {
+  enabled: boolean;
+}
+
 export interface AndroidSettings {
   /** Godmode looks for Android phones connected over adb, and agents may control the phones assigned to them. */
   enabled: boolean;
@@ -1753,6 +1758,7 @@ export interface Settings {
   plugins: PluginSettings;
   cards: CardSettings;
   ssh: SshSettings;
+  sshKeys: SshKeySettings;
   voice: VoiceSettings;
   security: SecuritySettings;
   server: ServerSettings;

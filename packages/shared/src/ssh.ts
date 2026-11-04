@@ -162,3 +162,75 @@ export interface SshGodmodeStatus {
   state: "installing" | "failed";
   error: string | null;
 }
+
+/** A key in ~/.ssh on the computer running Godmode, or parked in ~/.ssh/disabled. Never the private key itself. */
+export interface SshManagedKey {
+  /** File name, unique across ~/.ssh and ~/.ssh/disabled. */
+  name: string;
+  /** The private key's file; null when only the public half is here. */
+  path: string | null;
+  /** "ed25519", "rsa", "ecdsa", "dsa", "ed25519-sk", "ecdsa-sk" or "unknown". */
+  algorithm: string;
+  bits: number | null;
+  fingerprint: string | null;
+  /** The picture `ssh-keygen -lv` draws. */
+  randomart: string | null;
+  comment: string;
+  /** One line for authorized_keys or GitHub. */
+  publicKey: string | null;
+  /** Protected with a passphrase. */
+  encrypted: boolean;
+  /** In ~/.ssh; false = parked in ~/.ssh/disabled, where ssh doesn't look. */
+  enabled: boolean;
+  inAgent: boolean;
+  hasPrivate: boolean;
+  format: "openssh" | "pem" | "putty" | "none";
+  /** Group or others can read the private key, so ssh refuses it. */
+  looseMode: boolean;
+  /** Host entries of ~/.ssh/config that use the key. */
+  hosts: string[];
+  /** Saved SSH servers that sign in with the same key. */
+  servers: { id: ID; name: string }[];
+  modifiedAt: ISODate | null;
+}
+
+export interface SshKeysOverview {
+  dir: string;
+  agent: { available: boolean; loaded: number };
+  keys: SshManagedKey[];
+}
+
+export interface SshKeyGenerateInput {
+  name: string;
+  /** Default ed25519. */
+  algorithm?: "ed25519" | "rsa" | "ecdsa";
+  bits?: number;
+  /** Default user@computer. */
+  comment?: string;
+  passphrase?: string;
+}
+
+export interface SshKeyImportInput {
+  name: string;
+  /** A private key (OpenSSH or PEM), or a public key line. */
+  key: string;
+}
+
+export interface SshKeyPatch {
+  name?: string;
+  comment?: string;
+  enabled?: boolean;
+  /** Makes the private key readable by its owner only. */
+  fixPermissions?: boolean;
+}
+
+export interface SshKeyChange {
+  key: SshManagedKey;
+  /** Host entries repointed in ~/.ssh/config by a rename (the old config stays as a .bak file). */
+  configHosts: string[];
+}
+
+export interface SshKeyInstallResult {
+  server: string;
+  alreadyThere: boolean;
+}

@@ -131,6 +131,7 @@ export const qk = {
   sshServers: ["ssh-servers"] as unknown[],
   sshGodmode: ["ssh-godmode"] as unknown[],
   sshLocalKeys: ["ssh-local-keys"] as unknown[],
+  sshKeys: ["ssh-keys"] as unknown[],
   /** Android phones and adb (one entity: "android"). */
   android: ["android"] as unknown[],
   androidDevices: ["android", "devices"] as unknown[],

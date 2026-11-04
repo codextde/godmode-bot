@@ -479,6 +479,11 @@ const GODMODE_TOOLS = new Set([
   "vault_fill_login",
   "vault_fill_totp",
   "github_sign_in",
+  "ssh_keys_list",
+  "ssh_key_generate",
+  "ssh_key_update",
+  "ssh_key_delete",
+  "ssh_key_install_on_server",
   "vault_save_login",
   "vault_get_login",
   "vault_get_totp",
@@ -599,6 +604,16 @@ function godmodeMeta(tool: string, input: Input, ctx: ToolContext): Omit<ToolMet
       };
     case "github_sign_in":
       return { kind: "vault", icon: ShieldCheck, title: t("chat:tools.common.githubSignIn") };
+    case "ssh_keys_list":
+      return { kind: "vault", icon: KeyRound, title: t("chat:tools.godmode.sshKeysListed") };
+    case "ssh_key_generate":
+      return { kind: "vault", icon: KeyRound, title: t("chat:tools.godmode.sshKeyCreated"), detail: str(input.name) || undefined };
+    case "ssh_key_update":
+      return { kind: "vault", icon: KeyRound, title: t("chat:tools.godmode.sshKeyChanged"), detail: str(input.name) || undefined };
+    case "ssh_key_delete":
+      return { kind: "vault", icon: KeyRound, title: t("chat:tools.godmode.sshKeyDeleted"), detail: str(input.name) || undefined };
+    case "ssh_key_install_on_server":
+      return { kind: "vault", icon: KeyRound, title: t("chat:tools.godmode.sshKeyInstalled"), detail: str(input.name) || undefined };
     case "vault_save_login": {
       const site = hostOf(input.url);
       const user = str(input.username);

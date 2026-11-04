@@ -41,6 +41,7 @@ const BrowserPage = lazy(() => import("@/pages/browser/browser-page"));
 const ComputerPage = lazy(() => import("@/pages/computer/computer-page"));
 const VmsPage = lazy(() => import("@/pages/vms/vms-page"));
 const SshPage = lazy(() => import("@/pages/ssh/ssh-page"));
+const SshKeysPage = lazy(() => import("@/pages/vault/ssh-keys-page"));
 const AndroidDevicePage = lazy(() => import("@/pages/android/android-device-page"));
 const CallsPage = lazy(() => import("@/pages/calls/calls-page"));
 const InboxPage = lazy(() => import("@/pages/inbox/inbox-page"));
@@ -246,6 +247,7 @@ export function App() {
           <Route path="/vault/cards" element={<FeaturePage on={b.settings.cards.enabled} section="cards"><CardsPage /></FeaturePage>} />
           <Route path="/vault/passkeys" element={<PasskeysPage />} />
           <Route path="/vault/mac" element={<MacPasswordPage />} />
+          <Route path="/vault/ssh-keys" element={<FeaturePage on={b.settings.sshKeys.enabled} section="ssh-keys"><SshKeysPage /></FeaturePage>} />
           <Route path="/integrations" element={<ToSettings section="integrations" />} />
           <Route path="/messaging" element={<ToSettings section="messaging" />} />
           <Route path="/browser" element={<BrowserPage />} />

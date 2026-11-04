@@ -144,6 +144,15 @@
     "pointFiles": "Uploads and downloads within the run's folders",
     "linkDescription": "Add servers and pick the agents that may use them."
   },
+  "sshKeys": {
+    "title": "SSH keys",
+    "summary": "The keys in ~/.ssh on this computer, in one simple list.",
+    "offNote": "While it's off, Godmode leaves ~/.ssh alone and agents don't get these tools.",
+    "pointSee": "Type, fingerprint, comment and the hosts using each key",
+    "pointCreate": "New keys, import, rename, park and delete to the Trash",
+    "pointAgent": "Load into ssh-agent and add to your servers",
+    "linkDescription": "Under Passwords, next to your logins."
+  },
   "cards": {
     "title": "Cards",
     "titleEasy": "Payment cards",
@@ -457,7 +466,8 @@
       "cleanup": "Cleanup",
       "logs": "Logs",
       "about": "About",
-      "accounts": "Claude accounts"
+      "accounts": "Claude accounts",
+      "sshKeys": "SSH keys"
     },
     "easy": {
       "general": "General",
@@ -484,7 +494,8 @@
       "computer": "Computer control",
       "connect": "Claude Code & MCP",
       "system": "System check",
-      "accounts": "Claude accounts"
+      "accounts": "Claude accounts",
+      "sshKeys": "SSH keys"
     },
     "groups": {
       "preferences": "Preferences",

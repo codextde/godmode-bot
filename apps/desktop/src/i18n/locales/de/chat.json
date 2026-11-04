@@ -212,7 +212,12 @@
       "readArtifact": "Ein Artefakt gelesen",
       "lookedAtArtifacts": "Seine Artefakte angesehen",
       "reportedBlocked": "Gemeldet, was er braucht",
-      "macPassword": "Mac-Passwort"
+      "macPassword": "Mac-Passwort",
+      "sshKeysListed": "SSH-Schlüssel geprüft",
+      "sshKeyCreated": "SSH-Schlüssel erstellt",
+      "sshKeyChanged": "SSH-Schlüssel geändert",
+      "sshKeyDeleted": "SSH-Schlüssel in den Papierkorb gelegt",
+      "sshKeyInstalled": "SSH-Schlüssel zu einem Server hinzugefügt"
     },
     "builtin": {
       "ranCommand": "Befehl ausgeführt",

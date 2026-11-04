@@ -90,7 +90,7 @@ export function generateKeyPair(comment = "godmode"): SshGeneratedKey {
 }
 
 /** Public key blob stored in the clear inside an OpenSSH private key (also when the key itself is encrypted). */
-function openSshPublicBlob(text: string): Buffer | null {
+export function openSshPublicBlob(text: string): Buffer | null {
   const m = /-----BEGIN OPENSSH PRIVATE KEY-----([\s\S]+?)-----END OPENSSH PRIVATE KEY-----/.exec(text);
   if (!m?.[1]) return null;
   try {
@@ -121,7 +121,7 @@ export function sshDir(): string {
   return join(process.env.HOME || homedir(), ".ssh");
 }
 
-const NOT_KEYS = /^(?:known_hosts|authorized_keys|config|environment|allowed_signers)(?:[._-].*)?$|\.(?:pub|old|bak|sock|txt|md)$/i;
+export const NOT_KEYS = /^(?:known_hosts|authorized_keys|config|environment|allowed_signers)(?:[._-].*)?$|\.(?:pub|old|bak|sock|txt|md)$/i;
 
 /** Private keys in ~/.ssh on this computer (for importing into a server; nothing is copied until the human picks one). */
 export function listLocalKeys(): SshLocalKey[] {

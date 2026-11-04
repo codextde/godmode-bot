@@ -19,6 +19,7 @@ import {
   Globe,
   HeartPulse,
   Info,
+  Key,
   KeyRound,
   KeySquare,
   Laptop,
@@ -73,6 +74,7 @@ import { PhoneSection } from "@/components/settings/phone-section";
 import { PluginsSection } from "@/components/settings/plugins-section";
 import { SecuritySection } from "@/components/settings/security-section";
 import { SshSection } from "@/components/settings/ssh-section";
+import { SshKeysSection } from "@/components/settings/ssh-keys-section";
 import { SystemSection } from "@/components/settings/system-section";
 import { VmSection } from "@/components/settings/vm-section";
 import { VoiceSection } from "@/components/settings/voice-section";
@@ -105,6 +107,7 @@ const SECTIONS = [
   { id: "cards", labelKey: "page.sections.cards", icon: <CreditCard />, groupKey: "page.groups.features" },
   { id: "vms", labelKey: "page.sections.vms", icon: <Box />, groupKey: "page.groups.features" },
   { id: "ssh", labelKey: "page.sections.ssh", icon: <Server />, groupKey: "page.groups.features" },
+  { id: "ssh-keys", labelKey: "page.sections.sshKeys", icon: <Key />, groupKey: "page.groups.features" },
   { id: "android", labelKey: "page.sections.android", icon: <Smartphone />, groupKey: "page.groups.features" },
   { id: "files", labelKey: "page.sections.files", icon: <FolderOpen />, groupKey: "page.groups.dataPrivacy" },
   { id: "api-keys", labelKey: "page.sections.apiKeys", icon: <KeyRound />, groupKey: "page.groups.dataPrivacy" },
@@ -142,6 +145,7 @@ const EASY: Partial<Record<SectionId, { labelKey: SettingsKey; groupKey: Setting
   cards: { labelKey: "page.easy.cards", groupKey: "page.groups.extras" },
   vms: { labelKey: "page.easy.vms", groupKey: "page.groups.extras" },
   ssh: { labelKey: "page.easy.ssh", groupKey: "page.groups.extras" },
+  "ssh-keys": { labelKey: "page.easy.sshKeys", groupKey: "page.groups.extras" },
   android: { labelKey: "page.easy.android", groupKey: "page.groups.extras" },
   security: { labelKey: "page.easy.security", groupKey: "page.groups.account" },
   backup: { labelKey: "page.easy.backup", groupKey: "page.groups.account" },
@@ -269,6 +273,7 @@ function SectionContent({ active, focusLabel, onFocused }: { active: SectionId; 
       plugins: () => <PluginsSection settings={s} />,
       cards: () => <CardsSection settings={s} />,
       ssh: () => <SshSection settings={s} />,
+      "ssh-keys": () => <SshKeysSection settings={s} />,
       artifacts: () => <ArtifactsSection settings={s} />,
       integrations: () => <IntegrationsSection settings={s} />,
       messaging: () => <MessagingSection settings={s} />,
