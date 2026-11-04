@@ -257,11 +257,11 @@ export function CommandPalette() {
   const agentName = (id: string) => agents.find((a) => a.id === id)?.name ?? "";
 
   return (
-    <CommandDialog open={open} onOpenChange={setOpen} filter={wordFilter} title={t("common:actions.search")} description={t("palette.description")}>
+    <CommandDialog open={open} onOpenChange={setOpen} filter={wordFilter} className="sm:max-w-3xl" title={t("common:actions.search")} description={t("palette.description")}>
       <CommandInput placeholder={t("palette.placeholder")} value={q} onValueChange={setQ} onKeyDown={onInputKey} />
       <TypeTabs kind={kind} onKind={setKind} />
       {fresh?.corrected && <div className="px-3 pt-2 text-xs text-muted-foreground">{t("palette.showingFor", { query: fresh.corrected })}</div>}
-      <CommandList className="max-h-[min(420px,60vh)]">
+      <CommandList className="h-[min(480px,60vh)] max-h-none">
         <CommandEmpty>{t("palette.empty")}</CommandEmpty>
         {kind === "all" && waiting.length > 0 && (
           <>
