@@ -23,7 +23,7 @@ const AGENT_SETTINGS: Record<string, readonly string[]> = {
   vm: ["onQuit", "idleStopMinutes"],
   // A dashboard the human asks for needs artifacts; integrations, messaging and phones reach outside: the human's.
   artifacts: ["enabled"],
-  voice: ["enabled", "autoSpeak", "language", "sttModel", "ttsModel", "ttsVoice", "elevenlabsVoiceId", "browserVoice", "rate"],
+  voice: ["enabled", "dictation", "autoSpeak", "language", "sttModel", "ttsModel", "ttsVoice", "elevenlabsVoiceId", "browserVoice", "rate"],
   // Agents may set calls up (switch, number, the owner's phone); quiet hours, model, length and what the voice tells
   // callers stay the human's.
   phone: ["enabled", "numberId", "ownerNumber", "callOwner", "language", "voiceId", "callerName"],

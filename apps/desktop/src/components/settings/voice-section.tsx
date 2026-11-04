@@ -148,6 +148,9 @@ export function VoiceSection({ settings }: { settings: Settings }) {
       </SettingsGroup>
 
       <SettingsGroup title={t("voice.stt.title")} icon={<Mic />}>
+        <SettingRow label={t("voice.stt.dictation")} htmlFor="voice-dictation" description={t("voice.stt.dictationDescription")}>
+          <Switch id="voice-dictation" checked={v.dictation} onCheckedChange={(dictation) => patch({ voice: { dictation } })} />
+        </SettingRow>
         <SettingRow
           label={t("voice.provider")}
           description={t(`voice.stt.${v.sttProvider}Description`)}

@@ -1951,8 +1951,8 @@
     "mode": {
       "title": "Voice mode",
       "test": "Test voice",
-      "enable": "Enable voice",
-      "enableDescription": "Shows the microphone in chat and enables spoken replies.",
+      "enable": "Enable voice mode",
+      "enableDescription": "Shows the voice mode button in chat and enables spoken replies.",
       "autoSpeak": "Speak replies to voice messages",
       "autoSpeakDescription": "When you dictate a message, the answer is read aloud automatically.",
       "language": "Language",
@@ -1960,6 +1960,8 @@
     },
     "stt": {
       "title": "Speech to text",
+      "dictation": "Dictation",
+      "dictationDescription": "Shows the microphone in the composer to dictate messages. Works without voice mode.",
       "browserDescription": "Free, uses your system's speech recognition.",
       "openaiDescription": "OpenAI Whisper-class transcription — more accurate, needs an OpenAI API key.",
       "providerLabel": "Speech to text provider",

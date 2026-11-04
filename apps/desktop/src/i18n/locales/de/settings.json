@@ -1951,8 +1951,8 @@
     "mode": {
       "title": "Sprachmodus",
       "test": "Stimme testen",
-      "enable": "Stimme aktivieren",
-      "enableDescription": "Zeigt das Mikrofon im Chat und aktiviert gesprochene Antworten.",
+      "enable": "Sprachmodus aktivieren",
+      "enableDescription": "Zeigt den Sprachmodus-Button im Chat und aktiviert gesprochene Antworten.",
       "autoSpeak": "Antworten auf Sprachnachrichten vorlesen",
       "autoSpeakDescription": "Wenn du eine Nachricht diktierst, wird die Antwort automatisch vorgelesen.",
       "language": "Sprache",
@@ -1960,6 +1960,8 @@
     },
     "stt": {
       "title": "Sprache zu Text",
+      "dictation": "Diktieren",
+      "dictationDescription": "Zeigt das Mikrofon im Eingabefeld zum Diktieren. Funktioniert auch ohne Sprachmodus.",
       "browserDescription": "Kostenlos, nutzt die Spracherkennung deines Systems.",
       "openaiDescription": "Transkription auf Whisper-Niveau von OpenAI – genauer, braucht einen OpenAI-API-Schlüssel.",
       "providerLabel": "Anbieter für Sprache zu Text",
