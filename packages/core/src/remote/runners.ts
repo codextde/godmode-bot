@@ -76,7 +76,7 @@ import { assertServer, closeAllSshTunnels, expandHome, pairingCodeVia, remoteFol
 const log = logger("runners");
 
 /** Changes to these copy the setup to every connected runner (after a short pause, so a burst of edits is one sync). */
-const SETUP_ENTITIES = new Set(["workspaces", "agents", "credentials", "totp", "mcp-servers", "api-tools", "composio", "browser-profiles", "ssh-servers", "vms", "settings"]);
+const SETUP_ENTITIES = new Set(["workspaces", "agents", "credentials", "totp", "mcp-servers", "api-tools", "composio", "browser-profiles", "ssh-servers", "vms", "settings", "claude-accounts"]);
 const SYNC_DEBOUNCE_MS = 5_000;
 const SYNC_TIMEOUT_MS = 5 * 60_000;
 const MAX_ADDRESSES = 10;

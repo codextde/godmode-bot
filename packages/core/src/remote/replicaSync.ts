@@ -10,6 +10,7 @@ import { logger } from "../log";
 import { refreshMobileAccess } from "../mobile/access";
 import { computerName } from "../mobile/devices";
 import { reloadSchedules } from "../scheduler/scheduler";
+import { claudeAccountsArrived } from "../services/claudeAccounts";
 import { notify } from "../services/notifications";
 import { applyRuntimeSettings } from "../services/runtime";
 import { getSettings, resetSettingsCache, updateSettings } from "../services/settings";
@@ -136,6 +137,7 @@ async function afterApply(from: string, result: ApplyResult): Promise<void> {
     resetSettingsCache();
     applyRuntimeSettings(getSettings());
   }
+  claudeAccountsArrived(result.keys.claude_accounts ?? [], result.keys.secrets ?? []);
   if (result.keys.routines?.length) reloadSchedules();
   if (result.keys.tasks?.length) ticketsArrived([...new Set(result.keys.tasks)]);
   if (result.keys.mobile_devices?.some((id) => get("SELECT 1 FROM mobile_devices WHERE id = ?", id))) phonesArrived(from);

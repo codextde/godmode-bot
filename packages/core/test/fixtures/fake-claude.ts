@@ -127,6 +127,15 @@ if (args.includes("--version")) {
   process.exit(0);
 }
 
+/** `auth login`: what a finished sign-in leaves in the config, the account named by FAKE_CLAUDE_LOGIN_EMAIL. */
+if (args[0] === "auth" && args[1] === "login") {
+  const dir = process.env.CLAUDE_CONFIG_DIR!;
+  const email = process.env.FAKE_CLAUDE_LOGIN_EMAIL ?? "login@example.com";
+  writeFileSync(join(dir, ".credentials.json"), JSON.stringify({ claudeAiOauth: { accessToken: `access-${email}`, refreshToken: `refresh-${email}`, expiresAt: Date.now() + 8 * 3600_000, subscriptionType: "max" } }));
+  writeFileSync(join(dir, ".claude.json"), JSON.stringify({ oauthAccount: { emailAddress: email, displayName: "Login", organizationName: "Org" } }));
+  process.exit(0);
+}
+
 /**
  * `plugin validate <dir> --json`: a report shaped like the validator's. Hooks are the module's `on('<event>'` calls
  * (with a `{ key: 'value' }` matcher), calls its `$.noun.verb(`; an event Claude Code doesn't have is an error, as is a

@@ -8,7 +8,8 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { chmodSync, existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { AgentQuestion, Conversation, DeviceGroup, DeviceInvite, ServerEvent, StartChatResult } from "@godmode/shared";
+import { SYSTEM_CLAUDE_ACCOUNT } from "@godmode/shared";
+import type { AgentQuestion, ClaudeAccountsState, Conversation, DeviceGroup, DeviceInvite, ServerEvent, StartChatResult } from "@godmode/shared";
 import { config, loadConfig } from "../src/config";
 import { all, closeDb, get, openDb, setMeta } from "../src/db";
 import { ensureDefaultAgent } from "../src/agents/service";
@@ -17,6 +18,9 @@ import { getAccessToken } from "../src/server/auth";
 import { deliverForwarded, websocketHandler, type HubSocket } from "../src/server/ws";
 import { resetSettingsCache, updateSettings } from "../src/services/settings";
 import { startChat } from "../src/services/conversations";
+import { accountForRun, listClaudeAccounts, refreshClaudeUsage } from "../src/services/claudeAccounts";
+import { tokensFromPrimary } from "../src/remote/claudeTokens";
+import { getAppSecret, isUnlocked } from "../src/vault/vault";
 import { startDevices, stopDevices } from "../src/remote/devices";
 import { startHumanTasks, stopHumanTasks } from "../src/services/humanTasks";
 import { forwarding, groupRole, primaryRunnerId, resetGroupCache, runsShared } from "../src/remote/group";
@@ -326,6 +330,30 @@ describe("a device group, end to end", () => {
     // Made there, and then copied here like everything the group shares.
     await until(() => !!get("SELECT id FROM human_tasks WHERE title = ?", "Sign the contract"), 20_000, "the copy of the task");
   }, 60_000);
+
+  test("a Claude account signed in on the primary works here, and this computer asks the primary for its tokens", async () => {
+    expect((await onPrimary("/api/vault/setup", { method: "POST", body: JSON.stringify({ passphrase: "correct horse battery staple", rememberDevice: false }) })).status).toBeLessThan(300);
+    expect((await onPrimary("/api/claude-accounts/login", { method: "POST", body: JSON.stringify({}) })).status).toBeLessThan(300);
+    await until(async () => (await onPrimary<ClaudeAccountsState>("/api/claude-accounts")).body.login.state === "done", 30_000, "the sign-in on the primary");
+    const account = (await onPrimary<ClaudeAccountsState>("/api/claude-accounts")).body.accounts.find((a) => a.email === "login@example.com")!;
+    await onPrimary(`/api/claude-accounts/${account.id}/default`, { method: "POST" });
+
+    await until(() => isUnlocked() && !!get("SELECT id FROM claude_accounts WHERE id = ? AND is_default = 1", account.id) && !!getAppSecret(`claude_account:${account.id}`), 30_000, "the account on this computer");
+    expect(listClaudeAccounts().find((a) => a.isDefault)?.email).toBe("login@example.com");
+    expect((await accountForRun(null))?.token).toBe("access-login@example.com");
+    // Nobody signed in to Claude Code on this computer: even with that login as the default it works with the account.
+    await onPrimary(`/api/claude-accounts/${SYSTEM_CLAUDE_ACCOUNT}/default`, { method: "POST" });
+    await until(() => !get("SELECT id FROM claude_accounts WHERE is_default = 1"), 30_000, "the default to change here too");
+    await refreshClaudeUsage();
+    expect((await accountForRun(null))?.token).toBe("access-login@example.com");
+
+    const tokens = await tokensFromPrimary(account.id, 60_000);
+    expect(JSON.parse(tokens!).refreshToken).toBe("refresh-login@example.com");
+    expect(await tokensFromPrimary("cla_nope", 60_000)).toBeNull();
+
+    await onPrimary(`/api/claude-accounts/${account.id}`, { method: "DELETE" });
+    await until(() => !get("SELECT id FROM claude_accounts WHERE id = ?", account.id) && !getAppSecret(`claude_account:${account.id}`), 30_000, "the account to go here too");
+  }, 90_000);
 
   test("a chat of the primary moves to this computer with its Claude session and continues here", async () => {
     const started = await onPrimary<StartChatResult>("/api/chat", { method: "POST", body: JSON.stringify({ content: "Start on the desk" }) });

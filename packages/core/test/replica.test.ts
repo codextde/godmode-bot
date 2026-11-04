@@ -321,4 +321,32 @@ describe("between two computers", () => {
     expect(state).not.toContain("workspaces");
     expect(changesFor("rnr_b", 0, { setup: true }).changes.map((c) => c.t)).toContain("workspaces");
   });
+
+  test("a Claude account goes to the others without what each computer tracks about it", () => {
+    use(a);
+    run("INSERT INTO claude_accounts (id, email, limited_until, needs_sign_in, last_used_at, created_at) VALUES ('cla_1', 'a@example.com', ?, 1, ?, ?)", T(9), T(9), T(0));
+    const change = changesFor("rnr_b", 0, { setup: true }).changes.find((c) => c.t === "claude_accounts" && c.k === "cla_1")!;
+    expect(change.row).toMatchObject({ email: "a@example.com", is_default: 0 });
+    for (const own of ["limited_until", "needs_sign_in", "last_used_at"]) expect(change.row).not.toHaveProperty(own);
+    use(b);
+    applyChanges("rnr_a", [change], { peerWinsTies: false });
+    expect(get<{ email: string; needs_sign_in: number; last_used_at: string | null }>("SELECT email, needs_sign_in, last_used_at FROM claude_accounts WHERE id = 'cla_1'")).toEqual({ email: "a@example.com", needs_sign_in: 0, last_used_at: null });
+    for (const db of [a, b]) {
+      use(db);
+      run("DELETE FROM claude_accounts");
+    }
+  });
+
+  test("accounts from before they were shared go to the other computers once", () => {
+    use(a);
+    run("DROP TRIGGER replica_claude_accounts_ins");
+    run("INSERT INTO claude_accounts (id, email, created_at) VALUES ('cla_old', 'old@example.com', ?)", T(0));
+    run("DELETE FROM meta WHERE key IN ('replica.triggers', 'replica.backfilled.claude_accounts')");
+    resetReplicaCache();
+    ensureReplica();
+    const seen = () => changesFor("rnr_b", 0, { setup: true }).changes.filter((c) => c.k === "cla_old");
+    expect(seen().map((c) => c.row?.email)).toEqual(["old@example.com"]);
+    expect(get<{ origin: string | null }>("SELECT origin FROM replica_rows WHERE tbl = 'claude_accounts' AND pk = 'cla_old'")?.origin).toBeNull();
+    run("DELETE FROM claude_accounts");
+  });
 });
