@@ -70,6 +70,10 @@ function call(name: string, args: Record<string, unknown>) {
       structuredContent: { screenshot_width: 1600, screenshot_height: 1200, window_bounds: { x: 100, y: 50, width: 800, height: 600 } },
     };
   }
+  // The elements only come back in this format; the driver's default is one Markdown text.
+  if (name === "get_window_state" && args.tree_format === "elements") {
+    return { content: [], structuredContent: { elements: [{ element_index: 0, element_token: "s1:0", role: "AXButton", label: "Save", actions: ["AXPress"], frame: { x: 110, y: 60, w: 20, h: 10 }, depth: 0 }] } };
+  }
   const pending = join(dir, "refuse-pixels");
   if (("x" in args || "from_x" in args) && existsSync(pending)) {
     const left = Number(readFileSync(pending, "utf8"));

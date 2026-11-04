@@ -975,7 +975,7 @@ final class AgentCursor {
 
   /// Sky 500, like the agent's marks in Godmode's live view.
   private static let tint = CGColor(srgbRed: 0.055, green: 0.647, blue: 0.914, alpha: 1)
-  private static let idleSeconds: TimeInterval = 20
+  private static let idleSeconds: TimeInterval = 45
 
   private var panel: NSPanel?
   /// The arrow's tip sits at this layer's origin.
@@ -1814,6 +1814,21 @@ func ensureKeyWindow(_ p: Params) throws -> [String: Any] {
   throw HelperError("Another window of this app has the keyboard focus, so typing could land there instead of the shared window.", code: "not_key_window")
 }
 
+/// A hidden app or a minimized window takes no background input: put them back on screen, the app stays behind.
+func showWithoutActivating(_ pid: pid_t) {
+  if let app = NSRunningApplication(processIdentifier: pid), app.isHidden { app.unhide() }
+  let ax = AXUIElementCreateApplication(pid)
+  AXUIElementSetMessagingTimeout(ax, 0.5)
+  var ref: CFTypeRef?
+  guard AXUIElementCopyAttributeValue(ax, kAXWindowsAttribute as CFString, &ref) == .success, let windows = ref as? [AXUIElement], !windows.isEmpty else { return }
+  let minimized = windows.filter {
+    var value: CFTypeRef?
+    return AXUIElementCopyAttributeValue($0, kAXMinimizedAttribute as CFString, &value) == .success && (value as? Bool) == true
+  }
+  guard minimized.count == windows.count, let first = minimized.first else { return }
+  AXUIElementSetAttributeValue(first, kAXMinimizedAttribute as CFString, kCFBooleanFalse)
+}
+
 func openApp(_ p: Params) throws -> [String: Any] {
   let name = p.string("name")?.trimmingCharacters(in: .whitespaces) ?? ""
   var url: URL? = nil
@@ -1832,6 +1847,11 @@ func openApp(_ p: Params) throws -> [String: Any] {
   guard let appURL = url else { throw HelperError("No app named \"\(name)\" was found.", code: "not_found") }
   let config = NSWorkspace.OpenConfiguration()
   config.activates = p.bool("activate") ?? true
+  // Opening a running app sends it a reopen event, and most apps come to the front for it, whatever `activates` says.
+  if !config.activates, let running = NSWorkspace.shared.runningApplications.first(where: { $0.bundleURL == appURL }) {
+    showWithoutActivating(running.processIdentifier)
+    return ["pid": Int(running.processIdentifier), "path": appURL.path]
+  }
   let sem = DispatchSemaphore(value: 0)
   var pid: Int? = nil
   var failure: Error? = nil
@@ -1842,6 +1862,7 @@ func openApp(_ p: Params) throws -> [String: Any] {
   }
   if sem.wait(timeout: .now() + 20) == .timedOut { throw HelperError("Timed out opening the app") }
   if let failure { throw HelperError("Could not open the app: \(failure.localizedDescription)") }
+  if !config.activates, let pid { showWithoutActivating(pid_t(pid)) }
   return ["pid": pid ?? NSNull(), "path": appURL.path]
 }
 

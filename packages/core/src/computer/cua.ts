@@ -511,6 +511,7 @@ export class CuaDriverClient {
         {
           pid,
           window_id: windowId,
+          tree_format: "elements",
           include_screenshot: opts.screenshot,
           ...(opts.screenshot ? { max_image_dimension: opts.maxDimension } : {}),
           ...(opts.query ? { query: opts.query } : {}),
@@ -588,6 +589,11 @@ export class CuaDriverClient {
       const tool = opts.count === 2 ? "double_click" : opts.button === "right" ? "right_click" : "click";
       return this.call(tool, { pid: target.pid, window_id: target.windowId, element_token: token, ...(opts.delivery ? { delivery_mode: opts.delivery } : {}) });
     });
+  }
+
+  /** Run an item of the app's menu bar through accessibility; a wrong path fails and lists that menu's items. */
+  invokeMenu(target: { pid: number; windowId: number }, path: string[]): Promise<CuaResult> {
+    return this.exclusive(() => this.call("invoke_menu", { pid: target.pid, window_id: target.windowId, path }));
   }
 
   typeText(target: { pid: number; windowId: number }, text: string, opts: { element?: string; delivery?: Delivery } = {}): Promise<CuaResult> {

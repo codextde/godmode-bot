@@ -674,15 +674,16 @@ When something on this Mac needs its password, use \`mac_password\`, never \`sud
 
 function computerSection(target: ComputerTarget, human: string, canReveal: boolean, own: boolean): string {
   const what = computerTargetLabel(target);
+  const background = `Apps stay in the background: \`computer_open_app\` or \`computer_windows\` with \`focus\` puts you in an app's window without bringing it forward. Your input then goes only to that window, ${human} keeps their mouse, keyboard and front app, and a Godmode cursor over the window shows what you do. Never drive an app with osascript, cliclick or \`activate\` instead. In a window prefer \`computer_ui\` elements (text can't land in another field) and \`computer_menu\`; check on the screenshot that your input landed where you meant, above all before you send something. Some apps ignore background clicks: reach the place with keys or \`computer_menu\`, or retry that action with \`foreground: true\`. The real mouse and keyboard (\`computer_windows\` with \`desktop: true\`) are only for what can't be done in a window.`;
   const scope = own
-    ? `You may use ${target.kind === "display" ? `the display **${what}**` : "the whole desktop"} of this computer without a share, with the real mouse and keyboard. ${human} may be working at it right now and sees what you do, so only use it for a step your shell, browser and other tools can't do, then get out of the way.${target.kind === "desktop" ? " Check `computer_info` for the displays and pick one with `display`." : ""} One run uses it at a time: when another holds it, carry on with the rest and try again later.`
+    ? `You may use ${target.kind === "display" ? `the display **${what}**` : "the whole desktop"} of this computer without a share. ${background} ${human} may be working at it right now, so only use the screen for a step your shell, browser and other tools can't do, then get out of the way.${target.kind === "desktop" ? " Check `computer_info` for the displays and pick one with `display`." : ""} One run uses the real mouse or one window at a time: when another holds it, carry on with the rest and try again later.`
     : target.kind === "window"
       ? `${human} shared one app window with you: **${what}**. You control it in the background — your clicks and keystrokes go only to this window, ${human} keeps using their mouse and keyboard, and every other app is off limits. Prefer \`computer_ui\` elements (accessibility) for buttons, menus and fields: they work even when the window is covered. Keyboard shortcuts with cmd/ctrl may not reach a background window; use menus or elements instead.`
       : target.kind === "tab"
         ? `${human} shared one browser tab with you: **${what}**. Control it with the \`computer\` tools (screenshot, click, type) in the background; the \`browser\` tools may still be used for other pages.`
         : target.kind === "display"
-          ? `${human} shared one display with you: **${what}**. You use the real mouse and keyboard — ${human} sees everything you do. Stay on this display.`
-          : `${human} shared their entire desktop with you (every display). You use the real mouse and keyboard — ${human} sees everything you do. Check \`computer_info\` for the displays and pick one with \`display\`.`;
+          ? `${human} shared one display with you: **${what}**. ${background} Stay on this display.`
+          : `${human} shared their entire desktop with you (every display). ${background} Check \`computer_info\` for the displays and pick one with \`display\`.`;
   return `### Computer
 ${scope}
 - Use the \`computer\` MCP tools: start with \`{action: "screenshot"}\`; coordinates are pixels of your latest screenshot and every action returns a fresh screenshot. Zoom in on small text instead of guessing.

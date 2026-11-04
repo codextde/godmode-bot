@@ -335,12 +335,12 @@ Click **Share** (the screen icon) in the message box and pick what the agent may
 | Share | How the agent works |
 |---|---|
 | **A window** | Only that app window, **in the background**: clicks, typing and scrolling go straight to the window's process (accessibility-first via [Cua Driver](https://github.com/trycua/cua)), so your cursor and focus stay where they are — even when the window is covered. |
-| **A display / the entire desktop** | The real mouse and keyboard, across every monitor (the agent picks a display per screenshot). |
+| **A display / the entire desktop** | Apps it opens stay **in the background** like a shared window, with a Godmode cursor over the window so you can follow along. The real mouse and keyboard, across every monitor, only for what can't be done in a window. |
 | **A browser tab** | One tab of Godmode's browser, over CDP, in the background. |
 
 The chat shows a live view of what's shared; **Take control** lets you click and type into it yourself (a window keeps
 running in the background). **Stop sharing** takes effect immediately, even mid-run. Agents can also get unattended
-desktop access for routines (agent settings → *Computer*). Setup lives in **Settings → Computer**:
+desktop access for routines (agent settings → *Computer*); they work the same way. Setup lives in **Settings → Computer**:
 
 - **macOS** asks once for *Accessibility* and *Screen Recording* for Godmode (restart Godmode after granting).
 - **Cua Driver** (`cua-driver` from PyPI, MIT) is downloaded via uv the first time an agent needs it (or with one

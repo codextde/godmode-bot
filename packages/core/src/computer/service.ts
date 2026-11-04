@@ -316,6 +316,8 @@ export interface RunComputer {
   view: string | null;
   /** Tool calls of one run are handled one at a time. */
   queue: Promise<unknown>;
+  /** A desktop run working in one app's window in the background; null = on the desktop, with the real mouse. */
+  window: { target: Extract<ComputerTarget, { kind: "window" }>; engine: ComputerEngine } | null;
   /** Where the target came from: shared in the chat, or the agent's own unattended access. */
   source: "share" | "agent";
   /** Runs whose hold on the same target this run doesn't wait for: the ones that handed it its work. */
@@ -340,14 +342,48 @@ const runs = new Map<string, RunComputer>();
 /** An agent's own run that stopped acting lets others have the target after this long. */
 const COMPUTER_HOLD_MS = 5 * 60_000;
 
+/** What the run acts on right now. */
+export function activeTarget(rc: RunComputer): ComputerTarget {
+  return rc.window?.target ?? rc.target;
+}
+
+export function activeEngine(rc: RunComputer): ComputerEngine {
+  return rc.window?.engine ?? rc.engine;
+}
+
+/** Windows can be worked in the background here: the native helper on macOS, Cua Driver elsewhere. */
+export function backgroundWindowsAvailable(): boolean {
+  return process.platform === "darwin" || getSettings().computer.useCuaDriver;
+}
+
+/**
+ * Point a desktop run at one app's window: its input goes to that window in the background, with the agent cursor over
+ * it. The run may use the real mouse anyway, so bringing the window forward for one action needs no further setting.
+ */
+export async function workInWindow(rc: RunComputer, w: { id: number; pid: number; app: string; title: string }): Promise<void> {
+  const target = { kind: "window" as const, pid: w.pid, windowId: w.id, app: w.app, title: w.title };
+  const engine = windowEngine(target, { agent: true, allowForeground: true });
+  await rc.window?.engine.dispose().catch(() => {});
+  rc.window = { target, engine };
+  rc.view = null;
+}
+
+/** Back on the desktop, with the real mouse. */
+export async function leaveWindow(rc: RunComputer): Promise<void> {
+  const left = rc.window;
+  rc.window = null;
+  rc.view = null;
+  await left?.engine.dispose().catch(() => {});
+}
+
 function holding(rc: RunComputer): boolean {
   return rc.source === "share" || (rc.heldAt !== null && Date.now() - rc.heldAt < COMPUTER_HOLD_MS);
 }
 
-/** Holds the target right now: a shared one from its start, an agent's own from its first action. */
+/** Holds the target right now: a shared one from its start, an agent's own from its first action. A run in one app's window in the background leaves the desktop free. */
 export function holdsComputer(runId: string): boolean {
   const rc = runs.get(runId);
-  return !!rc && holding(rc);
+  return !!rc && !rc.window && holding(rc);
 }
 
 /**
@@ -356,9 +392,9 @@ export function holdsComputer(runId: string): boolean {
  */
 export function claimComputer(rc: RunComputer): RunComputer | null {
   if (rc.source === "agent") {
-    const key = computerLockKey(rc.target);
+    const key = computerLockKey(activeTarget(rc));
     for (const other of runs.values()) {
-      if (other !== rc && computerLockKey(other.target) === key && holding(other) && !rc.ancestors.includes(other.runId)) return other;
+      if (other !== rc && computerLockKey(activeTarget(other)) === key && holding(other) && !rc.ancestors.includes(other.runId)) return other;
     }
     rc.heldAt = Date.now();
   }
@@ -382,6 +418,7 @@ export function attachComputer(
     conversationId,
     target,
     engine: createEngine(target, { agent: true }),
+    window: null,
     shots: new Map(),
     view: null,
     queue: Promise.resolve(),
@@ -402,6 +439,7 @@ export async function detachComputer(runId: string): Promise<void> {
   rc.revoked = true;
   rc.abort.abort();
   runs.delete(runId);
+  await rc.window?.engine.dispose().catch(() => {});
   await rc.engine.dispose().catch(() => {});
 }
 
@@ -416,7 +454,7 @@ export function runComputer(runId: string): RunComputer | null {
 
 /** Runs currently controlling something (for the UI: "agent is working here"). */
 export function activeComputerRuns(): { runId: string; conversationId: string; target: ComputerTarget }[] {
-  return [...runs.values()].filter(holding).map((r) => ({ runId: r.runId, conversationId: r.conversationId, target: r.target }));
+  return [...runs.values()].filter(holding).map((r) => ({ runId: r.runId, conversationId: r.conversationId, target: activeTarget(r) }));
 }
 
 /** The view a share opens on: its single view, or the primary display of a desktop. */
