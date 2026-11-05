@@ -6,7 +6,7 @@
  * File access is confined to the repository: paths are resolved (including symlinks) and must stay
  * inside it, and `.git` is never readable or writable through these helpers.
  */
-import git from "isomorphic-git";
+import git, { type PromiseFsClient } from "isomorphic-git";
 import fs from "node:fs";
 import { lstat, mkdir, readdir, readFile, realpath, rename, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
@@ -19,6 +19,8 @@ export const MAX_FILE_BYTES = 2 * 1024 * 1024;
 const ADD_BATCH_BYTES = 64 * 1024 * 1024;
 const ADD_BATCH_FILES = 500;
 export const MAX_COMMIT_FILE_BYTES = 1024 * 1024 * 1024;
+const GIT_SLICE_MS = 20;
+const GIT_FS_CALLS = ["readFile", "writeFile", "mkdir", "rmdir", "unlink", "stat", "lstat", "readdir", "readlink", "symlink"] as const;
 
 /* ------------------------------------------------------------------ */
 /* Per-repository mutex                                                */
@@ -148,13 +150,40 @@ function fitsInCommit(dir: string, filepath: string): boolean {
   return (fs.lstatSync(join(dir, filepath), { throwIfNoEntry: false })?.size ?? 0) <= MAX_COMMIT_FILE_BYTES;
 }
 
+/**
+ * isomorphic-git's status walks the whole repository at once, and in a big one its file calls and their answers all run
+ * in one turn of the event loop (390 ms at 34k files). This fs lets the loop go round every `sliceMs` (the walk takes 10% longer).
+ */
+export function pacedFs(sliceMs = GIT_SLICE_MS): PromiseFsClient {
+  let sliceStart = performance.now();
+  let pause: Promise<void> | null = null;
+  const breathe = () => {
+    if (pause || performance.now() - sliceStart < sliceMs) return pause;
+    pause = new Promise<void>((done) =>
+      setImmediate(() => {
+        pause = null;
+        sliceStart = performance.now();
+        done();
+      }),
+    );
+    return pause;
+  };
+  const paced = (name: (typeof GIT_FS_CALLS)[number]) => async (...args: unknown[]) => {
+    await breathe();
+    return (fs.promises[name] as (...a: unknown[]) => Promise<unknown>)(...args);
+  };
+  return { promises: Object.fromEntries(GIT_FS_CALLS.map((name) => [name, paced(name)])) as unknown as PromiseFsClient["promises"] };
+}
+
+const statusFs = pacedFs();
+
 async function stageAndCommit(dir: string, message: string): Promise<string | null> {
   const cache = {};
   const indexSecond = await stat(join(dir, ".git", "index")).then(
     (s) => Math.floor(s.mtimeMs / 1000),
     () => null,
   );
-  let matrix: StatusRow[] = await git.statusMatrix({ fs, dir, cache, filter: (filepath) => fitsInCommit(dir, filepath) });
+  let matrix: StatusRow[] = await git.statusMatrix({ fs: statusFs, dir, cache, filter: (filepath) => fitsInCommit(dir, filepath) });
   if (indexSecond !== null) matrix = await recheckRacyFiles(dir, matrix, indexSecond, cache);
   const toAdd: string[] = [];
   const toRemove: string[] = [];
@@ -218,7 +247,7 @@ async function recheckRacyFiles(dir: string, matrix: StatusRow[], indexSecond: n
   }
   if (!racy.length) return matrix;
   await addInBatches(dir, racy, cache);
-  const fresh = new Map((await git.statusMatrix({ fs, dir, filepaths: racy, cache, filter: (filepath) => fitsInCommit(dir, filepath) })).map((row) => [row[0], row]));
+  const fresh = new Map((await git.statusMatrix({ fs: statusFs, dir, filepaths: racy, cache, filter: (filepath) => fitsInCommit(dir, filepath) })).map((row) => [row[0], row]));
   return matrix.map((row) => fresh.get(row[0]) ?? row);
 }
 

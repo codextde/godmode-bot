@@ -1052,10 +1052,12 @@ describe("logins and 2FA codes in the VM", () => {
       expect(currentCodes([totp.id]).map((c) => c.code)).toContain(digits);
       expect(JSON.stringify(code)).not.toContain(digits);
 
-      // Only logins and 2FA entries in the agent's scope.
-      expect(out(await callVmTool(ctx, "fill_login", { credentialId: foreign.id, field: "password", screenshot: false }))).toContain("not available to this agent");
-      expect(out(await callVmTool(ctx, "fill_totp", { totpId: foreignTotp.id, screenshot: false }))).toContain("not available to you");
-      expect(out(await callVmTool(ctx, "fill_totp", { totpId: totp.id, credentialId: foreign.id, screenshot: false }))).toContain("not available to you");
+      // Only logins and 2FA entries in the agent's scope: a workspace agent doesn't reach another workspace's.
+      const member = await makeAgent({ name: "Login Member", workspaceId: createWorkspace({ name: "Own client" }).id });
+      const scoped = { ...ctx, agentId: member.id };
+      expect(out(await callVmTool(scoped, "fill_login", { credentialId: foreign.id, field: "password", screenshot: false }))).toContain("not available to this agent");
+      expect(out(await callVmTool(scoped, "fill_totp", { totpId: foreignTotp.id, screenshot: false }))).toContain("not available to you");
+      expect(out(await callVmTool(scoped, "fill_totp", { totpId: totp.id, credentialId: foreign.id, screenshot: false }))).toContain("not available to you");
       expect(out(await callVmTool(ctx, "fill_totp", { credentialId: unicode.id, screenshot: false }))).toContain("missing_totp");
 
       const audited = listAudit(100).filter((a) => a.details.runId === ctx.runId);

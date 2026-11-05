@@ -292,18 +292,17 @@ async function syncNotes(): Promise<void> {
       noteIndex.set(key, mtime);
     }
   }
-  for (const key of [...noteIndex.keys()]) {
-    if (present.has(key)) continue;
-    const [agentId, path] = key.split("\u0000") as [string, string];
-    run("DELETE FROM search_notes WHERE agent_id = ? AND path = ?", agentId, path);
-    noteIndex.delete(key);
+  for (const key of noteIndex.keys()) if (!present.has(key)) noteIndex.delete(key);
+  // Also what an earlier core process indexed: the rows outlive it, what it knew about them doesn't.
+  for (const row of all<{ agent_id: string; path: string }>("SELECT DISTINCT agent_id, path FROM search_notes")) {
+    if (noteIndex.has(`${row.agent_id}\u0000${row.path}`)) continue;
+    run("DELETE FROM search_notes WHERE agent_id = ? AND path = ?", row.agent_id, row.path);
   }
 }
 
 export function refreshNotes(force = false): Promise<void> {
   if (notesSync) return notesSync;
   if (!force && Date.now() - notesSyncedAt < NOTE_SYNC_MS) return Promise.resolve();
-  if (notesSyncedAt === 0) run("DELETE FROM search_notes");
   notesSync = syncNotes()
     .catch((err) => log.warn(`notes index: ${String(err)}`))
     .finally(() => {
@@ -331,7 +330,8 @@ export async function search(query: string, opts: { limit?: number; notes?: bool
   const withNotes = opts.notes !== false;
   if (withNotes) {
     const pending = refreshNotes();
-    if (notesSyncedAt === 0) await pending;
+    // The rows outlive the core process: only a first index ever is worth waiting for.
+    if (notesSyncedAt === 0 && !get("SELECT 1 FROM search_notes LIMIT 1")) await pending;
   }
   const runAll = (fixes: Map<number, string[]>) => ({
     chats: searchChats(terms, fixes, limit),

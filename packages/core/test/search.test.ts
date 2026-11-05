@@ -1,12 +1,12 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { mkdirSync, utimesSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { searchSegments, type Agent } from "@godmode/shared";
 import { makeAgent, setupEnv, type TestEnv } from "./fixtures/runner-harness";
-import { run as sql } from "../src/db";
+import { all, run as sql } from "../src/db";
 import { addMessage, createConversation, deleteConversation, listConversations, updateConversation } from "../src/services/conversations";
 import { createTask, updateTask } from "../src/tasks/service";
-import { chunkMarkdown, makeSnippet, rebuildSearchIndex, refreshNotes, search } from "../src/services/search";
+import { chunkMarkdown, makeSnippet, rebuildSearchIndex, refreshNotes, resetNoteIndex, search } from "../src/services/search";
 import { parseQuery } from "../src/services/searchQuery";
 
 let env: TestEnv;
@@ -160,5 +160,21 @@ describe("notes", () => {
     utimesSync(join(agent.repoPath, "memory", "suppliers.md"), later, later);
     await refreshNotes(true);
     expect((await search("okapi")).notes).toEqual([]);
+  });
+
+  test("a new core process searches the index it finds, syncs meanwhile and drops the rows of notes that are gone", async () => {
+    writeFileSync(join(agent.repoPath, "memory", "kept.md"), "# Kept\n\nMarmot crates\n");
+    writeFileSync(join(agent.repoPath, "memory", "gone.md"), "# Gone\n\nWombat crates\n");
+    await refreshNotes(true);
+    const rows = (word: string) => all("SELECT rowid FROM search_notes WHERE body LIKE ?", `%${word}%`);
+    expect(rows("Wombat")).toHaveLength(1);
+    rmSync(join(agent.repoPath, "memory", "gone.md"));
+    resetNoteIndex();
+    expect((await search("wombat")).notes).toHaveLength(1);
+    expect(rows("Marmot")).toHaveLength(1);
+    await refreshNotes();
+    expect(rows("Marmot")).toHaveLength(1);
+    expect(rows("Wombat")).toEqual([]);
+    expect((await search("marmot")).notes[0]).toMatchObject({ path: "memory/kept.md" });
   });
 });
