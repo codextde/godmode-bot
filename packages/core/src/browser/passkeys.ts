@@ -71,6 +71,7 @@ class PasskeyBridge {
   private live = new Set<string>();
   private paused = false;
   private stopped = false;
+  private retired = false;
   private syncTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
@@ -136,11 +137,15 @@ class PasskeyBridge {
         void client.send(method, params, sessionId).catch((err) => log.debug(`${method} failed in tab ${targetInfo.targetId}`, err));
       }
       if (!waitingForDebugger) void client.send("Runtime.evaluate", { expression: NO_ACCOUNT_CHOOSER }, sessionId).catch(() => {});
-      if (this.authenticators) {
+      if (this.authenticators && !this.retired) {
         await client.send("WebAuthn.enable", { enableUI: false }, sessionId);
         const { authenticatorId } = await client.send<{ authenticatorId: string }>("WebAuthn.addVirtualAuthenticator", { options: AUTHENTICATOR }, sessionId);
-        this.sessions.set(sessionId, { targetId: targetInfo.targetId, authenticatorId });
-        for (const credential of this.loaded.values()) await this.add(sessionId, credential);
+        if (this.retired) {
+          await client.send("WebAuthn.removeVirtualAuthenticator", { authenticatorId }, sessionId);
+        } else {
+          this.sessions.set(sessionId, { targetId: targetInfo.targetId, authenticatorId });
+          for (const credential of this.loaded.values()) await this.add(sessionId, credential);
+        }
       }
       // Paused (idle check) or stopped while this tab was being set up: let go of it like of the others.
       if (this.idle || !this.live.has(sessionId)) {
@@ -238,7 +243,7 @@ class PasskeyBridge {
   }
 
   private async sync() {
-    if (this.idle || !this.client || !this.authenticators) return;
+    if (this.idle || this.retired || !this.client || !this.authenticators) return;
     const current = passkeysForBrowser(this.rb.profileId);
     if (!current) return;
     const next = new Map(current.map((c) => [key(c), c]));
@@ -276,6 +281,16 @@ class PasskeyBridge {
     }
   }
 
+  /** A new bridge replaces this one: the passkeys leave the tabs now, the sessions keep NO_ACCOUNT_CHOOSER until it has attached. */
+  retire() {
+    this.retired = true;
+    this.loaded.clear();
+    for (const [sessionId, tab] of this.sessions) {
+      void this.client?.send("WebAuthn.removeVirtualAuthenticator", { authenticatorId: tab.authenticatorId }, sessionId).catch(() => {});
+    }
+    this.sessions.clear();
+  }
+
   stop() {
     this.stopped = true;
     if (this.syncTimer) clearTimeout(this.syncTimer);
@@ -289,6 +304,12 @@ class PasskeyBridge {
 }
 
 const bridges = new Map<string, PasskeyBridge>();
+const retiring = new Map<string, PasskeyBridge[]>();
+
+function stopRetiring(profileId: string) {
+  for (const bridge of retiring.get(profileId) ?? []) bridge.stop();
+  retiring.delete(profileId);
+}
 
 function wanted(): boolean {
   try {
@@ -312,7 +333,10 @@ function startFor(rb: RunningBrowser) {
   const authenticators = wanted();
   const running = bridges.get(rb.profileId);
   if (running?.authenticators === authenticators) return;
-  if (running) stopFor(rb.profileId);
+  if (running) {
+    running.retire();
+    retiring.set(rb.profileId, [...(retiring.get(rb.profileId) ?? []), running]);
+  }
   const bridge: PasskeyBridge = new PasskeyBridge(rb, () => {
     // The bridge's own connection dropped while the browser runs on: start a new one after a pause.
     if (bridges.get(rb.profileId) !== bridge) return;
@@ -323,16 +347,22 @@ function startFor(rb: RunningBrowser) {
     }, 2000).unref?.();
   }, authenticators);
   bridges.set(rb.profileId, bridge);
-  bridge.start().catch((err) => {
-    log.warn(`could not attach to the tabs of the browser of profile ${rb.profileId}`, err);
-    if (bridges.get(rb.profileId) === bridge) bridges.delete(rb.profileId);
-    bridge.stop();
-  });
+  bridge
+    .start()
+    .catch((err) => {
+      log.warn(`could not attach to the tabs of the browser of profile ${rb.profileId}`, err);
+      if (bridges.get(rb.profileId) === bridge) bridges.delete(rb.profileId);
+      bridge.stop();
+    })
+    .finally(() => {
+      if (bridges.get(rb.profileId) === bridge || !bridges.has(rb.profileId)) stopRetiring(rb.profileId);
+    });
 }
 
 function stopFor(profileId: string) {
   bridges.get(profileId)?.stop();
   bridges.delete(profileId);
+  stopRetiring(profileId);
 }
 
 /** Start or restart the bridges to match the setting and the vault (locked = Chrome's own passkey dialogs). */
@@ -361,6 +391,7 @@ export function initPasskeys() {
 }
 
 export async function pausePasskeys(profileId: string): Promise<void> {
+  stopRetiring(profileId);
   await bridges.get(profileId)?.pause();
 }
 

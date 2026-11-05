@@ -312,7 +312,6 @@ describe.skipIf(!chrome)("passkeys in the browser", () => {
     ])("never opens, with %s", async (_, passkeys) => {
       applyRuntimeSettings(updateSettings({ browser: { passkeys } }));
       await waitFor(async () => passkeysActive(profileId) === passkeys);
-      await Bun.sleep(300);
       const page = await tabAskingForAccounts();
       try {
         expect(await typeInto(page)).toEqual({ seen: { keydown: 1, mousedown: 1 }, value: "a", accounts: null });
