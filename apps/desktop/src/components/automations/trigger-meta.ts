@@ -157,7 +157,7 @@ export function triggerText(routine: Routine): string {
     case "schedule":
       return scheduleToHuman(routine.cron, trigger.startWindowMinutes, trigger.runsPerWindow);
     case "app":
-      return `${trigger.triggerName} · ${prettySlug(trigger.toolkit)}`;
+      return [trigger, ...(trigger.moreEvents ?? [])].map((e) => `${e.triggerName} · ${prettySlug(e.toolkit)}`).join(" | ");
     case "condition":
       return t("automations:trigger.conditionText", { condition: trigger.condition, schedule: lowerFirst(cronToHuman(routine.cron)) });
     case "webhook":

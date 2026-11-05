@@ -499,7 +499,10 @@
       "pickedOfflineHint": "Nur {{name}} führt sie aus, auch wenn ein anderer Computer einspringt. Was er verpasst, während er weg ist, läuft, sobald er zurück ist (gerade offline).",
       "unlistedHint": "An einen Computer gebunden, der nicht aufgeführt ist: einer, der die Gruppe verlassen hat (dann führt der primäre sie aus), oder einer, den dieser Computer nicht sieht, solange der primäre weg ist."
     },
-    "timezone": "Zeitzone"
+    "timezone": "Zeitzone",
+    "addAppEvent": "Weiteres Ereignis hinzufügen",
+    "moreAppEvent": "Oder wenn",
+    "removeAppEvent": "Ereignis entfernen"
   },
   "heartbeatTab": {
     "interval": {

@@ -29,7 +29,7 @@ import { AGENT_TEMPLATES } from "../../agents/templates";
 import { TEAM_TEMPLATES, installTeam } from "../../agents/teams";
 import { listSlashCommands } from "../../runner/commands";
 import type { Routine, RoutineTrigger } from "@godmode/shared";
-import { createRoutine, deleteRoutine, getRoutine, listRoutines, resolveAppTrigger, runRoutineNow, updateRoutine } from "../../services/routines";
+import { MAX_MORE_APP_EVENTS, createRoutine, deleteRoutine, getRoutine, listRoutines, resolveAppTrigger, runRoutineNow, updateRoutine } from "../../services/routines";
 import { listEvents, sendTestEvent } from "../../automations/events";
 import { rotateWebhookToken } from "../../automations/webhooks";
 import { startChat } from "../../services/conversations";
@@ -156,16 +156,17 @@ export const agentSchema = z.object({
   heartbeat: heartbeatSchema.optional(),
 });
 
+const appEventSchema = z.object({
+  connectionId: id,
+  toolkit: z.string().trim().max(100).optional(),
+  triggerSlug: z.string().trim().min(1, "Choose an app event").max(200),
+  triggerName: z.string().trim().max(200).optional(),
+  config: z.record(z.string(), z.unknown()).optional(),
+});
+
 const triggerSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("schedule"), startWindowMinutes: z.number().optional(), runsPerWindow: z.number().optional() }),
-  z.object({
-    type: z.literal("app"),
-    connectionId: id,
-    toolkit: z.string().trim().max(100).optional(),
-    triggerSlug: z.string().trim().min(1, "Choose an app event").max(200),
-    triggerName: z.string().trim().max(200).optional(),
-    config: z.record(z.string(), z.unknown()).optional(),
-  }),
+  appEventSchema.extend({ type: z.literal("app"), moreEvents: z.array(appEventSchema).max(MAX_MORE_APP_EVENTS).optional() }),
   z.object({
     type: z.literal("condition"),
     condition: z.string().trim().min(1, "Describe the condition").max(2000),

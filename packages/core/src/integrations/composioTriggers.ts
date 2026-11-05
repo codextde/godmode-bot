@@ -10,7 +10,18 @@ import type { ComposioTriggerType, ServerEvent } from "@godmode/shared";
 import { all, getMeta, setMeta } from "../db";
 import { bus } from "../events/bus";
 import { logger } from "../log";
-import { accountInScope, parseTrigger, patchTriggerState, type RoutineRow, type TriggerState } from "../services/routines";
+import {
+  APP_INSTANCES_CLEARED,
+  accountInScope,
+  appEventsOf,
+  appInstanceIds,
+  appInstancePatch,
+  appInstanceState,
+  parseTrigger,
+  patchTriggerState,
+  type RoutineRow,
+  type TriggerState,
+} from "../services/routines";
 import { describePayload, receiveEvent } from "../automations/events";
 import { notify } from "../services/notifications";
 import * as vault from "../vault/vault";
@@ -217,25 +228,20 @@ function connectionsById(): Map<string, ConnectionRow> {
  */
 export function routeTriggerMessage(msg: TriggerMessage): number {
   const connections = connectionsById();
-  const rows = appRoutines().filter((r) => {
-    const t = parseTrigger(r.trigger);
-    const connection = t.type === "app" ? connections.get(t.connectionId) : undefined;
-    return !!connection && accountInScope(connection, { id: r.agent_id, workspaceId: r.agent_workspace_id });
-  });
-  let targets = msg.triggerId ? rows.filter((r) => parseJson<TriggerState>(r.trigger_state, {}).composioTriggerId === msg.triggerId) : [];
-  if (!msg.triggerId && msg.triggerSlug && msg.connectedAccountId) {
-    targets = rows.filter((r) => {
-      const t = parseTrigger(r.trigger);
-      return (
-        t.type === "app" &&
-        t.triggerSlug === msg.triggerSlug!.toUpperCase() &&
-        connections.get(t.connectionId)?.connected_account_id === msg.connectedAccountId
-      );
-    });
-  }
-  for (const row of targets) {
+  const targets: { row: AppRoutineRow; name: string }[] = [];
+  for (const row of appRoutines()) {
     const trigger = parseTrigger(row.trigger);
-    const name = trigger.type === "app" ? trigger.triggerName : "App event";
+    if (trigger.type !== "app") continue;
+    const state = parseJson<TriggerState>(row.trigger_state, {});
+    const match = appEventsOf(trigger).find((event, i) => {
+      const connection = connections.get(event.connectionId);
+      if (!connection || !accountInScope(connection, { id: row.agent_id, workspaceId: row.agent_workspace_id })) return false;
+      if (msg.triggerId) return appInstanceState(state, i).composioTriggerId === msg.triggerId;
+      return !!msg.triggerSlug && !!msg.connectedAccountId && event.triggerSlug === msg.triggerSlug.toUpperCase() && connection.connected_account_id === msg.connectedAccountId;
+    });
+    if (match) targets.push({ row, name: match.triggerName });
+  }
+  for (const { row, name } of targets) {
     const described = describePayload(msg.data);
     try {
       receiveEvent(row.id, {
@@ -422,8 +428,8 @@ async function setInstanceStatus(triggerId: string, status: "enable" | "disable"
   }
 }
 
-function setError(row: RoutineRow, state: TriggerState, error: string): boolean {
-  if (state.error === error) return false;
+function setError(row: RoutineRow, state: TriggerState, error: string | null): boolean {
+  if ((state.error ?? null) === error) return false;
   patchTriggerState(row.id, { error });
   return true;
 }
@@ -490,76 +496,83 @@ async function syncOnce() {
       changed = setError(row, state, VAULT_LOCKED) || changed;
       continue;
     }
-    // A watched account that is gone or out of reach stops delivering: its instance is switched off below.
-    const unusable = (error: string) => {
-      changed = setError(row, state, error) || changed;
-      if (state.composioTriggerId && !state.remoteDisabled) toDisable.add(state.composioTriggerId);
-    };
-    const connection = connections.get(trigger.connectionId);
-    if (!connection) {
-      unusable("The connected account was removed — choose another one");
-      continue;
-    }
-    // Checked when the automation was saved, but the agent may have moved to another workspace since.
-    if (!accountInScope(connection, { id: row.agent_id, workspaceId: row.agent_workspace_id })) {
-      unusable("The watched account isn't available to this agent anymore — choose another one");
-      continue;
-    }
-    if (connection.status !== "ACTIVE") {
-      unusable(`The ${connection.toolkit} connection is ${connection.status.toLowerCase()} — reconnect it in Settings → Integrations`);
-      continue;
-    }
-    const signature = sha256(stable([keyFingerprint, trigger.triggerSlug, connection.connected_account_id, trigger.config])).slice(0, 32);
-    if (!wanted) {
-      if (state.composioTriggerId && !state.remoteDisabled) toDisable.add(state.composioTriggerId);
-      continue;
-    }
-    const verified = state.composioVerifiedAt ? Date.now() - Date.parse(state.composioVerifiedAt) < VERIFY_INTERVAL_MS : false;
-    if (state.composioTriggerId && state.composioSignature === signature && !state.remoteDisabled && !state.error && verified) {
-      live.add(state.composioTriggerId);
-      continue;
-    }
-    // A known, unchanged instance whose only error was the missing key or locked vault (resolved by now) is merely
-    // re-checked: failing to reach Composio then doesn't take it offline.
-    const staleError = state.error === NOT_CONFIGURED || state.error === VAULT_LOCKED;
-    const recheck =
-      !!state.composioTriggerId && state.composioSignature === signature && !state.remoteDisabled && (!state.error || staleError);
-    try {
-      // Upsert is idempotent: it returns the existing instance, or recreates one deleted on Composio's side. It
-      // may belong to another automation that disabled it, so it is switched on explicitly.
-      const triggerId = await upsertInstance(trigger.triggerSlug, connection, trigger.config);
-      await setInstanceStatus(triggerId, "enable");
-      const known = knownInstances();
-      if (!known.has(triggerId)) {
-        known.add(triggerId);
-        saveInstances(known);
-      }
-      patchTriggerState(row.id, {
-        composioTriggerId: triggerId,
-        composioSignature: signature,
-        composioVerifiedAt: new Date().toISOString(),
-        remoteDisabled: null,
-        error: null,
-      });
-      live.add(triggerId);
+    const events = appEventsOf(trigger);
+    const extra = Object.keys(state.moreInstances ?? {}).filter((k) => Number(k) >= events.length - 1);
+    if (extra.length) {
+      patchTriggerState(row.id, { moreInstances: Object.fromEntries(extra.map((k) => [k, null])) });
       changed = true;
-    } catch (err) {
-      const upstream = upstreamStatus(err);
-      const transient = upstream === null || upstream === 429 || upstream >= 500;
-      if (recheck && transient) {
-        // Composio is unreachable for now (offline, rate limited, 5xx): the instance keeps working; retry next sync.
-        log.info(`could not re-check trigger ${state.composioTriggerId}: ${err instanceof Error ? err.message : String(err)}`);
-        live.add(state.composioTriggerId!);
-        if (staleError) {
-          patchTriggerState(row.id, { error: null });
-          changed = true;
+    }
+    let rowError: string | null = null;
+    const fail = (error: string) => {
+      rowError ??= error;
+    };
+    for (const [i, event] of events.entries()) {
+      const inst = appInstanceState(state, i);
+      const label = events.length > 1 ? `${event.triggerName}: ` : "";
+      // A watched account that is gone or out of reach stops delivering: its instance is switched off below.
+      const unusable = (error: string) => {
+        fail(label + error);
+        if (inst.composioTriggerId && !inst.remoteDisabled) toDisable.add(inst.composioTriggerId);
+      };
+      const connection = connections.get(event.connectionId);
+      if (!connection) {
+        unusable("The connected account was removed — choose another one");
+        continue;
+      }
+      // Checked when the automation was saved, but the agent may have moved to another workspace since.
+      if (!accountInScope(connection, { id: row.agent_id, workspaceId: row.agent_workspace_id })) {
+        unusable("The watched account isn't available to this agent anymore — choose another one");
+        continue;
+      }
+      if (connection.status !== "ACTIVE") {
+        unusable(`The ${connection.toolkit} connection is ${connection.status.toLowerCase()} — reconnect it in Settings → Integrations`);
+        continue;
+      }
+      const signature = sha256(stable([keyFingerprint, event.triggerSlug, connection.connected_account_id, event.config])).slice(0, 32);
+      if (!wanted) {
+        if (inst.composioTriggerId && !inst.remoteDisabled) toDisable.add(inst.composioTriggerId);
+        continue;
+      }
+      const verified = inst.composioVerifiedAt ? Date.now() - Date.parse(inst.composioVerifiedAt) < VERIFY_INTERVAL_MS : false;
+      if (inst.composioTriggerId && inst.composioSignature === signature && !inst.remoteDisabled && !state.error && verified) {
+        live.add(inst.composioTriggerId);
+        continue;
+      }
+      // A known, unchanged instance whose only error was the missing key or locked vault (resolved by now) is merely
+      // re-checked: failing to reach Composio then doesn't take it offline.
+      const staleError = state.error === NOT_CONFIGURED || state.error === VAULT_LOCKED;
+      const recheck = !!inst.composioTriggerId && inst.composioSignature === signature && !inst.remoteDisabled && (!state.error || staleError);
+      try {
+        // Upsert is idempotent: it returns the existing instance, or recreates one deleted on Composio's side. It
+        // may belong to another automation that disabled it, so it is switched on explicitly.
+        const triggerId = await upsertInstance(event.triggerSlug, connection, event.config);
+        await setInstanceStatus(triggerId, "enable");
+        const known = knownInstances();
+        if (!known.has(triggerId)) {
+          known.add(triggerId);
+          saveInstances(known);
         }
-      } else if (err instanceof HttpError && err.status === 423) {
-        changed = setError(row, state, VAULT_LOCKED) || changed;
-      } else {
-        changed = setError(row, state, `Couldn't set up the app trigger: ${err instanceof Error ? err.message : String(err)}`) || changed;
+        patchTriggerState(
+          row.id,
+          appInstancePatch(i, { composioTriggerId: triggerId, composioSignature: signature, composioVerifiedAt: new Date().toISOString(), remoteDisabled: null }),
+        );
+        live.add(triggerId);
+        changed = true;
+      } catch (err) {
+        const upstream = upstreamStatus(err);
+        const transient = upstream === null || upstream === 429 || upstream >= 500;
+        if (recheck && transient) {
+          // Composio is unreachable for now (offline, rate limited, 5xx): the instance keeps working; retry next sync.
+          log.info(`could not re-check trigger ${inst.composioTriggerId}: ${err instanceof Error ? err.message : String(err)}`);
+          live.add(inst.composioTriggerId!);
+        } else if (err instanceof HttpError && err.status === 423) {
+          fail(VAULT_LOCKED);
+        } else {
+          fail(`${label}Couldn't set up the app trigger: ${err instanceof Error ? err.message : String(err)}`);
+        }
       }
     }
+    if (wanted || rowError) changed = setError(row, state, rowError) || changed;
   }
 
   if (configured && unlocked) {
@@ -569,8 +582,16 @@ async function syncOnce() {
         const exists = await setInstanceStatus(triggerId, "disable");
         // Every automation sharing the instance must set it up again when it runs next.
         for (const other of rows) {
-          if (parseJson<TriggerState>(other.trigger_state, {}).composioTriggerId !== triggerId) continue;
-          patchTriggerState(other.id, exists ? { remoteDisabled: true } : { composioTriggerId: null, composioSignature: null, remoteDisabled: null });
+          const otherTrigger = parseTrigger(other.trigger);
+          if (otherTrigger.type !== "app") continue;
+          const otherState = parseJson<TriggerState>(other.trigger_state, {});
+          appEventsOf(otherTrigger).forEach((_, i) => {
+            if (appInstanceState(otherState, i).composioTriggerId !== triggerId) return;
+            patchTriggerState(
+              other.id,
+              appInstancePatch(i, exists ? { remoteDisabled: true } : { composioTriggerId: null, composioSignature: null, remoteDisabled: null }),
+            );
+          });
         }
         changed = true;
       } catch (err) {
@@ -594,13 +615,7 @@ async function syncOnce() {
 async function deleteOrphans() {
   const known = knownInstances();
   if (!known.size) return;
-  const referenced = new Set(
-    all<{ id: string | null }>(
-      "SELECT CASE WHEN json_valid(trigger_state) THEN json_extract(trigger_state, '$.composioTriggerId') END AS id FROM routines",
-    )
-      .map((r) => r.id)
-      .filter(Boolean),
-  );
+  const referenced = new Set(all<{ trigger_state: string }>("SELECT trigger_state FROM routines").flatMap((r) => appInstanceIds(parseJson<TriggerState>(r.trigger_state, {}))));
   let dirty = false;
   for (const id of known) {
     if (referenced.has(id)) continue;
@@ -652,7 +667,7 @@ export async function releaseTriggerInstances(oldApiKey: string, newApiKey: stri
   );
   saveInstances(new Set());
   for (const row of appRoutines()) {
-    patchTriggerState(row.id, { composioTriggerId: null, composioSignature: null, composioVerifiedAt: null, remoteDisabled: null });
+    patchTriggerState(row.id, APP_INSTANCES_CLEARED);
   }
   stopListener();
   if (leftBehind.length) {

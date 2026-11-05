@@ -1068,6 +1068,34 @@ describe("app triggers (Composio)", () => {
     expect(JSON.parse(getMeta("composio.trigger_instances")!)).not.toContain("ti_gmail");
   });
 
+  test("one automation can listen to several app events", async () => {
+    route("POST", "/api/v3.1/trigger_instances/GMAIL_EMAIL_SENT/upsert", { trigger_id: "ti_sent" });
+    const sentEvent = { connectionId: "cmp_gmail", toolkit: "gmail", triggerSlug: "GMAIL_EMAIL_SENT", triggerName: "Email sent", config: {} };
+    const r = createRoutine({ agentId: agent.id, name: "Mail log", trigger: { ...gmailTrigger, moreEvents: [sentEvent] }, prompt: "Log it" });
+    await syncAppTriggers();
+    const state = readTriggerState(r.id);
+    expect(state.composioTriggerId).toBe("ti_gmail");
+    expect(state.moreInstances?.["0"]?.composioTriggerId).toBe("ti_sent");
+    expect(JSON.parse(getMeta("composio.trigger_instances")!)).toEqual(expect.arrayContaining(["ti_gmail", "ti_sent"]));
+
+    const socket = FakeSocket.instances[0]!;
+    socket.receive("pusher:connection_established", { socket_id: "1.2", activity_timeout: 120 });
+    await waitFor(() => socket.sent.some((m) => m.event === "pusher:subscribe"), "subscribe");
+    socket.receive("pusher_internal:subscription_succeeded", {}, "private-proj_9_triggers");
+    expect(getRoutine(r.id).triggerStatus.state).toBe("ok");
+    socket.receive("trigger_to_client", V3("ti_sent", "msg_sent", { subject: "Re: offer" }), "private-proj_9_triggers");
+    await waitFor(() => eventsOf(r.id).length === 1, "event from the second app event");
+    expect(eventsOf(r.id)[0]!.title).toBe("Email sent · Re: offer");
+    await waitFor(() => sent.length === 1, "run");
+    finish(sent[0]!.run);
+
+    updateRoutine(r.id, { trigger: gmailTrigger });
+    await syncAppTriggers();
+    expect(readTriggerState(r.id).moreInstances).toBeUndefined();
+    expect(callsTo("DELETE", "/api/v3.1/trigger_instances/manage/ti_sent")).toHaveLength(1);
+    expect(callsTo("DELETE", "/api/v3.1/trigger_instances/manage/ti_gmail")).toHaveLength(0);
+  });
+
   test("an agent that leaves the account's workspace stops getting its events", async () => {
     const ts = now();
     insert("workspaces", { id: "ws_sales", name: "Sales", slug: "sales", created_at: ts, updated_at: ts });

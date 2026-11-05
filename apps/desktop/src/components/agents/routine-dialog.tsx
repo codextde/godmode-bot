@@ -1,10 +1,10 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import { ChevronRight, CircleCheck } from "lucide-react";
-import type { ComposioConnection, GroupDevice, Routine, RoutineInput, RoutineTrigger, RoutineTriggerType, RoutineNotify } from "@godmode/shared";
+import { ChevronRight, CircleCheck, Plus, X } from "lucide-react";
+import type { Agent, AppTriggerEvent, ComposioConnection, GroupDevice, Routine, RoutineInput, RoutineTrigger, RoutineTriggerType, RoutineNotify } from "@godmode/shared";
 import { findModel } from "@godmode/shared";
 import { api, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
@@ -66,6 +66,7 @@ export interface RoutineDraft {
   /** Model for condition checks; null = the agent's. */
   checkModel: string | null;
   app: AppTriggerDraft;
+  moreApps?: MoreAppDraft[];
   /** App/webhook triggers: only act on matching events. */
   filter: string;
   prompt: string;
@@ -75,6 +76,16 @@ export interface RoutineDraft {
   /** Device groups: "primary" or a device id; null = any. */
   runOn: string | null;
 }
+
+type MoreAppDraft = AppTriggerDraft & { key: string };
+
+const MAX_MORE_APPS = 9;
+
+function appDraftOf(e: AppTriggerEvent): AppTriggerDraft {
+  return { connectionId: e.connectionId, toolkit: e.toolkit, triggerSlug: e.triggerSlug, triggerName: e.triggerName, config: { values: e.config ?? {}, json: {} } };
+}
+
+const newKey = () => Math.random().toString(36).slice(2, 10);
 
 /** Like the core: events get a conversation each (named after the event); schedules and conditions keep one. */
 function defaultReuse(type: RoutineTriggerType): boolean {
@@ -96,9 +107,8 @@ function initialDraft(routine: Routine | null | undefined, agentId: string | und
     condition: t?.type === "condition" ? t.condition : (initial?.condition ?? ""),
     checkModel: t?.type === "condition" ? t.checkModel : (initial?.checkModel ?? null),
     app:
-      t?.type === "app"
-        ? { connectionId: t.connectionId, toolkit: t.toolkit, triggerSlug: t.triggerSlug, triggerName: t.triggerName, config: { values: t.config ?? {}, json: {} } }
-        : (initial?.app ?? EMPTY_APP_TRIGGER),
+      t?.type === "app" ? appDraftOf(t) : (initial?.app ?? EMPTY_APP_TRIGGER),
+    moreApps: t?.type === "app" ? (t.moreEvents ?? []).map((e) => ({ ...appDraftOf(e), key: newKey() })) : (initial?.moreApps ?? []),
     filter: routine?.filter ?? initial?.filter ?? "",
     prompt: routine?.prompt ?? initial?.prompt ?? "",
     enabled: routine?.enabled ?? initial?.enabled ?? true,
@@ -157,10 +167,19 @@ export function RoutineDialog({
   const setAgent = (id: string) =>
     setDraft((d) => {
       const next = agents.find((a) => a.id === id);
-      const connection = qc.getQueryData<ComposioConnection[]>(qk.composioConnections)?.find((c) => c.id === d.app.connectionId);
-      const keep = !d.app.connectionId || (!!next && !!connection && connectionUsableBy(connection, next));
-      return { ...d, agentId: id, app: keep ? d.app : EMPTY_APP_TRIGGER };
+      const connections = qc.getQueryData<ComposioConnection[]>(qk.composioConnections) ?? [];
+      const keep = (app: AppTriggerDraft) => {
+        const connection = connections.find((c) => c.id === app.connectionId);
+        return !app.connectionId || (!!next && !!connection && connectionUsableBy(connection, next));
+      };
+      return { ...d, agentId: id, app: keep(d.app) ? d.app : EMPTY_APP_TRIGGER, moreApps: (d.moreApps ?? []).filter(keep) };
     });
+  const moreApps = draft.moreApps ?? [];
+  const [moreResolved, setMoreResolved] = useState<Record<string, ResolvedAppEvent>>({});
+  const setMoreApp = (key: string, app: AppTriggerDraft) => set("moreApps", moreApps.map((m) => (m.key === key ? { ...app, key } : m)));
+  const removeMoreApp = (key: string) => set("moreApps", moreApps.filter((m) => m.key !== key));
+  const addMoreApp = () =>
+    set("moreApps", [...moreApps, { ...EMPTY_APP_TRIGGER, connectionId: draft.app.connectionId, toolkit: draft.app.toolkit, key: newKey() }]);
 
   const type = draft.triggerType;
   const meta = TRIGGER_TYPES[type];
@@ -192,7 +211,12 @@ export function RoutineDialog({
     prompt: !draft.prompt.trim() ? (eventTrigger ? t("routineDialog.problems.promptEvent") : t("routineDialog.problems.prompt")) : null,
   };
   const appInvalid =
-    !!appProblems && (!!appProblems.connection || !!appProblems.trigger || schemaBlocked || Object.keys(appProblems.config).length > 0);
+    !!appProblems &&
+    (!!appProblems.connection ||
+      !!appProblems.trigger ||
+      schemaBlocked ||
+      Object.keys(appProblems.config).length > 0 ||
+      moreApps.some((m) => !moreResolved[m.key]?.event));
   const invalid = !!cronError || appInvalid || Object.values(problems).some(Boolean);
 
   const buildTrigger = (): RoutineTrigger => {
@@ -211,6 +235,7 @@ export function RoutineDialog({
           triggerSlug,
           triggerName: appSchema.triggerType?.name ?? triggerName,
           config: configValue(appSchema.fields, config),
+          ...(moreApps.length ? { moreEvents: moreApps.map((m) => moreResolved[m.key]!.event!) } : {}),
         };
       }
       case "condition":
@@ -432,12 +457,31 @@ export function RoutineDialog({
                 )}
 
                 {type === "app" && (
-                  <AppTriggerFields
-                    value={draft.app}
-                    onChange={(app) => set("app", app)}
-                    agent={agents.find((a) => a.id === draft.agentId)}
-                    showProblems={touched}
-                  />
+                  <>
+                    <AppTriggerFields
+                      value={draft.app}
+                      onChange={(app) => set("app", app)}
+                      agent={agents.find((a) => a.id === draft.agentId)}
+                      showProblems={touched}
+                    />
+                    {moreApps.map((m) => (
+                      <MoreAppEvent
+                        key={m.key}
+                        value={m}
+                        onChange={(app) => setMoreApp(m.key, app)}
+                        onRemove={() => removeMoreApp(m.key)}
+                        onResolved={(r) => setMoreResolved((prev) => ({ ...prev, [m.key]: r }))}
+                        agent={agents.find((a) => a.id === draft.agentId)}
+                        showProblems={touched}
+                      />
+                    ))}
+                    {moreApps.length < MAX_MORE_APPS && (
+                      <Button type="button" variant="ghost" size="sm" className="h-7 gap-1 px-2 text-xs text-muted-foreground" onClick={addMoreApp}>
+                        <Plus className="size-3.5" />
+                        {t("routineDialog.addAppEvent")}
+                      </Button>
+                    )}
+                  </>
                 )}
 
                 {type === "condition" && (
@@ -763,6 +807,55 @@ function SwitchCard({
         <p className="mt-1 text-xs text-muted-foreground">{description}</p>
       </div>
       <Switch id={id} checked={checked} onCheckedChange={onChange} />
+    </div>
+  );
+}
+
+interface ResolvedAppEvent {
+  event: AppTriggerEvent | null;
+}
+
+function MoreAppEvent({
+  value,
+  onChange,
+  onRemove,
+  onResolved,
+  agent,
+  showProblems,
+}: {
+  value: AppTriggerDraft;
+  onChange: (value: AppTriggerDraft) => void;
+  onRemove: () => void;
+  onResolved: (resolved: ResolvedAppEvent) => void;
+  agent: Agent | undefined;
+  showProblems: boolean;
+}) {
+  const { t } = useTranslation("agents");
+  const schema = useAppTriggerSchema(value);
+  const problems = appTriggerProblems(value, schema);
+  const invalid = !!problems.connection || !!problems.trigger || !!problems.schema || Object.keys(problems.config).length > 0;
+  const event: AppTriggerEvent | null = invalid
+    ? null
+    : {
+        connectionId: value.connectionId,
+        toolkit: value.toolkit,
+        triggerSlug: value.triggerSlug,
+        triggerName: schema.triggerType?.name ?? value.triggerName,
+        config: configValue(schema.fields, value.config),
+      };
+  const signature = JSON.stringify(event);
+  useEffect(() => {
+    onResolved({ event: signature === "null" ? null : (JSON.parse(signature) as AppTriggerEvent) });
+  }, [signature]);
+  return (
+    <div className="space-y-2 border-t border-border/60 pt-3">
+      <div className="flex items-center justify-between">
+        <span className="text-xs text-muted-foreground">{t("routineDialog.moreAppEvent")}</span>
+        <Button type="button" variant="ghost" size="icon" className="size-6" onClick={onRemove} aria-label={t("routineDialog.removeAppEvent")}>
+          <X className="size-3.5" />
+        </Button>
+      </div>
+      <AppTriggerFields value={value} onChange={onChange} agent={agent} showProblems={showProblems} />
     </div>
   );
 }

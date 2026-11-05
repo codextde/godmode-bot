@@ -7,7 +7,7 @@ import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Cron } from "croner";
-import type { Agent, Routine, RoutineInput, RoutineTrigger, RoutineTriggerStatus, RunStatus, Run } from "@godmode/shared";
+import type { Agent, AppTriggerEvent, Routine, RoutineInput, RoutineTrigger, RoutineTriggerStatus, RunStatus, Run } from "@godmode/shared";
 import { isModelId, MAX_RUNS_PER_WINDOW, MAX_START_WINDOW_MINUTES, MIN_MINUTES_PER_RUN, startWindowLimit, startWindowTooLong } from "@godmode/shared";
 import { all, bool, get, insert, int, run, update } from "../db";
 import { bus } from "../events/bus";
@@ -54,7 +54,7 @@ export interface RoutineRow {
  * Runtime state of a trigger (JSON column `trigger_state`). Absent keys mean null/false.
  * Updated with SQLite's json_patch (RFC 7396): a null value removes the key.
  */
-export interface TriggerState {
+export interface AppInstanceState {
   /** App triggers: Composio trigger instance (`ti_…`) and the setup it was created for. */
   composioTriggerId?: string;
   composioSignature?: string;
@@ -62,6 +62,10 @@ export interface TriggerState {
   composioVerifiedAt?: string;
   /** App triggers: the instance was disabled on Composio because the automation is off. */
   remoteDisabled?: boolean;
+}
+
+export interface TriggerState extends AppInstanceState {
+  moreInstances?: Record<string, AppInstanceState | null>;
   /** Setup problem (app triggers) or failed last check (conditions). */
   error?: string;
   lastEventAt?: string;
@@ -89,6 +93,7 @@ export interface TriggerState {
 export const OPEN_WORK_CLEARED = { openItems: null, openRepeats: null, openHandledAt: null, openHeld: null };
 
 export const TRIGGER_TYPES = ["schedule", "app", "condition", "webhook"] as const;
+export const MAX_MORE_APP_EVENTS = 9;
 /** Condition checks start an agent run: not more often than this. */
 export const MIN_CHECK_INTERVAL_MS = 5 * 60_000;
 const MAX_FILTER = 2000;
@@ -99,6 +104,26 @@ export function parseTrigger(raw: string | null | undefined): RoutineTrigger {
   const t = parseJson<RoutineTrigger | null>(raw, null);
   return t && typeof t === "object" && TRIGGER_TYPES.includes(t.type) ? t : { type: "schedule" };
 }
+
+export function appEventsOf(trigger: Extract<RoutineTrigger, { type: "app" }>): AppTriggerEvent[] {
+  const { connectionId, toolkit, triggerSlug, triggerName, config } = trigger;
+  return [{ connectionId, toolkit, triggerSlug, triggerName, config }, ...(trigger.moreEvents ?? [])];
+}
+
+export function appInstanceState(state: TriggerState, index: number): AppInstanceState {
+  return index === 0 ? state : (state.moreInstances?.[String(index - 1)] ?? {});
+}
+
+export function appInstancePatch(index: number, patch: { [K in keyof AppInstanceState]?: AppInstanceState[K] | null }): { [K in keyof TriggerState]?: TriggerState[K] | null } {
+  return index === 0 ? patch : { moreInstances: { [String(index - 1)]: patch as AppInstanceState } };
+}
+
+export function appInstanceIds(state: TriggerState): string[] {
+  const ids = [state.composioTriggerId, ...Object.values(state.moreInstances ?? {}).map((s) => s?.composioTriggerId)];
+  return ids.filter((id): id is string => !!id);
+}
+
+export const APP_INSTANCES_CLEARED = { composioTriggerId: null, composioSignature: null, composioVerifiedAt: null, remoteDisabled: null, moreInstances: null };
 
 export function readTriggerState(id: string): TriggerState {
   return parseJson<TriggerState>(get<{ trigger_state: string }>("SELECT trigger_state FROM routines WHERE id = ?", id)?.trigger_state, {});
@@ -129,7 +154,9 @@ function triggerStatusOf(r: RoutineRow, trigger: RoutineTrigger, state: TriggerS
   switch (trigger.type) {
     case "app": {
       if (state.error) return { ...base, state: "error", message: state.error };
-      if (!state.composioTriggerId) return { ...base, state: "pending", message: "Setting up the app trigger…" };
+      if (appEventsOf(trigger).some((_, i) => !appInstanceState(state, i).composioTriggerId)) {
+        return { ...base, state: "pending", message: "Setting up the app trigger…" };
+      }
       const health = appTriggerHealth();
       return { ...base, ...health };
     }
@@ -389,6 +416,18 @@ function text(value: unknown, what: string, max: number): string {
   return s;
 }
 
+function normalizeAppEvent(e: Partial<AppTriggerEvent> | undefined, agent: Pick<Agent, "id" | "workspaceId">): AppTriggerEvent {
+  if (!e || typeof e !== "object") throw badRequest("An app event is missing");
+  const connection = connectionForAgent(text(e.connectionId, "The connected account", 200), agent);
+  const triggerSlug = text(e.triggerSlug, "The app event", 200).toUpperCase();
+  if (!/^[A-Z0-9][A-Z0-9_]*$/.test(triggerSlug)) throw badRequest(`Invalid app event "${e.triggerSlug}"`);
+  const config = e.config ?? {};
+  if (typeof config !== "object" || Array.isArray(config)) throw badRequest("The app event settings must be an object");
+  if (JSON.stringify(config).length > MAX_CONFIG_BYTES) throw badRequest("The app event settings are too large");
+  const triggerName = typeof e.triggerName === "string" && e.triggerName.trim() ? e.triggerName.trim().slice(0, 200) : humanizeSlug(triggerSlug);
+  return { connectionId: connection.id, toolkit: connection.toolkit, triggerSlug, triggerName, config };
+}
+
 /** Validate and normalize a trigger for an agent. */
 export function normalizeTrigger(input: RoutineTrigger | undefined, agent: Pick<Agent, "id" | "workspaceId">): RoutineTrigger {
   const t = input ?? { type: "schedule" };
@@ -417,14 +456,11 @@ export function normalizeTrigger(input: RoutineTrigger | undefined, agent: Pick<
       return { type: "condition", condition: text(t.condition, "The condition", MAX_CONDITION), checkModel };
     }
     case "app": {
-      const connection = connectionForAgent(text(t.connectionId, "The connected account", 200), agent);
-      const triggerSlug = text(t.triggerSlug, "The app event", 200).toUpperCase();
-      if (!/^[A-Z0-9][A-Z0-9_]*$/.test(triggerSlug)) throw badRequest(`Invalid app event "${t.triggerSlug}"`);
-      const config = t.config ?? {};
-      if (typeof config !== "object" || Array.isArray(config)) throw badRequest("The app event settings must be an object");
-      if (JSON.stringify(config).length > MAX_CONFIG_BYTES) throw badRequest("The app event settings are too large");
-      const triggerName = typeof t.triggerName === "string" && t.triggerName.trim() ? t.triggerName.trim().slice(0, 200) : humanizeSlug(triggerSlug);
-      return { type: "app", connectionId: connection.id, toolkit: connection.toolkit, triggerSlug, triggerName, config };
+      const more = t.moreEvents ?? [];
+      if (!Array.isArray(more)) throw badRequest("More app events must be a list");
+      if (more.length > MAX_MORE_APP_EVENTS) throw badRequest(`An automation listens to at most ${MAX_MORE_APP_EVENTS + 1} app events`);
+      const [first, ...rest] = [t, ...more].map((e) => normalizeAppEvent(e, agent));
+      return rest.length ? { type: "app", ...first!, moreEvents: rest } : { type: "app", ...first! };
     }
     default:
       throw badRequest(`Unknown trigger type "${(t as { type?: unknown })?.type}" (expected schedule, app, condition or webhook)`);
@@ -437,15 +473,23 @@ export function normalizeTrigger(input: RoutineTrigger | undefined, agent: Pick<
  */
 export async function resolveAppTrigger(trigger: RoutineTrigger | undefined, agentId: string): Promise<RoutineTrigger | undefined> {
   if (trigger?.type !== "app") return trigger;
-  const connection = connectionForAgent(text(trigger.connectionId, "The connected account", 200), getAgent(agentId));
-  const type = await getTriggerType(text(trigger.triggerSlug, "The app event", 200));
+  const agent = getAgent(agentId);
+  const more = Array.isArray(trigger.moreEvents) ? trigger.moreEvents : [];
+  if (more.length > MAX_MORE_APP_EVENTS) throw badRequest(`An automation listens to at most ${MAX_MORE_APP_EVENTS + 1} app events`);
+  const [first, ...rest] = await Promise.all([trigger, ...more].map((e) => resolveAppEvent(e, agent)));
+  return rest.length ? { type: "app", ...first!, moreEvents: rest } : { type: "app", ...first! };
+}
+
+async function resolveAppEvent(e: Partial<AppTriggerEvent>, agent: Agent): Promise<AppTriggerEvent> {
+  const connection = connectionForAgent(text(e?.connectionId, "The connected account", 200), agent);
+  const type = await getTriggerType(text(e?.triggerSlug, "The app event", 200));
   if (type.toolkit && type.toolkit !== connection.toolkit) {
     throw badRequest(`“${type.name}” is a ${type.toolkit} event, but the chosen account is ${connection.toolkit}`);
   }
-  const config = trigger.config ?? {};
+  const config = e.config ?? {};
   const missing = missingConfigFields(type, config);
   if (missing.length) throw badRequest(`“${type.name}” needs these settings: ${missing.join(", ")}`);
-  return { type: "app", connectionId: connection.id, toolkit: connection.toolkit, triggerSlug: type.slug, triggerName: type.name, config };
+  return { connectionId: connection.id, toolkit: connection.toolkit, triggerSlug: type.slug, triggerName: type.name, config };
 }
 
 function sameTrigger(a: RoutineTrigger, b: RoutineTrigger): boolean {
@@ -654,10 +698,7 @@ export function updateRoutine(id: string, patch: Partial<RoutineInput>): Routine
     // What was observed or set up for the old trigger means nothing for the new one (the app trigger sync deletes a
     // Composio instance nothing references anymore).
     patchTriggerState(id, {
-      composioTriggerId: null,
-      composioSignature: null,
-      composioVerifiedAt: null,
-      remoteDisabled: null,
+      ...APP_INSTANCES_CLEARED,
       error: null,
       observation: null,
       observedAt: null,

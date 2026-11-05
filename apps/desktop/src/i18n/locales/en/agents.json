@@ -499,7 +499,10 @@
       "pickedOfflineHint": "Only {{name}} runs it, also while another computer stands in. A time it misses while away runs when it's back (it's offline now).",
       "unlistedHint": "Pinned to a computer that isn't listed: one that left the group (the primary runs it then), or one this computer can't see while the primary is away."
     },
-    "timezone": "Timezone"
+    "timezone": "Timezone",
+    "addAppEvent": "Add another event",
+    "moreAppEvent": "Or when",
+    "removeAppEvent": "Remove event"
   },
   "heartbeatTab": {
     "interval": {
