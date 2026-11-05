@@ -523,8 +523,11 @@ describe("TOTP service", () => {
 
     const visibleToGlobal = totpForAgent(globalAgent).map((e) => e.id);
     expect(visibleToGlobal).toContain(global.id);
-    expect(visibleToGlobal).toContain(inA.id);
-    expect(visibleToGlobal).toContain(inB.id);
+    expect(visibleToGlobal).not.toContain(inA.id);
+    expect(visibleToGlobal).not.toContain(inB.id);
+    const visibleToGodmode = totpForAgent({ ...globalAgent, isDefault: true }).map((e) => e.id);
+    expect(visibleToGodmode).toContain(inA.id);
+    expect(visibleToGodmode).toContain(inB.id);
     const visibleToA = totpForAgent(agentA).map((e) => e.id);
     expect(visibleToA).toContain(global.id);
     expect(visibleToA).toContain(inA.id);

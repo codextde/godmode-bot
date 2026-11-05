@@ -54,14 +54,15 @@ export function scopeCondition(workspaceId: ScopeFilter): { sql: string; params:
   return { sql: "workspace_id = ?", params: [workspaceId] };
 }
 
-/** SQL condition for what an agent can see: a global agent sees every row, a workspace agent global rows + its own workspace's. */
+/** SQL condition for what an agent can see: Godmode sees every row, any other agent global rows + its own workspace's. */
 export function agentScopeCondition(agent: Agent): { sql: string; params: string[] } {
-  if (!agent.workspaceId) return { sql: "1 = 1", params: [] };
+  if (agent.isDefault) return { sql: "1 = 1", params: [] };
+  if (!agent.workspaceId) return { sql: "workspace_id IS NULL", params: [] };
   return { sql: "(workspace_id IS NULL OR workspace_id = ?)", params: [agent.workspaceId] };
 }
 
 export function inAgentScope(agent: Agent, workspaceId: string | null): boolean {
-  return !agent.workspaceId || workspaceId === null || workspaceId === agent.workspaceId;
+  return agent.isDefault || workspaceId === null || workspaceId === agent.workspaceId;
 }
 
 /** Throws 404 when a (non-null) workspace id does not exist. */
