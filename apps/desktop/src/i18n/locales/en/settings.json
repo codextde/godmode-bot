@@ -467,7 +467,8 @@
       "logs": "Logs",
       "about": "About",
       "accounts": "Claude accounts",
-      "sshKeys": "SSH keys"
+      "sshKeys": "SSH keys",
+      "review": "Auto review"
     },
     "easy": {
       "general": "General",
@@ -495,7 +496,8 @@
       "connect": "Claude Code & MCP",
       "system": "System check",
       "accounts": "Claude accounts",
-      "sshKeys": "SSH keys"
+      "sshKeys": "SSH keys",
+      "review": "Daily review"
     },
     "groups": {
       "preferences": "Preferences",
@@ -2065,6 +2067,49 @@
       "languageBody": "Your voice language is {{language}}. Hex will listen for English — set the language to en-US or de-DE above.",
       "path": "Location",
       "pathDescription": "Leave empty and Godmode uses Hex from Applications or installs its own copy. Otherwise the Hex app or its hex program."
+    }
+  },
+  "review": {
+    "title": "Auto review",
+    "description": "Every day Godmode looks at your whole setup and fixes what doesn't make sense.",
+    "schedule": "Schedule",
+    "enabled": "Auto review",
+    "when": "When",
+    "next": "Next: {{when}}",
+    "autoFix": "Fix what it finds",
+    "reportOnly": "Off: it only reports.",
+    "now": "Review now",
+    "stop": "Stop",
+    "started": "Review started",
+    "running": "Reviewing your setup…",
+    "history": "Reviews",
+    "empty": "No reviews yet.",
+    "changes_one": "{{count}} change",
+    "changes_other": "{{count}} changes",
+    "forYou_one": "{{count}} for you",
+    "forYou_other": "{{count}} for you",
+    "undo": "Undo",
+    "undone": "Undone",
+    "undoneLabel": "Undone",
+    "openRun": "Open the review's chat",
+    "blocks": {
+      "forYou": "For you",
+      "changes": "Changes",
+      "found": "Found",
+      "agents": "Agents"
+    },
+    "status": {
+      "queued": "Waiting to start",
+      "running": "Reviewing",
+      "succeeded": "Done",
+      "failed": "Failed",
+      "cancelled": "Stopped"
+    },
+    "schedules": {
+      "morning": "Every morning at 5:00",
+      "night": "Every night at 2:00",
+      "weekdays": "Weekdays at 7:00",
+      "sunday": "Sundays at 5:00"
     }
   }
 }

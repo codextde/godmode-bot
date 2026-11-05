@@ -26,6 +26,7 @@ const TRIGGER_ICON: Record<RunTrigger, IconName> = {
   routine: "workflow",
   check: "gauge",
   dream: "moon",
+  review: "check",
   delegation: "subagent",
   manual: "hand",
   api: "link",

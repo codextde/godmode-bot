@@ -83,7 +83,7 @@ export function TurnEnd({ conversation, message, agent }: { conversation: Conver
   });
 
   if (!run || (run.status !== "failed" && run.status !== "cancelled")) return null;
-  if (run.trigger === "dream" || run.trigger === "check" || PLATFORM_ORIGINS.has(conversation.origin)) return null;
+  if (run.trigger === "dream" || run.trigger === "review" || run.trigger === "check" || PLATFORM_ORIGINS.has(conversation.origin)) return null;
   // The connection to Claude dropped, or Claude Code stopped with an error: Godmode continues by itself, a little later.
   const retryAt = run.retryAt ? new Date(run.retryAt).toLocaleTimeString(intlLocale(), { hour: "2-digit", minute: "2-digit" }) : null;
   const why = run.retryCause === "error" ? t("turnEnd.errorStopped") : t("turnEnd.connectionDropped");

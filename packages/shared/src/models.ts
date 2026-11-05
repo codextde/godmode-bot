@@ -388,7 +388,7 @@ export interface ComposioTriggerType {
  * `dream`: the archived conversation an agent's dreams (memory consolidation) run in ·
  * `slack` / `telegram` / `teams`: a chat on that platform (see Messaging) · `task`: an agent works on a board task.
  */
-export type ConversationOrigin = "chat" | "routine" | "delegation" | "api" | "dream" | "slack" | "telegram" | "teams" | "task" | "heartbeat";
+export type ConversationOrigin = "chat" | "routine" | "delegation" | "api" | "dream" | "review" | "slack" | "telegram" | "teams" | "task" | "heartbeat";
 
 export interface Conversation {
   id: ID;
@@ -747,7 +747,7 @@ export type RunStatus = "queued" | "running" | "paused" | "succeeded" | "failed"
  * `dream`: the agent consolidated its memory in the background · `followup`: the agent continued a chat at the time it set ·
  * `task`: the agent worked on a board task.
  */
-export type RunTrigger = "chat" | "routine" | "check" | "dream" | "delegation" | "manual" | "api" | "followup" | "task" | "heartbeat" | "call";
+export type RunTrigger = "chat" | "routine" | "check" | "dream" | "review" | "delegation" | "manual" | "api" | "followup" | "task" | "heartbeat" | "call";
 
 export interface RunUsage {
   inputTokens: number;
@@ -926,6 +926,102 @@ export interface DreamOverview {
   active: Dream | null;
   /** Latest dreams, newest first. */
   dreams: Dream[];
+}
+
+/* ------------------------------------------------------------------ */
+/* Auto review: the main agent's daily review of the whole setup       */
+/* ------------------------------------------------------------------ */
+
+export type ReviewReason = "schedule" | "manual";
+export type ReviewStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled";
+export type ReviewArea = "agents" | "chats" | "automations" | "memory" | "errors" | "logins" | "setup";
+export type ReviewSeverity = "info" | "warning" | "critical";
+
+export interface ReviewFinding {
+  area: ReviewArea;
+  severity: ReviewSeverity;
+  /** One or two sentences: what is wrong and why it matters. */
+  text: string;
+  /** What the human should do; empty when the review fixed it or nothing is needed. */
+  forHuman: string;
+}
+
+export type ReviewActionKind =
+  | "agent_updated"
+  | "automation_updated"
+  | "chat_archived"
+  | "chat_stopped"
+  | "chat_restarted"
+  | "run_cancelled"
+  | "run_continued"
+  | "dream_started"
+  | "ticket_filed"
+  | "other";
+
+export interface ReviewAction {
+  /** Index in the review's actions (stable). */
+  index: number;
+  kind: ReviewActionKind;
+  /** One line for the human: what changed and why. */
+  text: string;
+  /** What it was done to: an agent, automation, chat, run or ticket id. */
+  targetId: string | null;
+  /** The chat it is about, to open it. */
+  conversationId: ID | null;
+  /** It can still be put back as it was. */
+  canUndo: boolean;
+  undoneAt: ISODate | null;
+  at: ISODate;
+}
+
+/** How well one agent worked since the last review (1 = poor, 5 = excellent). */
+export interface ReviewScore {
+  agentId: ID;
+  name: string;
+  score: number;
+  note: string;
+}
+
+/** Numbers taken when the review starts, compared with the previous review's. */
+export interface ReviewMetrics {
+  runs: number;
+  failed: number;
+  cancelled: number;
+  /** Chats that continue on their own: a follow-up or a /goal. */
+  continuing: number;
+  /** Open chats whose Claude context is over three quarters full. */
+  bigChats: number;
+  openQuestions: number;
+  missingLogins: number;
+  logErrors: number;
+  /** Agents whose MEMORY.md outgrew its limit. */
+  memoryOver: number;
+}
+
+export interface Review {
+  id: ID;
+  runId: ID | null;
+  conversationId: ID | null;
+  reason: ReviewReason;
+  status: ReviewStatus;
+  summary: string;
+  findings: ReviewFinding[];
+  actions: ReviewAction[];
+  scores: ReviewScore[];
+  metrics: ReviewMetrics | null;
+  error: string | null;
+  createdAt: ISODate;
+  startedAt: ISODate | null;
+  finishedAt: ISODate | null;
+}
+
+export interface ReviewOverview {
+  enabled: boolean;
+  autoFix: boolean;
+  /** Next scheduled review (null when off or the schedule is invalid). */
+  nextReviewAt: ISODate | null;
+  active: Review | null;
+  reviews: Review[];
 }
 
 /* ------------------------------------------------------------------ */
@@ -1617,6 +1713,17 @@ export interface DreamingSettings {
   offers: boolean;
 }
 
+/** Auto review: once a day the main agent reviews the whole setup and fixes what doesn't make sense. */
+export interface ReviewSettings {
+  enabled: boolean;
+  /** When: cron expression (5 fields) in local time, e.g. "0 5 * * *" = every morning at 05:00. */
+  cron: string;
+  /** Model for reviews (alias or id). "" = the main agent's own model. */
+  model: string;
+  /** The review fixes what it finds (agents, automations, chats); off = it only reports. */
+  autoFix: boolean;
+}
+
 export interface VmSettings {
   /** Agents may work in macOS VMs assigned to them, their chat or their workspace. */
   enabled: boolean;
@@ -1775,6 +1882,7 @@ export interface Settings {
   diagnostics: DiagnosticsSettings;
   maintenance: MaintenanceSettings;
   selfRepair: SelfRepairSettings;
+  review: ReviewSettings;
   mobile: MobileSettings;
   phone: PhoneSettings;
   power: PowerSettings;

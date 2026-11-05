@@ -34,6 +34,7 @@ import { clearRunMods, startModUpdates, stopModUpdates } from "./mods/service";
 import { reloadSchedules, startScheduler } from "./scheduler/scheduler";
 import { startSignInRetry, stopSignInRetry } from "./automations/signInRetry";
 import { startDreaming, stopDreaming } from "./memory/dreaming";
+import { startReviews, stopReviews } from "./review/review";
 import { startFollowups, stopFollowups } from "./services/followups";
 import { startHumanTasks, stopHumanTasks } from "./services/humanTasks";
 import { startPauses, stopPauses } from "./services/pauses";
@@ -218,6 +219,7 @@ async function serve(values: Record<string, unknown>, role?: CoreConfig["role"])
     startSignInRetry();
     startRunNotices();
     startDreaming();
+    startReviews();
     startAutomationEvents();
     startAppTriggers();
     startMessaging();
@@ -233,6 +235,7 @@ async function serve(values: Record<string, unknown>, role?: CoreConfig["role"])
     stopSignInRetry();
     stopRunNotices();
     stopDreaming();
+    stopReviews();
     stopAppTriggers();
     stopAutomationEvents();
     await stopMessaging();

@@ -272,6 +272,7 @@
       "routine": "Automation",
       "check": "Bedingungsprüfung",
       "dream": "Traum",
+      "review": "Auto-Review",
       "delegation": "Übergabe",
       "manual": "Manuell",
       "task": "Aufgabe",

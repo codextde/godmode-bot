@@ -3,7 +3,7 @@ import { Link } from "react-router";
 import { motion } from "motion/react";
 import { formatDistanceToNowStrict } from "date-fns";
 import { useTranslation } from "react-i18next";
-import { Archive, ArchiveRestore, HeartPulse, MessageSquare, MessagesSquare, Moon, Pin, Plug, Plus, Search, Share2, SquareKanban, Trash2, Workflow } from "lucide-react";
+import { Archive, ArchiveRestore, ClipboardCheck, HeartPulse, MessageSquare, MessagesSquare, Moon, Pin, Plug, Plus, Search, Share2, SquareKanban, Trash2, Workflow } from "lucide-react";
 import type { Agent, Conversation, ConversationOrigin } from "@godmode/shared";
 import { errorMessage } from "@/lib/api";
 import { useArchivedConversations, useConversations } from "@/lib/hooks";
@@ -30,6 +30,7 @@ const ORIGIN: Record<ConversationOrigin, { icon: ComponentType<{ className?: str
   delegation: { icon: Share2 },
   api: { icon: Plug },
   dream: { icon: Moon },
+  review: { icon: ClipboardCheck },
   slack: { icon: PLATFORMS.slack.glyph },
   telegram: { icon: PLATFORMS.telegram.glyph },
   teams: { icon: PLATFORMS.teams.glyph },

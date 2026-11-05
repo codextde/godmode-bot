@@ -235,9 +235,9 @@ const FROM_SQL = `conversations c LEFT JOIN followups f ON f.conversation_id = c
  * The chat has work ahead: an agent works in it, a run stands still, or it continues by itself later. Not a ticket's
  * chat (the board shows it) and not dreams or condition checks, which Godmode files in the archive itself.
  */
-const ONGOING_SQL = `c.origin NOT IN ('task', 'dream') AND CASE WHEN c.runner_id IS NULL
+const ONGOING_SQL = `c.origin NOT IN ('task', 'dream', 'review') AND CASE WHEN c.runner_id IS NULL
   THEN f.conversation_id IS NOT NULL OR p.run_id IS NOT NULL
-    OR c.id IN (SELECT ar.conversation_id FROM runs ar WHERE ar.status IN ('queued', 'running') AND ar.trigger NOT IN ('dream', 'check'))
+    OR c.id IN (SELECT ar.conversation_id FROM runs ar WHERE ar.status IN ('queued', 'running') AND ar.trigger NOT IN ('dream', 'review', 'check'))
   ELSE json_extract(c.runner_state, '$.running') = 1 OR json_extract(c.runner_state, '$.paused') IS NOT NULL OR json_extract(c.runner_state, '$.followup') IS NOT NULL END`;
 
 function conversationRow(id: string): ConversationRow | null {
@@ -1010,6 +1010,9 @@ export function messageTarget(conversationId: string, trigger: RunTrigger = "cha
   if (!agent.enabled) throw conflict(`Agent "${agent.name}" is disabled`);
   if (conv.origin === "dream" && trigger !== "dream") {
     throw badRequest(`This is where ${agent.name} dreams (consolidates its memory). Start a new chat to talk to it.`);
+  }
+  if ((conv.origin === "review") !== (trigger === "review")) {
+    throw badRequest(conv.origin === "review" ? `This is where ${agent.name} reviews the setup. Start a new chat to talk to it.` : "An auto review runs in its own chat");
   }
   return { conv, agent };
 }

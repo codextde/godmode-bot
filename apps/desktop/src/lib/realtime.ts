@@ -99,6 +99,8 @@ const ENTITY_KEYS: Record<EntityName, readonly unknown[][]> = {
   dreams: [qk.dreams, qk.agentFilesAll, qk.agentFileAll, qk.agentCommitsAll],
   followups: [qk.followups],
   offers: [qk.offers],
+  // A review started, reported, ended, or one of its changes was undone (that also changed agents, automations or chats).
+  reviews: [qk.reviews, qk.agents, qk.routines, qk.conversationsAll],
   // A beat was recorded, the watchdog stepped in, or an agent's heartbeat settings changed.
   heartbeats: [qk.heartbeats],
   // The background upkeep repaired, updated or cleaned up: system check, permissions, updates, cleanup.

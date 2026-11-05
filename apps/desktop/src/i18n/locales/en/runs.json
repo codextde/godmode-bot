@@ -12,6 +12,7 @@
     "routine": "Automation",
     "check": "Condition check",
     "dream": "Dream",
+    "review": "Auto review",
     "delegation": "Delegation",
     "manual": "Manual",
     "api": "API",

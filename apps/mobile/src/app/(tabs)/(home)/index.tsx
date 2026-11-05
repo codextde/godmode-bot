@@ -303,7 +303,7 @@ function RecentChats({ projects }: { projects: ReturnType<typeof useProjectIndex
   const chats = useMemo(
     () =>
       inProject(recent.data ?? [], projectId, agents)
-        .filter((conv) => !conv.archived && conv.origin !== "dream")
+        .filter((conv) => !conv.archived && conv.origin !== "dream" && conv.origin !== "review")
         .sort((a, b) => Number(b.pinned) - Number(a.pinned) || (b.lastMessageAt ?? b.createdAt).localeCompare(a.lastMessageAt ?? a.createdAt))
         .slice(0, RECENT_SHOWN),
     [recent.data, projectId, agents],

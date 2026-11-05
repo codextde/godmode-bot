@@ -31,7 +31,7 @@ export default function ArchivedChats() {
   const running = useRunningChats();
 
   const items = useMemo(() => {
-    const chats = inProject(list.data ?? [], projectId, byId).filter((conv) => conv.origin !== "dream");
+    const chats = inProject(list.data ?? [], projectId, byId).filter((conv) => conv.origin !== "dream" && conv.origin !== "review");
     const isGoing = (conv: Conversation) => running.has(conv.id) || !!conv.paused || !!conv.followup;
     const going = chats.filter(isGoing);
     const out: Item[] = [];
