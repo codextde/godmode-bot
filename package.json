@@ -1,7 +1,7 @@
 {
   "name": "godmode-bot",
   "private": true,
-  "version": "0.2.45",
+  "version": "0.2.46",
   "description": "Godmode Bot — the AI coworker that works like a human on your computer, with your logins, 2FA and tools. Powered by Claude Code + browser-use.",
   "license": "MIT",
   "type": "module",
