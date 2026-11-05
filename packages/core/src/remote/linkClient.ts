@@ -349,7 +349,7 @@ export class RemoteLink {
     this.bodyBytes = 0;
     for (const [id, p] of this.pending) {
       clearTimeout(p.timer);
-      p.reject(this.offlineError());
+      p.reject(this.offlineError(err));
       this.pending.delete(id);
     }
     if (current) {
@@ -421,8 +421,13 @@ export class RemoteLink {
     }
   }
 
-  private offlineError(): HttpError {
-    return new HttpError(409, this._state.error && this._state.state !== "online" ? this._state.error : `${this.opts.name} is offline — the chat continues when it's back.`, "runner_offline");
+  private offlineError(broke?: LinkError | null): HttpError {
+    return new HttpError(
+      409,
+      this._state.error && this._state.state !== "online" ? this._state.error : `${this.opts.name} is offline — the chat continues when it's back.`,
+      "runner_offline",
+      broke ? { link: broke.code } : undefined,
+    );
   }
 
   assertOnline(): void {
