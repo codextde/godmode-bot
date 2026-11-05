@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Agent } from "@godmode/shared";
 import { argValue, invocations, makeAgent, setupEnv, type TestEnv } from "./fixtures/runner-harness";
@@ -7,7 +7,7 @@ import { updateSettings } from "../src/services/settings";
 import { startChat } from "../src/services/conversations";
 import { waitForRun } from "../src/runner/runner";
 import { getConversation } from "../src/services/conversations";
-import { CLAUDE_MEM_VERSION, claudeMemEnv, claudeMemPluginDir, claudeMemPort } from "../src/memory/claudeMem";
+import { CLAUDE_MEM_VERSION, claudeMemEnv, claudeMemPluginDir, claudeMemPort, containHooks } from "../src/memory/claudeMem";
 
 let env: TestEnv;
 let agent: Agent;
@@ -56,5 +56,24 @@ describe("claude-mem backend", () => {
     expect((await waitForRun(run.id, 20_000)).status).toBe("succeeded");
     const inv = invocations(env).slice(before)[0]!;
     expect(argValue(inv, "--plugin-dir")).toBe(claudeMemPluginDir());
+  });
+
+  test("hooks run the launcher from the plugin folder, never one installed into ~/.local/bin", () => {
+    type Hook = { command?: string; args?: string[]; timeout?: number; async?: boolean };
+    const upstream = readFileSync(join(import.meta.dir, "fixtures", "claude-mem-hooks.json"), "utf8");
+    const contained = containHooks(upstream);
+    expect(contained).not.toContain("ensure-launcher");
+    const before = JSON.parse(upstream).hooks as Record<string, { hooks: Hook[] }[]>;
+    const after = JSON.parse(contained).hooks as Record<string, { hooks: Hook[] }[]>;
+    expect(Object.keys(after)).toEqual(Object.keys(before));
+    const all = (h: Record<string, { hooks: Hook[] }[]>) => Object.values(h).flatMap((groups) => groups.flatMap((g) => g.hooks));
+    const launched = all(before).filter((h) => h.command === "claude-mem");
+    expect(launched.length).toBeGreaterThan(5);
+    expect(all(after).some((h) => h.command === "claude-mem")).toBe(false);
+    const viaNode = all(after).filter((h) => h.command === "node");
+    expect(viaNode.map((h) => h.args)).toEqual(launched.map((h) => ["${CLAUDE_PLUGIN_ROOT}/scripts/claude-mem-launcher.cjs", ...(h.args ?? [])]));
+    expect(viaNode.map((h) => [h.timeout, h.async])).toEqual(launched.map((h) => [h.timeout, h.async]));
+    expect(after.Setup).toEqual(before.Setup!);
+    expect(() => containHooks(JSON.stringify({ hooks: { SessionStart: [{ hooks: [{ type: "command", command: "node ensure-launcher.cjs" }] }] } }))).toThrow();
   });
 });
