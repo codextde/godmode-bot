@@ -700,7 +700,7 @@ export const websocketHandler = {
     clients.delete(ws);
     if (ws.data.deviceId && !deviceOnline(ws.data.deviceId)) bus.changed("mobile");
   },
-  error(_ws: HubSocket, err: Error) {
+  error(err: Error) {
     log.warn("websocket error", err);
   },
 };

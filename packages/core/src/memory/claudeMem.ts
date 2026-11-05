@@ -6,7 +6,7 @@
  * store (`<agent repo>/.claude-mem`, git-ignored) and its own worker port, so memories never bleed between agents.
  */
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, rmSync, renameSync, writeFileSync, mkdtempSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, renameSync, writeFileSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Agent } from "@godmode/shared";
@@ -16,8 +16,9 @@ import { which } from "../util";
 
 const log = logger("claude-mem");
 
-export const CLAUDE_MEM_VERSION = "13.29.0";
+export const CLAUDE_MEM_VERSION = "15.10.0";
 const REGISTRY = "https://registry.npmjs.org/claude-mem";
+const LAUNCHER = "${CLAUDE_PLUGIN_ROOT}/scripts/claude-mem-launcher.cjs";
 
 function installRoot(): string {
   return join(config().dataDir, "plugins", "claude-mem", CLAUDE_MEM_VERSION);
@@ -27,6 +28,32 @@ function installRoot(): string {
 export function claudeMemPluginDir(): string | null {
   const dir = join(installRoot(), "plugin");
   return existsSync(join(dir, ".claude-plugin", "plugin.json")) ? dir : null;
+}
+
+type Hook = { command?: string; args?: string[] } & Record<string, unknown>;
+type HookGroup = { hooks?: Hook[] } & Record<string, unknown>;
+
+/**
+ * claude-mem's hooks call a `claude-mem` launcher on the PATH, which its SessionStart step compiles into ~/.local/bin
+ * and adds to the shell's rc file. Godmode keeps the install in its data folder: the hooks run the launcher script
+ * from the plugin with Node, and the step that places the launcher is dropped.
+ */
+export function containHooks(json: string): string {
+  const doc = JSON.parse(json) as { hooks?: Record<string, HookGroup[]> };
+  const events = doc.hooks ?? {};
+  for (const [event, groups] of Object.entries(events)) {
+    events[event] = groups
+      .map((group) => ({
+        ...group,
+        hooks: (group.hooks ?? [])
+          .filter((hook) => !hook.args?.some((arg) => arg.includes("ensure-launcher")))
+          .map((hook) => (hook.command === "claude-mem" ? { ...hook, command: "node", args: [LAUNCHER, ...(hook.args ?? [])] } : hook)),
+      }))
+      .filter((group) => group.hooks.length > 0);
+  }
+  const out = JSON.stringify(doc, null, 2);
+  if (out.includes("ensure-launcher")) throw new Error("claude-mem's hooks would install a launcher outside Godmode's data folder");
+  return out;
 }
 
 /** Deterministic worker port per agent (claude-mem's default port is shared per OS user). */
@@ -86,6 +113,8 @@ export async function installClaudeMem(): Promise<{ ok: boolean; output: string 
     if (proc.exitCode !== 0) throw new Error(`tar failed: ${proc.stderr.toString().trim()}`);
     const plugin = join(work, "package", "plugin");
     if (!existsSync(join(plugin, ".claude-plugin", "plugin.json"))) throw new Error("package has no Claude Code plugin");
+    const hooks = join(plugin, "hooks", "hooks.json");
+    writeFileSync(hooks, containHooks(readFileSync(hooks, "utf8")));
     const root = installRoot();
     rmSync(root, { recursive: true, force: true });
     mkdirSync(root, { recursive: true });
