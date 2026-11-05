@@ -59,9 +59,9 @@
   }
 
   const LOGO =
-    '<svg class="logo-mark" viewBox="0 0 512 512" fill="none"><rect x="16" y="16" width="480" height="480" rx="112" fill="#1C1C1C"/><rect x="16.5" y="16.5" width="479" height="479" rx="111.5" stroke="#FFFFFF" stroke-opacity="0.10"/><path d="M283 92 158 288h86l-22 132 132-204h-88l17-124Z" fill="#FAF9F5" stroke="#FAF9F5" stroke-width="10" stroke-linejoin="round"/></svg>';
+    '<svg class="logo-mark" viewBox="0 0 512 512" fill="none"><rect x="16" y="16" width="480" height="480" rx="112" fill="#2453D6"/><ellipse cx="152" cy="214" rx="40" ry="48" fill="#FFFFFF"/><ellipse cx="360" cy="214" rx="40" ry="48" fill="#FFFFFF"/><path d="M204 306Q256 358 308 306" stroke="#FFFFFF" stroke-width="30" stroke-linecap="round"/></svg>';
   const BOLT =
-    '<svg viewBox="140 80 240 360" fill="none"><path d="M283 92 158 288h86l-22 132 132-204h-88l17-124Z" fill="currentColor" stroke="currentColor" stroke-width="10" stroke-linejoin="round"/></svg>';
+    '<svg viewBox="96 96 320 320" fill="none"><ellipse cx="152" cy="214" rx="40" ry="48" fill="currentColor"/><ellipse cx="360" cy="214" rx="40" ry="48" fill="currentColor"/><path d="M204 306Q256 358 308 306" stroke="currentColor" stroke-width="30" stroke-linecap="round"/></svg>';
 
   function hydrateLogos(root) {
     (root || document).querySelectorAll("[data-logo]").forEach(function (el) {

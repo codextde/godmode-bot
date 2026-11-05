@@ -1,17 +1,14 @@
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 
-/** The Godmode mark — a flat anthracite tile with a paper bolt (inverts in dark mode). */
+/** The Godmode mark: the mascot's face on a blue tile. */
 export function Logo({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 512 512" className={cn("size-8 shrink-0", className)} aria-hidden>
-      <rect x="16" y="16" width="480" height="480" rx="112" className="fill-primary" />
-      <path
-        d="M283 92 158 288h86l-22 132 132-204h-88l17-124Z"
-        className="fill-primary-foreground stroke-primary-foreground"
-        strokeWidth="10"
-        strokeLinejoin="round"
-      />
+      <rect x="16" y="16" width="480" height="480" rx="112" fill="#2453D6" />
+      <ellipse cx="152" cy="214" rx="40" ry="48" fill="#FFFFFF" />
+      <ellipse cx="360" cy="214" rx="40" ry="48" fill="#FFFFFF" />
+      <path d="M204 306Q256 358 308 306" stroke="#FFFFFF" strokeWidth="30" strokeLinecap="round" fill="none" />
     </svg>
   );
 }

@@ -142,6 +142,7 @@ export const AGENT_COLORS = [
   "violet",
   "indigo",
   "sky",
+  "blue",
   "cyan",
   "emerald",
   "lime",
