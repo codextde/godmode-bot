@@ -348,5 +348,5 @@ export function signed(payload: unknown, secret = WEBHOOK_SECRET): { body: strin
 }
 
 export function event(type: string, object: Record<string, unknown>, id = `evt_${newId("x").slice(2)}`) {
-  return { id, object: "event", type, api_version: "2026-09-30.endive", created: Math.floor(Date.now() / 1000), data: { object }, livemode: false };
+  return { id, object: "event", type, api_version: Stripe.API_VERSION, created: Math.floor(Date.now() / 1000), data: { object }, livemode: false };
 }

@@ -1,5 +1,6 @@
 import { asc, eq } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "vitest";
+import Stripe from "stripe";
 import {
   archivePlan,
   createPlan,
@@ -250,7 +251,7 @@ describe("Stripe setup", () => {
       const params = stripe.lastParams("webhookEndpoints.create");
       expect(params).toMatchObject({
         url: "https://cloud.example.com/api/stripe/webhook",
-        api_version: "2026-09-30.endive",
+        api_version: Stripe.API_VERSION,
         metadata: { product: "godmode_cloud" },
         enabled_events: expect.arrayContaining(["checkout.session.completed", "customer.subscription.updated", "invoice.paid", "invoice.payment_failed"]),
       });

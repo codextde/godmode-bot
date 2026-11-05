@@ -6,7 +6,7 @@ import { logger } from "../log";
 
 const log = logger("hex");
 
-export const HEX_VERSION = "3.1.1";
+export const HEX_VERSION = "3.3.0";
 const DOWNLOAD_TIMEOUT_MS = 15 * 60_000;
 
 interface Download {
@@ -16,11 +16,11 @@ interface Download {
 }
 
 const DOWNLOADS: Record<string, Download> = {
-  "darwin-arm64": { file: `hex-${HEX_VERSION}-macos-arm64.zip`, sha256: "f07aeaa418521ef0253641dee24b95c884180bf41899bc1c5686f530f3668496", bytes: 26502891 },
-  "linux-x64": { file: `hex-${HEX_VERSION}-linux-x64`, sha256: "913fc3523c25194b24721fe1d6a59a28b9b0136ef0cdf9d55eed7f21b19201d2", bytes: 69129928 },
-  "linux-arm64": { file: `hex-${HEX_VERSION}-linux-arm64`, sha256: "f5b2c2e867348c4075f787a79f4673abd1b0c31e4c54cca867e53c795135dc7c", bytes: 61295344 },
-  "win32-x64": { file: `hex-${HEX_VERSION}-windows-x64.exe`, sha256: "c5c0a6d2e60bd64a3968219d313330d33d469e3751a8b68c4ac0bd524eed71b5", bytes: 67126200 },
-  "win32-arm64": { file: `hex-${HEX_VERSION}-windows-arm64.exe`, sha256: "ca209c5e742a31622a6ad114f7741af25a403489efde8187b23b3b079ccfd06f", bytes: 50403768 },
+  "darwin-arm64": { file: `hex-${HEX_VERSION}-macos-arm64.zip`, sha256: "1c28d6a1e790323ef199b481bc9231e6ad8e70a1785be84913e0a7bf0a6ebb39", bytes: 27081045 },
+  "linux-x64": { file: `hex-${HEX_VERSION}-linux-x64`, sha256: "e8c7b3a2ebeb1d7da5d6276d5f25145891d52178e3636347cb3ac331f7662622", bytes: 72583368 },
+  "linux-arm64": { file: `hex-${HEX_VERSION}-linux-arm64`, sha256: "a8a28cb8bc922f8e11fd5996e090d88aa143a2c3a65b07f1962435d0b15a24d1", bytes: 63788856 },
+  "win32-x64": { file: `hex-${HEX_VERSION}-windows-x64.exe`, sha256: "8eb6dfb49d59d30d7834fdbe52e4ac598a650989c2611590585fb4210d4fd1b2", bytes: 70988216 },
+  "win32-arm64": { file: `hex-${HEX_VERSION}-windows-arm64.exe`, sha256: "33bf443b322552379eee83e397a383d83ef249c8270cd21658a28ee8a2759fb8", bytes: 53326776 },
 };
 
 function download(): Download | null {
