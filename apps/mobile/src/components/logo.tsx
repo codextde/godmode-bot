@@ -4,7 +4,7 @@ import { useIsDark } from "@/lib/theme";
 
 const LOGO = require("../../assets/splash-icon.png");
 
-/** The Godmode mark: a paper bolt on an anthracite tile. */
+/** The Godmode mark: the mascot's face on a blue tile. */
 export function Logo({ size = 48 }: { size?: number }) {
   const dark = useIsDark();
   return (

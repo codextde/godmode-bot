@@ -113,17 +113,17 @@ html.menu-open { overflow: hidden; }
 .link-btn:hover { color: var(--text); text-decoration-color: var(--brand); }
 .link-btn[data-loading] { opacity: 0.6; pointer-events: none; }
 
-.play-ring { box-shadow: 0 0 0 0 rgb(11 118 81 / 0.35); animation: play-ring 2.4s var(--ease-out) infinite; }
+.play-ring { box-shadow: 0 0 0 0 rgb(36 83 214 / 0.35); animation: play-ring 2.4s var(--ease-out) infinite; }
 @keyframes play-ring {
-  0% { box-shadow: 0 0 0 0 rgb(11 118 81 / 0.3); }
-  70%, 100% { box-shadow: 0 0 0 10px rgb(11 118 81 / 0); }
+  0% { box-shadow: 0 0 0 0 rgb(36 83 214 / 0.3); }
+  70%, 100% { box-shadow: 0 0 0 10px rgb(36 83 214 / 0); }
 }
 
 /* Hero --------------------------------------------------------------------------------------- */
 .hero-wash {
   background:
     radial-gradient(ellipse 50% 60% at 18% 8%, rgb(253 235 226 / 0.9), transparent 70%),
-    radial-gradient(ellipse 45% 55% at 85% 0%, rgb(227 243 234 / 0.95), transparent 70%);
+    radial-gradient(ellipse 45% 55% at 85% 0%, rgb(231 237 252 / 0.95), transparent 70%);
 }
 .hero-note {
   display: flex;
@@ -487,7 +487,7 @@ html.menu-open { overflow: hidden; }
 .compare tbody tr:last-child td { border-bottom: 0; }
 .compare thead th { font-size: 13.5px; font-weight: 600; color: var(--muted); padding-top: 22px; padding-bottom: 18px; }
 .compare tbody th { font-size: 14px; font-weight: 500; color: var(--text-2); position: sticky; left: 0; background: var(--surface); z-index: 1; }
-.compare .is-us { background: rgb(227 243 234 / 0.45); }
+.compare .is-us { background: rgb(231 237 252 / 0.45); }
 .compare thead .is-us { color: var(--text); font-size: 14px; box-shadow: inset 0 3px 0 0 var(--brand); }
 .compare tbody tr:hover { background: var(--surface-2); }
 
@@ -529,13 +529,13 @@ html.menu-open { overflow: hidden; }
 .final-glow {
   background:
     radial-gradient(ellipse 45% 40% at 30% 10%, rgb(253 235 226 / 0.8), transparent 70%),
-    radial-gradient(ellipse 45% 45% at 70% 20%, rgb(227 243 234 / 0.9), transparent 70%);
+    radial-gradient(ellipse 45% 45% at 70% 20%, rgb(231 237 252 / 0.9), transparent 70%);
 }
 .final-panel {
   border-radius: 36px;
   background:
     radial-gradient(ellipse 60% 70% at 15% 0%, rgb(253 235 226 / 0.9), transparent 70%),
-    radial-gradient(ellipse 60% 70% at 90% 100%, rgb(227 243 234 / 1), transparent 70%),
+    radial-gradient(ellipse 60% 70% at 90% 100%, rgb(231 237 252 / 1), transparent 70%),
     var(--surface);
   box-shadow: 0 0 0 1px var(--line) inset, var(--shadow);
 }
@@ -726,3 +726,6 @@ textarea.field-input { min-height: 132px; resize: vertical; }
   width: 1.5px;
   background: linear-gradient(var(--line-2), var(--line-2)) no-repeat;
 }
+
+.logo-eyes { transform-box: fill-box; transform-origin: center; animation: gmc-blink 5.2s infinite; }
+@media (prefers-reduced-motion: reduce) { .logo-eyes { animation: none; } }
