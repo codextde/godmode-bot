@@ -30,6 +30,12 @@ export function TriggerSummary({ routine, icon = true, className }: { routine: R
         <span className="min-w-0 truncate">
           {trigger.triggerName}
           <span className="text-muted-foreground"> · {prettySlug(trigger.toolkit)}</span>
+          {!!trigger.moreEvents?.length && (
+            <span className="text-muted-foreground" title={trigger.moreEvents.map((e) => `${e.triggerName} · ${prettySlug(e.toolkit)}`).join("\n")}>
+              {" "}
+              {t("trigger.moreEvents", { count: trigger.moreEvents.length })}
+            </span>
+          )}
         </span>
       )}
       {trigger.type === "condition" && (

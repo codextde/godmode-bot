@@ -85,6 +85,7 @@ import { audit } from "../services/audit";
 import { markRunNotifiedUser, notify } from "../services/notifications";
 import { listMissingLogins, reportMissingLogin } from "../services/missingLogins";
 import {
+  MAX_MORE_APP_EVENTS,
   createRoutine,
   deleteRoutine,
   getRoutine,
@@ -837,6 +838,19 @@ const triggerSchema = z
       connectionId: z.string().describe("Connected account id (from automation_triggers_list)"),
       triggerSlug: z.string().describe('App event slug (from automation_triggers_list), e.g. "GMAIL_NEW_GMAIL_MESSAGE"'),
       config: z.record(z.string(), z.unknown()).optional().describe("The app event's settings, following its config schema"),
+      moreEvents: z
+        .array(
+          z.object({
+            connectionId: z.string().describe("Connected account id (from automation_triggers_list)"),
+            triggerSlug: z.string().describe("App event slug (from automation_triggers_list)"),
+            config: z.record(z.string(), z.unknown()).optional().describe("The app event's settings, following its config schema"),
+          }),
+        )
+        .max(MAX_MORE_APP_EVENTS)
+        .optional()
+        .describe(
+          'More app events that start the same automation, e.g. Slack "Channel Message Received" plus "Direct Message Received". Each may use another account or app. When updating, pass the whole list.',
+        ),
     }),
     z.object({
       type: z.literal("condition"),
@@ -881,7 +895,10 @@ const routineFields = {
 
 function triggerSummary(r: Routine) {
   const t = r.trigger;
-  if (t.type === "app") return { type: t.type, app: t.toolkit, event: t.triggerName, triggerSlug: t.triggerSlug, connectionId: t.connectionId, config: t.config };
+  if (t.type === "app") {
+    const more = t.moreEvents?.map((e) => ({ app: e.toolkit, event: e.triggerName, triggerSlug: e.triggerSlug, connectionId: e.connectionId, config: e.config }));
+    return { type: t.type, app: t.toolkit, event: t.triggerName, triggerSlug: t.triggerSlug, connectionId: t.connectionId, config: t.config, ...(more?.length ? { moreEvents: more } : {}) };
+  }
   if (t.type === "condition") return { type: t.type, condition: t.condition, checks: r.cron, checkModel: t.checkModel };
   // The URL is a secret (and masked in transcripts): the human copies it from the app.
   if (t.type === "webhook") return { type: t.type, url: "secret — copy it in the Godmode app: Automations → this automation → Copy webhook URL" };

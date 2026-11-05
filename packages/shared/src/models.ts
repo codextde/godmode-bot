@@ -260,6 +260,7 @@ export type RoutineTrigger =
       triggerName: string;
       /** Trigger configuration (fields of the trigger type's config schema). */
       config: Record<string, unknown>;
+      moreEvents?: AppTriggerEvent[];
     }
   | {
       type: "condition";
@@ -269,6 +270,14 @@ export type RoutineTrigger =
       checkModel: string | null;
     }
   | { type: "webhook" };
+
+export interface AppTriggerEvent {
+  connectionId: ID;
+  toolkit: string;
+  triggerSlug: string;
+  triggerName: string;
+  config: Record<string, unknown>;
+}
 
 /** Health of the trigger (listening for app events, last check, webhook calls…). */
 export interface RoutineTriggerStatus {

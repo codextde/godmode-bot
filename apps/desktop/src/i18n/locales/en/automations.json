@@ -54,7 +54,9 @@
     "when": "When {{condition}}",
     "checked": "checked {{schedule}}",
     "webhookRuns": "runs when its URL is called",
-    "pickerLabel": "What starts this automation"
+    "pickerLabel": "What starts this automation",
+    "moreEvents_one": "+ {{count}} more event",
+    "moreEvents_other": "+ {{count}} more events"
   },
   "eventSource": {
     "schedule": "Schedule",
