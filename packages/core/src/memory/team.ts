@@ -55,8 +55,8 @@ export function teamActivityDigest(lead: Agent, since: string | null, budget = T
   const names = new Map(below.map((a) => [a.id, a.name.replace(/[\r\n#]+/g, " ").trim()]));
   const rows = all<ResultRow>(
     `SELECT r.agent_id, r.trigger, r.status, r.result, r.error, r.finished_at, c.title FROM runs r JOIN conversations c ON c.id = r.conversation_id
-     WHERE r.agent_id IN (${below.map(() => "?").join(", ")}) AND r.trigger NOT IN ('check', 'dream') AND r.status IN ('succeeded', 'failed')
-       AND r.finished_at IS NOT NULL AND (? IS NULL OR r.finished_at > ?) AND c.private = 0 AND c.origin != 'dream'
+     WHERE r.agent_id IN (${below.map(() => "?").join(", ")}) AND r.trigger NOT IN ('check', 'dream', 'review') AND r.status IN ('succeeded', 'failed')
+       AND r.finished_at IS NOT NULL AND (? IS NULL OR r.finished_at > ?) AND c.private = 0 AND c.origin NOT IN ('dream', 'review')
      ORDER BY r.finished_at DESC, r.rowid DESC LIMIT 400`,
     ...below.map((a) => a.id),
     since,

@@ -96,7 +96,9 @@ import {
 } from "../services/routines";
 import { listEvents } from "../automations/events";
 import { reportCheckResult } from "../automations/conditions";
-import { dreamTidies, reportDream, tidyWorkspace } from "../memory/dreaming";
+import { dreamTidies, reportDream, startDream, tidyWorkspace } from "../memory/dreaming";
+import { FINDING_MAX, MAX_FINDINGS, MAX_TICKETS, NOTES_MAX, SUMMARY_MAX as REVIEW_SUMMARY_MAX, isReviewRun, pick, recordAction, reportReview, reviewFixes, ticketsFiled } from "../review/review";
+import { SUMMARY_MAX as RESTART_SUMMARY_MAX, archiveChat, readChat, restartChat, stopChat } from "../review/chats";
 import { MAX_OPEN as MAX_OFFERS, PROMPT_MAX as OFFER_PROMPT_MAX, TITLE_MAX as OFFER_TITLE_MAX, WHY_MAX as OFFER_WHY_MAX, offersOn, recordOffers } from "../memory/offers";
 import { NOTE_MAX as WORKSPACE_NOTE_MAX } from "../memory/workspace";
 import { COMPOSIO_API_KEY_SECRET, listConnections } from "../integrations/composio";
@@ -809,6 +811,8 @@ const agentFields = {
 
 /** agentFields that change how an agent looks and is introduced, not what it can do. */
 const COSMETIC_AGENT_FIELDS = new Set<string>(["role", "description", "avatar", "color", "character", "personality"]);
+/** agentFields an auto review may change: what an agent is told and when it wakes, not who it is or what it may do. */
+const REVIEW_AGENT_FIELDS = new Set<string>(["instructions", "description", "role", "heartbeat"]);
 
 const triggerSchema = z
   .discriminatedUnion("type", [
@@ -984,6 +988,18 @@ function isDreamRun(ctx: RunContext): boolean {
   }
 }
 
+/** The run is an auto review (review/review.ts): it gets the review's tools and nothing else. */
+function isReviewTrigger(ctx: RunContext): boolean {
+  try {
+    return getRun(ctx.runId).trigger === "review";
+  } catch {
+    return false;
+  }
+}
+
+/** The run is an auto review that is still working: what it changes is recorded on it. */
+const reviewing = (ctx: RunContext) => isReviewTrigger(ctx) && isReviewRun(ctx.runId);
+
 /**
  * Artifacts belong to a chat: not in condition checks, dreams or connected apps, and not on a runner (its chats show on
  * the controller). Only while the human has artifacts on.
@@ -1097,6 +1113,41 @@ function artifactRefusal(agent: Agent, id: string): string | null {
 }
 
 const DREAM_TOOLS: ReadonlySet<string> = new Set(["memory_dream_report", "workspace_tidy", "offer_help", "recall", "recall_read", "team_memory_read"]);
+
+/** What an auto review may use changes nothing or is recorded on the review (REVIEW_FIXES), so it can be undone. */
+const REVIEW_FIXES: ReadonlySet<string> = new Set([
+  "agent_update",
+  "routine_update",
+  "run_cancel",
+  "run_continue",
+  "task_create",
+  "self_repair",
+  "review_chat_archive",
+  "review_chat_stop",
+  "review_chat_restart",
+  "review_dream",
+]);
+const REVIEW_TOOLS: ReadonlySet<string> = new Set([
+  ...REVIEW_FIXES,
+  "review_chat_read",
+  "review_report",
+  "agents_list",
+  "agent_get",
+  "routine_list",
+  "automation_events_list",
+  "runs_list",
+  "delegation_status",
+  "missing_logins_list",
+  "tasks_list",
+  "task_get",
+  "goals_list",
+  "human_tasks_list",
+  "team_memory_read",
+  "recall",
+  "recall_read",
+  "workspaces_list",
+  "settings_get",
+]);
 
 /**
  * What an app outside Godmode may call, and the access its key needs. Nothing that needs a run, a chat or a browser,
@@ -2676,8 +2727,21 @@ Polished, calm, real hierarchy, responsive from 360 px, light and dark; no emoji
         protectedLeadRefusal(agent, ctx, patch.reportsTo);
       if (refusal) return fail(refusal);
       assertAgentPatchAllowed(target, patch);
+      const review = reviewing(ctx);
+      if (review && fields.some((f) => !REVIEW_AGENT_FIELDS.has(f))) {
+        return fail(`An auto review changes an agent's ${[...REVIEW_AGENT_FIELDS].join(", ")} only; report the rest as a finding.`);
+      }
+      const before = review ? pick(target, patch) : null;
       const updated = await updateAgent(agentId, patch, `agent:${agent.id}`);
       audit(`agent:${agent.id}`, "agent.update", agentId, { fields });
+      if (review && before) {
+        recordAction(ctx.runId, {
+          kind: "agent_updated",
+          text: `Changed ${target.name}'s ${fields.join(", ")}`,
+          targetId: agentId,
+          undo: { type: "agent", agentId, before, after: pick(updated, patch) },
+        });
+      }
       return json(agentSummary(updated, workspaceNames()));
     },
   }),
@@ -2904,9 +2968,21 @@ Polished, calm, real hierarchy, responsive from 360 px, light and dark; no emoji
       // What this caller writes or starts runs without raw secrets from now on. Pausing does neither, nor picking the computer.
       const pauseOnly = fields.length > 0 && fields.every((f) => f === "runOn" || (f === "enabled" && patch.enabled === false));
       const fillOnly = secrets.fillOnly && !pauseOnly;
-      const r = updateRoutine(routineId, { ...patch, ...(resolved ? { trigger: resolved } : {}), ...(fillOnly ? { fillOnly } : {}) });
+      const applied = { ...patch, ...(resolved ? { trigger: resolved } : {}), ...(fillOnly ? { fillOnly } : {}) };
+      const before = reviewing(ctx) ? pick(latest, applied) : null;
+      const r = updateRoutine(routineId, applied);
       const became = fillOnly && !latest.fillOnly;
       audit(`agent:${agent.id}`, "routine.update", routineId, { fields, ...(became ? { fillOnly } : {}) });
+      if (before) {
+        const what = fields.length === 1 && fields[0] === "enabled" ? (patch.enabled ? "Turned on" : "Paused") : `Changed the ${fields.join(", ")} of`;
+        recordAction(ctx.runId, {
+          kind: "automation_updated",
+          text: `${what} ${owner.name}'s automation "${latest.name}"`,
+          targetId: routineId,
+          conversationId: latest.conversationId,
+          undo: { type: "routine", routineId, before, after: pick(r, applied) },
+        });
+      }
       return json({ ...routineSummary(r), ...(became && canReveal(owner) ? { note: fillOnlyNote(owner) } : {}) });
     },
   }),
@@ -3093,6 +3169,8 @@ Polished, calm, real hierarchy, responsive from 360 px, light and dark; no emoji
     run: ({ start, parentTaskId, waitsFor, ...input }, { agent, ctx }) => {
       const refusal = taskAssignRefusal(agent, ctx, input.agentId);
       if (refusal) return fail(refusal);
+      const review = reviewing(ctx);
+      if (review && ticketsFiled(ctx.runId) >= MAX_TICKETS) return fail(`This review filed ${MAX_TICKETS} tickets already: report the rest as findings.`);
       const parentTask = parentTaskId ? findTask(parentTaskId) : null;
       // Only the ticket it works on, or one it filed: another agent's running ticket would start waiting for parts it never asked for.
       if (parentTask && parentTask.conversationId !== ctx.conversationId && parentTask.createdBy !== `agent:${agent.id}`) {
@@ -3108,6 +3186,7 @@ Polished, calm, real hierarchy, responsive from 360 px, light and dark; no emoji
         `agent:${agent.id}`,
       );
       audit(`agent:${agent.id}`, "task.create", t.id, { agentId: t.agentId, type: t.type });
+      if (review) recordAction(ctx.runId, { kind: "ticket_filed", text: `Filed #${t.number} "${t.title}"`, targetId: t.id, conversationId: t.conversationId ?? null });
       return json(taskSummary(t, workspaceNames(), new Map(listAgents({ workspaceId: "all" }).map((a) => [a.id, a.name]))));
     },
   }),
@@ -3451,6 +3530,7 @@ Polished, calm, real hierarchy, responsive from 360 px, light and dark; no emoji
       const refusal = offHostRefusal(ctx, target, "continue its work") ?? revealTargetRefusal(agent, ctx, target, "continue its work");
       if (refusal) return fail(refusal);
       const run = await continueCutOffRun(runId);
+      if (reviewing(ctx)) recordAction(ctx.runId, { kind: "run_continued", text: `Continued ${getAgent(run.agentId).name}'s work that a restart cut off`, targetId: run.id, conversationId: run.conversationId });
       return `Continued: ${getAgent(run.agentId).name} picks the work up in run ${run.id} (conversation ${run.conversationId}).`;
     },
   }),
@@ -3482,6 +3562,7 @@ Polished, calm, real hierarchy, responsive from 360 px, light and dark; no emoji
         await cancelRun(runId, text);
       }
       audit(`agent:${agent.id}`, "run.cancel", runId, { agentId: run.agentId, status: run.status, ...(runnerId ? { runnerId } : {}), ...(reason ? { reason } : {}) });
+      if (reviewing(ctx)) recordAction(ctx.runId, { kind: "run_cancelled", text: `Stopped a run of ${target.name}${reason ? `: ${reason}` : ""}`, targetId: runId, conversationId: run.conversationId });
       return `Stopped run ${runId} of ${target.name} (it was ${run.status}${runnerId ? ", on another computer" : ""}).`;
     },
   }),
@@ -4115,6 +4196,92 @@ Polished, calm, real hierarchy, responsive from 360 px, light and dark; no emoji
   }),
 
   defineTool({
+    name: "review_chat_read",
+    description:
+      "Auto review: read a chat — its state (follow-up, /goal, context, whether it stands still) and its latest exchanges — to judge whether it goes well, still makes sense, or should stop.",
+    schema: z.object({
+      conversationId: z.string(),
+      exchanges: z.number().int().min(1).max(20).optional().describe("How many of the latest exchanges (default 6)"),
+    }),
+    when: (_agent, ctx) => isReviewTrigger(ctx),
+    run: ({ conversationId, exchanges }) => readChat(conversationId, exchanges),
+  }),
+
+  defineTool({
+    name: "review_chat_archive",
+    description:
+      "Auto review: archive a chat whose work is over — quiet, nothing waiting in it. Refused for pinned chats, chats with a follow-up, chats that stand still, and chats the human wrote in during the last 3 days.",
+    schema: z.object({ conversationId: z.string(), reason: z.string().trim().min(1).max(200).describe("Why, one line for the human") }),
+    when: (_agent, ctx) => reviewing(ctx),
+    run: ({ conversationId, reason }, { ctx }) => archiveChat(ctx.runId, conversationId, reason),
+  }),
+
+  defineTool({
+    name: "review_chat_stop",
+    description:
+      "Auto review: stop a chat from continuing on its own — removes its follow-up, ends its /goal, and stops it from continuing by itself after the usage limit. For chats that loop without progress, wait for something that won't come, or whose work is done or no longer wanted. A run working in it now isn't stopped (run_cancel does that).",
+    schema: z.object({ conversationId: z.string(), reason: z.string().trim().min(1).max(200).describe("Why, shown in the chat and to the human") }),
+    when: (_agent, ctx) => reviewing(ctx),
+    run: ({ conversationId, reason }, { ctx }) => stopChat(ctx.runId, conversationId, reason),
+  }),
+
+  defineTool({
+    name: "review_chat_restart",
+    description:
+      "Auto review: a chat that grew too big goes on fresh. A normal chat continues in a new chat that starts with your summary (its follow-up moves along; the old chat is archived); an automation's or heartbeat's chat starts a new Claude session. Read the chat first (review_chat_read) and write a summary that keeps everything needed to go on: the task, what is done, what is open, decisions, names, numbers, links.",
+    schema: z.object({
+      conversationId: z.string(),
+      summary: z.string().max(RESTART_SUMMARY_MAX).describe("Where the work stands, complete enough to go on without the old chat"),
+      reason: z.string().trim().min(1).max(200).describe("Why, one line for the human"),
+    }),
+    when: (_agent, ctx) => reviewing(ctx),
+    run: ({ conversationId, summary, reason }, { agent, ctx }) => {
+      // The fresh chat starts a run of its agent with text the review wrote: only for agents it could hand work to.
+      const owner = get<{ agent_id: string }>("SELECT agent_id FROM conversations WHERE id = ?", conversationId)?.agent_id;
+      const target = owner ? getAgent(owner) : null;
+      const refusal = target && (offHostRefusal(ctx, target, "restart its chat") ?? revealTargetRefusal(agent, ctx, target, "restart its chat"));
+      if (refusal) return fail(`${refusal} Report it as a finding instead.`);
+      return restartChat(ctx.runId, conversationId, summary, reason);
+    },
+  }),
+
+  defineTool({
+    name: "review_dream",
+    description: "Auto review: let an agent dream now — consolidate and shorten its memory — when it is far over its target, contradicts itself or is out of date.",
+    schema: z.object({ agentId: z.string(), reason: z.string().trim().min(1).max(200) }),
+    when: (_agent, ctx) => reviewing(ctx),
+    run: async ({ agentId, reason }, { ctx }) => {
+      const target = getAgent(agentId);
+      const dream = await startDream(agentId, "manual");
+      recordAction(ctx.runId, { kind: "dream_started", text: `Let ${target.name} dream: ${reason}`, targetId: dream.id });
+      return `${target.name} dreams now (dream ${dream.id}).`;
+    },
+  }),
+
+  defineTool({
+    name: "review_report",
+    description:
+      "Finish the auto review. summary: two or three sentences for the human (what you found, what you fixed, what needs them). findings: real problems only, worst first; forHuman says exactly what the human has to do, empty when nothing. scores: each agent that worked, 1 (poor) to 5 (excellent), one line why. notes: your complete notes for the next review (they replace the old ones).",
+    schema: z.object({
+      summary: z.string().min(1).max(REVIEW_SUMMARY_MAX),
+      findings: z
+        .array(
+          z.object({
+            area: z.enum(["agents", "chats", "automations", "memory", "errors", "logins", "setup"]),
+            severity: z.enum(["info", "warning", "critical"]),
+            text: z.string().min(1).max(FINDING_MAX),
+            forHuman: z.string().max(FINDING_MAX).optional(),
+          }),
+        )
+        .max(MAX_FINDINGS),
+      scores: z.array(z.object({ agentId: z.string(), score: z.number().min(1).max(5), note: z.string().max(300) })).max(200),
+      notes: z.string().max(NOTES_MAX),
+    }),
+    when: (_agent, ctx) => reviewing(ctx),
+    run: (report, { ctx }) => reportReview(ctx.runId, { ...report, findings: report.findings.map((f) => ({ ...f, forHuman: f.forHuman ?? "" })) }),
+  }),
+
+  defineTool({
     name: "self_repair",
     description:
       "Check Godmode's own diagnostic logs (this computer's and every online runner's) and file a coding ticket for each log with new problems: errors, and warnings that recur, seen in the last day and not already covered by an open ticket or one filed in the last 3 days. Each ticket works on Godmode's source repository (Settings → Logs → Self-repair), gets the log attached, is worked on by the self-repair agent and — with auto-merge on — is merged into the base branch once delivered. Returns what was filed and what had nothing new. Follow the tickets with tasks_list (label autofix) and task_get.",
@@ -4129,6 +4296,11 @@ Polished, calm, real hierarchy, responsive from 360 px, light and dark; no emoji
       const ticket = get<{ labels: string }>("SELECT labels FROM tasks WHERE conversation_id = ?", ctx.conversationId);
       if (ticket && parseJson<string[]>(ticket.labels, []).includes("autofix")) return fail("You are working on a fix ticket: fix it here instead of filing another one.");
       const results = await selfRepairCheck({ sources, note, onlyNew, actor: `agent:${agent.id}` });
+      if (reviewing(ctx)) {
+        for (const { result } of results) {
+          if (result?.task) recordAction(ctx.runId, { kind: "ticket_filed", text: `Filed fix #${result.task.number} for Godmode: ${result.task.title}`, targetId: result.task.id, conversationId: result.task.conversationId ?? null });
+        }
+      }
       return json(
         results.map(({ source, result, error }) => ({
           source,
@@ -4212,7 +4384,8 @@ export function connectorTools(): ConnectorTool[] {
 /** Tools listed for this agent in this run (permission-filtered). */
 export function listToolsFor(agent: Agent, ctx: RunContext): { name: string; description: string; inputSchema: Record<string, unknown>; _meta?: Record<string, unknown> }[] {
   const dream = isDreamRun(ctx);
-  return TOOLS.filter((t) => (!dream || DREAM_TOOLS.has(t.name)) && (!t.when || t.when(agent, ctx)) && !connectorRefusal(ctx, t.name)).map((t) => {
+  const review = isReviewTrigger(ctx);
+  return TOOLS.filter((t) => (!dream || DREAM_TOOLS.has(t.name)) && (!review || REVIEW_TOOLS.has(t.name)) && (!t.when || t.when(agent, ctx)) && !connectorRefusal(ctx, t.name)).map((t) => {
     let schema = schemaCache.get(t.name);
     if (!schema) {
       schema = inputSchema(t.schema);
@@ -4260,6 +4433,11 @@ async function runTool(tool: ToolDef, ctx: RunContext, name: string, args: unkno
     if (refusal) return result(refusal, true);
     if (tool.when && !tool.when(agent, ctx)) return result(`The tool ${name} is not available to ${agent.name}.`, true);
     if (!DREAM_TOOLS.has(name) && isDreamRun(ctx)) return result(`The tool ${name} is not available while dreaming.`, true);
+    if (isReviewTrigger(ctx)) {
+      if (!REVIEW_TOOLS.has(name)) return result(`The tool ${name} is not available in an auto review.`, true);
+      if (REVIEW_FIXES.has(name) && !reviewFixes()) return result("Auto-fix is off: change nothing, report it as a finding with the fix you would make.", true);
+      if (REVIEW_FIXES.has(name) && !isReviewRun(ctx.runId)) return result("This review has ended: it changes nothing anymore.", true);
+    }
     const parsed = tool.schema.parse(args ?? {});
     const out = await tool.run(parsed as never, { ctx, agent });
     return typeof out === "string" ? result(out) : result(out.text, out.isError === true, out.images);

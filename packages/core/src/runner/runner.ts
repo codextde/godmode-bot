@@ -126,6 +126,7 @@ import { buildMcpConfig, gatewayUrl, removeMcpConfigFile, writeMcpConfigFile } f
 import { effortFor, ultracodeFor } from "./models";
 import {
   buildDreamSystemPrompt,
+  buildReviewSystemPrompt,
   buildSystemPrompt,
   continueContext,
   instructionsDigest,
@@ -212,6 +213,11 @@ const DREAM_TOOLS = "Read,Write,Edit,Glob,Grep";
  * Edit rules cover every built-in tool that writes files.
  */
 const DREAM_ALLOWED = ["Edit(./MEMORY.md)", "Edit(./memory/**)", "mcp__godmode"];
+/** Built-in Claude Code tools of an auto review (review/review.ts): it reads; every change goes through Godmode's tools, which record it. */
+const REVIEW_TOOLS = "Read,Glob,Grep";
+const REVIEW_ALLOWED = ["mcp__godmode"];
+/** Godmode's own upkeep (dreams, auto reviews): no browser, computer, VM, shell or plugins. */
+const UPKEEP: ReadonlySet<RunTrigger> = new Set(["dream", "review"]);
 /** A dream holds the agent's memory while it runs: never for longer than this (tidying the workspace and its notes takes a while). */
 const DREAM_TIMEOUT_MINUTES = 45;
 
@@ -716,7 +722,7 @@ function stepRunning(job: Job): boolean {
 export async function pauseRun(runId: string): Promise<void> {
   const job = jobs.get(runId);
   if (!job) throw conflict("That run isn't working right now");
-  if (job.trigger === "dream" || job.trigger === "check") throw badRequest("This kind of run can't be paused — stop it instead");
+  if (UPKEEP.has(job.trigger) || job.trigger === "check") throw badRequest("This kind of run can't be paused — stop it instead");
   if (job.cancelReason || job.pause) return;
   // A chat has one paused run; what waits behind it is frozen already.
   if (pausedConversations().has(job.conversationId)) throw conflict("This chat is paused already");
@@ -899,7 +905,7 @@ function closePaused(row: RunRow, reason: string, byHuman = false): void {
   const ts = now();
   unanswered.delete(row.id);
   // The human stopped the agent's latest real run: what failed before is behind it.
-  if (byHuman && row.trigger !== "dream" && row.trigger !== "check") safely("forget the failure", () => setAgentFailedRun(row.agent_id, null));
+  if (byHuman && !UPKEEP.has(row.trigger) && row.trigger !== "check") safely("forget the failure", () => setAgentFailedRun(row.agent_id, null));
   // Stopped for good: an answer it never got to read must not reach a later turn as an order.
   if (!shuttingDown) safely("drop the owed answer", () => dropOwedAnswers(row.conversation_id));
   sql("UPDATE runs SET status = 'cancelled', error = ?, finished_at = ? WHERE id = ?", reason, ts, row.id);
@@ -1007,7 +1013,7 @@ export function recoverInterruptedRuns(): void {
   for (const r of stale) {
     sql("UPDATE runs SET status = 'failed', error = ?, finished_at = ? WHERE id = ?", INTERRUPTED, ts, r.id);
     agentIds.add(r.agent_id);
-    if (r.status === "running" && r.trigger !== "dream" && r.trigger !== "check") broke.set(r.agent_id, r.id);
+    if (r.status === "running" && !UPKEEP.has(r.trigger) && r.trigger !== "check") broke.set(r.agent_id, r.id);
     for (const m of all<{ id: string; content: string; blocks: string }>(
       "SELECT id, content, blocks FROM messages WHERE run_id = ? AND role = 'assistant'",
       r.id,
@@ -1160,7 +1166,7 @@ function memoryHolder(job: Job): Job | null {
 /** The VM the run works in: its chat's, else its agent's, else its workspace's. */
 function vmOf(job: Job): string | null {
   if (job.vmId !== undefined) return job.vmId;
-  if (job.trigger === "dream") return (job.vmId = null);
+  if (UPKEEP.has(job.trigger)) return (job.vmId = null);
   try {
     job.vmId = resolveVmId(job.conversationId, getAgent(job.agentId));
   } catch {
@@ -1172,7 +1178,7 @@ function vmOf(job: Job): string | null {
 function browserLockOf(job: Job): string | null {
   if (job.browserLock !== undefined) return job.browserLock;
   job.browserFromChat = false;
-  if (job.trigger === "dream") return (job.browserLock = null);
+  if (UPKEEP.has(job.trigger)) return (job.browserLock = null);
   // One screen, one mouse and one Chrome per VM: runs working in the same VM take turns.
   const vmId = vmOf(job);
   if (vmId) return (job.browserLock = `vm:${vmId}`);
@@ -1250,9 +1256,9 @@ export function computerTargetOf(job: {
   let target: ComputerTarget | null = null;
   let fromAgent = false;
   try {
-    // Dreams only read and edit memory files.
+    // Dreams and reviews never use the screen.
     const agent = getAgent(job.agentId);
-    if (getSettings().computer.enabled && job.trigger !== "dream" && !resolveVmId(job.conversationId, agent)) {
+    if (getSettings().computer.enabled && !(job.trigger && UPKEEP.has(job.trigger)) && !resolveVmId(job.conversationId, agent)) {
       const conv = get<{ computer_target: string | null }>("SELECT computer_target FROM conversations WHERE id = ?", job.conversationId);
       target = parseComputerTarget(parseJson<unknown>(conv?.computer_target, null));
       if (!target && agent.computer.enabled && job.trigger !== "check" && hasOwnDesktop()) {
@@ -2022,7 +2028,7 @@ function limitUnsaid(job: Job, attempt: Attempt): LimitPause | null {
 function limitOf(job: Job, attempt: Attempt): LimitPause | null {
   const limit = limitSaid(job, attempt) ?? limitUnsaid(job, attempt);
   // Checks and dreams come round again by themselves; delegated work reports its failure to the run that waits for it.
-  return job.trigger === "check" || job.trigger === "dream" || job.parentRunId ? null : limit;
+  return job.trigger === "check" || UPKEEP.has(job.trigger) || job.parentRunId ? null : limit;
 }
 
 async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcome> {
@@ -2051,8 +2057,10 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   if (!conv) return { status: "cancelled", error: "Conversation was deleted" };
   job.private = conv.private === 1;
   const dreaming = job.trigger === "dream";
-  // A dream always works in the agent's repository, on its memory files.
-  const folder = dreaming ? null : (conv.working_directory ?? agent.workingDirectory);
+  const reviewing = job.trigger === "review";
+  const upkeep = dreaming || reviewing;
+  // A dream always works in the agent's repository, on its memory files; an auto review reads from there.
+  const folder = upkeep ? null : (conv.working_directory ?? agent.workingDirectory);
   const problem = folder && (isDirectory(folder) ? workingDirectoryProblem(folder) : `The folder ${folder} doesn't exist anymore.`);
   if (problem) {
     const fix = conv.working_directory ? "Pick another folder for this chat." : `Change the default folder in ${agent.name}'s settings.`;
@@ -2080,7 +2088,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   let vm: RunVm | null = null;
   let guest: GuestTools | null = null;
   // The VM the queue decided on (its lock is what keeps other runs out of it).
-  const vmId = dreaming ? null : vmOf(job);
+  const vmId = upkeep ? null : vmOf(job);
   if (vmId) {
     if (!settings.vm.enabled) {
       return { status: "failed", error: "This work is set to run in a virtual machine, but virtual machines are turned off (Settings → Virtual machines). Turn them on, or remove the VM from the chat, agent or workspace." };
@@ -2125,22 +2133,22 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
       }
     : null;
   // A task's own git worktree (tasks/service.ts), when this chat is one and works there.
-  const task = dreaming
+  const task = upkeep
     ? null
     : get<{ repo_url: string; repo_path: string; branch: string }>(
         "SELECT repo_url, repo_path, branch FROM tasks WHERE conversation_id = ? AND branch IS NOT NULL",
         job.conversationId,
       );
   // The project the chat works on (its own, else the agent's).
-  const project = dreaming ? null : projectOfChat(job.conversationId, agent);
+  const project = upkeep ? null : projectOfChat(job.conversationId, agent);
   // The workspace's and the project's folders and repositories; a missing clone is cloned first. A dream only works on its memory.
   let sources: RunSource[] = [];
-  const workspaceId = dreaming ? (agent.workspaceId ?? null) : workspaceOfChat(job.conversationId, agent, project);
+  const workspaceId = upkeep ? (agent.workspaceId ?? null) : workspaceOfChat(job.conversationId, agent, project);
   const owners = [
     ...(workspaceId ? [{ workspaceId, projectId: null }] : []),
     ...(project ? [{ workspaceId: project.workspaceId, projectId: project.id }] : []),
   ];
-  if (!dreaming && owners.length) {
+  if (!upkeep && owners.length) {
     const cancelled = new AbortController();
     const watch = setInterval(() => halted(job) && cancelled.abort(), 250);
     try {
@@ -2158,13 +2166,13 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     if (stop) return stop;
   }
   // SSH servers of the chat and the agent. Uploads and downloads stay within the folders this run works with.
-  const ssh = dreaming || !settings.ssh.enabled ? [] : promptServers(runSshServerIds(job.conversationId, agent.id));
+  const ssh = upkeep || !settings.ssh.enabled ? [] : promptServers(runSshServerIds(job.conversationId, agent.id));
   if (ssh.length) {
     const folders = [cwd, agent.repoPath, vm?.hostSharedDir, ...sources.map((s) => s.path)].filter((f): f is string => !!f);
     attachSsh(job.runId, [...new Set(folders)]);
   }
   // Android phones of the chat and the agent (only on this computer: phones are plugged into it).
-  const phones = dreaming || !settings.android.enabled ? [] : promptDevices(runAndroidDeviceIds(job.conversationId, agent.id));
+  const phones = upkeep || !settings.android.enabled ? [] : promptDevices(runAndroidDeviceIds(job.conversationId, agent.id));
   if (phones.length) {
     const folders = [cwd, agent.repoPath, vm?.hostSharedDir, ...sources.map((s) => s.path)].filter((f): f is string => !!f);
     attachAndroid(job.runId, phones.map((p) => p.id), [...new Set(folders)]);
@@ -2173,7 +2181,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     onNotice: (text) => job.acc.addNotice("warning", text),
     computer: !!computer,
     vm: vm ? { id: vm.id, browser: guest?.browser ?? null, cua: guest?.cua ?? null } : null,
-    gatewayOnly: dreaming,
+    gatewayOnly: upkeep,
     run: { runId: job.runId, conversationId: job.conversationId },
     browserProfileId: runProfileOf(job),
     ssh: ssh.length > 0,
@@ -2181,14 +2189,14 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     workspaceId,
   });
   // The human's plugins (Plugins page). Dreams and condition checks are small jobs with a fixed shape: they load none.
-  const mods = dreaming || job.trigger === "check" || !settings.plugins.enabled ? null : await modsForRun(agent, job.runId, (text) => job.acc.addNotice("warning", text));
+  const mods = upkeep || job.trigger === "check" || !settings.plugins.enabled ? null : await modsForRun(agent, job.runId, (text) => job.acc.addNotice("warning", text));
   // A run takes its MCP servers from this file alone: the ones its plugins declare go in beside Godmode's.
   for (const [name, server] of Object.entries(mods?.mcpServers ?? {})) mcp.mcpServers[name] ??= server;
   const mcpPath = writeMcpConfigFile(job.runId, mcp);
   res.files.push(mcpPath);
   const chosen = conv.model?.trim() || agent.model?.trim() || settings.runner.model?.trim() || DEFAULT_MODEL;
   // Dreams read every chat of the agent: on Claude, also for an agent that works on GLM.
-  const model = dreaming && modelProvider(chosen) === "zai" ? settings.runner.model?.trim() || DEFAULT_MODEL : chosen;
+  const model = upkeep && modelProvider(chosen) === "zai" ? settings.runner.model?.trim() || DEFAULT_MODEL : chosen;
   const glm = modelProvider(model) === "zai";
   // A project an agent wrote without raw secrets (or without control of this computer) gets no more from its runs.
   const projectFillOnly = !!project?.fillOnly && agent.permissions.secretAccess === "reveal";
@@ -2204,12 +2212,12 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   // Ultracode: the chat's choice, else the agent's, else the setting — with a model this Claude Code has it for. Dreams
   // and condition checks are small jobs with a fixed shape: never.
   const wantsUltracode = (conv.ultracode === null ? null : conv.ultracode === 1) ?? agent.ultracode ?? settings.runner.ultracode;
-  const ultracode = !dreaming && job.trigger !== "check" && ultracodeFor(model, wantsUltracode === true);
+  const ultracode = !upkeep && job.trigger !== "check" && ultracodeFor(model, wantsUltracode === true);
   // Between two steps Claude Code asks for the messages waiting in the chat's queue, and before shell commands and file
   // writes whether they reach for another browser profile. Dreams and condition checks run in chats nobody writes to.
   const hook = (path: string) => ({ type: "http", url: `${gatewayUrl()}/hooks/${path}`, timeout: 10, headers: { Authorization: `Bearer ${res.token}` } });
   const hooksPath =
-    dreaming || job.trigger === "check"
+    upkeep || job.trigger === "check"
       ? null
       : writeTempFile(
           res,
@@ -2230,7 +2238,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   job.hooked = !!hooksPath;
   if (job.acc.blocks.length) scheduleDelta(job);
 
-  const canDelegate = !dreaming && (agent.permissions.allowDelegation || agent.permissions.canManageAgents);
+  const canDelegate = !upkeep && (agent.permissions.allowDelegation || agent.permissions.canManageAgents);
   let peers: Agent[] = [];
   if (canDelegate) {
     try {
@@ -2243,8 +2251,8 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   const promptSources = (workspace || project) && sources.length ? { workspace: workspace?.name ?? null, project: project?.name ?? null, items: sources } : null;
   // Keys in the environment are only for Bash on this computer (and need an open vault).
   // GLM runs send what they read to Z.ai: no keys there.
-  const toolKeysInEnv = !dreaming && !glm && !(vm && settings.vm.isolateHostShell);
-  const toolList = dreaming ? [] : apiToolsForAgent(agent);
+  const toolKeysInEnv = !upkeep && !glm && !(vm && settings.vm.isolateHostShell);
+  const toolList = upkeep ? [] : apiToolsForAgent(agent);
   const envOwners = toolKeysInEnv && isUnlocked() ? apiToolEnvOwners(toolList) : new Map<string, string>();
   const apiTools: PromptApiTool[] = toolList.map((t) => ({
     id: t.id,
@@ -2262,10 +2270,12 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   });
   const digest = instructionsDigest(standing);
   const artifactsHere = settings.artifacts.enabled && job.trigger !== "check" && config().role !== "runner";
-  const builderModel = artifactsHere && !dreaming && !glm && settings.artifacts.builderModel?.trim() ? settings.artifacts.builderModel.trim() : null;
+  const builderModel = artifactsHere && !upkeep && !glm && settings.artifacts.builderModel?.trim() ? settings.artifacts.builderModel.trim() : null;
   const systemPrompt = dreaming
     ? buildDreamSystemPrompt(agent, settings)
-    : buildSystemPrompt({
+    : reviewing
+      ? buildReviewSystemPrompt(agent, settings)
+      : buildSystemPrompt({
         agent,
         settings,
         peers,
@@ -2299,7 +2309,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
         fillOnly,
         // Delegated work reports to the run that handed it over; checks only observe.
         asking: job.trigger !== "check" && !job.parentRunId,
-        macPassword: job.trigger !== "check" && job.trigger !== "dream" && !job.parentRunId && !vm && macPasswordSupported(),
+        macPassword: job.trigger !== "check" && !UPKEEP.has(job.trigger) && !job.parentRunId && !vm && macPasswordSupported(),
         check: job.trigger === "check",
         unattended: UNATTENDED.has(job.trigger),
         cards: settings.cards.enabled && !vm && job.trigger !== "check" && "browser" in mcp.mcpServers && hasCardsForAgent(agent),
@@ -2313,7 +2323,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
         glmDelegation: !glm && config().role !== "runner" && zaiKey() ? GLM_MODELS[0]!.id : null,
       });
   const memoryNow = memoryDigest(agent.repoPath);
-  if (!dreaming && job.trigger !== "check" && !job.private && !job.memoryBefore) job.memoryBefore = snapshotMemory(agent.repoPath);
+  if (!upkeep && job.trigger !== "check" && !job.private && !job.memoryBefore) job.memoryBefore = snapshotMemory(agent.repoPath);
 
   const effort = effortFor(model, job.trigger === "check" ? "low" : conv.effort || agent.effort || settings.runner.effort || null);
   job.model = model;
@@ -2337,6 +2347,9 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   if (dreaming) {
     // Never bypass permissions for a dream: it may only write its memory files (print mode denies the rest).
     baseArgs.push("--permission-mode", "default", "--allowedTools", ...DREAM_ALLOWED);
+  } else if (reviewing) {
+    // An auto review never bypasses permissions: it reads, and changes things only through Godmode's tools.
+    baseArgs.push("--permission-mode", "default", "--allowedTools", ...REVIEW_ALLOWED);
   } else if (settings.runner.bypassPermissions && !hostLocked) baseArgs.push("--dangerously-skip-permissions");
   else {
     // Non-bypass mode: allow Godmode-provided MCP tools without prompts (print mode cannot ask). Ultracode runs on
@@ -2348,6 +2361,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   baseArgs.push("--mcp-config", mcpPath, "--strict-mcp-config");
   if (hooksPath) baseArgs.push("--settings", hooksPath);
   if (dreaming) baseArgs.push("--tools", DREAM_TOOLS);
+  if (reviewing) baseArgs.push("--tools", REVIEW_TOOLS);
   const disallowed: string[] = [];
   // Godmode's ask_human / request_approval are how an agent asks: Claude Code's own question tool would go nowhere.
   if (!dreaming) disallowed.push("AskUserQuestion");
@@ -2378,12 +2392,12 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   baseArgs.push("--append-system-prompt-file", writeTempFile(res, `godmode-prompt-${job.runId}.md`, systemPrompt));
   // Dreams and runs kept off the host load no settings files: .claude/settings*.json in a folder the run can write to
   // could add hooks (shell commands on this computer) or widen its permissions.
-  baseArgs.push("--setting-sources", dreaming || hostLocked ? "" : "project,local");
+  baseArgs.push("--setting-sources", upkeep || hostLocked ? "" : "project,local");
   if (folder) baseArgs.push("--add-dir", agent.repoPath);
   // The VM's shared folder: how files move between the VM and the host.
   if (vm) baseArgs.push("--add-dir", vm.hostSharedDir);
   for (const source of sources) baseArgs.push("--add-dir", source.path);
-  if ((agent.subagents.length || builderModel) && !dreaming) {
+  if ((agent.subagents.length || builderModel) && !upkeep) {
     const defs: Record<string, { description: string; prompt: string; model?: string }> = {};
     for (const s of agent.subagents) {
       if (!s.name?.trim()) continue;
@@ -2397,7 +2411,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     }
   }
   // claude-mem's worker outlives the run: started from a GLM run it would keep Z.ai's endpoint for later Claude runs.
-  if (settings.memory.backend === "claude-mem" && !dreaming && !glm && !job.private) {
+  if (settings.memory.backend === "claude-mem" && !upkeep && !glm && !job.private) {
     const pluginDir = claudeMemPluginDir();
     if (pluginDir) baseArgs.push("--plugin-dir", pluginDir);
     else {
@@ -2438,7 +2452,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   const logSink: RunLog = job.resumed ? appendedLog(logPath) : Bun.file(logPath).writer();
   const logEpoch = redactionEpoch();
 
-  const timeoutMinutes = dreaming
+  const timeoutMinutes = upkeep
     ? Math.min(settings.runner.runTimeoutMinutes || DREAM_TIMEOUT_MINUTES, DREAM_TIMEOUT_MINUTES)
     : settings.runner.runTimeoutMinutes;
   if (timeoutMinutes > 0) {
@@ -2485,7 +2499,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
         ? resumeContextPrefix(folder, agent.repoPath, { instructions: restate ? standing : undefined, memoryChanged, vm: promptVm, sources: promptSources, followup, humanTasks, apiTools, ssh, android: phones }) +
           lateNote +
           body
-        : (command || dreaming ? "" : firstTurnContext()) + lateNote + body;
+        : (command || upkeep ? "" : firstTurnContext()) + lateNote + body;
     // What the run did before a pause, and what the chat's queue added to this stretch.
     const kept = job.acc.blocks.length;
     let attempt = await spawnClaude(job, cmd, [...baseArgs, ...sessionArgs, ...extraArgs], prompt, cwd, env, logSink);
@@ -2873,7 +2887,7 @@ async function finalize(job: Job, outcome: Outcome, agent: Agent | null, started
     });
     safely("update conversation", () => saveConversation(job, agent, outcome.status === "succeeded", ts));
     // Before run.finished goes out: whoever handles the end of the run (the task board) sees what waits for the human.
-    if (wasRunning && agent && outcome.status === "succeeded" && job.trigger !== "check" && job.trigger !== "dream" && !job.private) {
+    if (wasRunning && agent && outcome.status === "succeeded" && job.trigger !== "check" && !UPKEEP.has(job.trigger) && !job.private) {
       safely("note an open decision", () =>
         noteOpenDecision({ agentId: job.agentId, conversationId: job.conversationId, runId: job.runId, workspaceId: chatWorkspaceId(job.conversationId) ?? agent.workspaceId, attended: attendedBy(job) }, text),
       );
@@ -2883,14 +2897,14 @@ async function finalize(job: Job, outcome: Outcome, agent: Agent | null, started
   if (wasRunning) {
     // "Last run failed" follows the agent's real work (not dreams or condition checks): a failure is remembered until
     // a later run succeeds, the human stops one, or the human dismisses it. Set before run.finished goes out.
-    if (job.trigger !== "dream" && job.trigger !== "check") {
+    if (!UPKEEP.has(job.trigger) && job.trigger !== "check") {
       if (outcome.status === "failed") safely("remember the failure", () => setAgentFailedRun(job.agentId, job.runId));
       else if (outcome.status === "succeeded" || job.stoppedByHuman) safely("forget the failure", () => setAgentFailedRun(job.agentId, null));
     }
     const others = [...jobs.values()].some((j) => j !== job && j.agentId === job.agentId && j.status === "running");
     if (!others) safely("set agent status", () => setAgentStatus(job.agentId, "idle"));
     // A dream is not activity of the agent ("last active" stays the last real run).
-    if (job.trigger !== "dream") safely("touch agent", () => touchAgentRun(job.agentId));
+    if (!UPKEEP.has(job.trigger)) safely("touch agent", () => touchAgentRun(job.agentId));
   }
 
   let finished: Run | null = null;
@@ -2909,7 +2923,7 @@ async function finalize(job: Job, outcome: Outcome, agent: Agent | null, started
   if (convAlive) emitConversationUpdated(job.conversationId);
 
   // Condition checks and dreams keep no transcript: checks only report a result, a dream's record is the dream itself.
-  if (wasRunning && finished && convAlive && job.trigger !== "check" && job.trigger !== "dream" && !job.private) {
+  if (wasRunning && finished && convAlive && job.trigger !== "check" && !UPKEEP.has(job.trigger) && !job.private) {
     const done = finished;
     safely("append transcript", () => {
       const users = [job.userMessageId, ...job.alsoAnswers].flatMap((id) => (id ? [getMessage(id)] : []));
@@ -2937,18 +2951,18 @@ async function finalize(job: Job, outcome: Outcome, agent: Agent | null, started
   // A dream's summary may talk about past login trouble — that is no new missing login. Neither is Claude Code's own
   // error ("Failed to authenticate. API Error: 403") standing in for the answer.
   const claudeError = outcome.status === "failed" && (text.trim() === error?.trim() || /^(?:Failed to authenticate[.:]|API Error:)/.test(text.trim()));
-  if (outcome.status !== "cancelled" && job.trigger !== "dream" && !claudeError) await detectMissingLogin(job, agent, text);
+  if (outcome.status !== "cancelled" && !UPKEEP.has(job.trigger) && !claudeError) await detectMissingLogin(job, agent, text);
 
   const memoryBefore = job.memoryBefore;
   job.memoryBefore = undefined;
-  if (memoryBefore && job.trigger !== "check" && job.trigger !== "dream" && !job.private) {
+  if (memoryBefore && job.trigger !== "check" && !UPKEEP.has(job.trigger) && !job.private) {
     safely("record memory edits", () =>
       recordMemoryEdits({ agentId: job.agentId, runId: job.runId, conversationId: job.conversationId, trigger: job.trigger, repoPath: agent.repoPath, before: memoryBefore }),
     );
   }
   // Condition checks change nothing worth a commit; the task run that follows commits as usual. Dreams commit their
   // memory changes themselves (memory/dreaming.ts).
-  if (getSettings().memory.autoCommit && job.trigger !== "check" && job.trigger !== "dream" && !job.private) {
+  if (getSettings().memory.autoCommit && job.trigger !== "check" && !UPKEEP.has(job.trigger) && !job.private) {
     const title = get<{ title: string }>("SELECT title FROM conversations WHERE id = ?", job.conversationId)?.title ?? job.trigger;
     const message = `Run ${job.runId.slice(-6)}: ${title}`;
     commitAgentRepo(job.agentId, message).catch((err) => log.warn(`auto-commit for agent ${job.agentId} failed`, err));

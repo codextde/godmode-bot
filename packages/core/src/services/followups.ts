@@ -28,7 +28,7 @@ export const NOTE_MAX = 2000;
 /** Follow-up runs in a row, without new input from the human, an automation or another agent, before the agent has to ask. */
 export const MAX_UNATTENDED = 20;
 /** Chats that can't have follow-ups: a delegated task reports back to the agent that handed it over. */
-const NO_FOLLOWUPS = new Set(["dream", "delegation"]);
+const NO_FOLLOWUPS = new Set(["dream", "review", "delegation"]);
 /** The timer looks again at least this often (clock changes, sleep). */
 const TICK_MS = 60_000;
 /** Started later than this after its time: the run is told it was overdue. */

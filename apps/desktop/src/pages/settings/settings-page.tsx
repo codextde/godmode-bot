@@ -9,6 +9,7 @@ import {
   AppWindow,
   AudioLines,
   BrainCircuit,
+  ClipboardCheck,
   Box,
   ChevronRight,
   BroomSparkles,
@@ -69,6 +70,7 @@ import { IntegrationsSection } from "@/components/settings/integrations-section"
 import { LicenseSection } from "@/components/settings/license-section";
 import { LogsSection } from "@/components/settings/logs-section";
 import { MemorySection } from "@/components/settings/memory-section";
+import { ReviewSection } from "@/components/settings/review-section";
 import { MessagingSection } from "@/components/settings/messaging-section";
 import { PhoneSection } from "@/components/settings/phone-section";
 import { PluginsSection } from "@/components/settings/plugins-section";
@@ -98,6 +100,7 @@ const SECTIONS = [
   { id: "computer", labelKey: "page.sections.computer", icon: <MonitorUp />, groupKey: "page.groups.preferences" },
   { id: "voice", labelKey: "page.sections.voice", icon: <AudioLines />, groupKey: "page.groups.preferences" },
   { id: "memory", labelKey: "page.sections.memory", icon: <BrainCircuit />, groupKey: "page.groups.preferences" },
+  { id: "review", labelKey: "page.sections.review", icon: <ClipboardCheck />, groupKey: "page.groups.preferences" },
   { id: "activity", labelKey: "page.sections.activity", icon: <Activity />, groupKey: "page.groups.features" },
   { id: "artifacts", labelKey: "page.sections.artifacts", icon: <AppWindow />, groupKey: "page.groups.features" },
   { id: "integrations", labelKey: "page.sections.integrations", icon: <Plug />, groupKey: "page.groups.features" },
@@ -134,6 +137,7 @@ const EASY: Partial<Record<SectionId, { labelKey: SettingsKey; groupKey: Setting
   accounts: { labelKey: "page.easy.accounts", groupKey: "page.groups.everyday" },
   instructions: { labelKey: "page.easy.instructions", groupKey: "page.groups.everyday" },
   memory: { labelKey: "page.easy.memory", groupKey: "page.groups.everyday" },
+  review: { labelKey: "page.easy.review", groupKey: "page.groups.everyday" },
   voice: { labelKey: "page.easy.voice", groupKey: "page.groups.everyday" },
   calls: { labelKey: "page.easy.calls", groupKey: "page.groups.everyday" },
   phone: { labelKey: "page.easy.phone", groupKey: "page.groups.everyday" },
@@ -281,6 +285,7 @@ function SectionContent({ active, focusLabel, onFocused }: { active: SectionId; 
       voice: () => <VoiceSection settings={s} />,
       calls: () => <CallsSection settings={s} />,
       memory: () => <MemorySection settings={s} />,
+      review: () => <ReviewSection settings={s} />,
       files: () => <FilesSection />,
       "api-keys": () => <ApiKeysSection />,
       security: () => <SecuritySection settings={s} />,

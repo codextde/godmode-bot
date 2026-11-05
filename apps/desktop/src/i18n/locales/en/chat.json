@@ -376,6 +376,7 @@
       "delegation": "Handed over",
       "api": "Chat",
       "dream": "Dreams",
+      "review": "Auto reviews",
       "task": "Task",
       "heartbeat": "Heartbeat"
     },
@@ -1194,6 +1195,7 @@
     "switchedOffHint": "It doesn't answer, run its automations or take handoffs until you switch it on.",
     "switchOn": "Switch on",
     "dreamLog": "This is where <b>{{name}}</b> dreams — start a new chat to talk to it.",
+    "reviewLog": "This is where <b>{{name}}</b> reviews your setup every day — start a new chat to talk to it.",
     "ideas": {
       "whatCanYouDo": "What can you do for me?",
       "inboxAgent": "Create an agent that checks my inbox every morning and summarizes it",

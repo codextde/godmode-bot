@@ -216,7 +216,7 @@ export async function pauseAgent(agentId: string): Promise<number> {
   const frozen = pausedConversations();
   const targets = new Map<string, string>();
   for (const r of listActiveRuns()) {
-    if (r.agentId !== agentId || r.trigger === "dream" || r.trigger === "check" || frozen.has(r.conversationId)) continue;
+    if (r.agentId !== agentId || r.trigger === "dream" || r.trigger === "review" || r.trigger === "check" || frozen.has(r.conversationId)) continue;
     if (r.status === "running" || !targets.has(r.conversationId)) targets.set(r.conversationId, r.runId);
   }
   let paused = 0;

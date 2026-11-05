@@ -28,7 +28,7 @@ interface HitRow {
   rank: number;
 }
 
-const OWN = "c.agent_id = ? AND c.private = 0 AND c.origin != 'dream' AND m.role IN ('user', 'assistant')";
+const OWN = "c.agent_id = ? AND c.private = 0 AND c.origin NOT IN ('dream', 'review') AND m.role IN ('user', 'assistant')";
 
 function recency(iso: string): number {
   const t = Date.parse(iso);

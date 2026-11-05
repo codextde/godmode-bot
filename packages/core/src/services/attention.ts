@@ -148,7 +148,7 @@ export function listAttention(): AttentionItem[] {
   for (const f of all<{ id: string; agent_id: string; title: string; run_id: string; error: string | null; at: string }>(
     `SELECT c.id, c.agent_id, c.title, r.id AS run_id, r.error, COALESCE(r.finished_at, r.created_at) AS at
      FROM conversations c JOIN runs r ON r.id = c.unread_run_id
-     WHERE r.status = 'failed' AND r.trigger != 'routine' AND c.archived = 0 AND c.origin NOT IN ('task', 'dream')
+     WHERE r.status = 'failed' AND r.trigger != 'routine' AND c.archived = 0 AND c.origin NOT IN ('task', 'dream', 'review')
        AND c.id NOT IN (SELECT conversation_id FROM paused_runs)`,
   )) {
     items.push({

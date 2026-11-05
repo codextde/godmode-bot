@@ -20,7 +20,7 @@ export async function retryRun(conversationId: string, runId: string): Promise<S
   const conv = getConversationSummary(conversationId);
   const run = getRun(runId);
   if (run.conversationId !== conversationId) throw notFound("Run");
-  if (run.trigger === "dream" || run.trigger === "check") throw badRequest("This kind of run can't be picked up again");
+  if (run.trigger === "dream" || run.trigger === "review" || run.trigger === "check") throw badRequest("This kind of run can't be picked up again");
   const task = taskForConversation(conversationId);
   if (task) throw new HttpError(409, `This chat belongs to task #${task.number} — continue it from the task.`, "task_chat");
   if (conv.origin === "slack" || conv.origin === "telegram" || conv.origin === "teams") {

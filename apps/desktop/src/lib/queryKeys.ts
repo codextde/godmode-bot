@@ -70,6 +70,8 @@ export const qk = {
   /** Dreams (memory consolidation); invalidating the root refreshes every overview and detail. */
   dreams: ["dreams"] as unknown[],
   offers: ["offers"] as unknown[],
+  /** Auto reviews. */
+  reviews: ["reviews"] as unknown[],
   agentDreams: (agentId: string) => ["dreams", "agent", agentId],
   dream: (id: string) => ["dreams", "detail", id],
   routines: ["routines"] as unknown[],

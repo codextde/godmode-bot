@@ -674,7 +674,7 @@ function PausedStrip({ limit, auto, onContinue }: { limit: string | null; auto: 
  * platform's chat (those go on from there), nor while messages wait in the chat (they'd go along unasked).
  */
 function endedTurn(conv: ConversationWithMessages): { runId: string; mode: RetryMode } | null {
-  if (["task", "routine", "dream", "slack", "telegram", "teams"].includes(conv.origin) || conv.queue.length > 0) return null;
+  if (["task", "routine", "dream", "review", "slack", "telegram", "teams"].includes(conv.origin) || conv.queue.length > 0) return null;
   const last = conv.messages[conv.messages.length - 1];
   if (last?.role !== "assistant" || !last.runId) return null;
   const end = last.blocks[last.blocks.length - 1];

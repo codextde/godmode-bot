@@ -199,6 +199,8 @@ export type EntityName =
   | "settings"
   | "runs"
   | "dreams"
+  /** Auto reviews: started, reported, finished, an action undone. */
+  | "reviews"
   /** The main agent offered work, or an offer was taken up, declined or expired. */
   | "offers"
   | "models"
