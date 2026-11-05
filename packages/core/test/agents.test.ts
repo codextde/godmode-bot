@@ -696,7 +696,7 @@ describe("characters and personality", () => {
 
     type Row = { character: string | null; personality: string; color: string };
     const row = (id: string) => db.query<Row, [string]>("SELECT character, personality, color FROM agents WHERE id = ?").get(id)!;
-    expect(JSON.parse(row("agt_main").character!)).toEqual({ ...MASCOT_CHARACTER, top: "bolt" });
+    expect(JSON.parse(row("agt_main").character!)).toEqual(MASCOT_CHARACTER);
     expect(row("agt_main").personality).toBe("buddy");
     expect(row("agt_main").color).toBe("emerald");
     expect(row("agt_other")).toEqual({ character: null, personality: "", color: "violet" });
@@ -799,7 +799,7 @@ describe("characters and personality", () => {
   });
 
   test("describeAppearance reads naturally", () => {
-    expect(describeAppearance({ color: "emerald", character: { ...MASCOT_CHARACTER, top: "bolt" } })).toBe(
+    expect(describeAppearance({ color: "emerald", character: MASCOT_CHARACTER })).toBe(
       "In the Godmode app you appear as a little emerald mochi character with a lightning bolt and rosy cheeks.",
     );
     const plain = { body: "squircle", eyes: "dots", mouth: "smile", top: "none", face: "none", neck: "none" } as const;

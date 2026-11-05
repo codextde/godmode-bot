@@ -282,7 +282,7 @@ const q = (days: number, mode = live ? 'live' : 'test') => `?days=${days}&mode=$
           </p>
           {
             issued && (
-              <div class="mt-4 rounded-xl p-3 ring-1 ring-[rgb(126_166_255/0.35)]" style="background: rgb(126 166 255 / 0.06)">
+              <div class="mt-4 rounded-xl p-3 ring-1 ring-[rgb(47_214_144/0.35)]" style="background: rgb(47 214 144 / 0.06)">
                 <p class="text-[12.5px] text-muted">License for {issued.email}</p>
                 <div class="mt-1.5 flex items-center gap-2">
                   <code class="flex-1 font-mono text-[15px] tracking-[0.04em] break-all text-text">{issued.license_key}</code>
@@ -320,7 +320,7 @@ const q = (days: number, mode = live ? 'live' : 'test') => `?days=${days}&mode=$
                     </span>
                   </div>
                   <div class="mt-1.5 h-2 rounded-full bg-[rgb(255_250_240/0.05)]">
-                    <div class="h-2 rounded-full bg-[#3f6fe8]" style={`width:${funnel[0].value ? Math.min(100, Math.max(0.5, (f.value / funnel[0].value) * 100)) : 0}%`} title={`${f.label}: ${f.value}`}></div>
+                    <div class="h-2 rounded-full bg-[#1a9e66]" style={`width:${funnel[0].value ? Math.min(100, Math.max(0.5, (f.value / funnel[0].value) * 100)) : 0}%`} title={`${f.label}: ${f.value}`}></div>
                   </div>
                 </li>
               ))

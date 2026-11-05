@@ -95,7 +95,6 @@ export function EmptyState({
 const COLOR_CLASSES: Record<string, string> = {
   violet: "bg-violet-500/12 ring-violet-600/15 dark:bg-violet-400/14",
   indigo: "bg-indigo-500/12 ring-indigo-600/15 dark:bg-indigo-400/14",
-  blue: "bg-blue-500/12 ring-blue-600/15 dark:bg-blue-400/14",
   sky: "bg-sky-500/12 ring-sky-600/15 dark:bg-sky-400/14",
   cyan: "bg-cyan-500/12 ring-cyan-600/15 dark:bg-cyan-400/14",
   emerald: "bg-emerald-500/12 ring-emerald-600/15 dark:bg-emerald-400/14",
@@ -114,7 +113,6 @@ export function colorGradient(color: string | undefined) {
 const SWATCH_CLASSES: Record<string, string> = {
   violet: "bg-violet-500",
   indigo: "bg-indigo-500",
-  blue: "bg-blue-500",
   sky: "bg-sky-500",
   cyan: "bg-cyan-500",
   emerald: "bg-emerald-500",

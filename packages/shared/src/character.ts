@@ -90,11 +90,11 @@ export const MASCOT_CHARACTER: AgentCharacter = {
   body: "blob",
   eyes: "dots",
   mouth: "smile",
-  top: "none",
+  top: "bolt",
   face: "blush",
   neck: "none",
 };
-export const MASCOT_COLOR = "blue";
+export const MASCOT_COLOR = "emerald";
 
 /* ------------------------------------------------------------------ */
 /* Colours                                                              */
@@ -104,7 +104,6 @@ export const MASCOT_COLOR = "blue";
 export const CHARACTER_PALETTE: Record<string, { fill: string; shade: string; light: string }> = {
   violet: { fill: "#b69cff", shade: "#9a7bf2", light: "#d7c9ff" },
   indigo: { fill: "#8f9bff", shade: "#7481f0", light: "#c3c9ff" },
-  blue: { fill: "#7fa8ff", shade: "#5f8df5", light: "#c2d5ff" },
   sky: { fill: "#7fcdf7", shade: "#5db6ea", light: "#bfe6fb" },
   cyan: { fill: "#6fdbe3", shade: "#4cc2cd", light: "#b6eef1" },
   emerald: { fill: "#5fdca6", shade: "#3fc48b", light: "#aeeed2" },

@@ -50,7 +50,7 @@ const total = data.reduce((s, d) => s + d.value, 0);
             {d.value > 0 && (
               <path
                 d={`M${x},${H - padB} V${y(d.value) + r} Q${x},${y(d.value)} ${x + r},${y(d.value)} H${x + barW - r} Q${x + barW},${y(d.value)} ${x + barW},${y(d.value) + r} V${H - padB} Z`}
-                fill="#3f6fe8"
+                fill="#1a9e66"
               />
             )}
             <title>{`${d.label}: ${fmt(d.value)}`}</title>
@@ -67,5 +67,5 @@ const total = data.reduce((s, d) => s + d.value, 0);
 </figure>
 
 <style>
-  .bar-hit:hover path { fill: #7ea6ff; }
+  .bar-hit:hover path { fill: #2fd690; }
 </style>
