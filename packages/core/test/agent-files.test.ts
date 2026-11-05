@@ -1,5 +1,5 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
+import { afterAll, beforeAll, describe, expect, spyOn, test } from "bun:test";
+import { existsSync, mkdirSync, mkdtempSync, promises as fsPromises, readFileSync, readdirSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Agent, AgentFileInfo, AgentFileMoveResult, AgentFileSearchHit, AgentFileSize, AgentFilesDeleteResult, AgentNote, DeletedAgentFile, FileReview, GitCommit } from "@godmode/shared";
@@ -10,6 +10,7 @@ import { resetSettingsCache } from "../src/services/settings";
 import { createApp } from "../src/server/app";
 import { getAccessToken } from "../src/server/auth";
 import { expiredDeletedFiles } from "../src/agents/files";
+import { pacedFs } from "../src/agents/repo";
 import { runCleanup, scanCleanup } from "../src/services/cleanup";
 
 let dataDir: string;
@@ -339,5 +340,34 @@ describe("files page", () => {
     expect(bin.status).toBe(200);
     expect(bin.data.map((b) => b.id)).toContain(entry.id);
     expect((await call("GET", "/api/files/overview")).status).toBe(200);
+  });
+});
+
+describe("git's walk over a repository", () => {
+  async function callOrder(sliceMs: number) {
+    const order: string[] = [];
+    const lstat = spyOn(fsPromises, "lstat").mockImplementation(async () => {
+      order.push("call");
+      return {} as never;
+    });
+    const paced = pacedFs(sliceMs);
+    const loop = new Promise<void>((done) =>
+      setImmediate(() => {
+        order.push("loop");
+        done();
+      }),
+    );
+    await paced.promises.lstat(tmpdir());
+    await loop;
+    lstat.mockRestore();
+    return order;
+  }
+
+  test("lets the event loop go round once its time slice is used up", async () => {
+    expect(await callOrder(0)).toEqual(["loop", "call"]);
+  });
+
+  test("holds no call back within a time slice", async () => {
+    expect(await callOrder(60_000)).toEqual(["call", "loop"]);
   });
 });
