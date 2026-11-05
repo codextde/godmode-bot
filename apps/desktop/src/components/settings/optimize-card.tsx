@@ -153,7 +153,7 @@ function Meter({ value, max, over }: { value: number; max: number; over: boolean
 
 function ContextTile({ report, open, onToggle }: { report: OptimizeReport; open: boolean; onToggle: () => void }) {
   const { t } = useTranslation("settings");
-  const { budget, over, largest } = report.context;
+  const { budget, share, over, largest } = report.context;
   const limit = budget ?? DEFAULT_CONTEXT_BUDGET;
   const lines: { text: string; tone?: "warn" | "ok" | "muted" }[] = [
     over
@@ -164,7 +164,7 @@ function ContextTile({ report, open, onToggle }: { report: OptimizeReport; open:
     <Tile
       icon={<MessagesSquare />}
       label={t("cleanup.optimize.context.label")}
-      value={budget ? tokensLabel(budget) : t("cleanup.optimize.context.full")}
+      value={budget ? tokensLabel(budget) : share === 0 ? t("cleanup.optimize.context.off") : share ? `${share}%` : t("cleanup.optimize.context.full")}
       caption={t("cleanup.optimize.context.caption")}
       lines={lines}
       more={largest.length ? t("cleanup.optimize.context.fullest") : undefined}

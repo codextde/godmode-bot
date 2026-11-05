@@ -8,7 +8,7 @@
 import { computerView, type ComputerTarget } from "@godmode/shared";
 import { all, get } from "../db";
 import { getSettings } from "../services/settings";
-import { sameSettingShape, settingInRange } from "../services/settingShape";
+import { NULLABLE_SETTINGS, sameSettingShape, settingInRange } from "../services/settingShape";
 import { parseJson } from "../util";
 
 const ID = "[^/]+";
@@ -268,7 +268,7 @@ function settingsRefusal(body: Record<string, unknown>): string | null {
     if (typeof patch !== "object" || patch === null || Array.isArray(patch)) return `Invalid ${section} settings.`;
     for (const [key, value] of Object.entries(patch)) {
       if (!SETTINGS[section]?.includes(key)) return "Change this setting in Godmode on your computer.";
-      if (!sameSettingShape(value, current[section]?.[key], false) || !settingInRange(`${section}.${key}`, value)) return `Invalid value for ${section}.${key}.`;
+      if (!sameSettingShape(value, current[section]?.[key], NULLABLE_SETTINGS.has(`${section}.${key}`)) || !settingInRange(`${section}.${key}`, value)) return `Invalid value for ${section}.${key}.`;
     }
   }
   return null;

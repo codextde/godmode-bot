@@ -921,6 +921,7 @@
         "label": "Context",
         "caption": "per chat",
         "full": "Full",
+        "off": "Off",
         "over_one": "{{count}} chat past it, compressed on its next turn",
         "over_other": "{{count}} chats past it, compressed on their next turn",
         "overNoBudget_one": "{{count}} chat past {{tokens}} this week",

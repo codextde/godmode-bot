@@ -1,6 +1,6 @@
 /** Resolving and launching the Claude Code CLI (owner: runner). Shared by agent runs and the model catalog. */
 import { existsSync } from "node:fs";
-import { ZAI_ANTHROPIC_BASE_URL, ZAI_KEY_SECRET } from "@godmode/shared";
+import { DEFAULT_AUTO_COMPACT_PERCENT, ZAI_ANTHROPIC_BASE_URL, ZAI_KEY_SECRET } from "@godmode/shared";
 import type { Subprocess } from "bun";
 import { join } from "node:path";
 import { config, ensureDir } from "../config";
@@ -119,6 +119,11 @@ export function applyZaiEnv(env: Record<string, string | undefined>, model: stri
   // Claude Code loads MCP tools on demand only for Anthropic's own API unless told otherwise. Z.ai supports it, and
   // without it every MCP tool's schema goes into each request: a plugin with many tools fills GLM's window by itself.
   env.ENABLE_TOOL_SEARCH = "true";
+  // Claude Code doesn't know GLM's window (it assumes 200k): a budget would compress later than the share did.
+  if (env.CLAUDE_CODE_AUTO_COMPACT_WINDOW) {
+    delete env.CLAUDE_CODE_AUTO_COMPACT_WINDOW;
+    env.CLAUDE_AUTOCOMPACT_PCT_OVERRIDE = String(DEFAULT_AUTO_COMPACT_PERCENT);
+  }
 }
 
 /** Stop a claude process and everything it started: its process group on POSIX (spawn it `detached`), taskkill /T on Windows. */

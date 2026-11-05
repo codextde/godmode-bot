@@ -2159,6 +2159,8 @@ export interface OptimizeReport {
   context: {
     /** Chats are summarized at this many tokens (null = by share of the model's window). */
     budget: number | null;
+    /** Without a budget: the share of the window (percent; 0 = never, null = nearly full). */
+    share: number | null;
     /** Chats active in the last 7 days, and those holding more than the budget (250k without one). */
     active: number;
     over: number;

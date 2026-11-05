@@ -446,23 +446,29 @@ suite("agent repositories", () => {
 });
 
 suite("rebuildable folders", () => {
-  test("installed packages of projects nobody worked on for two weeks go, unless git holds them or the agent is working", async () => {
+  test("installed packages of projects nobody worked on for a month go, unless git holds them, a note names them or the agent is working", async () => {
     const workspace = join(agent.repoPath, "workspace");
     const project = (name: string, files: string[]) => {
       const dir = join(workspace, name);
       for (const f of files) file(join(dir, f), 16 * 1024);
-      age(dir, 20 * DAY);
+      age(dir, 40 * DAY);
       return dir;
     };
     const idle = project("old-app", ["package.json", "node_modules/left-pad/index.js"]);
-    const python = project("py-app", ["main.py", ".venv/pyvenv.cfg", ".venv/lib/site.py"]);
+    const python = project("py-app", ["main.py", "requirements.txt", ".venv/pyvenv.cfg", ".venv/lib/site.py"]);
     const rust = project("rust-app", ["Cargo.toml", "target/debug/app"]);
     // An edit in its sources keeps a project's packages.
     const active = project("new-app", ["package.json", "node_modules/react/index.js"]);
     file(join(active, "src", "app.ts"), 1024);
-    // Folders that only share a name.
-    const plainVenv = project("py-plain", ["venv/notes.txt"]);
+    // Folders that only share a name, or nothing would install again.
+    const plainVenv = project("py-plain", ["requirements.txt", "venv/notes.txt"]);
     const javaTarget = project("java-app", ["pom.xml", "target/classes/A.class"]);
+    const handMade = project("py-script", ["run.py", ".venv/pyvenv.cfg", ".venv/lib/site.py"]);
+    const loose = project("loose", ["node_modules/x/index.js"]);
+    // A project a note names may be run from there.
+    const daily = project("daily-report", ["package.json", "node_modules/x/index.js"]);
+    file(join(agent.repoPath, "memory", "daily.md"), 0);
+    writeFileSync(join(agent.repoPath, "memory", "daily.md"), "- The daily report runs from workspace/daily-report every morning.\n");
     // Scratch files and uploads aren't looked into, symlinks aren't followed.
     const scratch = project("tmp/try", ["node_modules/x/index.js"]);
     const upload = project("uploads/site", ["node_modules/x/index.js"]);
@@ -471,7 +477,7 @@ suite("rebuildable folders", () => {
     age(elsewhere, 20 * DAY);
     symlinkSync(elsewhere, join(workspace, "linked"));
     // Packages git holds.
-    const vendored = project("vendored", ["node_modules/lib/index.js"]);
+    const vendored = project("vendored", ["package.json", "node_modules/lib/index.js"]);
     await git(["add", "-f", "workspace/vendored/node_modules/lib/index.js"], agent.repoPath);
     await git(["commit", "-q", "-m", "vendored"], agent.repoPath);
 
@@ -479,21 +485,22 @@ suite("rebuildable folders", () => {
     expect(folders.recommended).toBe(true);
     const gone = [join(idle, "node_modules"), join(python, ".venv"), join(rust, "target")];
     expect(paths(folders).sort()).toEqual([...gone].sort());
-    expect(folders.entries).toHaveLength(4);
+    expect(folders.entries).toHaveLength(5);
     expect(folders.entries.find((e) => e.path === join(vendored, "node_modules"))?.kept).toBe("Tracked by git — it stays.");
+    expect(folders.entries.find((e) => e.path === join(daily, "node_modules"))?.kept).toMatch(/^Named in memory\/daily\.md/);
     expect(folders.entries.find((e) => e.path === join(idle, "node_modules"))?.name).toBe("Cleaner · old-app/node_modules");
 
     insert("runs", { id: "run_buildwork001", agent_id: agent.id, conversation_id: "cnv_buildwork", trigger: "chat", status: "running", prompt: "x", created_at: new Date().toISOString() });
     try {
       expect(item(await scanCleanup(), "build-folders").entries.every((e) => /Cleaner is working/.test(e.kept ?? ""))).toBe(true);
-      expect((await runCleanup(["build-folders"])).results[0]).toMatchObject({ removed: 0, kept: 4 });
+      expect((await runCleanup(["build-folders"])).results[0]).toMatchObject({ removed: 0, kept: 5 });
       expect(gone.map(existsSync)).toEqual([true, true, true]);
     } finally {
       sql("DELETE FROM runs WHERE id = 'run_buildwork001'");
     }
 
     const result = await runCleanup(["build-folders"]);
-    expect(result.results[0]).toMatchObject({ ok: true, removed: 3, kept: 1 });
+    expect(result.results[0]).toMatchObject({ ok: true, removed: 3, kept: 2 });
     expect(result.freedBytes).toBeGreaterThanOrEqual(4 * 16 * 1024);
     expect(gone.map(existsSync)).toEqual([false, false, false]);
     const stay = [
@@ -507,6 +514,9 @@ suite("rebuildable folders", () => {
       join(upload, "node_modules"),
       join(elsewhere, "node_modules"),
       join(vendored, "node_modules"),
+      join(handMade, ".venv"),
+      join(loose, "node_modules"),
+      join(daily, "node_modules"),
     ];
     expect(stay.filter((p) => !existsSync(p))).toEqual([]);
     expect(paths(item(await scanCleanup(), "build-folders"))).toEqual([]);

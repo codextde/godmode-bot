@@ -27,7 +27,7 @@ export function optimizeReport(at = new Date()): OptimizeReport {
   const budget = settings.runner.contextBudget;
   const chats = all<{ id: string; agent_id: string; name: string; title: string; tokens: number }>(
     `SELECT c.id, c.agent_id, a.name, c.title, c.context_tokens AS tokens FROM conversations c JOIN agents a ON a.id = c.agent_id
-     WHERE c.last_message_at > ? AND c.origin != 'dream' AND c.context_tokens IS NOT NULL ORDER BY c.context_tokens DESC`,
+     WHERE c.last_message_at > ? AND c.origin != 'dream' AND c.private = 0 AND c.context_tokens IS NOT NULL ORDER BY c.context_tokens DESC`,
     new Date(at.getTime() - WEEK).toISOString(),
   );
   const limit = budget ?? DEFAULT_CONTEXT_BUDGET;
@@ -56,6 +56,7 @@ export function optimizeReport(at = new Date()): OptimizeReport {
     checkedAt: now(),
     context: {
       budget,
+      share: budget ? null : settings.runner.autoCompactPercent,
       active: chats.length,
       over: chats.filter((c) => c.tokens > limit).length,
       largest: chats.slice(0, LARGEST).map((c) => ({ conversationId: c.id, agentId: c.agent_id, agentName: c.name, title: c.title, tokens: c.tokens })),

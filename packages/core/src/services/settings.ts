@@ -209,6 +209,8 @@ export function getSettings(): Settings {
 
 /** Deep-merge a partial settings patch and persist changed sections. */
 export function updateSettings(patch: DeepPartial<Settings>): Settings {
+  // A share picked on its own (an older phone app, an agent) means chats compress by share again, not at the budget.
+  if (patch.runner && "autoCompactPercent" in patch.runner && !("contextBudget" in patch.runner)) patch = { ...patch, runner: { ...patch.runner, contextBudget: null } };
   const current = getSettings();
   const next = merge(current, patch);
   for (const key of Object.keys(patch) as Section[]) {

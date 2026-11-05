@@ -17,6 +17,9 @@ const SETTING_LIMITS: Record<string, [min: number, max: number]> = {
   "general.userName": [0, 80],
 };
 
+/** Numbers that may also be empty: when chats compress is a budget, a share of the window, or Claude Code's own. */
+export const NULLABLE_SETTINGS: ReadonlySet<string> = new Set(["runner.contextBudget", "runner.autoCompactPercent"]);
+
 /** Settings that take one of a few words. */
 export const SETTING_CHOICES: Record<string, readonly string[]> = {
   "general.theme": THEMES,

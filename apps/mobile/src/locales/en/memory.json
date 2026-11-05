@@ -47,6 +47,7 @@
     "tokens": "tokens",
     "autoOff": "Auto-compress is off.",
     "autoAt": "Compresses by itself at {{pct}}%.",
+    "autoAtTokens": "Compresses by itself at {{tokens}}.",
     "unknown": "Known after {{name}}'s next answer in this chat.",
     "explain": "Compress turns the conversation so far into a short summary. {{name}} keeps the gist, your instructions and its files, and every next step gets faster and cheaper.",
     "queued": "Compress is queued",

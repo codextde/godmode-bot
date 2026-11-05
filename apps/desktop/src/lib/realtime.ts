@@ -66,7 +66,7 @@ const ENTITY_KEYS: Record<EntityName, readonly unknown[][]> = {
   "human-tasks": [qk.humanTasks, qk.bootstrap],
   artifacts: [qk.artifacts],
   notifications: [qk.notifications, qk.bootstrap],
-  settings: [qk.settings, qk.bootstrap],
+  settings: [qk.settings, qk.bootstrap, qk.optimize],
   runs: [qk.runs],
   models: [qk.models],
   computer: [qk.computer],

@@ -921,6 +921,7 @@
         "label": "Kontext",
         "caption": "pro Chat",
         "full": "Voll",
+        "off": "Aus",
         "over_one": "{{count}} Chat darüber, wird im nächsten Schritt komprimiert",
         "over_other": "{{count}} Chats darüber, werden im nächsten Schritt komprimiert",
         "overNoBudget_one": "{{count}} Chat über {{tokens}} diese Woche",

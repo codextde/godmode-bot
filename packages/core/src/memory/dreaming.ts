@@ -963,11 +963,11 @@ function leftBefore(agentId: string, before: string): number {
  */
 export function onDreamRunFinished(run: Run): void {
   const row = get<DreamRow>(`SELECT ${COLUMNS} FROM dreams WHERE run_id = ?`, run.id);
+  const reviewed = row ? reviewing.get(row.id) : undefined;
+  if (row) reviewing.delete(row.id);
   if (!row || !ACTIVE.includes(row.status)) return;
   const paused = preempted.delete(row.id);
   sizeReminders.delete(row.id);
-  const reviewed = reviewing.get(row.id);
-  reviewing.delete(row.id);
   const status: DreamStatus = run.status === "succeeded" ? "succeeded" : paused ? "paused" : run.status === "cancelled" ? "cancelled" : "failed";
   const repoPath = repoPathOf(row.agent_id);
   let kept: DreamFileChange[] = [];
@@ -1143,7 +1143,7 @@ export function dreamDue(agent: Agent, settings: Settings = getSettings(), at = 
   const last = lastDreamAt(agent.id) ?? agent.createdAt;
   if (at.getTime() - new Date(last).getTime() < s.refreshDays * 86_400_000) return false;
   if (s.tidyWorkspace && workspaceChangedSince(agent.repoPath, new Date(last).getTime())) return true;
-  if (unusedNotes(agent.id, agent.repoPath, at).length) return true;
+  if (pending.exchanges > 0 && unusedNotes(agent.id, agent.repoPath, at).length) return true;
   // Old memory without dates can't go stale by time alone; new activity below the threshold rides along.
   return mentionsTime(readMemory(agent.repoPath) ?? "");
 }
@@ -1384,7 +1384,8 @@ function onBusEvent(event: Parameters<Parameters<typeof bus.on>[0]>[0]) {
       if (event.run.status === "running") onDreamRunStarted(event.run);
     } else if (event.run.status === "queued") maybePreempt(event.run);
   } else if (event.type === "run.finished") {
-    recordMemoryUse(event.run);
+    const finished = event.run;
+    setImmediate(() => recordMemoryUse(finished));
     if (event.run.trigger === "dream") onDreamRunFinished(event.run);
   }
 }

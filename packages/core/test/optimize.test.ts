@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, utimesSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { autoCompactWindow, compactPoint, compressChoice, compressPatch, contextGauge, type Agent, type RunTrigger } from "@godmode/shared";
@@ -7,10 +7,11 @@ import { makeAgent, setupEnv, type TestEnv } from "./fixtures/runner-harness";
 import { get, insert, run as sql, setMeta } from "../src/db";
 import { createConversation } from "../src/services/conversations";
 import { buildDreamPrompt, dreamDue, ensureDreamListener, memoryToTidy } from "../src/memory/dreaming";
-import { markReviewed, noteOf, noteUses, recordMemoryUse, unusedNotes, UNUSED_DAYS } from "../src/memory/usage";
+import { markReviewed, noteOf, noteUses, recordMemoryUse, unusedNotes, UNUSED_DAYS, UNUSED_RUNS } from "../src/memory/usage";
 import { optimizeReport } from "../src/services/optimize";
 import { checkSettingsPatch } from "../src/services/settingsPatch";
-import { getSettings } from "../src/services/settings";
+import { getSettings, updateSettings } from "../src/services/settings";
+import { agentSettingsRefusal } from "../src/services/agentSettings";
 import { newId } from "../src/util";
 
 let env: TestEnv;
@@ -27,10 +28,18 @@ afterAll(async () => {
   await env.close();
 });
 
-function note(agent: Agent, path: string, text = "# Note\n- a fact\n") {
+/** A note last written `days` ago. */
+function note(agent: Agent, path: string, text = "# Note\n- a fact\n", days = UNUSED_DAYS + 20) {
   const abs = join(agent.repoPath, path);
   mkdirSync(join(abs, ".."), { recursive: true });
   writeFileSync(abs, text);
+  const t = new Date(Date.now() - days * DAY);
+  utimesSync(abs, t, t);
+}
+
+/** The agent kept working: finished runs in the last days. */
+function work(agent: Agent, runs = UNUSED_RUNS) {
+  for (let i = 0; i < runs; i++) runWith(agent, [], "chat", ago(i + 1));
 }
 
 /** A finished run of the agent whose message holds these tool steps. */
@@ -64,6 +73,11 @@ describe("which notes tasks use", () => {
     expect(noteOf(repo, "/data/agents/other/memory/x.md")).toBeNull();
     expect(noteOf(repo, "workspace/memory.md")).toBeNull();
     expect(noteOf(repo, "memory/../secrets.md")).toBeNull();
+    // The team profile reaches every task through its prompt.
+    expect(noteOf(repo, "memory/profile.md")).toBeNull();
+    // The same repository seen from a VM or a moved data folder.
+    expect(noteOf(repo, "/Volumes/My Shared Files/agents/scout/memory/leads.md")).toBe("memory/leads.md");
+    expect(noteOf(repo, "/Volumes/x/agents/other/memory/leads.md")).toBeNull();
   });
 
   test("reads, edits, shell commands and a lead's team_memory_read count; dreams only start the clock", async () => {
@@ -75,39 +89,50 @@ describe("which notes tasks use", () => {
       { name: "Edit", input: { file_path: join(agent.repoPath, "MEMORY.md"), old_string: "a", new_string: "b" } },
       { name: "Read", input: { file_path: join(agent.repoPath, "workspace/notes.md") } },
       { name: "mcp__godmode__team_memory_read", input: { agentId: report.slug, path: "memory/cases.md" } },
+      { name: "Bash", input: { command: "rg -l invoice memory/kunden-übersicht.md" } },
     ]);
     recordMemoryUse(run);
     expect(uses(agent.id, "memory/leads.md")?.uses).toBe(1);
     expect(uses(agent.id, "memory/tools.md")?.uses).toBe(1);
     expect(uses(report.id, "memory/cases.md")?.uses).toBe(1);
-    expect(get<{ n: number }>("SELECT COUNT(*) AS n FROM memory_note_uses WHERE agent_id = ?", agent.id)?.n).toBe(2);
+    expect(uses(agent.id, "memory/kunden-übersicht.md")?.uses).toBe(1);
+    expect(get<{ n: number }>("SELECT COUNT(*) AS n FROM memory_note_uses WHERE agent_id = ?", agent.id)?.n).toBe(3);
 
     recordMemoryUse(runWith(agent, [{ name: "Write", input: { file_path: join(agent.repoPath, "memory/leads.md"), content: "x" } }]));
     expect(uses(agent.id, "memory/leads.md")?.uses).toBe(2);
 
     const dream = runWith(agent, [
       { name: "Read", input: { file_path: join(agent.repoPath, "memory/leads.md") } },
+      { name: "Read", input: { file_path: join(agent.repoPath, "memory/only-read.md") } },
       { name: "Write", input: { file_path: join(agent.repoPath, "memory/new-topic.md"), content: "x" } },
     ], "dream", ago(-1));
     recordMemoryUse(dream);
     expect(uses(agent.id, "memory/leads.md")?.uses).toBe(2);
     expect(uses(agent.id, "memory/leads.md")?.last_used_at).not.toBe(dream.finishedAt);
+    expect(uses(agent.id, "memory/only-read.md")).toBeNull();
     expect(uses(agent.id, "memory/new-topic.md")).toEqual({ uses: 0, last_used_at: dream.finishedAt });
   });
 
   test("a note is unused once no task touched it for 30 days, counted from when counting began", async () => {
     const agent = await makeAgent({ name: "Forgetful" });
-    for (const n of ["memory/used.md", "memory/stale.md", "memory/never.md", "memory/sub/deep.md"]) note(agent, n);
+    for (const n of ["memory/used.md", "memory/stale.md", "memory/never.md", "memory/sub/deep.md", "memory/profile.md"]) note(agent, n);
+    note(agent, "memory/fresh.md", undefined, 2);
     writeFileSync(join(agent.repoPath, "memory/image.png"), "x");
     insert("memory_note_uses", { agent_id: agent.id, path: "memory/used.md", last_used_at: ago(2), uses: 4 });
     insert("memory_note_uses", { agent_id: agent.id, path: "memory/stale.md", last_used_at: ago(UNUSED_DAYS + 5), uses: 1 });
 
+    setMeta("memory.usesSince", ago(UNUSED_DAYS + 10));
+    // An agent that wasn't needed this month keeps every note.
+    expect(unusedNotes(agent.id, agent.repoPath)).toEqual([]);
+    work(agent);
+
+    // Counting began 10 days ago: only what was last used before that is known to be unused.
     setMeta("memory.usesSince", ago(10));
     expect(unusedNotes(agent.id, agent.repoPath).map((n) => n.path)).toEqual(["memory/stale.md"]);
 
     setMeta("memory.usesSince", ago(UNUSED_DAYS + 10));
     const all = noteUses(agent.id, agent.repoPath);
-    expect(all.map((n) => n.path)).toEqual(["memory/never.md", "memory/sub/deep.md", "memory/stale.md", "memory/used.md"]);
+    expect(all.map((n) => n.path)).toEqual(["memory/never.md", "memory/sub/deep.md", "memory/stale.md", "memory/fresh.md", "memory/used.md"]);
     expect(all.filter((n) => n.unused).map((n) => n.path)).toEqual(["memory/never.md", "memory/sub/deep.md", "memory/stale.md"]);
     expect(all.find((n) => n.path === "memory/used.md")).toMatchObject({ uses: 4, unused: false });
     expect(all.find((n) => n.path === "memory/never.md")).toMatchObject({ uses: 0, lastUsedAt: null });
@@ -124,8 +149,13 @@ describe("which notes tasks use", () => {
     setMeta("memory.usesSince", ago(UNUSED_DAYS + 10));
     const settings = getSettings();
     const later = new Date(Date.now() + 8 * DAY);
-    expect(memoryToTidy(agent, settings)).toBe(false);
     note(agent, "memory/old-campaign.md", "# Campaign\n" + "- detail\n".repeat(300));
+    // Not needed this month: nothing to tidy.
+    expect(memoryToTidy(agent, settings)).toBe(false);
+    expect(dreamDue(agent, settings, later)).toBe(false);
+    work(agent, UNUSED_RUNS - 1);
+    expect(memoryToTidy(agent, settings)).toBe(false);
+    work(agent, 1);
     expect(memoryToTidy(agent, settings)).toBe(true);
     expect(dreamDue(agent, settings, later)).toBe(true);
     const prompt = buildDreamPrompt({
@@ -172,6 +202,19 @@ describe("context budget", () => {
     expect(compressPatch("claude")).toEqual({ contextBudget: null, autoCompactPercent: null });
     expect(compressPatch("0")).toEqual({ contextBudget: null, autoCompactPercent: 0 });
     expect(compressPatch("p60")).toEqual({ contextBudget: null, autoCompactPercent: 60 });
+  });
+
+  test("agents and the phone switch between a budget, a share and never; a share alone drops the budget", () => {
+    expect(agentSettingsRefusal({ runner: { contextBudget: null, autoCompactPercent: 0 } }, "Daniel")).toBeNull();
+    expect(agentSettingsRefusal({ runner: { contextBudget: 400_000 } }, "Daniel")).toBeNull();
+    expect(agentSettingsRefusal({ runner: { contextBudget: 40_000 } }, "Daniel")).toMatch(/Invalid value/);
+    try {
+      updateSettings({ runner: { autoCompactPercent: 50 } });
+      expect(getSettings().runner).toMatchObject({ contextBudget: null, autoCompactPercent: 50 });
+      expect(agentSettingsRefusal({ runner: { contextBudget: 250_000 } }, "Daniel")).toBeNull();
+    } finally {
+      updateSettings({ runner: { contextBudget: 250_000, autoCompactPercent: 70 } });
+    }
   });
 
   test("the budget takes whole tokens in range, or nothing", () => {

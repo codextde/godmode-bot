@@ -45,7 +45,7 @@ const NAMES = {
   "agent-history": "Agent file history",
   "deleted-files": "Deleted files",
   // Before the database: the room the pictures leave is given back in the same pass.
-  "chat-pictures": "Old screenshots in chats",
+  "chat-pictures": "Old pictures in chats",
   database: "Database",
   "old-logs": "Old logs",
   "vm-downloads": "Unfinished VM downloads",
@@ -81,7 +81,7 @@ export const SCRATCH_DAYS = 7;
 /** Raw run logs (runs/<day>/) are kept this long; the chats and their results stay in the database. */
 export const RUN_LOG_DAYS = 14;
 /** Installed packages and build caches stay while their project was worked on in this many days. */
-export const BUILD_DAYS = 14;
+export const BUILD_DAYS = 30;
 /** How deep in an agent's workspace projects are looked for. */
 const BUILD_DEPTH = 8;
 /** Screenshots in chats are kept this long; the steps they belong to stay. */
@@ -550,22 +550,27 @@ async function agentScratch(scan: Scan): Promise<Category> {
   };
 }
 
+const NODE = ["package.json"];
+const PYTHON = ["requirements.txt", "requirements-dev.txt", "pyproject.toml", "Pipfile", "setup.py", "uv.lock", "poetry.lock"];
+const XCODE = [".xcodeproj", ".xcworkspace", "Package.swift", "project.yml"];
+
 /**
- * Folders an install or a build makes again, by name. Some only count with the file that tells them apart from a
- * folder of the same name: inside them (a Python environment's pyvenv.cfg) or next to them (Cargo.toml, Package.swift).
+ * Folders an install or a build makes again, by name, and only next to the file that says how (a folder an agent filled
+ * by hand can't be made again): `beside` names one of which must sit next to it (or ends one, for Xcode projects),
+ * `inside` a file it must hold (a Python environment's pyvenv.cfg).
  */
-export const REBUILDABLE = new Map<string, { inside?: string; beside?: string }>([
-  ["node_modules", {}],
-  [".venv", { inside: "pyvenv.cfg" }],
-  ["venv", { inside: "pyvenv.cfg" }],
-  ["DerivedData", {}],
-  [".next", {}],
-  [".turbo", {}],
-  [".parcel-cache", {}],
-  [".gradle", {}],
-  [".expo", {}],
-  ["target", { beside: "Cargo.toml" }],
-  [".build", { beside: "Package.swift" }],
+export const REBUILDABLE = new Map<string, { inside?: string; beside: string[] }>([
+  ["node_modules", { beside: NODE }],
+  [".next", { beside: NODE }],
+  [".turbo", { beside: NODE }],
+  [".parcel-cache", { beside: NODE }],
+  [".expo", { beside: NODE }],
+  [".venv", { inside: "pyvenv.cfg", beside: PYTHON }],
+  ["venv", { inside: "pyvenv.cfg", beside: PYTHON }],
+  ["DerivedData", { beside: XCODE }],
+  [".gradle", { beside: ["build.gradle", "build.gradle.kts", "settings.gradle", "settings.gradle.kts"] }],
+  ["target", { beside: ["Cargo.toml"] }],
+  [".build", { beside: ["Package.swift"] }],
 ]);
 
 async function isFile(path: string): Promise<boolean> {
@@ -575,9 +580,9 @@ async function isFile(path: string): Promise<boolean> {
 async function rebuildable(dir: string, name: string): Promise<boolean> {
   const rule = REBUILDABLE.get(name);
   if (!rule) return false;
-  if (rule.inside) return isFile(join(dir, name, rule.inside));
-  if (rule.beside) return isFile(join(dir, rule.beside));
-  return true;
+  if (rule.inside && !(await isFile(join(dir, name, rule.inside)))) return false;
+  const siblings = await names(dir);
+  return rule.beside.some((b) => (b.startsWith(".") ? siblings.some((s) => s.endsWith(b)) : siblings.includes(b)));
 }
 
 /** Rebuildable folders in `dir`: none inside another, none reached through a symlink or in .git. */
@@ -630,23 +635,32 @@ async function buildFolders(scan: Scan): Promise<Category | null> {
   for (const agent of agentRepos()) {
     const workspace = await repoDir(agent, "workspace");
     if (!workspace) continue;
+    const owner = { id: agent.id, repoPath: agent.dir, instructions: agent.instructions };
+    // A project the agent's notes, instructions or automations name may be run from there (a script, a daily job).
+    const named = (path: string) => {
+      const where = namedBy(owner)(relative(workspace, dirname(path)));
+      return where ? `Named in ${where} — a task may still run it.` : null;
+    };
     // What is in tmp/ is the scratch files' to clean; uploads are the human's.
     for (const path of await rebuildableIn(workspace, BUILD_DEPTH, ["tmp", "uploads"])) {
       if (scan.at - (await lastWorkedOn(path, io, projects)) < BUILD_DAYS * DAY) continue;
       const clean = async () => {
-        if (busyOrWaiting(newScan()).has(agent.id)) throw new Kept(working(agent));
         if (Date.now() - (await lastWorkedOn(path)) < BUILD_DAYS * DAY) throw new Kept("Its project was worked on again.");
-        const tracked = await trackedByGit(path);
-        if (tracked) throw new Kept(tracked);
-        await withRepoLock(agent.dir, () => remove(path));
+        const reason = named(path) ?? (await trackedByGit(path));
+        if (reason) throw new Kept(reason);
+        await withRepoLock(agent.dir, async () => {
+          // Asked last, right before it goes: a run that started meanwhile may be using it.
+          if (busyOrWaiting(newScan()).has(agent.id)) throw new Kept(working(agent));
+          await remove(path);
+        });
       };
-      const kept = busy.has(agent.id) ? working(agent) : await trackedByGit(path);
+      const kept = busy.has(agent.id) ? working(agent) : (named(path) ?? (await trackedByGit(path)));
       targets.push(await target(scan, path, `${agent.name} · ${relative(workspace, path)}`, { kept, clean }));
     }
   }
   return {
     id: "build-folders",
-    detail: `Installed packages and build caches (node_modules, Python environments, Xcode DerivedData) in agents' projects nobody worked on for ${BUILD_DAYS} days. Installing or building again brings them back.`,
+    detail: `Installed packages and build caches (node_modules, Python environments, Xcode DerivedData) of agents' projects nobody worked on for ${BUILD_DAYS} days, next to the file that installs them again. What a note or automation names stays.`,
     targets,
   };
 }
@@ -888,6 +902,8 @@ async function chatPictures(scan: Scan): Promise<Category> {
     const mark = Math.min(open, newer ?? Infinity) - 1;
     if (mark > (Number(getMeta(PICTURES_ROWID)) || 0)) setMeta(PICTURES_ROWID, String(mark));
   };
+  // Nothing old holds a picture: the next look starts where the newer messages begin.
+  if (!found.length) advance();
   const agents = new Map(all<{ id: string; name: string }>("SELECT id, name FROM agents").map((a) => [a.id, a.name]));
   const byAgent = new Map<string, Pictures[]>();
   for (const p of found) {
@@ -940,7 +956,7 @@ async function chatPictures(scan: Scan): Promise<Category> {
   }
   return {
     id: "chat-pictures",
-    detail: `Screenshots agents took in chats older than ${PICTURE_DAYS} days. The chats, their steps and results stay; only the pictures go.`,
+    detail: `Screenshots and other pictures tools showed in chats more than ${PICTURE_DAYS} days ago. The chats, their steps and results stay; only the pictures go.`,
     targets,
   };
 }

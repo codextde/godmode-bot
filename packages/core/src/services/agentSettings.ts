@@ -3,7 +3,7 @@ import { HttpError } from "../util";
 import { audit } from "./audit";
 import { applyRuntimeSettings } from "./runtime";
 import { DEFAULT_SETTINGS, getSettings, updateSettings } from "./settings";
-import { SETTING_CHOICES, sameSettingShape, settingInRange } from "./settingShape";
+import { NULLABLE_SETTINGS, SETTING_CHOICES, sameSettingShape, settingInRange } from "./settingShape";
 import { checkSettingsPatch } from "./settingsPatch";
 
 type Sections = Record<string, unknown>;
@@ -104,7 +104,7 @@ export function agentSettingsRefusal(changes: Record<string, unknown>, human: st
       const whole = typeof value !== "number" || ((Number.isInteger(value) || FRACTIONS.has(path)) && value >= (AT_LEAST[path] ?? -Infinity));
       const choices = SETTING_CHOICES[path];
       if (choices && typeof value === "string" && !choices.includes(value)) return `${path} must be one of: ${choices.join(", ")}.`;
-      if (!sameSettingShape(value, was, false) || !whole || !settingInRange(path, value)) return `Invalid value for ${path}: it is ${JSON.stringify(was)} now, keep its type and range.`;
+      if (!sameSettingShape(value, was, NULLABLE_SETTINGS.has(path)) || !whole || !settingInRange(path, value)) return `Invalid value for ${path}: it is ${JSON.stringify(was)} now, keep its type and range.`;
       if (typeof value === "string") {
         if (value.length > MAX_TEXT || NOT_ONE_LINE.test(value)) return `${path} takes one line of at most ${MAX_TEXT} characters.`;
       }

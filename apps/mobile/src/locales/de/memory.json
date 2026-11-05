@@ -47,6 +47,7 @@
     "tokens": "Tokens",
     "autoOff": "Automatisches Komprimieren ist aus.",
     "autoAt": "Komprimiert sich bei {{pct}} % von selbst.",
+    "autoAtTokens": "Komprimiert sich bei {{tokens}} von selbst.",
     "unknown": "Bekannt nach der nächsten Antwort von {{name}} in diesem Chat.",
     "explain": "Komprimieren fasst die bisherige Unterhaltung kurz zusammen. {{name}} behält das Wesentliche, deine Anweisungen und seine Dateien, und jeder weitere Schritt wird schneller und günstiger.",
     "queued": "Komprimieren ist eingereiht",

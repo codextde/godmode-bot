@@ -111,7 +111,9 @@ export default function ModelAndLimits() {
           title={t("ai.compact.auto")}
           value={compressChoice(r)}
           options={[
-            ...CONTEXT_BUDGET_CHOICES.map((b) => ({ value: String(b), label: t(b === DEFAULT_CONTEXT_BUDGET ? "ai.compact.atTokensDefault" : "ai.compact.atTokens", { tokens: tokensLabel(b) }) })),
+            ...[...new Set([...CONTEXT_BUDGET_CHOICES, ...(r.contextBudget ? [r.contextBudget] : [])])]
+              .sort((a, b) => a - b)
+              .map((b) => ({ value: String(b), label: t(b === DEFAULT_CONTEXT_BUDGET ? "ai.compact.atTokensDefault" : "ai.compact.atTokens", { tokens: tokensLabel(b) }) })),
             ...(compressChoice(r).startsWith("p") ? [{ value: compressChoice(r), label: t("ai.compact.at", { percent: Number(compressChoice(r).slice(1)) }) }] : []),
             { value: "claude", label: t("ai.compact.nearlyFull") },
             { value: "0", label: t("ai.compact.never") },
