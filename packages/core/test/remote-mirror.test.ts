@@ -871,7 +871,7 @@ describe("catching up after a connect", () => {
         calls.push(path);
         if (path.startsWith("/api/conversations?")) return (path.includes("archived") ? [] : [huge]) as T;
         if (path === `/api/conversations/${huge.id}`) {
-          if (breaks) throw new HttpError(409, "Mac mini is offline", "runner_offline");
+          if (breaks) throw new HttpError(409, "Mac mini is offline", "runner_offline", { link: "bad_frame" });
           return { ...huge, messages: [], activeRunId: null, queue: [] } as T;
         }
         return [] as T;
@@ -887,6 +887,26 @@ describe("catching up after a connect", () => {
 
     forgetHeavyChats(RUNNER);
     breaks = false;
+    expect(await catchUp(RUNNER, api)).toEqual({ conversations: 1, refreshed: 1 });
+    runnerDisconnected(RUNNER);
+  });
+
+  test("a runner that keeps falling asleep during a catch-up doesn't get a chat left out", async () => {
+    const small = chat({ title: "Short chat", running: true });
+    let asleep = true;
+    const api: RunnerApi = {
+      async json<T>(_method: string, path: string): Promise<T> {
+        if (path.startsWith("/api/conversations?")) return (path.includes("archived") ? [] : [small]) as T;
+        if (path === `/api/conversations/${small.id}`) {
+          if (asleep) throw new HttpError(409, "Mac mini is offline", "runner_offline");
+          return { ...small, messages: [], activeRunId: null, queue: [] } as T;
+        }
+        return [] as T;
+      },
+    };
+    for (let i = 0; i < 3; i++) expect((await failure(catchUp(RUNNER, api))).code).toBe("runner_offline");
+
+    asleep = false;
     expect(await catchUp(RUNNER, api)).toEqual({ conversations: 1, refreshed: 1 });
     runnerDisconnected(RUNNER);
   });

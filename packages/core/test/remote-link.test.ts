@@ -208,11 +208,22 @@ describe("a session", () => {
     stranger.stop();
   });
 
+  test("a lost frame ends the link and says so to what waits on it", async () => {
+    await until(() => link.state.state === "online", 15_000, "online");
+    const slow = link.request("GET", "/api/slow");
+    await sleep(100);
+    (link as unknown as { current: { channel: { receive(data: string): void } } }).current.channel.receive("not a frame");
+    await expect(slow).rejects.toMatchObject({ code: "runner_offline", details: { link: "bad_frame" } });
+    await until(() => link.state.state === "online", 15_000, "back online");
+  });
+
   test("when the runner goes away, waiting requests fail as offline and the link comes back with it", async () => {
     const slow = link.request("GET", "/api/slow");
     await sleep(100);
     stopLinkServer();
-    await expect(slow).rejects.toMatchObject({ code: "runner_offline" });
+    const gone = (await slow.catch((err) => err)) as HttpError;
+    expect(gone.code).toBe("runner_offline");
+    expect((gone.details as { link?: string } | undefined)?.link).not.toBe("bad_frame");
     await until(() => link.state.state !== "online", 5_000, "offline");
     await expect(link.request("GET", "/api/echo")).rejects.toMatchObject({ code: "runner_offline" });
 

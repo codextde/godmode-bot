@@ -1109,6 +1109,11 @@ function offline(err: unknown): boolean {
   return err instanceof HttpError && err.code === "runner_offline";
 }
 
+/** The link ended over a lost frame. A runner that slept or went away ends it too, but that says nothing about the chat. */
+function lostFrames(err: unknown): boolean {
+  return err instanceof HttpError && (err.details as { link?: string } | undefined)?.link === "bad_frame";
+}
+
 /**
  * Chats whose messages broke the link while they came (older runners drop frames of an answer that large): the
  * next catch-ups leave them out for a while, so one long chat can't keep its runner offline and out of reach of the
@@ -1167,7 +1172,7 @@ export async function catchUp(runnerId: string, api: RunnerApi, opts: CatchUpOpt
         continue;
       } catch (err) {
         if (offline(err)) {
-          droppedWhileFetching(runnerId, chat.id);
+          if (lostFrames(err)) droppedWhileFetching(runnerId, chat.id);
           throw err;
         }
         log.warn(`could not catch up on conversation ${chat.id} of runner ${runnerId}`, err);
