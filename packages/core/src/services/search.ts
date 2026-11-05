@@ -241,6 +241,7 @@ export function corrections(terms: Term[]): Map<number, string[]> {
 const noteIndex = new Map<string, number>();
 let notesSyncedAt = 0;
 let notesSync: Promise<void> | null = null;
+let notesFirstBuild = false;
 
 export function chunkMarkdown(text: string): { line: number; heading: string; body: string }[] {
   const chunks: { line: number; heading: string; body: string }[] = [];
@@ -303,11 +304,14 @@ async function syncNotes(): Promise<void> {
 export function refreshNotes(force = false): Promise<void> {
   if (notesSync) return notesSync;
   if (!force && Date.now() - notesSyncedAt < NOTE_SYNC_MS) return Promise.resolve();
+  // The rows outlive the core process: only the first index ever is worth waiting for.
+  notesFirstBuild = notesSyncedAt === 0 && !get("SELECT 1 FROM search_notes LIMIT 1");
   notesSync = syncNotes()
     .catch((err) => log.warn(`notes index: ${String(err)}`))
     .finally(() => {
       notesSyncedAt = Date.now();
       notesSync = null;
+      notesFirstBuild = false;
     });
   return notesSync;
 }
@@ -330,8 +334,7 @@ export async function search(query: string, opts: { limit?: number; notes?: bool
   const withNotes = opts.notes !== false;
   if (withNotes) {
     const pending = refreshNotes();
-    // The rows outlive the core process: only a first index ever is worth waiting for.
-    if (notesSyncedAt === 0 && !get("SELECT 1 FROM search_notes LIMIT 1")) await pending;
+    if (notesFirstBuild) await pending;
   }
   const runAll = (fixes: Map<number, string[]>) => ({
     chats: searchChats(terms, fixes, limit),
