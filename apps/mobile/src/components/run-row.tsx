@@ -30,6 +30,7 @@ export const TRIGGER_LABEL: Record<RunTrigger, string> = {
   get routine() { return t("components:runRow.trigger.routine"); },
   get check() { return t("components:runRow.trigger.check"); },
   get dream() { return t("components:runRow.trigger.dream"); },
+  get review() { return t("components:runRow.trigger.review"); },
   get delegation() { return t("components:runRow.trigger.delegation"); },
   get manual() { return t("components:runRow.trigger.manual"); },
   api: "API",

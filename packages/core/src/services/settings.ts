@@ -163,6 +163,12 @@ export const DEFAULT_SETTINGS: Settings = {
     agentId: null,
     autoMerge: true,
   },
+  review: {
+    enabled: true,
+    cron: "0 5 * * *",
+    model: "",
+    autoFix: true,
+  },
   mobile: {
     enabled: false,
     port: MOBILE_DEFAULT_PORT,

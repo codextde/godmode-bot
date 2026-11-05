@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.27
+# syntax=docker/dockerfile:1.28
 #
 # Godmode Bot — headless server with the web dashboard (for a home server, NAS, VPS, Raspberry Pi 4/5, …).
 #
@@ -9,8 +9,8 @@
 # Claude Code needs credentials: pass ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN (`claude setup-token`), or log in
 # once with `docker exec -it <container> claude` and keep /home/godmode/.claude on a volume (see docker-compose.yml).
 
-ARG NODE_VERSION=24
-ARG BUN_VERSION=1.4.2
+ARG NODE_VERSION=26
+ARG BUN_VERSION=1.4.4
 ARG DEBIAN_RELEASE=trixie
 
 # ---------------------------------------------------------------------------------------------------------------
@@ -25,7 +25,8 @@ ARG GODMODE_OFFICIAL_BUILD=""
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0 \
     CI=1
 COPY --from=bun /usr/local/bin/bun /usr/local/bin/bun
-RUN corepack enable
+# Node 25+ no longer ships corepack; it provides pnpm in the version of package.json "packageManager".
+RUN npm install --global corepack && corepack enable
 WORKDIR /src
 
 # Dependencies first (cached until the lockfile changes).

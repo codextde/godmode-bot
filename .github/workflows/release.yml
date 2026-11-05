@@ -78,7 +78,7 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: "1.4.2"
+          bun-version: "1.4.4"
 
       - name: Bump main when the tag is ahead of it
         env:
@@ -478,7 +478,7 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: "1.4.2"
+          bun-version: "1.4.4"
 
       - name: Tidy the assets and put the download table on top of the notes
         env:
@@ -515,7 +515,7 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: "1.4.2"
+          bun-version: "1.4.4"
 
       - name: Set the version from the tag
         run: bun scripts/bump-version.ts "$TAG"

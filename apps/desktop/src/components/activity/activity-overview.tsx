@@ -25,7 +25,7 @@ import { useReduceAnimations } from "@/lib/motion";
 
 const STATUSES: ("all" | RunStatus)[] = ["all", "running", "paused", "succeeded", "failed", "cancelled", "queued"];
 
-const TRIGGERS: RunTrigger[] = ["chat", "routine", "check", "dream", "delegation", "task", "followup", "heartbeat", "manual", "api"];
+const TRIGGERS: RunTrigger[] = ["chat", "routine", "check", "dream", "review", "delegation", "task", "followup", "heartbeat", "manual", "api"];
 
 function dayLabel(d: Date, t: TFunction<["activity", "runs", "common"]>) {
   if (isToday(d)) return t("common:words.today");

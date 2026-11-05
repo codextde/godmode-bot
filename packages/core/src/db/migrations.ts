@@ -2006,7 +2006,35 @@ ALTER TABLE phone_calls ADD COLUMN purge_pending INTEGER NOT NULL DEFAULT 0;
 `,
   },
   {
-    id: 122,
+    id: 124,
+    name: "auto_reviews",
+    sql: /* sql */ `
+-- Auto review (review/review.ts): the main agent's daily review of the whole setup, what it found and what it changed.
+CREATE TABLE reviews (
+  id TEXT PRIMARY KEY,
+  run_id TEXT,
+  conversation_id TEXT,
+  reason TEXT NOT NULL,
+  status TEXT NOT NULL,
+  summary TEXT NOT NULL DEFAULT '',
+  findings TEXT NOT NULL DEFAULT '[]',
+  -- What the review changed, each with what it takes to put it back (undo).
+  actions TEXT NOT NULL DEFAULT '[]',
+  scores TEXT NOT NULL DEFAULT '[]',
+  metrics TEXT,
+  -- What the review keeps in mind for the next one (its running notes).
+  notes TEXT NOT NULL DEFAULT '',
+  error TEXT,
+  created_at TEXT NOT NULL,
+  started_at TEXT,
+  finished_at TEXT
+);
+CREATE INDEX idx_reviews_created ON reviews(created_at);
+CREATE INDEX idx_reviews_run ON reviews(run_id);
+`,
+  },
+  {
+    id: 125,
     name: "context_budget",
     sql: /* sql */ `
 -- Long chats compress at a token budget now (runner.contextBudget, 250k by default). Whoever picked another share than
@@ -2018,7 +2046,7 @@ WHERE key = 'runner' AND json_valid(value) AND json_type(value, '$.autoCompactPe
 `,
   },
   {
-    id: 123,
+    id: 126,
     name: "memory_note_uses",
     sql: /* sql */ `
 -- When a task last opened or wrote each memory note (memory/usage.ts): notes nobody uses are merged or dropped by dreams.

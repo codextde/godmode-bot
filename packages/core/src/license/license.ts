@@ -524,7 +524,7 @@ export function initLicense(): void {
 }
 
 /** Runs that did something for the human: not condition checks, memory consolidation or heartbeats, nor sub-runs. */
-const WORK = "status = 'succeeded' AND parent_run_id IS NULL AND trigger NOT IN ('check', 'dream', 'heartbeat')";
+const WORK = "status = 'succeeded' AND parent_run_id IS NULL AND trigger NOT IN ('check', 'dream', 'review', 'heartbeat')";
 
 /** What Godmode did on this computer so far: a few counts, for the end of the free trial. */
 export function licenseUsage(): LicenseUsage {

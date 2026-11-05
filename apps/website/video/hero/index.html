@@ -518,8 +518,8 @@
       tl.to("#s-done", { opacity: 1, duration: 0.3 }, 17.0);
 
       // ---------- Browser ----------
-      const URL = "billing.acme.example/login";
-      const urlSched = GM.typeSchedule(URL, 6.55, 34, 3);
+      const PAGE_URL = "billing.acme.example/login";
+      const urlSched = GM.typeSchedule(PAGE_URL, 6.55, 34, 3);
       tl.fromTo("#loadbar", { opacity: 1, scaleX: 0 }, { opacity: 1, scaleX: 1, duration: 0.8, ease: "power2.inOut", immediateRender: false }, 7.2);
       tl.to("#loadbar", { opacity: 0, duration: 0.2 }, 8.0);
       tl.fromTo("#vp-blank", { opacity: 1 }, { opacity: 0, duration: 0.4 }, 7.6);
@@ -634,7 +634,7 @@
         typed.textContent = txt;
         ph.style.display = txt.length ? "none" : "inline";
         caret.style.opacity = t > 0.72 && t < 4.62 ? 1 : GM.blinkOn(t, 1.0) ? 1 : 0;
-        urlEl.innerHTML = t < 6.55 || reset ? '<span class="dim">about:blank</span>' : "https://" + GM.typedAt(urlSched, URL, t);
+        urlEl.innerHTML = t < 6.55 || reset ? '<span class="dim">about:blank</span>' : "https://" + GM.typedAt(urlSched, PAGE_URL, t);
         emailEl.textContent = t < 9.25 ? "" : GM.typedAt(emailSched, EMAIL, t);
         passEl.textContent = "•".repeat(t < 9.95 ? 0 : Math.min(14, Math.floor((t - 9.95) / 0.035)));
         fEmail.classList.toggle("focus", t >= 9.2 && t < 9.9);

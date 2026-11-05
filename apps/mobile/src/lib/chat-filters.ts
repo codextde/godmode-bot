@@ -99,6 +99,7 @@ export function chatSource(c: Conversation): ChatSource {
     case "task":
     case "heartbeat":
     case "dream":
+    case "review":
       return "agents";
     default:
       return "mine";

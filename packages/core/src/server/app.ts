@@ -12,6 +12,7 @@ import { registerVaultRoutes } from "./routes/vault";
 import { registerCardRoutes } from "./routes/cards";
 import { registerWorkspaceRoutes } from "./routes/workspaces";
 import { registerAgentRoutes } from "./routes/agents";
+import { registerReviewRoutes } from "./routes/reviews";
 import { registerChatRoutes } from "./routes/chat";
 import { registerMcpAppRoutes } from "./routes/mcpApps";
 import { serveMcpAppFrame } from "./mcpAppFrame";
@@ -208,6 +209,7 @@ export function createApp() {
   registerMcpAppRoutes(app);
   registerMissingLoginRoutes(app);
   registerMemoryRoutes(app);
+  registerReviewRoutes(app);
   registerQuestionRoutes(app);
   registerHumanTaskRoutes(app);
   registerArtifactRoutes(app);

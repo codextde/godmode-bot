@@ -63,6 +63,9 @@
  *               shortens it when the report is sent back (DREAM_BLOAT_STAYS: never). With a workspace inventory in the prompt and a
  *               `tidy-ops.json` in the state dir, it first calls workspace_tidy with those operations; when offer_help is
  *               listed and the state dir has an `offer-args.json`, it calls offer_help with those arguments.
+ *   Auto review — …  an auto review: reads the digest files the prompt names, calls the gateway (tools/list, a forbidden
+ *               tool, then each call of the state dir's `review-calls.json`, then review_report with `review-report.json`
+ *               or a default report — none while the state dir has `review-no-report`) and answers "REVIEW {json}"
  *   LEAVE_DECISION  finish with an answer that has a "Decision for you" section
  *   ASK_IN_PROSE    finish with an answer that closes with a question to the human
  *   ASK_HUMAN   call the gateway's ask_human (arguments from the state dir's `ask-args.json` when it exists) as a step,
@@ -534,6 +537,49 @@ if (slash?.[1] === "clear") {
   await ask("approval");
 } else if (prompt.includes("ASK_HUMAN")) {
   await ask("question");
+} else if (prompt.startsWith("Auto review —")) {
+  out(init);
+  const cwd = process.cwd();
+  const files = [...prompt.matchAll(/`(workspace\/tmp\/reviews\/[^`]+\.md)`/g)].map((m) => m[1]!);
+  const digest = files.map((f) => (existsSync(join(cwd, f)) ? readFileSync(join(cwd, f), "utf8") : "")).join("\n");
+  const cfg = JSON.parse(readFileSync(argValue("--mcp-config")!, "utf8")) as {
+    mcpServers: Record<string, { url: string; headers: Record<string, string> }>;
+  };
+  const gw = cfg.mcpServers.godmode!;
+  const rpc = async (body: unknown) => {
+    const res = await fetch(gw.url, { method: "POST", headers: { ...gw.headers, "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify(body) });
+    const raw = await res.text();
+    return raw ? JSON.parse(raw) : null;
+  };
+  await rpc({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "fake", version: "1" } } });
+  const list = await rpc({ jsonrpc: "2.0", id: 2, method: "tools/list" });
+  const forbidden = await rpc({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "agent_delete", arguments: { agentId: "agt_x" } } });
+  const callsFile = join(stateDir, "review-calls.json");
+  const calls = existsSync(callsFile) ? (JSON.parse(readFileSync(callsFile, "utf8")) as { name: string; arguments: unknown }[]) : [];
+  const done: { name: string; text: string; isError: boolean }[] = [];
+  for (const [i, call] of calls.entries()) {
+    const r = await rpc({ jsonrpc: "2.0", id: 10 + i, method: "tools/call", params: call });
+    done.push({ name: call.name, text: r.result.content[0].text as string, isError: r.result.isError === true });
+  }
+  const reportFile = join(stateDir, "review-report.json");
+  const reportArgs = existsSync(reportFile)
+    ? JSON.parse(readFileSync(reportFile, "utf8"))
+    : { summary: "Reviewed the setup.", findings: [], scores: [], notes: "Watch the follow-ups." };
+  const report = existsSync(join(stateDir, "review-no-report"))
+    ? null
+    : await rpc({ jsonrpc: "2.0", id: 4, method: "tools/call", params: { name: "review_report", arguments: reportArgs } });
+  const summary = {
+    servers: Object.keys(cfg.mcpServers),
+    tools: (list.result.tools as { name: string }[]).map((t) => t.name),
+    forbidden: { text: forbidden.result.content[0].text as string, isError: forbidden.result.isError === true },
+    calls: done,
+    report: report ? { text: report.result.content[0].text as string, isError: report.result.isError === true } : null,
+    files: files.length,
+    digest,
+  };
+  const text = `REVIEW ${JSON.stringify(summary)}`;
+  textTurn(text);
+  result(text);
 } else if (prompt.startsWith("Dream: consolidate")) {
   out(init);
   const cwd = process.cwd();

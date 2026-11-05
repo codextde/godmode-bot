@@ -340,7 +340,8 @@
       "system": "System",
       "logs": "Logs",
       "about": "Über",
-      "sshKeys": "SSH-Schlüssel"
+      "sshKeys": "SSH-Schlüssel",
+      "review": "Auto-Review"
     },
     "importChat": "Chat importieren…"
   },

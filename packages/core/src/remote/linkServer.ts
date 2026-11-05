@@ -423,7 +423,7 @@ async function onMessage(h: Handler, link: Link, message: unknown) {
         link.channel.sendJson({ t: "pong", at: m.at });
         return;
       case "client":
-        if (m.event && typeof m.event === "object") h.websocket.message(link.client as never, JSON.stringify(m.event as ClientEvent));
+        if (m.event && typeof m.event === "object") h.websocket.message?.(link.client as never, JSON.stringify(m.event as ClientEvent));
         return;
       case "req":
         await answerRequest(h, link, m);

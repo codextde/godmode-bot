@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { Agent, Conversation, ConversationWithMessages } from "@godmode/shared";
-import { Archive, ArchiveRestore, AudioLines, ChevronRight, Cpu, Ellipsis, HeartPulse, Laptop, Moon, Pencil, Pin, PinOff, Send, Share2, SquareKanban, Trash2, Plug, Workflow, X } from "lucide-react";
+import { Archive, ArchiveRestore, AudioLines, ChevronRight, ClipboardCheck, Cpu, Ellipsis, HeartPulse, Laptop, Moon, Pencil, Pin, PinOff, Send, Share2, SquareKanban, Trash2, Plug, Workflow, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -36,6 +36,7 @@ const ORIGIN_META = {
   delegation: { label: "header.origin.delegation", icon: Share2 },
   api: { label: "header.origin.api", icon: Plug },
   dream: { label: "header.origin.dream", icon: Moon },
+  review: { label: "header.origin.review", icon: ClipboardCheck },
   slack: { name: "Slack", icon: PLATFORMS.slack.glyph },
   telegram: { name: "Telegram", icon: PLATFORMS.telegram.glyph },
   teams: { name: "Teams", icon: PLATFORMS.teams.glyph },

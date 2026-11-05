@@ -376,6 +376,7 @@
       "delegation": "Übergeben",
       "api": "Chat",
       "dream": "Träume",
+      "review": "Auto-Reviews",
       "task": "Aufgabe",
       "heartbeat": "Heartbeat"
     },
@@ -1196,6 +1197,7 @@
     "switchedOffHint": "Antwortet nicht, führt keine Automationen aus und nimmt keine Übergaben an, bis du ihn einschaltest.",
     "switchOn": "Einschalten",
     "dreamLog": "Hier träumt <b>{{name}}</b> – starte einen neuen Chat, um mit ihm zu sprechen.",
+    "reviewLog": "Hier prüft <b>{{name}}</b> jeden Tag dein Setup. Starte einen neuen Chat, um mit ihm zu sprechen.",
     "ideas": {
       "whatCanYouDo": "Was kannst du für mich tun?",
       "inboxAgent": "Erstelle einen Agenten, der jeden Morgen meinen Posteingang prüft und zusammenfasst",

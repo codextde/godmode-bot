@@ -7,7 +7,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-HF="npx --yes hyperframes@0.8.123"
+HF="npx --yes hyperframes@0.9.17"
 OUT=../public/media
 R=.renders
 mkdir -p "$OUT" "$R"

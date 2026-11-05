@@ -1,6 +1,6 @@
 import type { RunStatus, RunTrigger } from "@godmode/shared";
 import { findModel } from "@godmode/shared";
-import { AlarmClock, Ban, CheckCircle2, CirclePause, Clock3, Hand, HeartPulse, MessageSquare, Moon, Phone, Plug, Radar, Share2, SquareKanban, Workflow, XCircle } from "lucide-react";
+import { AlarmClock, Ban, CheckCircle2, CirclePause, ClipboardCheck, Clock3, Hand, HeartPulse, MessageSquare, Moon, Phone, Plug, Radar, Share2, SquareKanban, Workflow, XCircle } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Orb } from "@/components/aicss/Orb";
 import { t } from "@/i18n";
@@ -151,6 +151,12 @@ const TRIGGER_META: Record<RunTrigger, { label: string; icon: typeof MessageSqua
     icon: Moon,
     get label() {
       return t("runs:trigger.dream");
+    },
+  },
+  review: {
+    icon: ClipboardCheck,
+    get label() {
+      return t("runs:trigger.review");
     },
   },
   delegation: {

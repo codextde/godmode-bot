@@ -463,7 +463,7 @@ export async function stopWaitingWork(primary: string, name: string, since: stri
     since
       ? all<{ run_id: string }>(
           `SELECT p.run_id FROM paused_runs p JOIN runs r ON r.id = p.run_id
-             WHERE p.reason = 'limit' AND r.trigger IN ('routine', 'heartbeat', 'check', 'dream', 'followup') AND r.created_at >= ?`,
+             WHERE p.reason = 'limit' AND r.trigger IN ('routine', 'heartbeat', 'check', 'dream', 'review', 'followup') AND r.created_at >= ?`,
           since,
         ).map((r) => r.run_id)
       : [],
@@ -1471,7 +1471,7 @@ export async function handoff(from: string | null, to: string | null): Promise<H
   if (isSecondary()) return primaryLink().json<HandoffResult>("POST", "/api/devices/handoff", { from, to }, { timeoutMs: 10 * 60_000 });
   if (from === to) throw badRequest("Pick another computer to hand the work to.");
   const chats = all<{ id: string; title: string; runner_state: string | null }>(
-    `SELECT id, title, runner_state FROM conversations WHERE ${from === null ? "runner_id IS NULL" : "runner_id = ?"} AND origin NOT IN ('dream', 'task') AND archived = 0`,
+    `SELECT id, title, runner_state FROM conversations WHERE ${from === null ? "runner_id IS NULL" : "runner_id = ?"} AND origin NOT IN ('dream', 'review', 'task') AND archived = 0`,
     ...(from === null ? [] : [from]),
   );
   const result: HandoffResult = { moved: [], failed: [] };

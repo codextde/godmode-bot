@@ -14,7 +14,7 @@
 # Nothing secret goes into the image: the database password and the app secret are generated at runtime (compose
 # service `init`). Coolify passes all its variables as build args, so never read a secret through ARG here.
 
-ARG NODE_VERSION=24
+ARG NODE_VERSION=26
 
 # ---------------------------------------------------------------------------------------------------------------
 # pnpm (the version from package.json "packageManager", through corepack)
@@ -25,7 +25,7 @@ ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0 \
     NEXT_TELEMETRY_DISABLED=1
 WORKDIR /repo
 COPY package.json ./
-RUN corepack enable && corepack install
+RUN npm install --global corepack && corepack enable && corepack install
 
 # ---------------------------------------------------------------------------------------------------------------
 # Build: the dashboard (Vite, served under /ui) and the cloud (next build + the custom server bundle)

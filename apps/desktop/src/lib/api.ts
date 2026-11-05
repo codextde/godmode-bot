@@ -1,4 +1,4 @@
-import type { SharedChatPreview, DreamAllResult, McpApp, DeviceGroup, DeviceGroupPatch, DeviceInvite, HandoffInput, HandoffResult, JoinGroupInput, MoveChatInput, RetireRunnerInput, RetireRunnerResult,
+import type { SharedChatPreview, DreamAllResult, Review, ReviewOverview, McpApp, DeviceGroup, DeviceGroupPatch, DeviceInvite, HandoffInput, HandoffResult, JoinGroupInput, MoveChatInput, RetireRunnerInput, RetireRunnerResult,
   AndroidAssignInput,
   SearchResults,
   HexStatus,
@@ -679,6 +679,16 @@ export const api = {
     get: (id: string) => get<DreamDetail>(`/api/dreams/${id}`),
     /** Put the memory files back the way they were before the dream (409 when they were edited since). */
     revert: (id: string) => post<Dream>(`/api/dreams/${id}/revert`),
+  },
+
+  reviews: {
+    /** Auto review: on or off, the next time, the running review and the latest ones. */
+    overview: () => get<ReviewOverview>("/api/reviews"),
+    /** Review now (409 while one runs). Stop it via `runs.cancel(review.runId)`. */
+    start: () => post<Review>("/api/reviews"),
+    get: (id: string) => get<Review>(`/api/reviews/${id}`),
+    /** Put one change back (409 when it was changed again since). */
+    undo: (id: string, index: number) => post<Review>(`/api/reviews/${id}/actions/${index}/undo`),
   },
 
   routines: {

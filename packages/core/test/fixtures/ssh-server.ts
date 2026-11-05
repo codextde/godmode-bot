@@ -141,7 +141,7 @@ export async function startSshServer(opts: TestSshServerOptions = {}): Promise<T
           };
           void Promise.all([pump(child.stdout, (b) => stream.write(b)), pump(child.stderr, (b) => stream.stderr.write(b)), child.exited]).then(([, , code]) => {
             try {
-              if (child.signalCode) stream.exit(child.signalCode.replace(/^SIG/, ""), false, "");
+              if (child.signalCode) stream.exit(String(child.signalCode).replace(/^SIG/, ""), false, "");
               else stream.exit(code);
               stream.end();
             } catch {

@@ -4,7 +4,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import type { Agent, AndroidDevice, BrowserProfile, ComputerTarget, ConversationWithMessages, Message, SendMessageInput, SshServer, Vm } from "@godmode/shared";
 import { characterGreeting, computerTargetLabel } from "@godmode/shared";
-import { Archive, ArchiveRestore, ArrowUpRight, Brain, MessageSquareDashed, MessageSquarePlus, Moon, Power, PowerOff, Sparkles, Wand2 } from "lucide-react";
+import { Archive, ArchiveRestore, ArrowUpRight, Brain, ClipboardCheck, MessageSquareDashed, MessageSquarePlus, Moon, Power, PowerOff, Sparkles, Wand2 } from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -536,8 +536,8 @@ function ConversationView({ conversationId }: { conversationId: string }) {
   if (isLoading || !conv) return <ConversationSkeleton />;
 
   const lastMessage = messages[messages.length - 1] ?? null;
-  // The agent's dream log: the core refuses messages here, so it reads like a transcript.
-  const dreamLog = conv.origin === "dream";
+  // The agent's dream log or its auto reviews: the core refuses messages here, so it reads like a transcript.
+  const dreamLog = conv.origin === "dream" || conv.origin === "review";
   // The latest turn, when nothing else is about to happen in the chat: if it ended early, the thread offers to pick it up.
   const lastTurn =
     !inflight && !paused && !queue.length && !dreamLog && !runnerAway && agent?.enabled !== false && lastMessage?.role === "assistant" && lastMessage.runId ? lastMessage : null;
@@ -620,7 +620,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
 
         {dreamLog ? (
           <div className="relative shrink-0 px-3 pb-3 @xl:px-6 @xl:pb-4">
-            <DreamLogNote agent={agent ?? { id: conv.agentId, name: t("turnEnd.theAgent"), enabled: true }} />
+            <DreamLogNote review={conv.origin === "review"} agent={agent ?? { id: conv.agentId, name: t("turnEnd.theAgent"), enabled: true }} />
           </div>
         ) : (
           <div className="relative shrink-0 px-3 pb-3 @xl:px-6 @xl:pb-4">
@@ -960,17 +960,17 @@ function SwitchedOffBar({ agent }: { agent: Agent }) {
 }
 
 /** Footer of an agent's dream log: nothing to send here — point to a fresh chat instead. */
-function DreamLogNote({ agent }: { agent: Pick<Agent, "id" | "name" | "enabled"> }) {
+function DreamLogNote({ agent, review }: { agent: Pick<Agent, "id" | "name" | "enabled">; review: boolean }) {
   const { t } = useTranslation("chat");
   const agentName = agent.name;
   const chat = useStartAgentChat();
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border bg-card px-4 py-3 text-[13px] text-muted-foreground shadow-card">
       <span className="grid size-7 shrink-0 place-items-center rounded-lg border bg-dream-soft text-dream">
-        <Moon className="size-3.5" aria-hidden />
+        {review ? <ClipboardCheck className="size-3.5" aria-hidden /> : <Moon className="size-3.5" aria-hidden />}
       </span>
       <span className="min-w-0 flex-1 basis-56">
-        <Trans t={t} i18nKey="conv.dreamLog" values={{ name: agentName }} components={{ b: <span className="font-medium text-foreground" /> }} />
+        <Trans t={t} i18nKey={review ? "conv.reviewLog" : "conv.dreamLog"} values={{ name: agentName }} components={{ b: <span className="font-medium text-foreground" /> }} />
       </span>
       <Button size="sm" variant="outline" disabled={chat.isPending} onClick={() => chat.mutate(agent)}>
         {chat.isPending ? <Spinner /> : <MessageSquarePlus />} {t("header.newChat")}

@@ -138,6 +138,20 @@ export function checkSettingsPatch(patch: Record<string, unknown>, needsGrant: (
       if (maintenance[key] !== undefined && typeof maintenance[key] !== "boolean") throw badRequest(`maintenance.${key} must be true or false`);
     }
   }
+  const review = patch.review as Record<string, unknown> | undefined;
+  if (review !== undefined) {
+    if (typeof review !== "object" || review === null || Array.isArray(review)) throw badRequest("Invalid auto review settings");
+    for (const key of ["enabled", "autoFix"] as const) {
+      if (review[key] !== undefined && typeof review[key] !== "boolean") throw badRequest(`review.${key} must be true or false`);
+    }
+    if (review.cron !== undefined && (typeof review.cron !== "string" || !isValidDreamSchedule(review.cron))) {
+      throw badRequest("The review schedule must be a cron expression with 5 fields (minute hour day month weekday)");
+    }
+    if (review.model !== undefined && (typeof review.model !== "string" || (review.model.trim() !== "" && !isModelId(review.model.trim())))) {
+      throw badRequest("Invalid model id for auto review");
+    }
+    if (typeof review.model === "string" && review.model.trim() && modelProvider(review.model) !== "anthropic") throw badRequest("The review model must be a Claude model");
+  }
   const repair = patch.selfRepair as Record<string, unknown> | undefined;
   if (repair !== undefined) {
     if (typeof repair !== "object" || repair === null || Array.isArray(repair)) throw badRequest("Invalid self-repair settings");

@@ -468,7 +468,8 @@
       "logs": "Logs",
       "about": "Über",
       "accounts": "Claude-Konten",
-      "sshKeys": "SSH-Schlüssel"
+      "sshKeys": "SSH-Schlüssel",
+      "review": "Auto-Review"
     },
     "easy": {
       "general": "Allgemein",
@@ -496,7 +497,8 @@
       "connect": "Claude Code & MCP",
       "system": "Systemcheck",
       "accounts": "Claude-Konten",
-      "sshKeys": "SSH-Schlüssel"
+      "sshKeys": "SSH-Schlüssel",
+      "review": "Tägliches Review"
     },
     "groups": {
       "preferences": "Einstellungen",
@@ -2118,6 +2120,49 @@
       "languageBody": "Deine Sprache ist {{language}}. Hex hört dann auf Englisch – stell die Sprache oben auf en-US oder de-DE.",
       "path": "Speicherort",
       "pathDescription": "Leer lassen, dann nutzt Godmode Hex aus Programme oder installiert eine eigene Kopie. Sonst die Hex-App oder ihr hex-Programm."
+    }
+  },
+  "review": {
+    "title": "Auto-Review",
+    "description": "Jeden Tag prüft Godmode dein ganzes Setup und behebt, was keinen Sinn ergibt.",
+    "schedule": "Zeitplan",
+    "enabled": "Auto-Review",
+    "when": "Wann",
+    "next": "Nächstes: {{when}}",
+    "autoFix": "Gefundenes selbst beheben",
+    "reportOnly": "Aus: es meldet nur.",
+    "now": "Jetzt prüfen",
+    "stop": "Stoppen",
+    "started": "Review gestartet",
+    "running": "Prüft dein Setup…",
+    "history": "Reviews",
+    "empty": "Noch keine Reviews.",
+    "changes_one": "{{count}} Änderung",
+    "changes_other": "{{count}} Änderungen",
+    "forYou_one": "{{count}} für dich",
+    "forYou_other": "{{count}} für dich",
+    "undo": "Rückgängig",
+    "undone": "Rückgängig gemacht",
+    "undoneLabel": "Rückgängig gemacht",
+    "openRun": "Chat des Reviews öffnen",
+    "blocks": {
+      "forYou": "Für dich",
+      "changes": "Änderungen",
+      "found": "Gefunden",
+      "agents": "Agenten"
+    },
+    "status": {
+      "queued": "Wartet auf den Start",
+      "running": "Prüft",
+      "succeeded": "Fertig",
+      "failed": "Fehlgeschlagen",
+      "cancelled": "Gestoppt"
+    },
+    "schedules": {
+      "morning": "Jeden Morgen um 5:00",
+      "night": "Jede Nacht um 2:00",
+      "weekdays": "Werktags um 7:00",
+      "sunday": "Sonntags um 5:00"
     }
   }
 }
