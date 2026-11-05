@@ -101,6 +101,8 @@ const RULES: [methods: string, path: string, rule: Rule][] = [
   ["POST", "/api/doctor/updates", refused(COMPUTER_ONLY)],
   ["GET", "/api/cleanup", A],
   ["POST", "/api/cleanup", refused(COMPUTER_ONLY)],
+  ["GET", "/api/optimize", A],
+  ["POST", "/api/optimize", refused(COMPUTER_ONLY)],
 
   ["GET", "/api/vault/status", A],
   ["POST", "/api/vault/lock", A],

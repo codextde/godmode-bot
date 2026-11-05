@@ -168,6 +168,7 @@ export interface Invocation {
     CLAUDE_CODE_PLUGIN_DIR_WATCH: string | null;
     CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS: string | null;
     CLAUDE_AUTOCOMPACT_PCT_OVERRIDE: string | null;
+    CLAUDE_CODE_AUTO_COMPACT_WINDOW: string | null;
     DISABLE_AUTO_COMPACT: string | null;
     ANTHROPIC_BASE_URL: string | null;
     ANTHROPIC_AUTH_TOKEN: string | null;

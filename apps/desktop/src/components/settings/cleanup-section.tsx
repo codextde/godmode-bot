@@ -19,6 +19,7 @@ import { dateLocale, t as translate } from "@/i18n";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
 import { CleanupItems } from "./cleanup-items";
+import { OptimizeCard } from "./optimize-card";
 import { SectionHeading, SettingRow, SettingsGroup, useSettingsPatch } from "./settings-kit";
 import { usePermissions } from "./system-permissions";
 import { useToolUpdates } from "./system-updates";
@@ -53,6 +54,7 @@ export function CleanupSection({ settings }: { settings: Settings | undefined })
   return (
     <div className="space-y-5">
       <SectionHeading title={t("cleanup.title")} description={t("cleanup.description")} />
+      <OptimizeCard />
       {report.isError ? (
         <div className="rounded-xl border border-destructive/25 bg-destructive/[0.05] p-5 text-sm">
           <p className="font-medium text-destructive">{t("cleanup.scanError")}</p>

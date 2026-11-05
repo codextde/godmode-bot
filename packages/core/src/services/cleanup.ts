@@ -1,18 +1,19 @@
 /**
  * Cleanup (Settings → Cleanup): a self check of Godmode's data folder and what piles up in it over time — leftovers of
  * interrupted runs, browser caches, worktrees of finished tasks, clones nothing uses, what agents leave in their
- * repositories (scratch files, old run logs, unpacked git history), free database pages, old logs, unfinished VM
- * downloads and the trash.
+ * repositories (scratch files, installed packages, old run logs, unpacked git history), old screenshots in chats, free
+ * database pages, old logs, unfinished VM downloads and the trash.
  *
  * Only Godmode's own files are removed. Whatever may hold work stays: checkouts with uncommitted changes or commits no
  * branch holds, clones with commits that were never pushed, and anything an agent or a browser uses right now. What is
  * removed is looked at twice: for the report, and again right before it goes.
  */
+import type { Database } from "bun:sqlite";
 import { existsSync, readlinkSync, statfsSync, statSync } from "node:fs";
 import { lstat, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
-import type { CleanupEntry, CleanupId, CleanupItem, CleanupReport, CleanupResult, CleanupRun, HealthCheck, StorageArea, StorageUsage } from "@godmode/shared";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import type { CleanupEntry, CleanupId, CleanupItem, CleanupReport, CleanupResult, CleanupRun, HealthCheck, MessageBlock, StorageArea, StorageUsage } from "@godmode/shared";
 import { formatBytes } from "@godmode/shared";
 import { DELETED_DAYS, expiredDeletedFiles } from "../agents/files";
 import { withRepoLock } from "../agents/repo";
@@ -20,7 +21,7 @@ import { namedBy } from "../memory/workspace";
 import { backupInProgress } from "../backup/backup";
 import { getRegistered } from "../browser/state";
 import { config } from "../config";
-import { all, get, getDb, getMeta, setMeta } from "../db";
+import { all, deleteMeta, get, getDb, getMeta, run as sql, setMeta, tx } from "../db";
 import { logger } from "../log";
 import { listActiveRuns } from "../runner/runner";
 import { removeCheckoutUnless, repoCacheDir, whileCloneIdle } from "../tasks/git";
@@ -39,9 +40,12 @@ const NAMES = {
   "task-worktrees": "Worktrees of finished tasks",
   "task-clones": "Clones no task uses",
   "agent-scratch": "Agents' scratch files",
+  "build-folders": "Rebuildable folders",
   "agent-run-logs": "Old run logs",
   "agent-history": "Agent file history",
   "deleted-files": "Deleted files",
+  // Before the database: the room the pictures leave is given back in the same pass.
+  "chat-pictures": "Old screenshots in chats",
   database: "Database",
   "old-logs": "Old logs",
   "vm-downloads": "Unfinished VM downloads",
@@ -58,9 +62,11 @@ export const RECOMMENDED: CleanupId[] = [
   "task-worktrees",
   "task-clones",
   "agent-scratch",
+  "build-folders",
   "agent-run-logs",
   "agent-history",
   "deleted-files",
+  "chat-pictures",
   "database",
   "old-logs",
 ];
@@ -74,6 +80,16 @@ const ENTRY_LIMIT = 50;
 export const SCRATCH_DAYS = 7;
 /** Raw run logs (runs/<day>/) are kept this long; the chats and their results stay in the database. */
 export const RUN_LOG_DAYS = 14;
+/** Installed packages and build caches stay while their project was worked on in this many days. */
+export const BUILD_DAYS = 14;
+/** How deep in an agent's workspace projects are looked for. */
+const BUILD_DEPTH = 8;
+/** Screenshots in chats are kept this long; the steps they belong to stay. */
+export const PICTURE_DAYS = 30;
+/** Messages up to this rowid hold no picture left to take: later looks start after it. */
+const PICTURES_ROWID = "cleanup.picturesRowid";
+/** Pictures taken out per step, so nothing else waits for all of them. */
+const PICTURE_STEP = { messages: 50, bytes: 16 * 1024 * 1024 };
 /** Loose history of an agent below this isn't worth packing. */
 const PACK_WORTH = 32 * 1024 * 1024;
 /** About what packing saves (measured on agent repositories, zlib alone → delta-compressed pack: 25 to 47 %). */
@@ -534,6 +550,107 @@ async function agentScratch(scan: Scan): Promise<Category> {
   };
 }
 
+/**
+ * Folders an install or a build makes again, by name. Some only count with the file that tells them apart from a
+ * folder of the same name: inside them (a Python environment's pyvenv.cfg) or next to them (Cargo.toml, Package.swift).
+ */
+export const REBUILDABLE = new Map<string, { inside?: string; beside?: string }>([
+  ["node_modules", {}],
+  [".venv", { inside: "pyvenv.cfg" }],
+  ["venv", { inside: "pyvenv.cfg" }],
+  ["DerivedData", {}],
+  [".next", {}],
+  [".turbo", {}],
+  [".parcel-cache", {}],
+  [".gradle", {}],
+  [".expo", {}],
+  ["target", { beside: "Cargo.toml" }],
+  [".build", { beside: "Package.swift" }],
+]);
+
+async function isFile(path: string): Promise<boolean> {
+  return (await lstat(path).catch(() => null))?.isFile() ?? false;
+}
+
+async function rebuildable(dir: string, name: string): Promise<boolean> {
+  const rule = REBUILDABLE.get(name);
+  if (!rule) return false;
+  if (rule.inside) return isFile(join(dir, name, rule.inside));
+  if (rule.beside) return isFile(join(dir, rule.beside));
+  return true;
+}
+
+/** Rebuildable folders in `dir`: none inside another, none reached through a symlink or in .git. */
+async function rebuildableIn(dir: string, depth: number, skip: string[] = []): Promise<string[]> {
+  const found: string[] = [];
+  for (const entry of await readdir(dir, { withFileTypes: true }).catch(() => [])) {
+    if (!entry.isDirectory() || entry.name === ".git" || skip.includes(entry.name)) continue;
+    const path = join(dir, entry.name);
+    if (await rebuildable(dir, entry.name)) found.push(path);
+    else if (depth > 1) found.push(...(await rebuildableIn(path, depth - 1)));
+  }
+  return found;
+}
+
+type Io = ReturnType<typeof limiter>;
+
+/** When anything in `path` last changed, leaving out the rebuildable folders in it. */
+async function lastChange(path: string, io: Io): Promise<number> {
+  const st = await io(() => lstat(path)).catch(() => null);
+  if (!st?.isDirectory()) return st?.mtimeMs ?? 0;
+  const children = await io(() => readdir(path)).catch(() => [] as string[]);
+  const times = await Promise.all(children.map(async (name) => ((await rebuildable(path, name)) ? 0 : lastChange(join(path, name), io))));
+  return times.reduce((a, b) => Math.max(a, b), st.mtimeMs);
+}
+
+/**
+ * When the project around a rebuildable folder was last worked on: its own files, and the last install (it touches the
+ * folder and what is right in it).
+ */
+async function lastWorkedOn(folder: string, io: Io = limiter(64), projects = new Map<string, Promise<number>>()): Promise<number> {
+  const project = dirname(folder);
+  if (!projects.has(project)) projects.set(project, lastChange(project, io));
+  const installed = [folder, ...(await names(folder)).map((n) => join(folder, n))].map((p) => io(() => lstat(p)).then((s) => s.mtimeMs, () => 0));
+  return (await Promise.all([projects.get(project)!, ...installed])).reduce((a, b) => Math.max(a, b), 0);
+}
+
+/** Files git holds can't be installed again. */
+async function trackedByGit(folder: string): Promise<string | null> {
+  const files = await gitLines(["ls-files", "--", basename(folder)], dirname(folder));
+  if (!files) return UNREADABLE;
+  return files.length ? "Tracked by git — it stays." : null;
+}
+
+async function buildFolders(scan: Scan): Promise<Category | null> {
+  if (!resolveGit()) return null;
+  const targets: Target[] = [];
+  const busy = busyOrWaiting(scan);
+  const io = limiter(64);
+  const projects = new Map<string, Promise<number>>();
+  for (const agent of agentRepos()) {
+    const workspace = await repoDir(agent, "workspace");
+    if (!workspace) continue;
+    // What is in tmp/ is the scratch files' to clean; uploads are the human's.
+    for (const path of await rebuildableIn(workspace, BUILD_DEPTH, ["tmp", "uploads"])) {
+      if (scan.at - (await lastWorkedOn(path, io, projects)) < BUILD_DAYS * DAY) continue;
+      const clean = async () => {
+        if (busyOrWaiting(newScan()).has(agent.id)) throw new Kept(working(agent));
+        if (Date.now() - (await lastWorkedOn(path)) < BUILD_DAYS * DAY) throw new Kept("Its project was worked on again.");
+        const tracked = await trackedByGit(path);
+        if (tracked) throw new Kept(tracked);
+        await withRepoLock(agent.dir, () => remove(path));
+      };
+      const kept = busy.has(agent.id) ? working(agent) : await trackedByGit(path);
+      targets.push(await target(scan, path, `${agent.name} · ${relative(workspace, path)}`, { kept, clean }));
+    }
+  }
+  return {
+    id: "build-folders",
+    detail: `Installed packages and build caches (node_modules, Python environments, Xcode DerivedData) in agents' projects nobody worked on for ${BUILD_DAYS} days. Installing or building again brings them back.`,
+    targets,
+  };
+}
+
 const DAY_DIR = /^\d{4}-\d{2}-\d{2}$/;
 
 /** Runs that may still write to their log: working, queued or paused (a paused run continues its own log). */
@@ -664,6 +781,170 @@ async function agentHistory(scan: Scan): Promise<Category | null> {
   };
 }
 
+interface Pictures {
+  id: string;
+  rowid: number;
+  agent: string;
+  chat: string;
+  at: string;
+  count: number;
+  bytes: number;
+}
+
+/**
+ * Messages after rowid `after`, written before `cutoff`, that hold pictures: on their steps, or kept apart while their
+ * run worked (message_images). `newer`: the first message after `after` written since. Runs in a worker as its source
+ * text too, so it may only use its arguments.
+ */
+function findPictures(db: Database, after: number, cutoff: string): { found: Pictures[]; newer: number | null } {
+  // Which messages are old is read from the chats' index (`+rowid` keeps SQLite on it): in the table, each date sits
+  // behind the message's pictures, and reading it means reading through them.
+  const rows = db
+    .query<{ rowid: number; id: string; agent: string; chat: string; at: string; blocks: string; apart: number; apartBytes: number }, [number, string]>(
+      `SELECT m.rowid AS rowid, m.id AS id, c.agent_id AS agent, m.conversation_id AS chat, m.created_at AS at, m.blocks AS blocks,
+         (SELECT count(*) FROM message_images WHERE message_id = m.id) AS apart,
+         (SELECT total(length(image)) FROM message_images WHERE message_id = m.id) AS apartBytes
+       FROM messages m JOIN conversations c ON c.id = m.conversation_id
+       WHERE m.rowid IN (SELECT rowid FROM messages WHERE +rowid > ?1 AND created_at < ?2)
+         AND (m.id IN (SELECT message_id FROM message_images) OR instr(m.blocks, '"image":"') > 0)
+       ORDER BY m.rowid`,
+    )
+    .iterate(after, cutoff);
+  const found: Pictures[] = [];
+  for (const row of rows) {
+    let count = row.apart;
+    let bytes = row.apartBytes;
+    try {
+      for (const b of JSON.parse(row.blocks)) {
+        if (b?.type !== "tool_use" || typeof b.image !== "string") continue;
+        count++;
+        bytes += b.image.length;
+      }
+    } catch {
+      /* not readable: nothing to take */
+    }
+    if (count) found.push({ id: row.id, rowid: row.rowid, agent: row.agent, chat: row.chat, at: row.at, count, bytes });
+  }
+  const newer = db
+    .query<{ first: number | null }, [number, string]>("SELECT min(+rowid) AS first FROM messages WHERE +rowid > ?1 AND created_at >= ?2")
+    .get(after, cutoff);
+  return { found, newer: newer?.first ?? null };
+}
+
+const PICTURES_WORKER = `import { Database } from "bun:sqlite";
+const findPictures = ${findPictures};
+self.onmessage = (event) => {
+  try {
+    const db = new Database(event.data.path, { readonly: true });
+    try {
+      postMessage({ result: findPictures(db, event.data.after, event.data.cutoff) });
+    } finally {
+      db.close();
+    }
+  } catch (err) {
+    postMessage({ error: err instanceof Error ? err.message : String(err) });
+  }
+};`;
+
+/** On its own connection in a worker: a few GB of chats take a second or more to read. */
+function lookForPictures(after: number, cutoff: string): Promise<ReturnType<typeof findPictures>> {
+  const path = config().dbPath;
+  if (path === ":memory:") return Promise.resolve(findPictures(getDb(), after, cutoff));
+  return inWorker(PICTURES_WORKER, { path, after, cutoff });
+}
+
+/** Takes the pictures out of a message: the bytes freed, or null while it is too new or its chat is working. */
+function stripPictures(id: string, cutoff: string, busyChats: Set<string>): number | null {
+  const message = get<{ chat: string; at: string; blocks: string }>("SELECT conversation_id AS chat, created_at AS at, blocks FROM messages WHERE id = ?", id);
+  if (!message) return 0;
+  if (message.at >= cutoff || busyChats.has(message.chat)) return null;
+  let freed = get<{ bytes: number }>("SELECT total(length(image)) AS bytes FROM message_images WHERE message_id = ?", id)?.bytes ?? 0;
+  sql("DELETE FROM message_images WHERE message_id = ?", id);
+  const blocks = parseJson<MessageBlock[] | null>(message.blocks, null);
+  if (!Array.isArray(blocks)) return freed;
+  let changed = false;
+  for (const b of blocks) {
+    if (b?.type !== "tool_use" || b.image === undefined) continue;
+    // The step, its input and its result stay; without its picture the app shows none.
+    delete b.image;
+    delete b.imageUrl;
+    changed = true;
+  }
+  if (changed) {
+    const json = JSON.stringify(blocks);
+    sql("UPDATE messages SET blocks = ? WHERE id = ?", json, id);
+    freed += message.blocks.length - json.length;
+  }
+  return freed;
+}
+
+async function chatPictures(scan: Scan): Promise<Category> {
+  const after = Number(getMeta(PICTURES_ROWID)) || 0;
+  const { found, newer } = await lookForPictures(after, new Date(scan.at - PICTURE_DAYS * DAY).toISOString());
+  const done = new Set<number>();
+  // Later looks start after the last message that is done, never past one that may still get pictures.
+  const advance = () => {
+    const open = found.find((p) => !done.has(p.rowid))?.rowid ?? newer ?? (found.at(-1)?.rowid ?? after) + 1;
+    const mark = Math.min(open, newer ?? Infinity) - 1;
+    if (mark > (Number(getMeta(PICTURES_ROWID)) || 0)) setMeta(PICTURES_ROWID, String(mark));
+  };
+  const agents = new Map(all<{ id: string; name: string }>("SELECT id, name FROM agents").map((a) => [a.id, a.name]));
+  const byAgent = new Map<string, Pictures[]>();
+  for (const p of found) {
+    if (scan.busyChats.has(p.chat)) continue;
+    const list = byAgent.get(p.agent);
+    if (list) list.push(p);
+    else byAgent.set(p.agent, [p]);
+  }
+  const targets: Target[] = [];
+  for (const [agent, pictures] of byAgent) {
+    const count = pictures.reduce((n, p) => n + p.count, 0);
+    const clean = async () => {
+      let freed = 0;
+      let waiting = 0;
+      for (let i = 0; i < pictures.length; ) {
+        const step: Pictures[] = [];
+        for (let bytes = 0; i < pictures.length && step.length < PICTURE_STEP.messages && bytes < PICTURE_STEP.bytes; i++) {
+          step.push(pictures[i]);
+          bytes += pictures[i].bytes;
+        }
+        // Asked again for every step: a chat may have started working meanwhile.
+        const cutoff = new Date(Date.now() - PICTURE_DAYS * DAY).toISOString();
+        const busyChats = newScan().busyChats;
+        tx(() => {
+          for (const p of step) {
+            const bytes = stripPictures(p.id, cutoff, busyChats);
+            if (bytes === null) waiting++;
+            else {
+              freed += bytes;
+              done.add(p.rowid);
+            }
+          }
+        });
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }
+      advance();
+      if (!freed && waiting) throw new Kept("Its chats are working again.");
+      return freed;
+    };
+    targets.push({
+      entry: {
+        name: `${agents.get(agent) ?? "A removed agent"} · ${count.toLocaleString("en-US")} ${count === 1 ? "picture" : "pictures"}`,
+        path: null,
+        bytes: pictures.reduce((n, p) => n + p.bytes, 0),
+        modifiedAt: pictures.reduce((a, p) => (p.at > a ? p.at : a), pictures[0].at),
+        kept: null,
+      },
+      clean,
+    });
+  }
+  return {
+    id: "chat-pictures",
+    detail: `Screenshots agents took in chats older than ${PICTURE_DAYS} days. The chats, their steps and results stay; only the pictures go.`,
+    targets,
+  };
+}
+
 function pragma(name: string): number {
   const row = getDb().query(`PRAGMA ${name}`).get() as Record<string, number> | null;
   return Number(row?.[name] ?? 0);
@@ -698,10 +979,12 @@ function database(scan: Scan): Category {
           db.run("PRAGMA auto_vacuum = INCREMENTAL");
           db.run("VACUUM");
           rebuildSearchIndex();
+          // VACUUM may number the messages anew: the next look for old pictures starts from the first.
+          deleteMeta(PICTURES_ROWID);
         }
         // In WAL mode the freed pages are written to the WAL; only the checkpoint after it shrinks the file. It waits for
-        // every reader, so not while the integrity check reads on its own connection.
-        await checking?.catch(() => undefined);
+        // every reader, so not while the integrity check or the look for old pictures reads on its own connection.
+        await Promise.allSettled(reading);
         db.run("PRAGMA wal_checkpoint(TRUNCATE)");
         db.run("PRAGMA optimize");
         return Math.max(0, before - size());
@@ -830,9 +1113,11 @@ const SCANNERS: Record<CleanupId, (scan: Scan) => Promise<Category | null> | Cat
   "task-worktrees": taskWorktrees,
   "task-clones": taskClones,
   "agent-scratch": agentScratch,
+  "build-folders": buildFolders,
   "agent-run-logs": agentRunLogs,
   "agent-history": agentHistory,
   "deleted-files": deletedFiles,
+  "chat-pictures": chatPictures,
   database,
   "old-logs": oldLogs,
   "vm-downloads": vmDownloads,
@@ -853,7 +1138,7 @@ self.onmessage = (event) => {
   try {
     const db = new Database(event.data, { readonly: true });
     try {
-      postMessage({ rows: db.query("PRAGMA quick_check").values().map((row) => String(row[0])) });
+      postMessage({ result: db.query("PRAGMA quick_check").values().map((row) => String(row[0])) });
     } finally {
       db.close();
     }
@@ -862,19 +1147,21 @@ self.onmessage = (event) => {
   }
 };`;
 
-/** On its own connection in a worker: on the main thread the read blocked everything else for 1 to 4 s. */
-export function quickCheck(path: string): Promise<string[]> {
-  if (path === ":memory:") return Promise.resolve((getDb().query("PRAGMA quick_check").values() as unknown[][]).map((row) => String(row[0])));
-  return new Promise((resolve, reject) => {
-    const url = URL.createObjectURL(new Blob([QUICK_CHECK_WORKER], { type: "application/javascript" }));
+/** Reads in workers, each on a connection of its own. */
+const reading = new Set<Promise<unknown>>();
+
+/** Runs `source` in a worker and hands it `data`; it answers with `{ result }` or `{ error }`. */
+function inWorker<T>(source: string, data: unknown): Promise<T> {
+  const answer = new Promise<T>((resolve, reject) => {
+    const url = URL.createObjectURL(new Blob([source], { type: "application/javascript" }));
     const worker = new Worker(url);
     const done = () => {
       worker.terminate();
       URL.revokeObjectURL(url);
     };
-    worker.onmessage = (event: MessageEvent<{ rows?: string[]; error?: string }>) => {
+    worker.onmessage = (event: MessageEvent<{ result?: T; error?: string }>) => {
       done();
-      if (event.data.rows) resolve(event.data.rows);
+      if ("result" in event.data) resolve(event.data.result as T);
       else reject(new Error(event.data.error ?? "The check stopped."));
     };
     worker.onerror = (event) => {
@@ -885,8 +1172,18 @@ export function quickCheck(path: string): Promise<string[]> {
       done();
       reject(new Error("The check stopped."));
     });
-    worker.postMessage(path);
+    worker.postMessage(data);
   });
+  reading.add(answer);
+  const settled = () => reading.delete(answer);
+  answer.then(settled, settled);
+  return answer;
+}
+
+/** On its own connection in a worker: on the main thread the read blocked everything else for 1 to 4 s. */
+export function quickCheck(path: string): Promise<string[]> {
+  if (path === ":memory:") return Promise.resolve((getDb().query("PRAGMA quick_check").values() as unknown[][]).map((row) => String(row[0])));
+  return inWorker(QUICK_CHECK_WORKER, path);
 }
 
 async function databaseCheck(fresh: boolean): Promise<HealthCheck> {

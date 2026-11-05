@@ -1461,6 +1461,8 @@ export interface RunnerSettings {
    * 0 = never by itself (only /compress), null = Claude Code's own threshold (close to full).
    */
   autoCompactPercent: number | null;
+  /** A chat's session is summarized once it holds this many tokens; it replaces `autoCompactPercent`. null = that share. */
+  contextBudget: number | null;
   extraArgs: string[];
   /** Global instructions: included in every run of every agent. */
   appendSystemPrompt: string;
@@ -2065,7 +2067,9 @@ export type CleanupId =
   | "agent-scratch"
   | "agent-run-logs"
   | "agent-history"
-  | "deleted-files";
+  | "deleted-files"
+  | "chat-pictures"
+  | "build-folders";
 
 export interface CleanupEntry {
   name: string;
@@ -2124,6 +2128,59 @@ export interface CleanupRun {
   finishedAt: ISODate;
   freedBytes: number;
   results: CleanupResult[];
+}
+
+/** A chat whose Claude session is among the fullest (Settings → Cleanup → Optimize). */
+export interface OptimizeChat {
+  conversationId: string;
+  agentId: string;
+  agentName: string;
+  title: string;
+  tokens: number;
+}
+
+/** One agent's memory as Optimize sees it: what every task loads, and the notes tasks no longer open. */
+export interface OptimizeAgentMemory {
+  agentId: string;
+  name: string;
+  /** Characters of MEMORY.md (loaded into every task). */
+  chars: number;
+  notes: number;
+  notesBytes: number;
+  /** Notes no task opened or wrote for 30 days. */
+  unused: number;
+  unusedBytes: number;
+  dreaming: boolean;
+}
+
+/** How lean Godmode is for its agents: chats within the context budget, memory that tasks use (Settings → Cleanup). */
+export interface OptimizeReport {
+  checkedAt: ISODate;
+  context: {
+    /** Chats are summarized at this many tokens (null = by share of the model's window). */
+    budget: number | null;
+    /** Chats active in the last 7 days, and those holding more than the budget (250k without one). */
+    active: number;
+    over: number;
+    largest: OptimizeChat[];
+  };
+  memory: {
+    /** What dreams keep MEMORY.md under. */
+    target: number;
+    agents: OptimizeAgentMemory[];
+    /** Since when Godmode counts which notes tasks use (null = not yet). */
+    countingSince: ISODate | null;
+    dreaming: boolean;
+    nextDreamAt: ISODate | null;
+    lastDreamAt: ISODate | null;
+  };
+  /** What keeps itself lean without a click. */
+  automatic: { cleanup: boolean; dreaming: boolean; budget: boolean };
+}
+
+export interface OptimizeRun {
+  cleanup: CleanupRun;
+  dreams: DreamAllResult;
 }
 
 export interface CleanupReport {

@@ -17,7 +17,7 @@ type Sections = Record<string, unknown>;
  */
 const AGENT_SETTINGS: Record<string, readonly string[]> = {
   general: ["theme", "palette", "mode", "minimizeToTray", "timeFormat"],
-  runner: ["model", "fallbackModel", "effort", "ultracode", "runTimeoutMinutes", "autoContinueOnLimit", "resumeAfterRestart", "stallMinutes", "loopRepeats", "autoCompactPercent"],
+  runner: ["model", "fallbackModel", "effort", "ultracode", "runTimeoutMinutes", "autoContinueOnLimit", "resumeAfterRestart", "stallMinutes", "loopRepeats", "autoCompactPercent", "contextBudget"],
   browser: ["headless", "keepAliveMinutes", "stealth", "muteAudio"],
   computer: ["agentCursor", "liveViewFps", "screenshotMaxSize"],
   vm: ["onQuit", "idleStopMinutes"],

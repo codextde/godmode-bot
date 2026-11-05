@@ -83,6 +83,7 @@ import { memoryEditsDigest, pruneMemoryEdits } from "./edits";
 import { notify } from "../services/notifications";
 import { PROFILE_FILE, PROFILE_MAX, isProfileKeeper, othersAboutHuman } from "./profile";
 import { teamActivityDigest } from "./team";
+import { UNUSED_DAYS, markReviewed, recordMemoryUse, unusedNotes } from "./usage";
 
 
 const log = logger("dreaming");
@@ -273,6 +274,12 @@ function memoryToShorten(agent: Agent, chars: number, target: number): boolean {
     agent.id,
   );
   return !left || left.memory_target !== target || left.memory_digest !== memoryDigest(agent.repoPath);
+}
+
+/** MEMORY.md is over its target, or notes went unused: a dream asked for now has work even without new activity. */
+export function memoryToTidy(agent: Agent, settings: Settings = getSettings(), at = new Date()): boolean {
+  const { target } = memoryBudget(settings.memory.dreaming.maxMemoryChars);
+  return memoryToShorten(agent, target, target) || unusedNotes(agent.id, agent.repoPath, at).length > 0;
 }
 
 /** Note the memory a finished (or undone) dream left. */
@@ -483,6 +490,8 @@ export interface DreamPromptInput {
   memoryChars?: number;
   /** Notes too long to read in one go, the largest first. */
   longNotes?: string[];
+  /** Notes no task opened or wrote for UNUSED_DAYS, the longest unused first. */
+  unusedNotes?: { path: string; bytes: number; lastUsedAt: string | null }[];
   /** The main agent may offer work (`offer_help`): its free slots and what became of earlier offers. */
   offers?: { slots: number; open: string[]; history: string[] } | null;
   now?: Date;
@@ -490,6 +499,19 @@ export interface DreamPromptInput {
 
 function fmtChars(n: number): string {
   return n.toLocaleString("en-US");
+}
+
+const UNUSED_IN_PROMPT = 15;
+/** Unused notes handed to a running dream (dream id → paths): the ones it keeps are not handed over again for a while. */
+const reviewing = new Map<string, string[]>();
+
+function unusedNotesStep(notes: NonNullable<DreamPromptInput["unusedNotes"]>): string {
+  const listed = notes
+    .slice(0, UNUSED_IN_PROMPT)
+    .map((n) => `${n.path} (${Math.max(1, Math.round(n.bytes / 1000))} KB, ${n.lastUsedAt ? `last used ${n.lastUsedAt.slice(0, 10)}` : "never used"})`)
+    .join(", ");
+  const more = notes.length > UNUSED_IN_PROMPT ? ` and ${notes.length - UNUSED_IN_PROMPT} more for later dreams` : "";
+  return `- No task opened or wrote these notes for ${UNUSED_DAYS} days or more: ${listed}${more}. Read each and decide: what is finished, stale or repeated elsewhere goes (delete the note and its link); small notes on a topic you still work on are merged into the note that is used; what holds lasting knowledge (rules, accounts, how-tos, people) stays, with a clear one-line gist and link in MEMORY.md so tasks find it. Report each as \`merged\` or \`removed\`, or leave it when it is fine.`;
 }
 
 /** The dream's task (its user message). */
@@ -553,6 +575,7 @@ export function buildDreamPrompt(input: DreamPromptInput): string {
     ...(input.longNotes?.length
       ? [`- These notes don't fit in one read: ${input.longNotes.join(", ")}. Read them in ranges and shrink the first one in this dream: cut what is finished or stale, split the rest by topic into memory/<topic>.md, each under ${NOTE_MAX_BYTES / 1000} KB, and update the links.`]
       : []),
+    ...(input.unusedNotes?.length ? [unusedNotesStep(input.unusedNotes)] : []),
     "",
     "1. Read MEMORY.md and look through memory/ (read the notes that relate to the activity).",
     input.digestPath
@@ -735,6 +758,8 @@ export async function startDream(agentId: string, reason: DreamReason = "manual"
     });
     inserted = true;
 
+    const unused = unusedNotes(agentId, agent.repoPath);
+    if (unused.length) reviewing.set(dreamId, unused.slice(0, UNUSED_IN_PROMPT).map((n) => n.path));
     const conversationId = dreamConversation(agent);
     // A fresh session per dream: everything it needs is in the prompt and the files.
     setConversationState(conversationId, { claudeSessionId: null, model: settings.memory.dreaming.model.trim() || null, effort: null });
@@ -744,6 +769,7 @@ export async function startDream(agentId: string, reason: DreamReason = "manual"
       settings,
       memoryChars: memoryChars(agent.repoPath),
       longNotes: longNotes(agent.repoPath),
+      unusedNotes: unused,
       digestPath,
       morePaths: digestPaths.slice(1),
       remaining: activity.remaining,
@@ -940,6 +966,8 @@ export function onDreamRunFinished(run: Run): void {
   if (!row || !ACTIVE.includes(row.status)) return;
   const paused = preempted.delete(row.id);
   sizeReminders.delete(row.id);
+  const reviewed = reviewing.get(row.id);
+  reviewing.delete(row.id);
   const status: DreamStatus = run.status === "succeeded" ? "succeeded" : paused ? "paused" : run.status === "cancelled" ? "cancelled" : "failed";
   const repoPath = repoPathOf(row.agent_id);
   let kept: DreamFileChange[] = [];
@@ -975,6 +1003,7 @@ export function onDreamRunFinished(run: Run): void {
     log.error(`could not settle dream ${row.id}`, err);
     error = `${status === "succeeded" ? "The dream finished, but" : "The dream ended, and"} its changes could not be checked: ${err instanceof Error ? err.message : String(err)}`;
   }
+  if (status === "succeeded" && reviewed && repoPath) markReviewed(row.agent_id, repoPath, reviewed);
   const summary = row.summary || (status === "succeeded" ? firstLine(run.result ?? "", SUMMARY_MAX) : "");
   exec(
     "UPDATE dreams SET status = ?, summary = ?, files = ?, workspace = ?, snapshot = NULL, error = ?, finished_at = ? WHERE id = ?",
@@ -1114,6 +1143,7 @@ export function dreamDue(agent: Agent, settings: Settings = getSettings(), at = 
   const last = lastDreamAt(agent.id) ?? agent.createdAt;
   if (at.getTime() - new Date(last).getTime() < s.refreshDays * 86_400_000) return false;
   if (s.tidyWorkspace && workspaceChangedSince(agent.repoPath, new Date(last).getTime())) return true;
+  if (unusedNotes(agent.id, agent.repoPath, at).length) return true;
   // Old memory without dates can't go stale by time alone; new activity below the threshold rides along.
   return mentionsTime(readMemory(agent.repoPath) ?? "");
 }
@@ -1203,7 +1233,7 @@ export async function dreamAll(): Promise<DreamAllResult> {
       continue;
     }
     const pending = pendingActivity(agent.id);
-    if (pending.exchanges === 0 && !memoryOverflowing(agent, settings)) {
+    if (pending.exchanges === 0 && !memoryOverflowing(agent, settings) && !memoryToTidy(agent, settings)) {
       skip("nothing_new");
       continue;
     }
@@ -1353,7 +1383,10 @@ function onBusEvent(event: Parameters<Parameters<typeof bus.on>[0]>[0]) {
     if (event.run.trigger === "dream") {
       if (event.run.status === "running") onDreamRunStarted(event.run);
     } else if (event.run.status === "queued") maybePreempt(event.run);
-  } else if (event.type === "run.finished" && event.run.trigger === "dream") onDreamRunFinished(event.run);
+  } else if (event.type === "run.finished") {
+    recordMemoryUse(event.run);
+    if (event.run.trigger === "dream") onDreamRunFinished(event.run);
+  }
 }
 
 /** Listen for dream runs starting and finishing (idempotent). */

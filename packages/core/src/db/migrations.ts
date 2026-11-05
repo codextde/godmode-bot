@@ -2005,4 +2005,31 @@ ALTER TABLE phone_calls ADD COLUMN pin_wrong INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE phone_calls ADD COLUMN purge_pending INTEGER NOT NULL DEFAULT 0;
 `,
   },
+  {
+    id: 122,
+    name: "context_budget",
+    sql: /* sql */ `
+-- Long chats compress at a token budget now (runner.contextBudget, 250k by default). Whoever picked another share than
+-- the old default, "nearly full" or "never" keeps that choice.
+UPDATE settings SET value = json_set(value, '$.contextBudget', json('null'))
+WHERE key = 'runner' AND json_valid(value) AND json_type(value, '$.autoCompactPercent') IS NOT NULL
+  AND json_type(value, '$.contextBudget') IS NULL
+  AND (json_type(value, '$.autoCompactPercent') = 'null' OR json_extract(value, '$.autoCompactPercent') != 70);
+`,
+  },
+  {
+    id: 123,
+    name: "memory_note_uses",
+    sql: /* sql */ `
+-- When a task last opened or wrote each memory note (memory/usage.ts): notes nobody uses are merged or dropped by dreams.
+CREATE TABLE memory_note_uses (
+  agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+  path TEXT NOT NULL,
+  last_used_at TEXT NOT NULL,
+  uses INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (agent_id, path)
+);
+INSERT OR REPLACE INTO meta (key, value) VALUES ('memory.usesSince', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+`,
+  },
 ];

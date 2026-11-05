@@ -14,7 +14,8 @@ import { EASE_OUT, useReduceAnimations } from "@/lib/motion";
 export { tokensLabel, type ContextGauge };
 
 export function useContextGauge(context: ConversationContext | null | undefined): ContextGauge | null {
-  return contextGauge(context, useSettings().data?.runner.autoCompactPercent);
+  const runner = useSettings().data?.runner;
+  return contextGauge(context, runner?.autoCompactPercent, runner?.contextBudget);
 }
 
 const TONE = {
@@ -102,7 +103,7 @@ export function ContextMeter({
                 animate={{ width: `${Math.max(1.5, gauge.share * 100)}%` }}
                 transition={{ duration: reduce ? 0.25 : 0.6, ease: EASE_OUT }}
               />
-              {gauge.autoAt !== null && (
+              {gauge.autoAt !== null && gauge.autoAt < 1 && (
                 <span className="absolute -top-1 h-3.5 w-px bg-foreground/40" style={{ left: `${gauge.autoAt * 100}%` }} title={t("meter.autoAtTitle", { pct: Math.round(gauge.autoAt * 100) })} />
               )}
             </div>
@@ -113,7 +114,7 @@ export function ContextMeter({
         </div>
         <div className="flex items-center justify-between gap-2 border-t bg-muted/40 px-3 py-2.5">
           <Link to="/settings/ai#auto-compact" className="text-[12px] text-muted-foreground transition hover:text-foreground">
-            {gauge.autoAt === null ? t("meter.autoOff") : t("meter.autoAt", { pct: Math.round(gauge.autoAt * 100) })}
+            {gauge.budget !== null ? t("meter.autoAtTokens", { tokens: tokensLabel(gauge.budget) }) : gauge.autoAt === null ? t("meter.autoOff") : t("meter.autoAt", { pct: Math.round(gauge.autoAt * 100) })}
           </Link>
           <Button size="sm" variant={gauge.tone === "calm" ? "outline" : "default"} disabled={disabled || compressing || !gauge.compressible} onClick={onCompress} className="h-7 gap-1.5 text-[12.5px]">
             {compressing ? <Loader2 className="size-3.5 animate-spin" /> : <FoldVertical className="size-3.5" />}
@@ -140,7 +141,11 @@ export function CompressBar({ gauge, agentName, running, onCompress, onDismiss }
         <span className="text-muted-foreground">
           {" "}
           · {pct !== null ? t("meter.barTokensPct", { tokens: tokensLabel(gauge.tokens), pct }) : t("meter.barTokens", { tokens: tokensLabel(gauge.tokens) })}.{" "}
-          {auto !== null ? t("meter.autoBy", { name: agentName, pct: auto }) : t("meter.keepQuick")}
+          {gauge.budget !== null
+            ? t("meter.autoByTokens", { name: agentName, tokens: tokensLabel(gauge.budget) })
+            : auto !== null
+              ? t("meter.autoBy", { name: agentName, pct: auto })
+              : t("meter.keepQuick")}
         </span>
       </span>
       <Button size="xs" onClick={onCompress} className="shrink-0 gap-1">

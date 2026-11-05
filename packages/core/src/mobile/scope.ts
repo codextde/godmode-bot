@@ -146,6 +146,7 @@ const SETTINGS: Record<string, string[]> = {
     "stallMinutes",
     "loopRepeats",
     "autoCompactPercent",
+    "contextBudget",
     "appendSystemPrompt",
   ],
   browser: ["enabled", "headless", "keepAliveMinutes", "liveView", "stealth", "muteAudio"],
