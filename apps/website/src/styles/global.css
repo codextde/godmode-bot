@@ -6,7 +6,7 @@
 @import "./components.css";
 
 /* ------------------------------------------------------------------------------------------ */
-/* Godmode — warm paper, soft warm grays, one blue accent (the mascot) and a peach blush.   */
+/* Godmode — warm paper, soft warm grays, one emerald accent (the mascot) and a peach blush.   */
 /* Admin pages (Base bare) keep the old dark tokens via [data-theme="dark"].                  */
 /* ------------------------------------------------------------------------------------------ */
 
@@ -23,11 +23,11 @@
   --text-2: #433c33;
   --muted: #655d52;
   --dim: #71675b;
-  --brand: #2453d6;
-  --brand-2: #1c43b3;
-  --brand-bright: #5b8cff;
-  --brand-soft: #e7edfc;
-  --brand-line: rgb(36 83 214 / 0.28);
+  --brand: #0b7651;
+  --brand-2: #096345;
+  --brand-bright: #3fc48b;
+  --brand-soft: #e3f3ea;
+  --brand-line: rgb(11 118 81 / 0.28);
   --peach: #f3a07f;
   --peach-soft: #fdebe2;
   --claude: #a94f2b;
@@ -59,10 +59,10 @@
   --text-2: #cfcbc3;
   --muted: #a29e96;
   --dim: #6f6b64;
-  --brand: #7ea6ff;
-  --brand-2: #adc6ff;
-  --brand-soft: rgb(126 166 255 / 0.12);
-  --brand-line: rgb(126 166 255 / 0.35);
+  --brand: #2fd690;
+  --brand-2: #7af0bd;
+  --brand-soft: rgb(47 214 144 / 0.12);
+  --brand-line: rgb(47 214 144 / 0.35);
   --claude: #d97757;
   --danger: #f0525b;
   --warn: #e8a53a;
@@ -120,7 +120,7 @@
     overflow-x: clip;
   }
   ::selection {
-    background: rgb(91 140 255 / 0.3);
+    background: rgb(63 196 139 / 0.3);
     color: var(--text);
   }
   :focus-visible {
@@ -232,18 +232,18 @@
     color: #fff;
     box-shadow:
       0 1px 0 0 rgb(255 255 255 / 0.22) inset,
-      0 1px 2px rgb(20 50 140 / 0.25),
-      0 10px 24px -10px rgb(36 83 214 / 0.55);
+      0 1px 2px rgb(11 80 55 / 0.25),
+      0 10px 24px -10px rgb(11 118 81 / 0.55);
   }
   .btn-primary:hover,
   .btn-brand:hover {
     background: var(--brand-2);
     box-shadow:
       0 1px 0 0 rgb(255 255 255 / 0.22) inset,
-      0 1px 2px rgb(20 50 140 / 0.25),
-      0 16px 34px -12px rgb(36 83 214 / 0.6);
+      0 1px 2px rgb(11 80 55 / 0.25),
+      0 16px 34px -12px rgb(11 118 81 / 0.6);
   }
-  .btn-xl.btn-primary { box-shadow: 0 1px 0 0 rgb(255 255 255 / 0.22) inset, 0 2px 4px rgb(20 50 140 / 0.2), 0 18px 40px -14px rgb(36 83 214 / 0.65); }
+  .btn-xl.btn-primary { box-shadow: 0 1px 0 0 rgb(255 255 255 / 0.22) inset, 0 2px 4px rgb(11 80 55 / 0.2), 0 18px 40px -14px rgb(11 118 81 / 0.65); }
 
   .btn-ghost {
     color: var(--text);

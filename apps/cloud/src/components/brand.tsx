@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 /** The product name when nobody renamed the cloud in Settings → General. */
 export const DEFAULT_APP_NAME = "Godmode Cloud";
 
-/** The Godmode mark: the mascot's face on a blue tile. */
+/** The Godmode mark — a flat anthracite tile with a paper bolt (inverts in dark mode). */
 export function Logo({ className, title }: { className?: string; title?: string }) {
   return (
     <svg
@@ -13,10 +13,13 @@ export function Logo({ className, title }: { className?: string; title?: string 
       aria-label={title}
       aria-hidden={title ? undefined : true}
     >
-      <rect x="16" y="16" width="480" height="480" rx="112" fill="#2453D6" />
-      <ellipse cx="152" cy="214" rx="40" ry="48" fill="#FFFFFF" />
-      <ellipse cx="360" cy="214" rx="40" ry="48" fill="#FFFFFF" />
-      <path d="M204 306Q256 358 308 306" stroke="#FFFFFF" strokeWidth="30" strokeLinecap="round" fill="none" />
+      <rect x="16" y="16" width="480" height="480" rx="112" className="fill-primary" />
+      <path
+        d="M283 92 158 288h86l-22 132 132-204h-88l17-124Z"
+        className="fill-primary-foreground stroke-primary-foreground"
+        strokeWidth="10"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }
