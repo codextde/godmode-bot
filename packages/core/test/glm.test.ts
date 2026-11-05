@@ -5,7 +5,7 @@ import { argValue, invocations, makeAgent, setupEnv, type TestEnv } from "./fixt
 import * as vault from "../src/vault/vault";
 import { callTool } from "../src/mcp/tools";
 import { buildSystemPrompt } from "../src/runner/prompt";
-import { getModelCatalog } from "../src/runner/models";
+import { __resetModelCatalogForTests, getModelCatalog } from "../src/runner/models";
 import { waitForRun } from "../src/runner/runner";
 import { chatFillOnly, getConversation, sendMessage, startChat, updateConversation } from "../src/services/conversations";
 import { updateAgent } from "../src/agents/service";
@@ -20,6 +20,8 @@ let agent: Agent;
 let boss: Agent;
 
 beforeAll(async () => {
+  // A stale catalog from an earlier test file would probe in the background, into the next test's count.
+  __resetModelCatalogForTests();
   env = await setupEnv("godmode-glm-");
   await vault.setup("correct horse battery staple", false);
   agent = await makeAgent({ name: "GLM Bot", description: "test agent" });
