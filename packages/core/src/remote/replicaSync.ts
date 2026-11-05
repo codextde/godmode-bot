@@ -16,6 +16,7 @@ import { applyRuntimeSettings } from "../services/runtime";
 import { getSettings, resetSettingsCache, updateSettings } from "../services/settings";
 import { ticketsArrived } from "../tasks/service";
 import { get, getMeta, setMeta } from "../db";
+import { HttpError } from "../util";
 import { groupRole, isSecondary, primaryRunnerId } from "./group";
 import {
   type ApplyOptions,
@@ -46,6 +47,8 @@ const chains = new Map<string, Promise<ApplyResult | null>>();
 const hintTimers = new Map<string, ReturnType<typeof setTimeout>>();
 /** When each computer was last pulled completely (ms). */
 const pulledAt = new Map<string, number>();
+/** Computers without the accounts route, and the Godmode they ran when they said so. */
+const noAccountsRoute = new Map<string, string>();
 let watchTimer: ReturnType<typeof setInterval> | null = null;
 let pullTimer: ReturnType<typeof setInterval> | null = null;
 let lastSeq = 0;
@@ -123,13 +126,19 @@ async function pullNow(peer: string): Promise<ApplyResult | null> {
 
 /**
  * Once per computer: while one of the two ran an older version, it read past the Claude accounts without knowing them.
- * An older computer doesn't have the route yet, so this waits for its update.
+ * An older computer doesn't have the route yet, so this asks again once it runs another Godmode.
  */
-async function catchUpOnAccounts(peer: string, l: ReturnType<typeof link>, opts: ApplyOptions, total: ApplyResult): Promise<void> {
+export async function catchUpOnAccounts(peer: string, l: Pick<ReturnType<typeof link>, "json" | "state">, opts: ApplyOptions, total: ApplyResult): Promise<void> {
   const key = `link.replica.accounts.${peer}`;
   if (getMeta(key)) return;
-  const res = await l.json<ReplicaPage>("GET", "/api/link/replica/claude-accounts", undefined, { timeoutMs: 30_000 }).catch(() => null);
+  const running = `${l.state.info?.version}/${l.state.info?.build}`;
+  if (noAccountsRoute.get(peer) === running) return;
+  const res = await l.json<ReplicaPage>("GET", "/api/link/replica/claude-accounts", undefined, { timeoutMs: 30_000 }).catch((err) => {
+    if (err instanceof HttpError && err.status === 404) noAccountsRoute.set(peer, running);
+    return null;
+  });
   if (!res || !Array.isArray(res.changes)) return;
+  noAccountsRoute.delete(peer);
   mergeResults(total, applyChanges(peer, res.changes, opts));
   setMeta(key, "1");
 }

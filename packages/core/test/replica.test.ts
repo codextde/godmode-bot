@@ -12,7 +12,9 @@ import { loadConfig } from "../src/config";
 import { all, closeDb, get, openDb, run, setDb } from "../src/db";
 import { setFileLogLevel, setLogDir, setLogLevel } from "../src/log";
 import { getSettings, resetSettingsCache, updateSettings } from "../src/services/settings";
-import { applyChanges, changesFor, ensureReplica, pendingFor, pendingKeys, replicaSeq, replicaTables, resetReplicaCache, retryDeferred, type ReplicaChange } from "../src/remote/replica";
+import { catchUpOnAccounts } from "../src/remote/replicaSync";
+import { HttpError } from "../src/util";
+import { applyChanges, changesFor, emptyApplyResult, ensureReplica, pendingFor, pendingKeys, replicaSeq, replicaTables, resetReplicaCache, retryDeferred, type ReplicaChange } from "../src/remote/replica";
 
 let dir: string;
 let a: Database;
@@ -348,5 +350,49 @@ describe("between two computers", () => {
     expect(seen().map((c) => c.row?.email)).toEqual(["old@example.com"]);
     expect(get<{ origin: string | null }>("SELECT origin FROM replica_rows WHERE tbl = 'claude_accounts' AND pk = 'cla_old'")?.origin).toBeNull();
     run("DELETE FROM claude_accounts");
+  });
+});
+
+describe("catching up on the Claude accounts", () => {
+  function peer(answer: () => unknown) {
+    const state = { info: { version: "0.2.33", build: "old" } };
+    let asked = 0;
+    const l = {
+      state,
+      json: async () => {
+        asked++;
+        return answer();
+      },
+    } as unknown as Parameters<typeof catchUpOnAccounts>[1];
+    const pull = () => catchUpOnAccounts("rnr_accounts", l, { peerWinsTies: false }, emptyApplyResult());
+    return { pull, state, asked: () => asked };
+  }
+
+  test("a computer without the route is asked once per Godmode it runs, then once for good", async () => {
+    use(a);
+    let hasRoute = false;
+    const p = peer(() => {
+      if (!hasRoute) throw new HttpError(404, "Not found", "not_found");
+      return { changes: [], last: 0, more: false };
+    });
+    await p.pull();
+    await p.pull();
+    expect(p.asked()).toBe(1);
+
+    p.state.info = { version: "0.2.33", build: "newer" };
+    hasRoute = true;
+    await p.pull();
+    await p.pull();
+    expect(p.asked()).toBe(2);
+  });
+
+  test("a link that dropped says nothing about the route: the next pull asks again", async () => {
+    use(a);
+    const p = peer(() => {
+      throw new HttpError(409, "Offline", "runner_offline");
+    });
+    await p.pull();
+    await p.pull();
+    expect(p.asked()).toBe(2);
   });
 });
