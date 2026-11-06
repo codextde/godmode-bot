@@ -1,7 +1,7 @@
 import { Stack } from "expo-router";
 import { ActivityIndicator, ScrollView, StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
-import { CONTEXT_BUDGET_CHOICES, DEFAULT_CONTEXT_BUDGET, ULTRACODE_HINT, ULTRACODE_HINT_DE, compressChoice, compressPatch, effortForModel, findModel, tokensLabel, type Effort } from "@godmode/shared";
+import { DEFAULT_AUTO_COMPACT_PERCENT, ULTRACODE_HINT, ULTRACODE_HINT_DE, effortForModel, findModel, type Effort } from "@godmode/shared";
 import { CloseButton } from "@/components/close-button";
 import { Group, PickerRow, SegmentRow, StepperRow, SwitchRow } from "@/components/form";
 import { useModelCatalog } from "@/lib/composer";
@@ -109,16 +109,13 @@ export default function ModelAndLimits() {
         <PickerRow
           icon="layers"
           title={t("ai.compact.auto")}
-          value={compressChoice(r)}
+          value={r.autoCompactPercent === undefined ? String(DEFAULT_AUTO_COMPACT_PERCENT) : r.autoCompactPercent === null ? "claude" : String(r.autoCompactPercent)}
           options={[
-            ...[...new Set([...CONTEXT_BUDGET_CHOICES, ...(r.contextBudget ? [r.contextBudget] : [])])]
-              .sort((a, b) => a - b)
-              .map((b) => ({ value: String(b), label: t(b === DEFAULT_CONTEXT_BUDGET ? "ai.compact.atTokensDefault" : "ai.compact.atTokens", { tokens: tokensLabel(b) }) })),
-            ...(compressChoice(r).startsWith("p") ? [{ value: compressChoice(r), label: t("ai.compact.at", { percent: Number(compressChoice(r).slice(1)) }) }] : []),
+            ...[40, 50, 60, 70, 80].map((p) => ({ value: String(p), label: p === DEFAULT_AUTO_COMPACT_PERCENT ? t("ai.compact.atDefault", { percent: p }) : t("ai.compact.at", { percent: p }) })),
             { value: "claude", label: t("ai.compact.nearlyFull") },
             { value: "0", label: t("ai.compact.never") },
           ]}
-          onChange={(v) => void patchSettings({ runner: compressPatch(v) })}
+          onChange={(v) => void patchSettings({ runner: { autoCompactPercent: v === "claude" ? null : Number(v) } })}
         />
       </Group>
 

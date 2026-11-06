@@ -1,11 +1,11 @@
 /**
  * Optimize (Settings → Cleanup): how lean Godmode is for its agents, and one click to make it so. Models work best well
- * below their 1M window, so chats are summarized at the context budget; MEMORY.md is loaded into every task and dreams
+ * below their 1M window, so long chats are summarized by themselves; MEMORY.md is loaded into every task and dreams
  * keep it short; notes no task opens any more are merged or dropped by dreams; the cleanup frees the disk. All of it
  * runs by itself as well — this report shows where things stand.
  */
 import type { DreamAllResult, OptimizeAgentMemory, OptimizeReport, OptimizeRun } from "@godmode/shared";
-import { DEFAULT_CONTEXT_BUDGET, memoryBudget } from "@godmode/shared";
+import { memoryBudget } from "@godmode/shared";
 import { listAgents } from "../agents/service";
 import { all, get } from "../db";
 import { logger } from "../log";
@@ -21,16 +21,17 @@ const log = logger("optimize");
 
 const WEEK = 7 * 86_400_000;
 const LARGEST = 5;
+/** A chat holding more than this is worth a summary, whatever its window. */
+const LARGE_CHAT = 250_000;
 
 export function optimizeReport(at = new Date()): OptimizeReport {
   const settings = getSettings();
-  const budget = settings.runner.contextBudget;
+  const share = settings.runner.autoCompactPercent;
   const chats = all<{ id: string; agent_id: string; name: string; title: string; tokens: number }>(
     `SELECT c.id, c.agent_id, a.name, c.title, c.context_tokens AS tokens FROM conversations c JOIN agents a ON a.id = c.agent_id
      WHERE c.last_message_at > ? AND c.origin != 'dream' AND c.private = 0 AND c.context_tokens IS NOT NULL ORDER BY c.context_tokens DESC`,
     new Date(at.getTime() - WEEK).toISOString(),
   );
-  const limit = budget ?? DEFAULT_CONTEXT_BUDGET;
 
   const agents: OptimizeAgentMemory[] = listAgents({ workspaceId: "all" })
     .filter((a) => a.enabled)
@@ -55,10 +56,9 @@ export function optimizeReport(at = new Date()): OptimizeReport {
   return {
     checkedAt: now(),
     context: {
-      budget,
-      share: budget ? null : settings.runner.autoCompactPercent,
+      share,
       active: chats.length,
-      over: chats.filter((c) => c.tokens > limit).length,
+      over: chats.filter((c) => c.tokens > LARGE_CHAT).length,
       largest: chats.slice(0, LARGEST).map((c) => ({ conversationId: c.id, agentId: c.agent_id, agentName: c.name, title: c.title, tokens: c.tokens })),
     },
     memory: {
@@ -69,7 +69,7 @@ export function optimizeReport(at = new Date()): OptimizeReport {
       nextDreamAt: settings.memory.dreaming.enabled ? nextDreamAt(settings) : null,
       lastDreamAt: get<{ t: string | null }>("SELECT MAX(finished_at) AS t FROM dreams WHERE status = 'succeeded'")?.t ?? null,
     },
-    automatic: { cleanup: settings.maintenance.autoCleanup, dreaming: settings.memory.dreaming.enabled, budget: budget !== null },
+    automatic: { cleanup: settings.maintenance.autoCleanup, dreaming: settings.memory.dreaming.enabled, compress: share !== 0 },
   };
 }
 

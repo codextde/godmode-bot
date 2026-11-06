@@ -73,15 +73,11 @@ export default function ChatMemorySheet() {
             {gauge.share !== null ? (
               <View style={[styles.track, { backgroundColor: c.sunken }]}>
                 <View style={[styles.fill, { width: `${Math.max(1.5, gauge.share * 100)}%`, backgroundColor: gauge.tone === "calm" ? c.text : color }]} />
-                {gauge.autoAt !== null && gauge.autoAt < 1 ? <View style={[styles.tick, { left: `${gauge.autoAt * 100}%`, backgroundColor: c.textMuted }]} /> : null}
+                {gauge.autoAt !== null ? <View style={[styles.tick, { left: `${gauge.autoAt * 100}%`, backgroundColor: c.textMuted }]} /> : null}
               </View>
             ) : null}
             <T variant="footnote" muted>
-              {gauge.budget !== null
-                ? t("chatMemory.autoAtTokens", { tokens: tokensLabel(gauge.budget) })
-                : gauge.autoAt === null
-                  ? t("chatMemory.autoOff")
-                  : t("chatMemory.autoAt", { pct: Math.round(gauge.autoAt * 100) })}
+              {gauge.autoAt === null ? t("chatMemory.autoOff") : t("chatMemory.autoAt", { pct: Math.round(gauge.autoAt * 100) })}
             </T>
           </>
         ) : (

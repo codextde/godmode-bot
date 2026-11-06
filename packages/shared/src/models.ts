@@ -1558,8 +1558,6 @@ export interface RunnerSettings {
    * 0 = never by itself (only /compress), null = Claude Code's own threshold (close to full).
    */
   autoCompactPercent: number | null;
-  /** A chat's session is summarized once it holds this many tokens; it replaces `autoCompactPercent`. null = that share. */
-  contextBudget: number | null;
   extraArgs: string[];
   /** Global instructions: included in every run of every agent. */
   appendSystemPrompt: string;
@@ -2268,11 +2266,9 @@ export interface OptimizeAgentMemory {
 export interface OptimizeReport {
   checkedAt: ISODate;
   context: {
-    /** Chats are summarized at this many tokens (null = by share of the model's window). */
-    budget: number | null;
-    /** Without a budget: the share of the window (percent; 0 = never, null = nearly full). */
+    /** Chats are summarized at this share of the window (percent; 0 = never, null = nearly full). */
     share: number | null;
-    /** Chats active in the last 7 days, and those holding more than the budget (250k without one). */
+    /** Chats active in the last 7 days, and those holding more than 250k tokens. */
     active: number;
     over: number;
     largest: OptimizeChat[];
@@ -2288,7 +2284,7 @@ export interface OptimizeReport {
     lastDreamAt: ISODate | null;
   };
   /** What keeps itself lean without a click. */
-  automatic: { cleanup: boolean; dreaming: boolean; budget: boolean };
+  automatic: { cleanup: boolean; dreaming: boolean; compress: boolean };
 }
 
 export interface OptimizeRun {

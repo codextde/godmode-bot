@@ -2,16 +2,14 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdirSync, utimesSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { autoCompactWindow, compactPoint, compressChoice, compressPatch, contextGauge, type Agent, type RunTrigger } from "@godmode/shared";
+import { type Agent, type RunTrigger } from "@godmode/shared";
 import { makeAgent, setupEnv, type TestEnv } from "./fixtures/runner-harness";
 import { get, insert, run as sql, setMeta } from "../src/db";
 import { createConversation } from "../src/services/conversations";
 import { buildDreamPrompt, dreamDue, ensureDreamListener, memoryToTidy } from "../src/memory/dreaming";
 import { markReviewed, noteOf, noteUses, recordMemoryUse, unusedNotes, UNUSED_DAYS, UNUSED_RUNS } from "../src/memory/usage";
 import { optimizeReport } from "../src/services/optimize";
-import { checkSettingsPatch } from "../src/services/settingsPatch";
-import { getSettings, updateSettings } from "../src/services/settings";
-import { agentSettingsRefusal } from "../src/services/agentSettings";
+import { getSettings } from "../src/services/settings";
 import { newId } from "../src/util";
 
 let env: TestEnv;
@@ -175,61 +173,8 @@ describe("which notes tasks use", () => {
   });
 });
 
-describe("context budget", () => {
-  test("Claude Code compresses at the budget", () => {
-    expect(autoCompactWindow(250_000)).toBe(283_000);
-    expect(autoCompactWindow(990_000)).toBe(1_000_000);
-    expect(compactPoint(250_000, 1_000_000)).toBe(250_000);
-    expect(compactPoint(250_000, 200_000)).toBe(167_000);
-    expect(compactPoint(250_000, null)).toBe(250_000);
-  });
-
-  test("the chat's meter fills up to the budget", () => {
-    const g = contextGauge({ tokens: 200_000, window: 1_000_000 }, 70, 250_000)!;
-    expect(g).toMatchObject({ window: 250_000, share: 0.8, autoAt: 1, budget: 250_000, tone: "warn" });
-    expect(contextGauge({ tokens: 245_000, window: 1_000_000 }, 70, undefined)!.tone).toBe("full");
-    const share = contextGauge({ tokens: 200_000, window: 1_000_000 }, 70, null)!;
-    expect(share).toMatchObject({ window: 1_000_000, share: 0.2, autoAt: 0.7, budget: null, tone: "calm" });
-  });
-
-  test("one choice for budget, share, nearly full and never", () => {
-    expect(compressChoice(undefined)).toBe("250000");
-    expect(compressChoice({ autoCompactPercent: 70, contextBudget: 400_000 })).toBe("400000");
-    expect(compressChoice({ autoCompactPercent: 50, contextBudget: null })).toBe("p50");
-    expect(compressChoice({ autoCompactPercent: null, contextBudget: null })).toBe("claude");
-    expect(compressChoice({ autoCompactPercent: 0, contextBudget: null })).toBe("0");
-    expect(compressPatch("200000")).toEqual({ contextBudget: 200_000 });
-    expect(compressPatch("claude")).toEqual({ contextBudget: null, autoCompactPercent: null });
-    expect(compressPatch("0")).toEqual({ contextBudget: null, autoCompactPercent: 0 });
-    expect(compressPatch("p60")).toEqual({ contextBudget: null, autoCompactPercent: 60 });
-  });
-
-  test("agents and the phone switch between a budget, a share and never; a share alone drops the budget", () => {
-    expect(agentSettingsRefusal({ runner: { contextBudget: null, autoCompactPercent: 0 } }, "Daniel")).toBeNull();
-    expect(agentSettingsRefusal({ runner: { contextBudget: 400_000 } }, "Daniel")).toBeNull();
-    expect(agentSettingsRefusal({ runner: { contextBudget: 40_000 } }, "Daniel")).toMatch(/Invalid value/);
-    try {
-      updateSettings({ runner: { autoCompactPercent: 50 } });
-      expect(getSettings().runner).toMatchObject({ contextBudget: null, autoCompactPercent: 50 });
-      expect(agentSettingsRefusal({ runner: { contextBudget: 250_000 } }, "Daniel")).toBeNull();
-    } finally {
-      updateSettings({ runner: { contextBudget: 250_000, autoCompactPercent: 70 } });
-    }
-  });
-
-  test("the budget takes whole tokens in range, or nothing", () => {
-    const check = (contextBudget: unknown) => () => checkSettingsPatch({ runner: { contextBudget } }, () => {});
-    expect(check(250_000)).not.toThrow();
-    expect(check(null)).not.toThrow();
-    expect(check(50_000)).toThrow(/context budget/);
-    expect(check(950_000)).toThrow(/context budget/);
-    expect(check(250_000.5)).toThrow(/context budget/);
-    expect(check("250k")).toThrow(/context budget/);
-  });
-});
-
 describe("optimize report", () => {
-  test("chats past the budget this week and the memory of every agent", async () => {
+  test("large chats this week and the memory of every agent", async () => {
     const agent = await makeAgent({ name: "Long Talker" });
     const big = createConversation({ agentId: agent.id, title: "Huge" }).id;
     const small = createConversation({ agentId: agent.id, title: "Small" }).id;
@@ -240,13 +185,13 @@ describe("optimize report", () => {
     set(old, 900_000, ago(20));
     writeFileSync(join(agent.repoPath, "MEMORY.md"), `# Memory\n${"- a line of memory\n".repeat(600)}`);
     const report = optimizeReport();
-    expect(report.context.budget).toBe(250_000);
+    expect(report.context.share).toBe(70);
     expect(report.context.largest[0]).toMatchObject({ conversationId: big, title: "Huge", agentName: "Long Talker", tokens: 610_000 });
     expect(report.context.largest.some((c) => c.conversationId === old)).toBe(false);
     expect(report.context.over).toBeGreaterThanOrEqual(1);
     const mine = report.memory.agents.find((a) => a.agentId === agent.id)!;
     expect(mine.chars).toBeGreaterThan(report.memory.target);
     expect(report.memory.agents[0]!.agentId).toBe(agent.id);
-    expect(report.automatic).toEqual({ cleanup: true, dreaming: true, budget: true });
+    expect(report.automatic).toEqual({ cleanup: true, dreaming: true, compress: true });
   });
 });

@@ -280,10 +280,9 @@
       "minutes": "Min.",
       "times": "Mal",
       "compact": "Lange Chats komprimieren",
-      "compactDescription": "Ein Chat wird automatisch zusammengefasst, sobald er so viele Tokens enthält, und geht von der Zusammenfassung aus weiter. Modelle arbeiten unter etwa 250k am besten. Komprimiere jederzeit von Hand über den Ring neben dem Modell oder mit /compress.",
-      "compactAt": "Bei {{percent}} % des Fensters",
-      "compactAtTokens": "Bei {{tokens}}",
-      "compactAtTokensDefault": "Bei {{tokens}} (empfohlen)",
+      "compactDescription": "Sobald ein Chat so viel vom Gedächtnis des Modells füllt, wird er automatisch zusammengefasst und geht von der Zusammenfassung aus weiter. Früher hält jeden Schritt schneller und günstiger, später bewahrt mehr Details. Komprimiere jederzeit von Hand über den Ring neben dem Modell oder mit /compress.",
+      "compactAt": "Bei {{percent}} %",
+      "compactAtDefault": "Bei {{percent}} % (Standard)",
       "compactNearlyFull": "Wenn fast voll",
       "compactNever": "Nie automatisch",
       "autoContinue": "Nach einem Nutzungslimit weitermachen",
@@ -910,7 +909,7 @@
   "cleanup": {
     "scanError": "Datenordner konnte nicht geprüft werden",
     "title": "Aufräumen",
-    "description": "Chats im Kontextbudget, ein Gedächtnis, das Aufgaben wirklich nutzen, und ein Datenordner, der schlank bleibt.",
+    "description": "Kompakte Chats, ein Gedächtnis, das Aufgaben wirklich nutzen, und ein Datenordner, der schlank bleibt.",
     "optimize": {
       "title": "Optimieren",
       "now": "Jetzt optimieren",
@@ -926,11 +925,9 @@
         "caption": "pro Chat",
         "full": "Voll",
         "off": "Aus",
-        "over_one": "{{count}} Chat darüber, wird im nächsten Schritt komprimiert",
-        "over_other": "{{count}} Chats darüber, werden im nächsten Schritt komprimiert",
-        "overNoBudget_one": "{{count}} Chat über {{tokens}} diese Woche",
-        "overNoBudget_other": "{{count}} Chats über {{tokens}} diese Woche",
-        "within": "Jeder Chat der Woche darunter",
+        "over_one": "{{count}} Chat über {{tokens}} diese Woche",
+        "over_other": "{{count}} Chats über {{tokens}} diese Woche",
+        "within": "Jeder Chat der Woche unter 250k",
         "fullest": "Vollste Chats der Woche"
       },
       "memory": {
@@ -959,8 +956,9 @@
         "cleanupOff": "Aufräumen von Hand",
         "dreams": "Träumt um {{time}}",
         "dreamsOff": "Träumen aus",
-        "budget": "Komprimiert bei {{tokens}}",
-        "budgetOff": "Kein Kontextbudget"
+        "compress": "Komprimiert bei {{pct}} %",
+        "compressFull": "Komprimiert, wenn fast voll",
+        "compressOff": "Komprimieren ist aus"
       }
     },
     "files": {

@@ -124,22 +124,6 @@ export function effortForModel(efforts: readonly Effort[], effort: Effort | null
 
 /** A chat is summarized by itself once its session fills this much of the context window (percent). */
 export const DEFAULT_AUTO_COMPACT_PERCENT = 70;
-/** Models work best well below their 1M window: by default a chat is summarized once it holds this many tokens. */
-export const DEFAULT_CONTEXT_BUDGET = 250_000;
-export const MIN_CONTEXT_BUDGET = 100_000;
-export const MAX_CONTEXT_BUDGET = 900_000;
-/** Claude Code summarizes 33k below its auto-compact window: 20k kept for the answer, 13k of its own buffer. */
-const COMPACT_HEADROOM = 33_000;
-
-/** CLAUDE_CODE_AUTO_COMPACT_WINDOW for a budget: Claude Code then summarizes the chat once it holds `budget` tokens. */
-export function autoCompactWindow(budget: number): number {
-  return Math.min(1_000_000, Math.round(budget) + COMPACT_HEADROOM);
-}
-
-/** Where a chat with this budget is summarized, on a model with this window (tokens). */
-export function compactPoint(budget: number, window: number | null | undefined): number {
-  return window ? Math.min(budget, Math.max(window - COMPACT_HEADROOM, 1)) : budget;
-}
 /** Below this a summary saves next to nothing: Compress is not offered. */
 export const COMPRESS_MIN_TOKENS = 20_000;
 
