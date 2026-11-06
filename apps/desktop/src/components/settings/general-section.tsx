@@ -41,8 +41,6 @@ export function GeneralSection({ settings }: { settings: Settings }) {
     setReduceAnimations(v === "reduced");
     setLightAnimations(v === "light");
   };
-  const holdInBackground = useUi((s) => s.holdInBackground);
-  const setHoldInBackground = useUi((s) => s.setHoldInBackground);
   const toolCallView = useUi((s) => s.toolCallView);
   const setToolCallView = useUi((s) => s.setToolCallView);
   const followUpMode = useUi((s) => s.followUpMode);
@@ -167,13 +165,6 @@ export function GeneralSection({ settings }: { settings: Settings }) {
               { value: "reduced", label: t("general.appearance.animationsReduced") },
             ]}
           />
-        </SettingRow>
-        <SettingRow
-          label={t("general.appearance.holdInBackground")}
-          htmlFor="hold-in-background"
-          description={t("general.appearance.holdInBackgroundDescription")}
-        >
-          <Switch id="hold-in-background" checked={holdInBackground} onCheckedChange={setHoldInBackground} />
         </SettingRow>
       </SettingsGroup>
 

@@ -8,6 +8,7 @@ import { withPending } from "./pending-queue";
 import { useUi } from "@/stores/ui";
 import { qk } from "./queryKeys";
 import { isMotionResting, onMotionRest } from "./motion-rest";
+import { isLightAnimations } from "./motion";
 
 type Listener = (event: ServerEvent) => void;
 const listeners = new Set<Listener>();
@@ -163,11 +164,11 @@ function setHolding(next: boolean) {
 export function startRealtime(queryClient: QueryClient) {
   stopped = false;
   client = queryClient;
-  const offRest = onMotionRest((resting) => setHolding(resting && useUi.getState().holdInBackground));
+  const offRest = onMotionRest((resting) => setHolding(resting && isLightAnimations(useUi.getState())));
   const offSetting = useUi.subscribe((s, prev) => {
-    if (s.holdInBackground !== prev.holdInBackground) setHolding(isMotionResting() && s.holdInBackground);
+    if (isLightAnimations(s) !== isLightAnimations(prev)) setHolding(isMotionResting() && isLightAnimations(s));
   });
-  holding = isMotionResting() && useUi.getState().holdInBackground;
+  holding = isMotionResting() && isLightAnimations(useUi.getState());
   void connect(queryClient);
   staleTimer ??= setInterval(() => void dropEndedRuns(), STALE_CHECK_MS);
   return () => {
