@@ -1,0 +1,474 @@
+---
+import Partners from '@/layouts/Partners.astro';
+import Icon from '@/components/ui/Icon.astro';
+import Bars from '@/components/admin/Bars.astro';
+import { COUNTRIES, isCountry, KIT, PARTNERS, partnerLink, ratePercent, STRIPE_PAYOUT_COUNTRIES } from '@/config/partners';
+import { isPlan, PRICING } from '@/config/site';
+import { db } from '@/lib/db';
+import { allowed } from '@/lib/limit';
+import { afterResponse, clearPartnerSession, partnerIdFromCookies, sameOrigin } from '@/lib/partner-auth';
+import { balanceOf, cents, firstName, liveFlag, normalizeClipUrl, partnerById, payoutMethod, sendLoginMail, sendPayoutChangeMail, shortName } from '@/lib/partners';
+import { stripe } from '@/lib/stripe';
+
+export const prerender = false;
+Astro.response.headers.set('cache-control', 'no-store');
+
+const id = await partnerIdFromCookies(Astro.cookies);
+let p = id ? await partnerById(id) : null;
+if (!p || p.status === 'banned') {
+  clearPartnerSession(Astro.cookies);
+  return Astro.redirect(p ? '/partners/login?ended=1' : '/partners/login', 303);
+}
+const D = db();
+const DAY = 86_400_000;
+const now = Date.now();
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData().catch(() => null);
+  const field = (k: string, n = 200) => String(form?.get(k) ?? '').trim().slice(0, n);
+  const action = field('action', 20);
+  let to = '?error=1';
+  if (!sameOrigin(Astro.request, Astro.url)) to = '?error=origin';
+  else if (action === 'clip') {
+    const clip = normalizeClipUrl(field('url', 600));
+    const posted = Date.parse(field('posted_at', 10));
+    const today = await D.prepare(`SELECT COUNT(*) AS n FROM partner_clips WHERE partner_id = ? AND created_at > ?`).bind(p.id, now - DAY).first<{ n: number }>();
+    if (!clip) to = '?clip=invalid#clips';
+    else if (Number(today?.n ?? 0) >= 30) to = '?clip=limit#clips';
+    else {
+      const res = await D.prepare(
+        `INSERT OR IGNORE INTO partner_clips (partner_id, url, platform, posted_at, status, created_at) VALUES (?, ?, ?, ?, 'submitted', ?)`,
+      )
+        .bind(p.id, clip.url, clip.platform, Number.isFinite(posted) ? posted : null, now)
+        .run();
+      to = res.meta.changes ? '?clip=added#clips' : '?clip=duplicate#clips';
+    }
+  } else if (action === 'paypal') {
+    const email = field('paypal_email').toLowerCase();
+    if (!EMAIL.test(email)) to = '?paypal=invalid#payouts';
+    else {
+      const me = p;
+      // Where the money goes changed: the partner hears about it at the address they confirmed.
+      if (me.paypal_email !== email) await afterResponse(Astro.locals, () => sendPayoutChangeMail(me, email).catch((e) => console.error('payout change email failed', me.id, e)));
+      await D.prepare(
+        `UPDATE partners SET paypal_email = ?, payout_method = CASE WHEN stripe_payouts_enabled = 1 AND payout_method = 'stripe' THEN 'stripe' ELSE 'paypal' END WHERE id = ?`,
+      )
+        .bind(email, p.id)
+        .run();
+      to = '?saved=paypal#payouts';
+    }
+  } else if (action === 'method') {
+    const method = field('method', 10);
+    if (method === 'stripe' || method === 'paypal') await D.prepare(`UPDATE partners SET payout_method = ? WHERE id = ?`).bind(method, p.id).run();
+    to = '?saved=method#payouts';
+  } else if (action === 'profile') {
+    const name = field('name', 80);
+    const country = field('country', 2).toUpperCase();
+    if (name.length < 2 || !isCountry(country)) to = '?profile=invalid#profile';
+    else {
+      // The country of a Stripe account is fixed once it exists.
+      await D.prepare(`UPDATE partners SET name = ?, country = CASE WHEN stripe_account_id IS NULL THEN ? ELSE country END, links = ? WHERE id = ?`)
+        .bind(name, country, field('links', 1000) || null, p.id)
+        .run();
+      to = '?saved=profile#profile';
+    }
+  } else if (action === 'verify') {
+    const me = p;
+    if (await allowed('PARTNER_LIMIT', Astro.request)) await afterResponse(Astro.locals, () => sendLoginMail(me).catch((e) => console.error('verify email failed', me.id, e)));
+    to = '?sent=1';
+  }
+  return Astro.redirect(`/partners/dashboard${to}`, 303);
+}
+
+// Stripe tells us when payouts are on; ask on every visit while an account exists (it can also switch off again).
+if (p.stripe_account_id) {
+  try {
+    const acct = await stripe().accounts.retrieve(p.stripe_account_id);
+    const enabled = acct.payouts_enabled ? 1 : 0;
+    if (enabled !== p.stripe_payouts_enabled) {
+      await D.prepare(`UPDATE partners SET stripe_payouts_enabled = ? WHERE id = ?`).bind(enabled, p.id).run();
+      p = { ...p, stripe_payouts_enabled: enabled };
+    }
+  } catch (e) {
+    console.error('stripe account refresh failed', p.id, e instanceof Error ? e.message : e);
+  }
+}
+
+const live = liveFlag();
+const range = 30;
+const sinceDay = new Date(now - (range - 1) * DAY).toISOString().slice(0, 10);
+const monthStart = Date.UTC(new Date(now).getUTCFullYear(), new Date(now).getUTCMonth(), 1);
+type Row = Record<string, number | string | null>;
+const all = async (sql: string, ...args: unknown[]) => ((await D.prepare(sql).bind(...args).all()).results ?? []) as Row[];
+const one = async (sql: string, ...args: unknown[]) => ((await D.prepare(sql).bind(...args).first()) ?? {}) as Row;
+const n = (v: unknown) => Number(v ?? 0);
+
+const [events, daily, customers, dailyEarned, commissions, payouts, clips, leaders, balance] = await Promise.all([
+  one(
+    `SELECT SUM(CASE WHEN type = 'ref_click' THEN 1 ELSE 0 END) AS clicks, SUM(CASE WHEN type = 'download' THEN 1 ELSE 0 END) AS downloads,
+            SUM(CASE WHEN type = 'checkout_start' THEN 1 ELSE 0 END) AS checkouts
+     FROM events WHERE ref = ?`,
+    p.code,
+  ),
+  all(`SELECT day, type, COUNT(*) AS c FROM events WHERE ref = ? AND day >= ? AND type IN ('ref_click', 'download') GROUP BY day, type`, p.code, sinceDay),
+  all(
+    `SELECT plan, status, first_paid_at FROM partner_referrals WHERE partner_id = ? AND livemode = ? AND status <> 'rejected'`,
+    p.id,
+    live,
+  ),
+  all(
+    `SELECT strftime('%Y-%m-%d', created_at / 1000, 'unixepoch') AS day, SUM(amount_cents) AS amount FROM partner_commissions
+     WHERE partner_id = ? AND livemode = ? AND kind = 'sale' AND status <> 'reversed' AND created_at >= ? GROUP BY day`,
+    p.id,
+    live,
+    now - range * DAY,
+  ),
+  all(
+    `SELECT c.created_at, c.kind, c.base_cents, c.amount_cents, c.status, c.available_at, r.plan FROM partner_commissions c
+     LEFT JOIN partner_referrals r ON r.id = c.referral_id
+     WHERE c.partner_id = ? AND c.livemode = ? ORDER BY c.created_at DESC, c.id DESC LIMIT 50`,
+    p.id,
+    live,
+  ),
+  all(`SELECT created_at, paid_at, amount_cents, method, status FROM partner_payouts WHERE partner_id = ? AND livemode = ? AND status <> 'canceled' ORDER BY created_at DESC LIMIT 24`, p.id, live),
+  all(`SELECT url, platform, posted_at, status, views, created_at FROM partner_clips WHERE partner_id = ? ORDER BY created_at DESC LIMIT 50`, p.id),
+  all(
+    `SELECT p.id, p.name, SUM(c.amount_cents) AS earned FROM partner_commissions c JOIN partners p ON p.id = c.partner_id
+     WHERE c.created_at >= ? AND c.livemode = ? AND c.status <> 'reversed' AND p.status = 'active'
+     GROUP BY p.id HAVING earned > 0 ORDER BY earned DESC LIMIT 10`,
+    monthStart,
+    live,
+  ),
+  balanceOf(p.id, live),
+]);
+
+const paying = customers.filter((c) => c.status === 'active' && c.first_paid_at);
+const mrr = paying.reduce((s, c) => s + (isPlan(c.plan) ? PRICING.plans[c.plan].price : PRICING.plans.private.price), 0);
+const days: string[] = [];
+for (let i = range - 1; i >= 0; i--) days.push(new Date(now - i * DAY).toISOString().slice(0, 10));
+const byDay = (type: string) => days.map((d) => ({ label: d, value: n(daily.find((r) => r.day === d && r.type === type)?.c) }));
+const earnedByDay = days.map((d) => ({ label: d, value: n(dailyEarned.find((r) => r.day === d)?.amount) / 100 }));
+
+const method = payoutMethod(p);
+const stripeCountry = Boolean(p.country && STRIPE_PAYOUT_COUNTRIES.has(p.country));
+const countryName = COUNTRIES.find((c) => c.code === p!.country)?.name ?? p.country ?? '';
+const nextFirst = Date.UTC(new Date(now).getUTCFullYear(), new Date(now).getUTCMonth() + 1, 1);
+const openPayout = payouts.find((x) => x.status === 'proposed' || x.status === 'approved' || x.status === 'failed');
+const due = balance.available;
+const link = partnerLink(p.code);
+const caption = KIT.caption(p.code);
+
+const date = (ms: unknown) => new Date(n(ms)).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+const fullDate = (ms: number) => new Date(ms).toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'UTC' });
+const planName = (plan: unknown) => (isPlan(plan) ? PRICING.plans[plan].name.replace('Godmode ', '') : 'Subscription');
+const commissionLabel = (kind: unknown) => (kind === 'sale' ? null : kind === 'dispute' ? 'Chargeback' : 'Refund');
+const payoutLabel: Record<string, string> = { proposed: 'Scheduled', approved: 'Approved', paid: 'Paid', failed: 'Delayed' };
+const q = Astro.url.searchParams;
+const notice = (() => {
+  if (q.get('welcome'))
+    return {
+      tone: 'good',
+      text: `You’re in. Your link and code work right away; we sent a confirmation link to ${p!.email}. Mark every video with #ad and switch on the platform’s paid-partnership label.`,
+    };
+  if (q.get('verified')) return { tone: 'good', text: 'Email confirmed. You’re all set for payouts.' };
+  if (q.get('sent')) return { tone: 'good', text: `We sent a confirmation link to ${p!.email}.` };
+  if (q.get('error')) return { tone: 'warn', text: 'That didn’t work. Please try again from this page.' };
+  return null;
+})();
+const clipMsg: Record<string, string> = {
+  added: 'Clip added. Thanks!',
+  duplicate: 'That clip is already on the list.',
+  invalid: 'That doesn’t look like a link to a post.',
+  limit: 'That’s a lot of clips for one day. Add more tomorrow.',
+};
+const connectMsg: Record<string, string> = {
+  unavailable: 'Stripe payouts open soon. Add PayPal meanwhile and you won’t miss a payout.',
+  country: `Stripe can’t pay out to ${countryName} yet. Add PayPal instead.`,
+  done: 'Back from Stripe. Payouts switch on as soon as Stripe has checked your details.',
+  error: 'That didn’t work. Please try again.',
+};
+const status = p.status;
+---
+
+<Partners title="Dashboard" noindex signedIn>
+  <main class="pt-[96px] pb-20 sm:pt-[108px]" data-no-pageview style="--chart-bar: var(--brand); --chart-bar-hover: var(--brand-bright)">
+    <div class="container-x">
+      <div class="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p class="text-[13px] font-semibold text-brand">{PARTNERS.name}</p>
+          <h1 class="mt-2 text-[clamp(28px,3.6vw,40px)] leading-tight font-[650] tracking-[-0.035em]">Hi {firstName(p.name)}</h1>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class:list={['chip', status === 'active' ? 'chip-brand' : 'chip-warn']}>{status === 'active' ? `${ratePercent(p.rate_bps)}% commission` : status}</span>
+          <a href="/partners/kit" class="btn btn-ghost btn-sm"><Icon name="clapperboard" size={15} /> Content kit</a>
+        </div>
+      </div>
+
+      {notice && <p class:list={['mt-6 rounded-2xl px-4 py-3 text-[14.5px]', notice.tone === 'good' ? 'bg-brand-soft text-text-2' : 'bg-peach-soft text-[#8a3d1f]']} role="status">{notice.text}</p>}
+      {
+        status !== 'active' && (
+          <p class="mt-6 rounded-2xl bg-peach-soft px-4 py-3 text-[14.5px] text-[#8a3d1f]" role="status">
+            Your partnership is paused: your link and code don’t count new customers right now. Reply to any of our emails if you have questions.
+          </p>
+        )
+      }
+      {
+        !p.email_verified_at && !q.get('welcome') && !q.get('sent') && (
+          <form method="post" class="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-surface px-4 py-3 text-[14.5px] text-text-2 ring-1 ring-line-2">
+            <span class="flex items-center gap-2"><Icon name="mail" size={16} class="text-brand" /> Confirm your email to get paid.</span>
+            <button type="submit" name="action" value="verify" class="link text-[14px]">Send the link again</button>
+          </form>
+        )
+      }
+
+      <section class="mt-6 grid gap-3 lg:grid-cols-[1.35fr_1fr]">
+        <div class="card p-6 sm:p-7">
+          <p class="text-[13px] text-muted">Your link</p>
+          <div class="mt-2 flex items-center gap-2">
+            <code class="min-w-0 flex-1 truncate rounded-xl bg-surface-2 px-4 py-3 font-mono text-[15px] text-text ring-1 ring-line">{link.replace(/^https?:\/\//, '')}</code>
+            <button type="button" class="btn btn-ghost btn-sm flex-none" data-copy={link}><Icon name="copy" size={15} /><span data-copy-label>Copy</span></button>
+          </div>
+          <p class="mt-5 text-[13px] text-muted">Your code</p>
+          <div class="mt-2 flex items-center gap-2">
+            <code class="min-w-0 flex-1 rounded-xl bg-surface-2 px-4 py-3 font-mono text-[15px] font-semibold tracking-[0.06em] text-text ring-1 ring-line">{p.code}</code>
+            <button type="button" class="btn btn-ghost btn-sm flex-none" data-copy={p.code}><Icon name="copy" size={15} /><span data-copy-label>Copy</span></button>
+          </div>
+          <p class="mt-3 text-[13px] text-dim">{PARTNERS.discountPercent}% off the first month for your viewers. Works on any device.</p>
+          <div class="mt-5 flex flex-col items-start gap-3 rounded-xl bg-surface-2 p-4 ring-1 ring-line sm:flex-row">
+            <p class="min-w-0 flex-1 text-[13.5px] leading-relaxed text-text-2">{caption}</p>
+            <button type="button" class="btn btn-ghost btn-sm flex-none" data-copy={caption}><span data-copy-label>Copy caption</span></button>
+          </div>
+        </div>
+
+        <div class="card flex flex-col p-6 sm:p-7">
+          <p class="text-[13px] text-muted">Available</p>
+          <p class="mt-2 text-[46px] leading-none font-[650] tracking-[-0.05em] tabular-nums">{cents(due)}</p>
+          <dl class="mt-6 space-y-2.5 text-[14px]">
+            <div class="flex justify-between"><dt class="text-text-2">Pending ({PARTNERS.holdDays}-day hold)</dt><dd class="tabular-nums">{cents(balance.pending)}</dd></div>
+            <div class="flex justify-between"><dt class="text-text-2">Paid out</dt><dd class="tabular-nums">{cents(balance.paid)}</dd></div>
+            <div class="flex justify-between"><dt class="text-text-2">Earned in total</dt><dd class="tabular-nums">{cents(balance.pending + balance.available + balance.paid)}</dd></div>
+          </dl>
+          <p class="mt-auto border-t border-line pt-4 text-[13.5px] text-muted">
+            {
+              openPayout
+                ? `${payoutLabel[String(openPayout.status)]}: ${cents(n(openPayout.amount_cents))} via ${openPayout.method === 'paypal' ? 'PayPal' : 'Stripe'}.`
+                : due >= PARTNERS.minPayoutEur * 100
+                  ? method && p.email_verified_at
+                    ? `Next payout: ${fullDate(nextFirst)}.`
+                    : 'Add a payout method and confirm your email to get paid.'
+                  : `Next payout on ${fullDate(nextFirst)} once ${cents(PARTNERS.minPayoutEur * 100)} is available.`
+            }
+          </p>
+        </div>
+      </section>
+
+      <section class="mt-3 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {
+          [
+            ['Link clicks', n(events.clicks).toLocaleString('en-US'), 'all time'],
+            ['Downloads', n(events.downloads).toLocaleString('en-US'), `${n(events.checkouts)} checkouts started`],
+            ['Paying customers', String(paying.length), `${customers.length} signed up`],
+            ['Referred MRR', `€${mrr.toLocaleString('en-US')}`, `you earn ${cents(Math.round(mrr * p.rate_bps) / 100)}/month`],
+          ].map(([label, value, note]) => (
+            <div class="card p-5 sm:p-6">
+              <p class="text-[13px] text-muted">{label}</p>
+              <p class="mt-2 text-[30px] leading-none font-semibold tracking-[-0.04em] tabular-nums">{value}</p>
+              <p class="mt-2 text-[12.5px] text-dim">{note}</p>
+            </div>
+          ))
+        }
+      </section>
+
+      <section class="mt-3 grid gap-3 lg:grid-cols-3">
+        <Bars title="Clicks · 30 days" data={byDay('ref_click')} width={420} />
+        <Bars title="Downloads · 30 days" data={byDay('download')} width={420} />
+        <Bars title="Earned · 30 days" data={earnedByDay} format="eur" width={420} />
+      </section>
+
+      <section class="mt-3 grid items-start gap-3 lg:grid-cols-[1.35fr_1fr]">
+        <div class="card overflow-x-auto p-6">
+          <p class="text-[13px] text-muted">Commissions</p>
+          <table class="mt-4 w-full text-[13.5px]">
+            <thead class="text-left text-[12px] text-dim">
+              <tr><th class="py-2 font-normal">Date</th><th class="pl-2 font-normal">Plan</th><th class="hidden text-right font-normal sm:table-cell">Payment</th><th class="text-right font-normal">You earn</th><th class="pl-4 text-right font-normal sm:text-left">Status</th></tr>
+            </thead>
+            <tbody>
+              {commissions.map((c, i) => (
+                <tr class="border-t border-line" hidden={i >= 10} data-extra={i >= 10 ? '' : undefined}>
+                  <td class="py-2.5 whitespace-nowrap text-muted">{date(c.created_at)}</td>
+                  <td class="pl-2 text-text-2">{commissionLabel(c.kind) ?? planName(c.plan)}</td>
+                  <td class="hidden text-right tabular-nums text-muted sm:table-cell">{cents(n(c.base_cents))}</td>
+                  <td class:list={['text-right font-medium tabular-nums', n(c.amount_cents) < 0 && 'text-danger']}>{cents(n(c.amount_cents))}</td>
+                  <td class="pl-4 text-right sm:text-left">
+                    {c.status === 'pending' ? (
+                      <span class="chip" title={`Available on ${fullDate(n(c.available_at))}`}>until {date(c.available_at)}</span>
+                    ) : (
+                      <span class:list={['chip', c.status === 'available' && 'chip-brand', c.status === 'reversed' && 'chip-warn']}>{c.status}</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+              {!commissions.length && <tr><td colspan="5" class="py-3 text-dim">No sales yet. Your first one shows up here the minute it’s paid.</td></tr>}
+            </tbody>
+          </table>
+          {commissions.length > 10 && (
+            <button type="button" class="link mt-4 text-[13.5px]" data-more>Show all {commissions.length}</button>
+          )}
+        </div>
+
+        <div class="grid gap-3">
+          <div class="card p-6">
+            <div class="flex items-center justify-between">
+              <p class="text-[13px] text-muted">Top partners this month</p>
+              <Icon name="trophy" size={16} class="text-dim" />
+            </div>
+            <ol class="mt-4 space-y-1">
+              {leaders.map((l, i) => (
+                <li class:list={['flex items-center gap-3 rounded-xl px-3 py-2 text-[14px]', n(l.id) === p!.id && 'bg-brand-soft']}>
+                  <span class:list={['w-5 text-right font-semibold tabular-nums', i < 3 ? 'text-brand' : 'text-dim']}>{i + 1}</span>
+                  <span class="flex-1 text-text-2">{shortName(String(l.name))}</span>
+                  {n(l.id) === p!.id && <span class="chip chip-brand !h-6">You</span>}
+                </li>
+              ))}
+              {!leaders.length && <li class="px-3 py-2 text-[14px] text-dim">No sales this month yet. The first one takes the top spot.</li>}
+            </ol>
+          </div>
+          <div class="card overflow-x-auto p-6">
+            <p class="text-[13px] text-muted">Payouts</p>
+            <table class="mt-4 w-full text-[13.5px]">
+              <tbody>
+                {payouts.map((x) => (
+                  <tr class="border-t border-line first:border-0">
+                    <td class="py-2.5 text-muted">{date(x.paid_at ?? x.created_at)}</td>
+                    <td class="text-text-2">{x.method === 'paypal' ? 'PayPal' : 'Stripe'}</td>
+                    <td class="text-right font-medium tabular-nums">{cents(n(x.amount_cents))}</td>
+                    <td class="pl-4 text-right"><span class:list={['chip', x.status === 'paid' && 'chip-brand']}>{payoutLabel[String(x.status)] ?? x.status}</span></td>
+                  </tr>
+                ))}
+                {!payouts.length && <tr><td class="py-2 text-[13.5px] text-dim">Payouts go out on the 1st of each month from {cents(PARTNERS.minPayoutEur * 100)}.</td></tr>}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section class="mt-3 grid gap-3 lg:grid-cols-[1.35fr_1fr]">
+        <div id="clips" class="card p-6">
+          <p class="text-[13px] text-muted">Your clips</p>
+          <form method="post" class="mt-4 grid gap-2 sm:grid-cols-[1fr_auto_auto]">
+            <input type="hidden" name="action" value="clip" />
+            <input class="field-input !min-h-[42px] !py-2 !text-[14px]" name="url" type="url" required maxlength="600" placeholder="https://www.tiktok.com/@you/video/…" aria-label="Link to your post" />
+            <input class="field-input !min-h-[42px] !w-auto !py-2 !text-[14px]" name="posted_at" type="date" aria-label="Posted on" />
+            <button type="submit" class="btn btn-primary btn-sm !h-[42px]">Add clip</button>
+          </form>
+          {q.get('clip') && <p class="mt-3 text-[13.5px] text-muted" role="status">{clipMsg[q.get('clip')!] ?? ''}</p>}
+          <ul class="mt-4 divide-y divide-line">
+            {clips.map((c) => (
+              <li class="flex items-center gap-3 py-2.5 text-[13.5px]">
+                <span class="w-20 flex-none text-text-2">{c.platform}</span>
+                <a href={String(c.url)} target="_blank" rel="noopener nofollow" class="min-w-0 flex-1 truncate text-muted hover:text-text">{String(c.url).replace(/^https:\/\//, '')}</a>
+                <span class="hidden flex-none tabular-nums text-dim sm:inline">{c.views != null ? `${n(c.views).toLocaleString('en-US')} views` : ''}</span>
+                <span class:list={['chip flex-none', c.status === 'approved' && 'chip-brand', c.status === 'rejected' && 'chip-warn']}>{c.status === 'submitted' ? 'in review' : c.status}</span>
+              </li>
+            ))}
+            {!clips.length && <li class="py-2.5 text-[13.5px] text-dim">Posted a clip? Add the link so we can see what works.</li>}
+          </ul>
+        </div>
+
+        <div id="payouts" class="card p-6 sm:p-7">
+          <p class="text-[13px] text-muted">Payout method</p>
+          <p class="mt-2 text-[17px] font-semibold tracking-[-0.015em]">
+            {method === 'stripe' ? 'Stripe, to your bank' : method === 'paypal' ? `PayPal · ${p.paypal_email}` : 'Not set up yet'}
+          </p>
+          {q.get('connect') && connectMsg[q.get('connect')!] && <p class="mt-4 rounded-xl bg-surface-2 px-4 py-3 text-[14px] text-text-2 ring-1 ring-line" role="status">{connectMsg[q.get('connect')!]}</p>}
+          {q.get('saved') === 'paypal' && <p class="mt-4 text-[13.5px] text-brand" role="status">PayPal saved.</p>}
+          {q.get('paypal') === 'invalid' && <p class="mt-4 text-[13.5px] text-danger" role="alert">Enter the email address of your PayPal account.</p>}
+
+          {
+            stripeCountry ? (
+              <div class="mt-5 rounded-2xl p-4 ring-1 ring-line">
+                <div class="flex items-center justify-between gap-3">
+                  <div>
+                    <p class="text-[14.5px] font-semibold">Stripe</p>
+                    <p class="mt-0.5 text-[13px] text-muted">
+                      {p.stripe_payouts_enabled ? 'Payouts are on.' : p.stripe_account_id ? 'Finish the setup with Stripe.' : 'Straight to your bank account.'}
+                    </p>
+                  </div>
+                  <div class="flex flex-none items-center gap-2">
+                    {Boolean(p.stripe_payouts_enabled) && method !== 'stripe' && (
+                      <form method="post"><input type="hidden" name="action" value="method" /><button name="method" value="stripe" class="btn btn-ghost btn-sm">Use Stripe</button></form>
+                    )}
+                    <form method="post" action="/api/partners/connect">
+                      <button type="submit" class:list={['btn btn-sm', p.stripe_account_id ? 'btn-ghost' : 'btn-primary']}>
+                        {p.stripe_payouts_enabled ? 'Open Stripe' : p.stripe_account_id ? 'Continue' : 'Set up'}
+                      </button>
+                    </form>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <p class="mt-4 text-[13.5px] text-muted">Partners in {countryName || 'your country'} are paid by PayPal.</p>
+            )
+          }
+
+          <form method="post" class:list={['rounded-2xl p-4 ring-1 ring-line', stripeCountry ? 'mt-3' : 'mt-4']}>
+            <input type="hidden" name="action" value="paypal" />
+            <div class="flex items-center justify-between gap-3">
+              <p class="text-[14.5px] font-semibold">PayPal</p>
+              {p.paypal_email && method === 'stripe' && (
+                <button type="submit" form="use-paypal" class="link text-[13px]">Use PayPal</button>
+              )}
+            </div>
+            <div class="mt-3 flex gap-2">
+              <input class="field-input !min-h-[42px] !py-2 !text-[14px]" name="paypal_email" type="email" required maxlength="200" placeholder="you@example.com" value={p.paypal_email ?? ''} aria-label="PayPal email" />
+              <button type="submit" class="btn btn-ghost btn-sm !h-[42px] flex-none">Save</button>
+            </div>
+          </form>
+          <form id="use-paypal" method="post" hidden><input type="hidden" name="action" value="method" /><input type="hidden" name="method" value="paypal" /></form>
+        </div>
+      </section>
+
+      <section class="mt-3">
+        <form id="profile" method="post" class="card p-6 sm:p-7">
+          <input type="hidden" name="action" value="profile" />
+          <p class="text-[13px] text-muted">Profile</p>
+          {q.get('saved') === 'profile' && <p class="mt-3 text-[13.5px] text-brand" role="status">Saved.</p>}
+          {q.get('profile') === 'invalid' && <p class="mt-3 text-[13.5px] text-danger" role="alert">Check your name and country.</p>}
+          <div class="mt-4 grid gap-4 md:grid-cols-3">
+            <label class="field">
+              <span>Name</span>
+              <input class="field-input !min-h-[42px] !py-2 !text-[14px]" name="name" required maxlength="80" value={p.name} />
+            </label>
+            <label class="field">
+              <span>Email</span>
+              <input class="field-input !min-h-[42px] !py-2 !text-[14px] text-muted" value={p.email} disabled />
+            </label>
+            <label class="field">
+              <span>Country</span>
+              <span class="relative block">
+                <select class="field-input !min-h-[42px] appearance-none !py-2 pr-10 !text-[14px]" name="country" disabled={Boolean(p.stripe_account_id)}>
+                  {COUNTRIES.map((c) => <option value={c.code} selected={c.code === p!.country}>{c.name}</option>)}
+                </select>
+                <Icon name="chevron-down" size={16} class="pointer-events-none absolute top-1/2 right-4 -translate-y-1/2 text-dim" />
+              </span>
+              {p.stripe_account_id && <input type="hidden" name="country" value={p.country ?? ''} />}
+            </label>
+          </div>
+          <label class="field mt-4">
+            <span>Where you post</span>
+            <textarea class="field-input !min-h-[72px] !py-2 !text-[14px]" name="links" rows="2" maxlength="1000">{p.links ?? ''}</textarea>
+          </label>
+          <button type="submit" class="btn btn-ghost btn-sm mt-5">Save profile</button>
+        </form>
+      </section>
+    </div>
+  </main>
+</Partners>
+
+<script>
+  document.querySelector('[data-more]')?.addEventListener('click', (e) => {
+    document.querySelectorAll<HTMLElement>('[data-extra]').forEach((r) => (r.hidden = false));
+    (e.currentTarget as HTMLElement).remove();
+  });
+</script>

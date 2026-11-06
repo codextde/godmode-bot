@@ -1,0 +1,35 @@
+---
+import Partners from '@/layouts/Partners.astro';
+import Icon from '@/components/ui/Icon.astro';
+import { PARTNERS } from '@/config/partners';
+import { consumeLoginToken, sameOrigin, setPartnerSession } from '@/lib/partner-auth';
+
+export const prerender = false;
+Astro.response.headers.set('cache-control', 'no-store');
+// The token stays off other sites; same-origin keeps the Origin header on the form post (sameOrigin checks it).
+Astro.response.headers.set('referrer-policy', 'same-origin');
+
+// Mail scanners open links on their own, so the link only shows a button; signing in takes the click (a POST).
+const token = Astro.url.searchParams.get('t') ?? '';
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData().catch(() => null);
+  const id = sameOrigin(Astro.request, Astro.url) ? await consumeLoginToken(String(form?.get('t') ?? '')) : null;
+  if (!id) return Astro.redirect('/partners/login?expired=1', 303);
+  await setPartnerSession(Astro.cookies, id, Astro.url.protocol === 'https:');
+  return Astro.redirect('/partners/dashboard?verified=1', 303);
+}
+if (!token) return Astro.redirect('/partners/login', 303);
+---
+
+<Partners title="Sign in" noindex>
+  <main class="relative isolate grid min-h-[78dvh] place-items-center overflow-hidden px-4 pt-[110px] pb-16">
+    <div class="hero-wash pointer-events-none absolute inset-x-0 top-0 -z-10 h-[700px]" aria-hidden="true"></div>
+    <form method="post" class="card w-full max-w-[440px] p-7 text-center sm:p-9">
+      <span class="mx-auto grid size-12 place-items-center rounded-2xl bg-brand-soft text-brand"><Icon name="badge-check" size={22} /></span>
+      <h1 class="mt-5 text-[26px] font-semibold tracking-[-0.03em]">{PARTNERS.name}</h1>
+      <p class="mt-2 text-[15px] text-muted">Continue to confirm your email and open your dashboard.</p>
+      <input type="hidden" name="t" value={token} />
+      <button type="submit" class="btn btn-primary btn-lg mt-7 w-full">Continue</button>
+    </form>
+  </main>
+</Partners>

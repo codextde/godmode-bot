@@ -1,18 +1,21 @@
 ---
 // Single-series column chart (one hue, no legend — the title names it). Hover shows the exact value.
+// Colors follow the page theme (--chart-bar / --chart-bar-hover override the bar color).
 interface Props {
   title: string;
   data: { label: string; value: number }[];
   format?: 'number' | 'eur';
+  /** Drawing width: smaller keeps the labels readable in narrow cards. */
+  width?: number;
 }
-const { title, data, format = 'number' } = Astro.props;
+const { title, data, format = 'number', width = 640 } = Astro.props;
 const max = Math.max(1, ...data.map((d) => d.value));
 // Round the axis top up to a clean number.
 const pow = 10 ** Math.floor(Math.log10(max));
 const top = Math.ceil(max / pow) * pow;
 const fmt = (v: number) =>
   format === 'eur' ? `€${v.toLocaleString('en-US', { maximumFractionDigits: 0 })}` : v.toLocaleString('en-US');
-const W = 640;
+const W = width;
 const H = 180;
 const padL = 44;
 const padB = 22;
@@ -32,8 +35,8 @@ const total = data.reduce((s, d) => s + d.value, 0);
     {
       ticks.map((t) => (
         <g>
-          <line x1={padL} x2={W} y1={y(t)} y2={y(t)} stroke="rgb(255 250 240 / 0.07)" stroke-width="1" />
-          <text x={padL - 8} y={y(t) + 4} text-anchor="end" font-size="11" fill="#6f6b64">
+          <line x1={padL} x2={W} y1={y(t)} y2={y(t)} style="stroke: var(--line)" stroke-width="1" />
+          <text x={padL - 8} y={y(t) + 4} text-anchor="end" font-size="11" style="fill: var(--dim)">
             {fmt(t)}
           </text>
         </g>
@@ -50,12 +53,12 @@ const total = data.reduce((s, d) => s + d.value, 0);
             {d.value > 0 && (
               <path
                 d={`M${x},${H - padB} V${y(d.value) + r} Q${x},${y(d.value)} ${x + r},${y(d.value)} H${x + barW - r} Q${x + barW},${y(d.value)} ${x + barW},${y(d.value) + r} V${H - padB} Z`}
-                fill="#1a9e66"
+                class="bar"
               />
             )}
             <title>{`${d.label}: ${fmt(d.value)}`}</title>
             {(i === 0 || i === data.length - 1 || data.length <= 14) && (
-              <text x={padL + i * band + band / 2} y={H - 6} text-anchor="middle" font-size="10.5" fill="#6f6b64">
+              <text x={padL + i * band + band / 2} y={H - 6} text-anchor="middle" font-size="10.5" style="fill: var(--dim)">
                 {d.label.slice(5)}
               </text>
             )}
@@ -67,5 +70,6 @@ const total = data.reduce((s, d) => s + d.value, 0);
 </figure>
 
 <style>
-  .bar-hit:hover path { fill: #2fd690; }
+  .bar { fill: var(--chart-bar, #1a9e66); }
+  .bar-hit:hover .bar { fill: var(--chart-bar-hover, #2fd690); }
 </style>

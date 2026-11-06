@@ -12,7 +12,7 @@ export default defineConfig({
   adapter: cloudflare({ imageService: 'compile' }),
   integrations: [
     sitemap({
-      filter: (page) => !/\/(admin|checkout)(\/|$)/.test(page),
+      filter: (page) => !/\/(admin|checkout|r)(\/|$)/.test(page) && !/\/partners\/(dashboard|auth|login|logout)(\/|$)/.test(page),
       i18n: { defaultLocale: 'en', locales: { en: 'en', de: 'de' } },
     }),
   ],

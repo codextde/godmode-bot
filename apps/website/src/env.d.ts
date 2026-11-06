@@ -32,5 +32,6 @@ declare namespace Cloudflare {
     STRIPE_MANAGED_PAYMENTS?: string;
     STRIPE_REQUIRE_TOS?: string;
     STRIPE_COLLECT_PROMOTIONS?: string;
+    PARTNER_PAYOUT_MONTHLY_CAP_EUR?: string;
   }
 }

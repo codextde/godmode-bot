@@ -35,10 +35,10 @@ export function licenseKeyFromDeepLink(link: string): string | null {
 /** How long a new install without a key runs free. */
 export const LICENSE_FREE_DAYS = 14;
 
-/** Monthly prices in EUR, as sold on usegodmode.com (keep in step with the site's PRICING). */
+/** Monthly prices in EUR (the same amounts in USD), as sold on usegodmode.com (keep in step with the site's PRICING). */
 export const LICENSE_PRICING = {
   guaranteeDays: 14,
-  private: { price: 79 },
+  private: { price: 49 },
   company: { price: 499 },
 } as const;
 

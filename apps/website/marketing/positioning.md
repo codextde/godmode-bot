@@ -78,7 +78,7 @@ trust line. "Agents" is fine once the reader knows what Godmode is ("AI coworker
 ## Offer (since 2026-11-01)
 
 **Download free, pay later.** Godmode for Mac is free for 14 days: no card, no sign-up, just download. After that
-€79/month for private use, €499/month for companies. 14-day money-back guarantee on the first payment, cancel anytime. The Founding
+€49/month for private use, €499/month for companies. 14-day money-back guarantee on the first payment, cancel anytime. The Founding
 100 offer (setup call, FOUNDING20, price lock) ended on October 31: never mention it again.
 
 - The one call to action everywhere (site, ads, posts, emails, README): **Download for Mac, free.** Link

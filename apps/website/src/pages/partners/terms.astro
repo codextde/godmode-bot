@@ -1,0 +1,82 @@
+---
+import Partners from '@/layouts/Partners.astro';
+import { euro, PARTNERS, ratePercent } from '@/config/partners';
+import { LEGAL, PRICING, SITE } from '@/config/site';
+---
+
+<Partners title="Partner program terms" description={`The terms of ${PARTNERS.name}, the Godmode affiliate program run by ${LEGAL.company}.`}>
+  <main class="pt-36 pb-16">
+    <article class="container-x max-w-[760px]">
+      <p class="eyebrow">{PARTNERS.name}</p>
+      <h1 class="h-section mt-5">Program terms</h1>
+      <p class="mt-4 text-[13px] text-dim">Last updated: {PARTNERS.termsUpdated}</p>
+      <div class="prose-gm mt-10">
+        <p>
+          {PARTNERS.name} is run by {LEGAL.company}, {LEGAL.street}, {LEGAL.city}, {LEGAL.country} (“we”). By joining you (“partner”) accept these terms.
+          You join as an independent partner, not as our employee or agent.
+        </p>
+
+        <h2>1. Joining</h2>
+        <p>
+          You must be at least 18. Joining is free and approved right away. We can pause or end a partnership at any time, in particular when these rules are
+          broken. You can leave at any time by email.
+        </p>
+
+        <h2>2. Commission</h2>
+        <ul>
+          <li>You earn {ratePercent()}% of every payment a customer you referred makes for Godmode, for {PARTNERS.months} months after their first payment.</li>
+          <li>The base is the amount paid minus the tax Stripe calculated on it. Payments in other currencies are converted to EUR at Stripe’s rate on the day of payment.</li>
+          <li>Each commission is held for {PARTNERS.holdDays} days (money-back guarantee and chargebacks) and then becomes available.</li>
+          <li>Refunds, also partial ones, and lost chargebacks cancel the matching commission. If it was already paid out, the amount is deducted from your next payouts.</li>
+          <li>Self-referrals earn nothing: purchases by you, with your email address, or for your own business.</li>
+        </ul>
+
+        <h2>3. Attribution</h2>
+        <ul>
+          <li>Your link (usegodmode.com/r/YOURCODE, or any page with ?ref=YOURCODE) stores your code in the visitor’s browser for {PARTNERS.cookieDays} days. If they click several partner links, the last one counts.</li>
+          <li>Your code entered at checkout always wins over a link. Customers who use it get {PARTNERS.discountPercent}% off their first month.</li>
+          <li>A customer counts for you when they buy in a browser that holds your link, or with your code. We decide attribution from our records; there is no claim to a commission without them.</li>
+        </ul>
+
+        <h2>4. Payouts</h2>
+        <ul>
+          <li>We pay out on the 1st of each month once your available balance is at least {euro(PARTNERS.minPayoutEur, 0)}, in EUR.</li>
+          <li>You must have confirmed your email and set up a payout method: Stripe (to your bank, where Stripe supports it) or PayPal.</li>
+          <li>Fees your bank or PayPal charge for receiving money are yours. You are responsible for declaring and paying any taxes on your commission.</li>
+          <li>Commission earned through a breach of these rules is not paid, and we may claim back what was paid for it.</li>
+        </ul>
+
+        <h2>5. Rules</h2>
+        <ul>
+          <li>Mark every post as advertising: #ad in the caption and the platform’s paid-partnership label where there is one.</li>
+          <li>No false or misleading claims about Godmode, its price or what it does, and no income promises.</li>
+          <li>No spam: no mass comments, direct messages or emails, and no posting where it isn’t allowed.</li>
+          <li>No paid ads that use the Godmode name or brand, including bidding on “Godmode” as a search keyword.</li>
+          <li>Don’t pose as Godmode, {LEGAL.company} or Daniel Ehrhardt, and don’t suggest that we, Anthropic or Apple endorse you.</li>
+          <li>No incentivised or fake installs, sign-ups or clicks: no paying or rewarding people for them, no bots, no cookie stuffing.</li>
+          <li>Keep content legal and respectful. Never show other people’s data or your own passwords or codes.</li>
+        </ul>
+
+        <h2>6. Using our brand</h2>
+        <p>
+          You may use the Godmode name, logo, screenshots and the recordings in the <a href="/partners/kit">content kit</a> in your posts about Godmode. You may
+          not change the logo or register names, accounts or domains with “Godmode” in them. We may share your public posts about Godmode with credit to you.
+        </p>
+
+        <h2>7. Your data</h2>
+        <p>
+          We store your name, email, country, the links you give us, your clips, and your payout details to run the program. Payouts are processed by Stripe or
+          PayPal. Other partners see your first name and the initial of your last name on the monthly leaderboard, never your earnings. Details are in our
+          <a href="/legal/privacy">privacy policy</a>.
+        </p>
+
+        <h2>8. Changes and law</h2>
+        <p>
+          We may change these terms or the commission with {PARTNERS.holdDays} days’ notice by email; commission earned before a change stays as it was. Prices of
+          Godmode ({PRICING.plans.private.name} €{PRICING.plans.private.price}/month, {PRICING.plans.company.name} €{PRICING.plans.company.price}/month) can change. German law applies.
+          Questions: <a href={`mailto:${SITE.email}`}>{SITE.email}</a>.
+        </p>
+      </div>
+    </article>
+  </main>
+</Partners>

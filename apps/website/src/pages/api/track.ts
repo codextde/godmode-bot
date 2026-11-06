@@ -2,6 +2,7 @@ import type { APIRoute } from 'astro';
 import { db } from '@/lib/db';
 import { dailyHash } from '@/lib/signed';
 import { allowed, BOTS } from '@/lib/limit';
+import { refFromRequest } from '@/lib/partner-auth';
 
 export const prerender = false;
 
@@ -49,12 +50,14 @@ export const POST: APIRoute = async ({ request }) => {
     /* ignore malformed referrers */
   }
   const cf = (request as Request & { cf?: { country?: string } }).cf;
+  // The partner this visitor came through, for the partner dashboard's funnel.
+  const ref = type === 'checkout_start' ? await refFromRequest(request) : null;
 
   await db()
     .prepare(
       `INSERT INTO events (ts, day, visitor, type, path, label, referrer, utm_source, utm_medium, utm_campaign,
-         utm_content, has_click_id, country, device)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         utm_content, has_click_id, country, device, ref)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .bind(
       now.getTime(),
@@ -71,6 +74,7 @@ export const POST: APIRoute = async ({ request }) => {
       body.click ? 1 : 0,
       cf?.country ?? null,
       str(body.device, 12),
+      ref,
     )
     .run();
   return new Response(null, { status: 204 });

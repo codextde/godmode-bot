@@ -4,6 +4,7 @@ import { env } from 'cloudflare:workers';
 import { cryptoProvider, stripe } from '@/lib/stripe';
 import { db, recordExpiredCheckout, revokeForCharge, syncSubscription, upsertFromSession } from '@/lib/db';
 import { sendWelcome } from '@/lib/mail';
+import { endReferral, handleInvoicePaid, referralFromSession, reverseCommission } from '@/lib/partners';
 
 export const prerender = false;
 
@@ -11,7 +12,7 @@ export const prerender = false;
  * Stripe webhook. Subscribe the endpoint to:
  *   checkout.session.completed, checkout.session.async_payment_succeeded,
  *   checkout.session.async_payment_failed, checkout.session.expired,
- *   customer.subscription.updated, customer.subscription.deleted, charge.refunded, charge.dispute.closed
+ *   customer.subscription.updated, customer.subscription.deleted, charge.refunded, charge.dispute.closed, invoice.paid
  * (scripts/stripe-setup.mjs does this for you).
  */
 export const POST: APIRoute = async ({ request }) => {
@@ -64,6 +65,7 @@ async function handle(event: Stripe.Event) {
       // Trials complete without a payment; store the trial end right away instead of waiting for an update event.
       const subId = typeof s.subscription === 'string' ? s.subscription : s.subscription?.id;
       if (s.mode === 'subscription' && subId) await syncSubscription(await stripe().subscriptions.retrieve(subId));
+      await referralFromSession(s);
       if (paid) await sendWelcome(s.id).catch((e) => console.error('welcome email failed', e));
       break;
     }
@@ -78,17 +80,27 @@ async function handle(event: Stripe.Event) {
       await recordExpiredCheckout(event.data.object);
       break;
     case 'customer.subscription.updated':
-    case 'customer.subscription.deleted':
+    case 'customer.subscription.deleted': {
       // Stripe doesn't guarantee event order; read the subscription's current state instead.
-      await syncSubscription(await stripe().subscriptions.retrieve(event.data.object.id));
+      const sub = await stripe().subscriptions.retrieve(event.data.object.id);
+      await syncSubscription(sub);
+      if (sub.status === 'canceled' || sub.status === 'incomplete_expired') await endReferral(sub.id);
       break;
-    case 'charge.refunded':
-      if (event.data.object.refunded) await revokeForCharge(event.data.object);
+    }
+    case 'invoice.paid':
+      await handleInvoicePaid(event.data.object);
       break;
+    case 'charge.refunded': {
+      const charge = event.data.object;
+      if (charge.amount > 0) await reverseCommission(charge.id, charge.amount_refunded / charge.amount, `refund:${charge.amount_refunded}`);
+      if (charge.refunded) await revokeForCharge(charge);
+      break;
+    }
     case 'charge.dispute.closed': {
       const dispute = event.data.object;
       if (dispute.status === 'lost') {
         const chargeId = typeof dispute.charge === 'string' ? dispute.charge : dispute.charge.id;
+        await reverseCommission(chargeId, 1, 'dispute');
         await revokeForCharge(await stripe().charges.retrieve(chargeId));
       }
       break;
