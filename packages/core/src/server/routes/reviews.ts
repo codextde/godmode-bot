@@ -1,7 +1,7 @@
 import type { Hono } from "hono";
 import { badRequest } from "../../util";
 import { getReview, reviewOverview, startReview, undoReviewAction } from "../../review/review";
-import { isPhoneRequest } from "../auth";
+import { isLimitedPhone } from "../auth";
 
 export function registerReviewRoutes(app: Hono): void {
   app.get("/api/reviews", (c) => c.json(reviewOverview()));
@@ -13,6 +13,6 @@ export function registerReviewRoutes(app: Hono): void {
   app.post("/api/reviews/:id/actions/:index/undo", async (c) => {
     const index = Number(c.req.param("index"));
     if (!Number.isInteger(index) || index < 0) throw badRequest("Invalid change");
-    return c.json(await undoReviewAction(c.req.param("id"), index, "user", { keepFillOnly: isPhoneRequest(c) }));
+    return c.json(await undoReviewAction(c.req.param("id"), index, "user", { keepFillOnly: isLimitedPhone(c) }));
   });
 }

@@ -254,7 +254,6 @@
     "agents": "Agenten",
     "archived": "Archiviert",
     "emptyTitle": "Alles durchsuchen",
-    "emptyBody": "Chats, Nachrichten, Aufgaben und Agenten.",
     "noResultsTitle": "Keine Treffer",
     "noResultsBody": "Nichts passt zu „{{query}}“.",
     "showingFor": "Ergebnisse für „{{query}}“",
@@ -273,7 +272,11 @@
     "micDeniedTitle": "Kein Zugriff aufs Mikrofon",
     "micDenied": "Erlaube Godmode das Mikrofon in der Einstellungen-App, um zu diktieren.",
     "recordFailed": "Aufnahme fehlgeschlagen",
-    "nothingHeard": "Es war nichts zu hören."
+    "nothingHeard": "Es war nichts zu hören.",
+    "speechDeniedTitle": "Kein Zugriff auf die Spracherkennung",
+    "speechDenied": "Erlaube Godmode das Mikrofon und die Spracherkennung in der Einstellungen-App, um zu diktieren.",
+    "phoneUnavailable": "Die Spracherkennung ist auf diesem Handy gerade nicht verfügbar.",
+    "tryAgain": "Versuch es noch einmal."
   },
   "archive": {
     "search": "Archivierte Chats durchsuchen",

@@ -35,7 +35,7 @@ import { getAgent, getDefaultAgentId } from "../agents/service";
 import { askPause, getRun, questionRefusal, resumeRun } from "../runner/runner";
 import { describeNow, stripNoteTags, type ContinueAnswer } from "../runner/prompt";
 import { audit } from "./audit";
-import { getMessage, promptWithFiles, saveAttachments, updateMessage } from "./conversations";
+import { getMessage, promptWithFiles, runFillOnly, saveAttachments, updateMessage } from "./conversations";
 import { hasDeliverable } from "./messageQueue";
 import { markRead, notify } from "./notifications";
 import { pausedRun } from "./pauses";
@@ -71,6 +71,8 @@ export interface Answerer {
   via: AnswerVia;
   /** A Godmode Cloud user who isn't the owner: may not approve what uses the Mac password. */
   notOwner?: boolean;
+  /** A phone without full access: the run that goes on with the answer gets no raw secrets. */
+  fillOnly?: boolean;
 }
 
 /** Who the asking agent is told answered: the main agent's name for `via: "agent"`, else the human. */
@@ -246,7 +248,7 @@ export function askQuestion(ctx: { runId: string; conversationId: string; worksp
   const human = humanName();
   const refused = questionRefusal(ctx.runId, human);
   if (refused) return { ok: false, text: refused };
-  if (hasDeliverable(ctx.conversationId)) {
+  if (hasDeliverable(ctx.conversationId, runFillOnly(ctx.runId))) {
     return {
       ok: false,
       text: `${human} wrote to you while you were working — the message reaches you right after this step. Read it first: it may already answer this. Ask again afterwards if you still need to.`,
@@ -464,7 +466,7 @@ export function answerQuestion(id: string, input: AnswerQuestionInput, by: Answe
   if (elsewhere && remoteAnswer) {
     if (r.status !== "open") throw new HttpError(409, "This was answered already.", "question_closed");
     // The run waits on that computer: it takes the answer, and its next update settles this copy.
-    remoteAnswer(elsewhere, r.id, input);
+    remoteAnswer(elsewhere, r.id, by.fillOnly ? ({ ...input, fillOnly: true } as AnswerQuestionInput) : input);
     audit(by.actor, "question.answer.forward", r.id, { via: by.via });
     return { question: toQuestion(r), run: getRun(r.run_id) };
   }
@@ -530,7 +532,7 @@ export function answerQuestion(id: string, input: AnswerQuestionInput, by: Answe
   held.delete(id);
   let run: Run;
   try {
-    run = resumeRun(paused, "user", answer, { status, optionId, text: stored, attachments, at: ts, via: by.via });
+    run = resumeRun(paused, "user", answer, { status, optionId, text: stored, attachments, at: ts, via: by.via }, { fillOnly: by.fillOnly });
   } catch (err) {
     // The run couldn't continue (agent switched off, shutting down): the question waits for another try.
     sql(

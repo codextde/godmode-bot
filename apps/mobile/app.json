@@ -38,6 +38,15 @@
         "android.permission.SYSTEM_ALERT_WINDOW",
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.WRITE_EXTERNAL_STORAGE"
+      ],
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.USE_BIOMETRIC",
+        "android.permission.USE_FINGERPRINT",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
       ]
     },
     "plugins": [
@@ -165,11 +174,35 @@
         {
           "microphonePermission": "Godmode uses the microphone when you talk to your agents."
         }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#0ECA7B"
+        }
+      ],
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Godmode uses the microphone when you talk to your agents.",
+          "speechRecognitionPermission": "Godmode turns what you say into text when you dictate a message."
+        }
       ]
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "owner": "codext-gmbh",
+    "extra": {
+      "router": {
+        "asyncRoutes": {
+          "web": true
+        }
+      },
+      "eas": {
+        "projectId": "bc4dc3cb-d06f-4021-a938-7cc16c61ef1b"
+      }
     }
   }
 }

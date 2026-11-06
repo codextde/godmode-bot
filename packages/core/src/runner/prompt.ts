@@ -374,7 +374,7 @@ On the checkout page: \`vault_list_cards\` → \`vault_card_purchase\` → \`vau
 You may read raw secrets with \`vault_get_login\` / \`vault_get_totp\` — only when a secret must be passed to an API or CLI tool that cannot be filled in the browser. Every reveal is audited. Never write secrets into files, memory, commits or your answer.`);
   } else if (perms.secretAccess === "reveal") {
     out.push(`### Raw secrets
-Not in this chat: its task came from another agent that may not read raw secrets, so \`vault_get_login\` / \`vault_get_totp\` are off here. Godmode still fills logins and 2FA codes into pages for you. If part of the task needs a raw secret (an API or CLI that cannot be filled in the browser), do the rest and say so in your final summary — ${human} can give you that part themselves.`);
+Not here: this work came from somewhere that may not read raw secrets (another agent, or the phone app without full access), so \`vault_get_login\` / \`vault_get_totp\` are off here. Godmode still fills logins and 2FA codes into pages for you. If part of the task needs a raw secret (an API or CLI that cannot be filled in the browser), do the rest and say so in your final summary — ${human} can give you that part themselves.`);
   }
 
   if (!ctx.check) out.push(teamSection(ctx, human));

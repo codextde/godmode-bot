@@ -282,10 +282,7 @@ export function GlassIconButton({
   );
 }
 
-/**
- * Nothing to show yet, like the desktop: a dashed box on a half-transparent card with a bordered icon tile, or `art`
- * (a character) in its place.
- */
+/** Nothing to show yet, like iOS's "content unavailable": a quiet symbol (or `art`, a character), a title, maybe a line and an action. */
 export function EmptyState({
   icon,
   art,
@@ -303,19 +300,19 @@ export function EmptyState({
 }) {
   const c = useColors();
   return (
-    <Animated.View entering={FadeIn.duration(220)} style={[styles.empty, { borderColor: c.borderStrong, backgroundColor: alpha(c.surface, 0.5) }, style]}>
+    <Animated.View entering={FadeIn.duration(220)} style={[styles.empty, style]}>
       {art ? (
         <View style={{ marginBottom: space.lg }}>{art}</View>
       ) : icon ? (
-        <View style={[styles.emptyIcon, { backgroundColor: c.surface, borderColor: c.border, boxShadow: c.shadowCard }]}>
-          <Icon name={icon} size={20} color={c.text} />
+        <View style={styles.emptyIcon}>
+          <Icon name={icon} size={30} color={c.textMuted} />
         </View>
       ) : null}
-      <T variant="callout" style={{ textAlign: "center", fontSize: 16, fontWeight: "500", letterSpacing: -0.16 }}>
+      <T variant="headline" style={{ textAlign: "center" }}>
         {title}
       </T>
       {body ? (
-        <T variant="subhead" muted style={{ textAlign: "center", maxWidth: 320, marginTop: 6 }}>
+        <T variant="subhead" muted style={{ textAlign: "center", maxWidth: 320, marginTop: 4 }}>
           {body}
         </T>
       ) : null}
@@ -437,10 +434,6 @@ const styles = StyleSheet.create({
     marginVertical: space.sm,
     paddingVertical: 48,
     paddingHorizontal: space.xl,
-    borderRadius: radius.lg,
-    borderCurve: "continuous",
-    borderWidth: 1,
-    borderStyle: "dashed",
   },
   skeletonRow: {
     flexDirection: "row",
@@ -455,13 +448,8 @@ const styles = StyleSheet.create({
     paddingVertical: 48,
   },
   emptyIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: radius.md,
-    borderCurve: "continuous",
-    borderWidth: 1,
-    alignItems: "center",
+    height: 36,
     justifyContent: "center",
-    marginBottom: space.lg,
+    marginBottom: space.md,
   },
 });

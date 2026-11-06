@@ -160,6 +160,7 @@ export const RoutineRow = memo(function RoutineRow({ routine, agent, working }: 
         value={routine.enabled}
         onValueChange={(enabled) => setRoutineEnabled(routine, enabled)}
         trackColor={{ true: c.brand, false: c.sunken }}
+        style={{ alignSelf: "center" }}
       />
     </Pressable>
   );

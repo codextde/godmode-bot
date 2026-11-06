@@ -807,9 +807,11 @@ describe("phone access", () => {
 
     const settings = await phone("/api/settings", { bearer: device });
     expect(settings.status).toBe(200);
-    const saved = await phone("/api/settings", json("PUT", { general: { mode: "easy" }, runner: { appendSystemPrompt: "Commit as me only.", effort: "high" }, memory: { dreaming: { enabled: true } } }));
+    const saved = await phone("/api/settings", json("PUT", { general: { mode: "easy" }, runner: { effort: "high" }, memory: { dreaming: { enabled: true } } }));
     expect(saved.status).toBe(200);
-    expect(((await saved.json()) as { runner: { appendSystemPrompt: string } }).runner).toMatchObject({ appendSystemPrompt: "Commit as me only." });
+    expect(((await saved.json()) as { runner: { effort: string } }).runner).toMatchObject({ effort: "high" });
+    // What every agent follows in every run is written on the computer (or from a phone with full access).
+    expect((await phone("/api/settings", json("PUT", { runner: { appendSystemPrompt: "Commit as me only." } }))).status).toBe(403);
     expect((await phone("/api/settings", json("PUT", { runner: { monthlyBudgetUsd: 50 } }))).status).toBe(403);
     expect((await phone("/api/settings", json("PUT", { runner: { spendTracking: true } }))).status).toBe(403);
     expect((await phone("/api/settings", json("PUT", { runner: { effort: "high&calc" } }))).status).toBe(400);
@@ -838,10 +840,11 @@ describe("phone access", () => {
       expect((await phone("/api/settings", json("PUT", patch))).status).toBe(403);
     }
 
-    const ws = await phone("/api/workspaces", json("POST", { name: "From the phone", icon: "🚀", instructions: "Be brief." }));
+    expect((await phone("/api/workspaces", json("POST", { name: "From the phone", instructions: "Be brief." }))).status).toBe(403);
+    const ws = await phone("/api/workspaces", json("POST", { name: "From the phone", icon: "🚀" }));
     expect(ws.status).toBe(200);
     const workspace = (await ws.json()) as { id: string; instructions: string };
-    expect(workspace.instructions).toBe("Be brief.");
+    expect(workspace.instructions).toBe("");
     expect((await phone("/api/workspaces", json("POST", { name: "Sneaky", sources: [{ kind: "folder", path: "/" }] }))).status).toBe(403);
     expect((await phone("/api/workspaces", json("POST", { name: "Sneaky", vmId: "vm_1" }))).status).toBe(403);
 
@@ -850,7 +853,7 @@ describe("phone access", () => {
       const set = await desktop(`/api/workspaces/${workspace.id}`, { method: "PATCH", body: JSON.stringify({ sources: [{ kind: "folder", path: folder }] }) });
       const sources = ((await set.json()) as { sources: { path: string }[] }).sources;
       expect(sources.length).toBe(1);
-      const kept = await phone(`/api/workspaces/${workspace.id}`, json("PATCH", { instructions: "Be very brief.", sources: [{ kind: "folder", path: sources[0]!.path }] }));
+      const kept = await phone(`/api/workspaces/${workspace.id}`, json("PATCH", { name: "Still from the phone", sources: [{ kind: "folder", path: sources[0]!.path }] }));
       expect(kept.status).toBe(200);
       expect((await phone(`/api/workspaces/${workspace.id}`, json("PATCH", { sources: [{ kind: "folder", path: tmpdir() }] }))).status).toBe(403);
     } finally {

@@ -36,6 +36,10 @@
     "locked": "Godmode ist gesperrt",
     "unlock": "Entsperren"
   },
+  "fullAccess": {
+    "title": "Erlaube in Godmode auf deinem Computer vollen Zugriff für dieses Handy.",
+    "noLock": "Auf diesem Handy ist weder Face ID noch ein Code eingerichtet."
+  },
   "liveStrip": {
     "watch": "Ansehen"
   },
@@ -381,7 +385,6 @@
       "inAWeek": "In einer Woche"
     },
     "title": "Wiedervorlagen",
-    "hint": "Chats, die deine Agenten von selbst wieder aufnehmen",
     "aChat": "Ein Chat",
     "continueFailed": "Konnte nicht fortgesetzt werden",
     "moveFailed": "Wiedervorlage konnte nicht verschoben werden",

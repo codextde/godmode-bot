@@ -16,7 +16,7 @@ import { describeNow } from "../runner/prompt";
 import { activeRunForConversation, waitForRun } from "../runner/runner";
 import { pauseOf } from "./pauses";
 import { deliverFollowup } from "../messaging/bridge";
-import { emitConversationUpdated, sendMessage } from "./conversations";
+import { emitConversationUpdated, runFillOnly, sendMessage } from "./conversations";
 import { notify, runNotifiedUser } from "./notifications";
 import { getSettings } from "./settings";
 import { isLicenseRequired, licenseBlocks, noteLicenseRefusal, requireLicense } from "../license/license";
@@ -239,6 +239,8 @@ async function start(r: FollowupRow, reason: FollowupReason): Promise<Run | null
       prompt: followupPrompt(r, reason),
       marker: [{ type: "followup", note: r.note, dueAt: r.due_at, setAt: r.created_at, reason }],
       trigger: "followup",
+      // Set by a run without raw secrets (a phone without full access started it): it goes on without them.
+      fillOnly: !!r.run_id && runFillOnly(r.run_id),
     });
     void report(r, run.id);
     return run;

@@ -254,7 +254,6 @@
     "agents": "Agents",
     "archived": "Archived",
     "emptyTitle": "Search everything",
-    "emptyBody": "Chats, messages, tasks and agents.",
     "noResultsTitle": "No results",
     "noResultsBody": "Nothing matches “{{query}}”.",
     "showingFor": "Showing results for “{{query}}”",
@@ -273,7 +272,11 @@
     "micDeniedTitle": "No microphone access",
     "micDenied": "Allow the microphone for Godmode in the Settings app to dictate.",
     "recordFailed": "Couldn't record",
-    "nothingHeard": "Nothing was heard."
+    "nothingHeard": "Nothing was heard.",
+    "speechDeniedTitle": "No access to speech recognition",
+    "speechDenied": "Allow the microphone and speech recognition for Godmode in the Settings app to dictate.",
+    "phoneUnavailable": "Speech recognition isn't available on this phone right now.",
+    "tryAgain": "Try again."
   },
   "archive": {
     "search": "Search archived chats",

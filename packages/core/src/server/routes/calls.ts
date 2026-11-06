@@ -5,7 +5,7 @@ import { callAudio } from "../../calls/elevenlabs";
 import { ownerPinStatus, pinRequired, removeOwnerPin, setOwnerPin } from "../../calls/pin";
 import { bus } from "../../events/bus";
 import { HttpError } from "../../util";
-import { isPhoneRequest } from "../auth";
+import { isLimitedPhone } from "../auth";
 
 const placeSchema = z.object({
   to: z.string().min(5).max(40),
@@ -76,7 +76,7 @@ export function registerCallRoutes(app: Hono): void {
     const call = getCall(c.req.param("id"));
     if (!call.providerCallId || !call.hasAudio) throw new HttpError(404, "This call has no recording", "not_found");
     // Callers say the owner's PIN on incoming calls: their recordings play on the computer only.
-    if (isPhoneRequest(c) && call.direction === "inbound" && (pinRequired() || call.ownerVerified || call.pinWrong)) {
+    if (isLimitedPhone(c) && call.direction === "inbound" && (pinRequired() || call.ownerVerified || call.pinWrong)) {
       throw new HttpError(403, "Listen to incoming calls on your computer.", "device_forbidden");
     }
     const res = await callAudio(call.providerCallId);

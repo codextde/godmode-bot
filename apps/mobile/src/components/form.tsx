@@ -149,6 +149,8 @@ export function SwitchRow({
           onChange(next);
         }}
         trackColor={{ true: c.brand, false: c.sunken }}
+        // iOS's Switch pins itself to the top of its row (alignSelf flex-start) unless told otherwise.
+        style={{ alignSelf: "center" }}
       />
     </View>
   );
@@ -454,6 +456,7 @@ export function TextEditor({
   minHeight = 140,
   label,
   hint,
+  readOnly = false,
 }: {
   value: string;
   onSave: (next: string) => Promise<boolean>;
@@ -462,6 +465,8 @@ export function TextEditor({
   minHeight?: number;
   label: string;
   hint?: string;
+  /** Shown, not edited (the computer keeps it); `hint` says why. */
+  readOnly?: boolean;
 }) {
   const c = useColors();
   const { t } = useTranslation("components");
@@ -487,9 +492,10 @@ export function TextEditor({
         placeholder={placeholder}
         placeholderTextColor={c.textFaint}
         maxLength={maxLength}
+        editable={!readOnly}
         multiline
         scrollEnabled={false}
-        style={[styles.editorInput, { color: c.text, minHeight }]}
+        style={[styles.editorInput, { color: readOnly ? c.textMuted : c.text, minHeight }]}
       />
       <View style={[styles.editorFoot, { borderTopColor: c.border }]}>
         <T variant="caption" muted style={{ flex: 1 }} numberOfLines={1}>

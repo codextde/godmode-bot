@@ -36,6 +36,10 @@
     "locked": "Godmode is locked",
     "unlock": "Unlock"
   },
+  "fullAccess": {
+    "title": "Allow full access for this phone in Godmode on your computer.",
+    "noLock": "This phone has no Face ID or passcode."
+  },
   "liveStrip": {
     "watch": "Watch"
   },
@@ -381,7 +385,6 @@
       "inAWeek": "In a week"
     },
     "title": "Follow-ups",
-    "hint": "Chats your agents will pick up again on their own",
     "aChat": "A chat",
     "continueFailed": "Couldn't continue now",
     "moveFailed": "Couldn't move the follow-up",

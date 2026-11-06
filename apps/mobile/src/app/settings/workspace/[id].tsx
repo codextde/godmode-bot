@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { MAX_INSTRUCTIONS_LENGTH } from "@godmode/shared";
 import { CharacterAvatar } from "@/components/character";
 import { CloseButton } from "@/components/close-button";
+import { useFullAccess } from "@/components/full-access";
 import { Group, LinkRow, PickerRow, SwitchRow, TextEditor } from "@/components/form";
 import { Identity, Sources } from "@/components/setup";
 import { EmptyState, SectionTitle } from "@/components/ui";
@@ -27,6 +28,9 @@ export default function WorkspaceScreen() {
   const profiles = useQuery({ queryKey: qk.browserProfiles, queryFn: api.browser.profiles });
   const { archive } = useArchive(() => router.back());
   const w = workspaces.find((x) => x.id === id);
+  // Every agent working here follows its context: a phone without full access reads it.
+  const locked = useFullAccess().fullAccess === false;
+  const { t: tc } = useTranslation("components");
 
   if (!w) {
     return (
@@ -80,6 +84,8 @@ export default function WorkspaceScreen() {
           value={w.instructions}
           placeholder={t("workspace.contextPlaceholder")}
           maxLength={MAX_INSTRUCTIONS_LENGTH}
+          readOnly={locked}
+          hint={locked ? tc("fullAccess.title") : undefined}
           onSave={(instructions) => patchWorkspace(w.id, { instructions }, { quiet: true })}
         />
       </View>

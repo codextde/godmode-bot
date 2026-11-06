@@ -733,7 +733,7 @@ export async function closeHumanTask(id: string, input: HumanTaskCloseInput, by:
   let continued = false;
   let notContinued: string | undefined;
   try {
-    const why = await continueAgent(r, agent, input.outcome, said, attachments);
+    const why = await continueAgent(r, agent, input.outcome, said, attachments, !!by.fillOnly);
     if (why === null) continued = true;
     else notContinued = why || undefined;
   } catch (err) {
@@ -744,7 +744,7 @@ export async function closeHumanTask(id: string, input: HumanTaskCloseInput, by:
 }
 
 /** Null when the chat continues; otherwise why not ("" = the human's own task, nothing to continue). */
-async function continueAgent(r: Row, agent: Agent | null, outcome: "done" | "declined", note: string, attachments: Attachment[]): Promise<string | null> {
+async function continueAgent(r: Row, agent: Agent | null, outcome: "done" | "declined", note: string, attachments: Attachment[], fillOnly = false): Promise<string | null> {
   if (!r.agent_id && !r.run_id) return "";
   if (!agent) return "The agent that gave you this task was deleted.";
   if (!r.conversation_id || !conversationExists(r.conversation_id)) return `${agent.name}'s chat for it was deleted.`;
@@ -761,7 +761,7 @@ async function continueAgent(r: Row, agent: Agent | null, outcome: "done" | "dec
   // The agent is at work in the chat (or its run stands still): the message waits in the queue and reaches it there.
   if (activeRunForConversation(conversationId) || pauseOf(conversationId) || hasQueued(conversationId)) {
     const text = promptWithFiles(note ? `${head}\n\n${note}` : head, agent, attachments);
-    await submitMessage(conversationId, { content: text });
+    await submitMessage(conversationId, { content: text, fillOnly });
     return null;
   }
 
@@ -791,6 +791,7 @@ ${
     files: attachments,
     trigger: ticket ? "task" : "chat",
     source: ticket ? "task" : undefined,
+    fillOnly,
   });
   return null;
 }

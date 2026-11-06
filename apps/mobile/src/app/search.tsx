@@ -141,7 +141,7 @@ export default function Search() {
         }
         ListEmptyComponent={
           !searching ? (
-            <EmptyState icon="search" title={t("search.emptyTitle")} body={t("search.emptyBody")} />
+            <EmptyState icon="search" title={t("search.emptyTitle")} />
           ) : forbidden ? (
             <EmptyState icon="search" title={t("search.unavailableTitle")} body={t("search.unavailableBody")} />
           ) : found.isError ? (

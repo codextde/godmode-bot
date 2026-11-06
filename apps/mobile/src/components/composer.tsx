@@ -60,7 +60,7 @@ export function Composer({
   trailing?: ReactNode;
   /** What sending does right now, e.g. "Queue message". */
   sendLabel?: string | null;
-  /** A mic that dictates into the field (the computer writes it down). */
+  /** A mic that dictates into the field (the computer or the phone writes it down). */
   voice?: boolean;
   /** Write, but don't send (e.g. while the agent is switched off): the text waits as a draft. */
   blocked?: boolean;

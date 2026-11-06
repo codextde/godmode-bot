@@ -4,7 +4,7 @@ import { getDefaultAgentId } from "../agents/service";
 import { startChat } from "../services/conversations";
 import { badRequest } from "../util";
 
-export async function importMemory(input: ImportMemoryInput): Promise<StartChatResult> {
+export async function importMemory(input: ImportMemoryInput, opts: { fillOnly?: boolean } = {}): Promise<StartChatResult> {
   const source = MEMORY_SOURCES.find((s) => s.id === input.source);
   if (!source) throw badRequest("Unknown assistant");
   const text = input.text.trim();
@@ -30,5 +30,6 @@ export async function importMemory(input: ImportMemoryInput): Promise<StartChatR
     prompt,
     title: `Memory from ${source.id === "other" ? "another assistant" : source.label}`,
     attachments: [{ name: `memory-from-${source.id}.md`, mime: "text/markdown", data: Buffer.from(text, "utf8").toString("base64") }],
+    fillOnly: opts.fillOnly,
   });
 }

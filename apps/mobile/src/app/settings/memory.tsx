@@ -1,14 +1,19 @@
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { router, Stack } from "expo-router";
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
-import { findModel } from "@godmode/shared";
+import { findModel, type Settings } from "@godmode/shared";
+import { useFullAccess } from "@/components/admin";
 import { CloseButton } from "@/components/close-button";
-import { Group, LinkRow, PickerRow, StepperRow, SwitchRow } from "@/components/form";
+import { ChoiceRow, Group, LinkRow, PickerRow, StepperRow, SwitchRow } from "@/components/form";
+import { ActionPill, ToolRow, reportInstall } from "@/components/program-parts";
+import { patchAnySettings } from "@/lib/admin";
 import { ApiError, errorText, updateDesktopMessage } from "@/lib/api";
 import { useModelCatalog } from "@/lib/composer";
 import { intlLocale } from "@/lib/i18n";
-import { settingsApi } from "@/lib/settings-api";
+import { programsApi } from "@/lib/programs";
+import { queryClient } from "@/lib/query";
+import { settingsApi, sq } from "@/lib/settings-api";
 import { patchSettings, useSettings } from "@/lib/setup";
 import { space } from "@/lib/theme";
 
@@ -22,6 +27,7 @@ const SCHEDULES = [
 export default function Memory() {
   const { t } = useTranslation(["settings", "common"]);
   const settings = useSettings();
+  const admin = useFullAccess().fullAccess === true;
   const s = settings.data;
   const m = s?.memory;
   const d = m?.dreaming;
@@ -56,6 +62,7 @@ export default function Memory() {
         </View>
       ) : (
         <>
+          {admin ? <Backend backend={m.backend} /> : null}
           <Group title={t("overview.links.memory")} footer={t("memory.memory.footer")}>
             <SwitchRow icon="brain" title={t("memory.memory.inject")} detail={t("memory.memory.injectDetail")} value={m.injectMemory} onChange={(injectMemory) => void patchSettings({ memory: { injectMemory } })} />
             <SwitchRow icon="sparkles" title={t("memory.memory.reflect")} detail={t("memory.memory.reflectDetail")} value={m.reflectAfterRun} onChange={(reflectAfterRun) => void patchSettings({ memory: { reflectAfterRun } })} />
@@ -134,6 +141,35 @@ export default function Memory() {
         </>
       )}
     </ScrollView>
+  );
+}
+
+/** Where agents keep their memory (full-access phones, like the desktop app); claude-mem is installed from here too. */
+function Backend({ backend }: { backend: Settings["memory"]["backend"] }) {
+  const { t } = useTranslation("programs");
+  const doctor = useQuery({ queryKey: sq.doctor, queryFn: () => settingsApi.doctor.get(), enabled: backend === "claude-mem" });
+  const dep = doctor.data?.dependencies.find((d) => d.id === "claude-mem");
+  const install = useMutation({
+    mutationFn: () => programsApi.doctor.install("claude-mem"),
+    onSettled: async (result, err) => {
+      reportInstall(err ?? result, { done: t("installed", { name: "claude-mem" }), failed: t("installFailed", { name: "claude-mem" }) });
+      queryClient.setQueryData(sq.doctor, await settingsApi.doctor.get(true).catch(() => doctor.data));
+    },
+  });
+  const missing = backend === "claude-mem" && dep && !dep.ok;
+  return (
+    <Group title={t("memory.title")} footer={missing ? t("memory.claudeMemMissing") : undefined}>
+      <ChoiceRow icon="doc" title={t("memory.files")} detail={t("memory.filesDetail")} selected={backend === "files"} onPress={() => void patchAnySettings({ memory: { backend: "files" } })} />
+      <ChoiceRow icon="brain" title={t("memory.claudeMem")} detail={t("memory.claudeMemDetail")} selected={backend === "claude-mem"} onPress={() => void patchAnySettings({ memory: { backend: "claude-mem" } })} />
+      {missing ? (
+        <ToolRow
+          title={dep.name}
+          detail={dep.detail}
+          ok={false}
+          action={dep.installable ? <ActionPill label={t("install")} busyLabel={t("installing")} busy={install.isPending} onPress={() => install.mutate()} /> : undefined}
+        />
+      ) : null}
+    </Group>
   );
 }
 

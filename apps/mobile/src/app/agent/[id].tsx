@@ -127,7 +127,7 @@ function AgentView({ agent, team }: { agent: Agent; team: Agent[] }) {
 
       <FailedRunBanner agent={agent} />
 
-      <Plate agent={agent} onRunTask={runTask} onSwitchOn={() => toggle.mutate(true)} switching={toggle.isPending} />
+      <Plate agent={agent} onSwitchOn={() => toggle.mutate(true)} switching={toggle.isPending} />
 
       <AgentHistory agent={agent} />
 
@@ -183,7 +183,7 @@ function AgentView({ agent, team }: { agent: Agent; team: Agent[] }) {
  * Everything the agent has going on, like the desktop's: what it works on right now, what stands still (and why), its
  * tickets on the board, the follow-ups it promised and its next automations.
  */
-function Plate({ agent, onRunTask, onSwitchOn, switching }: { agent: Agent; onRunTask: () => void; onSwitchOn: () => void; switching: boolean }) {
+function Plate({ agent, onSwitchOn, switching }: { agent: Agent; onSwitchOn: () => void; switching: boolean }) {
   const c = useColors();
   const { t } = useTranslation(["agents", "common"]);
   const runs = useLive((s) => s.runs);
@@ -220,9 +220,7 @@ function Plate({ agent, onRunTask, onSwitchOn, switching }: { agent: Agent; onRu
             <T variant="subhead" muted>
               {agent.enabled ? t("plate.empty", { name: agent.name }) : t("plate.switchedOff", { name: agent.name })}
             </T>
-            {agent.enabled ? (
-              <Button title={t("detail.runTask")} icon="play" variant="secondary" onPress={onRunTask} />
-            ) : (
+            {agent.enabled ? null : (
               <Button title={t("plate.switchOn")} icon="power" variant="secondary" loading={switching} onPress={onSwitchOn} />
             )}
           </View>
@@ -444,7 +442,7 @@ function RoutineRow({ routine }: { routine: Routine }) {
       >
         <Icon name="play" size={12} color={c.text} />
       </Pressable>
-      <Switch value={enabled} onValueChange={(v) => toggle.mutate(v)} trackColor={{ true: c.brand, false: c.sunken }} />
+      <Switch value={enabled} onValueChange={(v) => toggle.mutate(v)} trackColor={{ true: c.brand, false: c.sunken }} style={{ alignSelf: "center" }} />
     </Pressable>
   );
 }

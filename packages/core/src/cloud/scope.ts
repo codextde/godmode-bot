@@ -454,6 +454,7 @@ const RULES: [methods: string, path: string, rule: Rule][] = [
   ["POST", "/api/backup/export", S],
   ["POST", "/api/backup/import", S],
   ["POST", "/api/voice/transcribe", A],
+  ["GET", "/api/voice/dictation", A],
   ["POST", "/api/voice/speak", A],
   ["GET", "/api/voice/hex", A],
   ["POST", "/api/voice/hex/prepare", A],
@@ -478,7 +479,8 @@ const RULES: [methods: string, path: string, rule: Rule][] = [
   ["GET|PUT", "/api/mobile", refused(PHONES_ONLY)],
   ["POST|DELETE", "/api/mobile/pairing", refused(PHONES_ONLY)],
   ["PATCH|DELETE", "/api/mobile/devices/:id", refused(PHONES_ONLY)],
-  ["GET|DELETE", "/api/mobile/me", refused(PHONES_ONLY)],
+  ["GET|PATCH|DELETE", "/api/mobile/me", refused(PHONES_ONLY)],
+  ["POST|DELETE", "/api/mobile/me/push", refused(PHONES_ONLY)],
 
   // Keys for apps on this computer are made and taken away there.
   ["GET|POST", "/api/connectors", refused(COMPUTER_ONLY)],

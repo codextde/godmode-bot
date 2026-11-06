@@ -64,6 +64,8 @@ const ENTITY_KEYS: Partial<Record<EntityName, readonly (readonly unknown[])[]>> 
   composio: [["integrations"]],
   mods: [["plugins"]],
   "ssh-servers": [["ssh-servers"]],
+  // The computer gave this phone full access or took it away (or renamed it).
+  mobile: [qk.me],
 };
 
 function sendEvent(event: ClientEvent) {

@@ -6,8 +6,11 @@ import { ActivityIndicator, Alert, Linking, Pressable, ScrollView, StyleSheet, T
 import { useTranslation } from "react-i18next";
 import { IMPORT_MAX_CHARS, MEMORY_EXPORT_PROMPT, MEMORY_SOURCES, type MemorySource } from "@godmode/shared";
 import { Group, SegmentRow } from "@/components/form";
+import { NeedsFullAccess } from "@/components/full-access";
+import { useRevealLocked } from "@/components/this-phone-access";
 import { Button, Row, T, tap } from "@/components/ui";
 import { ApiError, errorText, updateDesktopMessage } from "@/lib/api";
+import { useAgents } from "@/lib/hooks";
 import { qk, queryClient } from "@/lib/query";
 import { settingsApi } from "@/lib/settings-api";
 import { radius, space, useColors } from "@/lib/theme";
@@ -23,6 +26,8 @@ export default function MemoryImportSheet() {
   const [copied, setCopied] = useState(false);
   const from = MEMORY_SOURCES.find((s) => s.id === source)!;
   const name = source === "other" ? t("memory.import.otherAssistant") : from.label;
+  // It goes into the main agent's memory: one that reads raw secrets keeps what the computer gave it.
+  const locked = useRevealLocked(useAgents().data?.find((a) => a.isDefault));
 
   const start = useMutation({
     mutationFn: () => settingsApi.memory.import(source, text.trim()),
@@ -33,7 +38,7 @@ export default function MemoryImportSheet() {
     },
     onError: (err) => Alert.alert(t("memory.import.failed"), failure(err)),
   });
-  const ready = !!text.trim() && !start.isPending;
+  const ready = !locked && !!text.trim() && !start.isPending;
 
   const copy = async () => {
     tap();
@@ -79,36 +84,42 @@ export default function MemoryImportSheet() {
         </Pressable>
       </Row>
 
-      <Group>
-        <SegmentRow<MemorySource>
-          title={t("memory.import.from")}
-          options={MEMORY_SOURCES.map((s) => ({ value: s.id, label: s.id === "other" ? t("memory.import.other") : s.label }))}
-          value={source}
-          onChange={(next) => setSource(next)}
-        />
-      </Group>
+      {locked ? (
+        <NeedsFullAccess />
+      ) : (
+        <>
+          <Group>
+            <SegmentRow<MemorySource>
+              title={t("memory.import.from")}
+              options={MEMORY_SOURCES.map((s) => ({ value: s.id, label: s.id === "other" ? t("memory.import.other") : s.label }))}
+              value={source}
+              onChange={(next) => setSource(next)}
+            />
+          </Group>
 
-      <View style={{ gap: space.md }}>
-        <Step n={1} text={t("memory.import.step1", { name })} />
-        <Row style={{ gap: space.sm }}>
-          <Button title={copied ? t("memory.import.copied") : t("memory.import.copy")} icon={copied ? "check" : "copy"} variant="outline" onPress={() => void copy()} style={{ flex: 1 }} />
-          {from.url ? <Button title={t("memory.import.open", { name })} icon="external" variant="outline" onPress={() => void Linking.openURL(from.url)} style={{ flex: 1 }} /> : null}
-        </Row>
-      </View>
+          <View style={{ gap: space.md }}>
+            <Step n={1} text={t("memory.import.step1", { name })} />
+            <Row style={{ gap: space.sm }}>
+              <Button title={copied ? t("memory.import.copied") : t("memory.import.copy")} icon={copied ? "check" : "copy"} variant="outline" onPress={() => void copy()} style={{ flex: 1 }} />
+              {from.url ? <Button title={t("memory.import.open", { name })} icon="external" variant="outline" onPress={() => void Linking.openURL(from.url)} style={{ flex: 1 }} /> : null}
+            </Row>
+          </View>
 
-      <View style={{ gap: space.md }}>
-        <Step n={2} text={t("memory.import.step2")} />
-        <TextInput
-          accessibilityLabel={t("memory.import.answer")}
-          value={text}
-          onChangeText={setText}
-          placeholder={t("memory.import.placeholder")}
-          placeholderTextColor={c.textFaint}
-          maxLength={IMPORT_MAX_CHARS}
-          multiline
-          style={[styles.answer, { color: c.text, backgroundColor: c.surface, borderColor: c.border }]}
-        />
-      </View>
+          <View style={{ gap: space.md }}>
+            <Step n={2} text={t("memory.import.step2")} />
+            <TextInput
+              accessibilityLabel={t("memory.import.answer")}
+              value={text}
+              onChangeText={setText}
+              placeholder={t("memory.import.placeholder")}
+              placeholderTextColor={c.textFaint}
+              maxLength={IMPORT_MAX_CHARS}
+              multiline
+              style={[styles.answer, { color: c.text, backgroundColor: c.surface, borderColor: c.border }]}
+            />
+          </View>
+        </>
+      )}
     </ScrollView>
   );
 }

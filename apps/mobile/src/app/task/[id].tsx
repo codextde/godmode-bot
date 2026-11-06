@@ -195,6 +195,8 @@ export default function TaskScreen() {
   }
   if (github && idle && (!pr || pr.state === "closed")) menu.push({ icon: "pullRequest", title: tr("manage.createPr"), onPress: () => pullRequest.mutate() });
   if (!t.archivedAt && t.status !== "blocked" && t.status !== "done" && t.status !== "cancelled") menu.push({ icon: "octagon", title: tr("manage.block"), onPress: () => edit(true) });
+  if (!t.archivedAt) menu.push({ icon: "archive", title: tr("task.archive"), onPress: () => archive(true) });
+  if (!t.archivedAt && t.status !== "done" && t.status !== "cancelled") menu.push({ icon: "close", title: tr("task.cancelTask"), destructive: true, onPress: () => move("cancelled") });
   menu.push({ icon: "trash", title: tr("manage.delete"), destructive: true, onPress: confirmDelete });
 
   return (
@@ -577,8 +579,6 @@ function Actions({
       break;
   }
   if (onOpenChat) buttons.push({ title: t("task.openChat"), icon: "chats", onPress: onOpenChat });
-  buttons.push({ title: t("task.archive"), icon: "archive", archived: true });
-  if (task.status !== "done" && task.status !== "cancelled") buttons.push({ title: t("task.cancelTask"), icon: "close", status: "cancelled" });
   return <ActionButtons buttons={buttons} busy={busy} onMove={onMove} onArchive={onArchive} />;
 }
 
@@ -594,16 +594,18 @@ function ActionButtons({
   onArchive: (archived: boolean) => void;
 }) {
   if (!buttons.length) return null;
+  // Archiving and cancelling live in the header menu; the rest sit side by side, the main one on the right.
   return (
-    <View style={{ gap: space.sm }}>
-      {buttons.map((b) => (
+    <View style={{ flexDirection: "row", flexWrap: "wrap-reverse", gap: space.sm }}>
+      {[...buttons].reverse().map((b) => (
         <Button
           key={b.title}
           title={b.title}
           icon={b.icon}
-          variant={b.primary ? "primary" : b.status === "cancelled" ? "danger" : "secondary"}
+          variant={b.primary ? "primary" : "secondary"}
           disabled={busy && (!!b.status || b.archived !== undefined)}
           onPress={b.onPress ?? (() => (b.archived !== undefined ? onArchive(b.archived) : onMove(b.status!)))}
+          style={{ flexGrow: 1 }}
         />
       ))}
     </View>

@@ -15,7 +15,7 @@ import {
 } from "../../services/artifacts";
 import { openArtifactFile, revealArtifactFile } from "../../services/artifactFiles";
 import { HttpError, badRequest } from "../../util";
-import { isLocalRequest } from "../auth";
+import { isLimitedPhone, isLocalRequest } from "../auth";
 import { body, z } from "../validate";
 
 const patchSchema = z.object({
@@ -51,7 +51,8 @@ export function registerArtifactRoutes(app: Hono): void {
     ),
   );
 
-  app.post("/api/artifacts/start", async (c) => c.json(await startArtifact(await body(c, startSchema)), 201));
+  // What a phone without full access asks for is built without raw secrets.
+  app.post("/api/artifacts/start", async (c) => c.json(await startArtifact(await body(c, startSchema), { fillOnly: isLimitedPhone(c) }), 201));
 
   app.get("/api/artifacts/:id", (c) => c.json({ ...getArtifact(c.req.param("id")), filesLocal: isLocalRequest(c) }));
 
@@ -67,7 +68,7 @@ export function registerArtifactRoutes(app: Hono): void {
 
   app.post("/api/artifacts/:id/message", async (c) => {
     const input = await body(c, messageSchema);
-    return c.json(await messageArtifact(c.req.param("id"), input.content, input.source));
+    return c.json(await messageArtifact(c.req.param("id"), input.content, input.source, { fillOnly: isLimitedPhone(c) }));
   });
 
   app.post("/api/artifacts/:id/refresh", async (c) => c.json(await refreshArtifact(c.req.param("id"))));

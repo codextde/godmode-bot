@@ -24,6 +24,8 @@ interface QueueRow {
   attachments: string;
   voice: number;
   created_at: string;
+  /** A phone without full access wrote it: it only reaches a run without raw secrets. */
+  fill_only: number;
 }
 
 /** What the human typed, before redaction — memory only (the database keeps the redacted text). */
@@ -52,9 +54,8 @@ export function hasQueued(conversationId: string): boolean {
 }
 
 /** A message waits that the running agent would get between two steps (a slash command waits for the next turn). */
-export function hasDeliverable(conversationId: string): boolean {
-  const first = rows(conversationId)[0];
-  return !!first && !isCommand(first);
+export function hasDeliverable(conversationId: string, fillOnlyRun = false): boolean {
+  return forRun(rows(conversationId), fillOnlyRun).length > 0;
 }
 
 function emitQueue(conversationId: string) {
@@ -86,7 +87,18 @@ function head(queue: QueueRow[]): QueueRow[] {
   return next < 0 ? queue : queue.slice(0, next);
 }
 
-function enqueue(conversationId: string, input: SendMessageInput): QueuedMessage {
+/**
+ * What a run gets of the queue between two steps: the head without a slash command, and in a run with raw secrets only
+ * up to the first message a phone without full access wrote (that one starts its own fill-only turn).
+ */
+function forRun(queue: QueueRow[], fillOnlyRun: boolean): QueueRow[] {
+  const taken = head(queue);
+  if (!taken.length || isCommand(taken[0]!)) return [];
+  const phone = fillOnlyRun ? -1 : taken.findIndex((r) => bool(r.fill_only));
+  return phone < 0 ? taken : taken.slice(0, phone);
+}
+
+function enqueue(conversationId: string, input: SendMessageInput & { fillOnly?: boolean }): QueuedMessage {
   const { agent } = messageTarget(conversationId);
   const content = (input.content ?? "").trim();
   const files = input.attachments ?? [];
@@ -99,6 +111,7 @@ function enqueue(conversationId: string, input: SendMessageInput): QueuedMessage
     attachments: JSON.stringify(files.length ? saveAttachments(agent, files) : []),
     voice: int(input.voice ?? false)!,
     created_at: now(),
+    fill_only: int(!!input.fillOnly)!,
   };
   insert("queued_messages", { ...row });
   typed.set(row.id, content);
@@ -110,7 +123,7 @@ function enqueue(conversationId: string, input: SendMessageInput): QueuedMessage
  * A message from the human: straight to the agent when the chat is idle, into the queue while the agent works or its run
  * is paused. With `steer`, the agent stops what it is doing and starts on the queue right away.
  */
-export async function submitMessage(conversationId: string, input: SendMessageInput): Promise<SendMessageOutcome> {
+export async function submitMessage(conversationId: string, input: SendMessageInput & { fillOnly?: boolean }): Promise<SendMessageOutcome> {
   if (handoffCommand(input.content ?? "") !== null && !handoffAllowed(conversationId)) {
     throw badRequest("Private chats and chats of tasks, apps or other agents can't go on in a new chat.");
   }
@@ -168,9 +181,9 @@ export function clearQueue(conversationId: string): void {
  * Hand the waiting messages to the run that is working in the chat (called between two of its steps). Slash commands
  * stay: Claude Code only runs them at the start of a turn.
  */
-export function takeQueued(conversationId: string, agent: Agent): { message: QueuedMessage; prompt: string }[] {
-  const taken = head(rows(conversationId));
-  if (!taken.length || isCommand(taken[0]!)) return [];
+export function takeQueued(conversationId: string, agent: Agent, fillOnlyRun = false): { message: QueuedMessage; prompt: string }[] {
+  const taken = forRun(rows(conversationId), fillOnlyRun);
+  if (!taken.length) return [];
   const out = taken.map((r) => {
     const message = toQueued(r);
     return { message, prompt: promptWithFiles(typed.get(r.id) ?? r.content, agent, message.attachments) };
@@ -198,6 +211,7 @@ export async function startQueued(conversationId: string): Promise<{ run: Run; m
       voice: taken.some((r) => bool(r.voice)),
       userMessageId: messages[0]!.id,
       alsoAnswers: messages.slice(1).map((m) => m.id),
+      fillOnly: taken.some((r) => bool(r.fill_only)),
     });
   } catch (err) {
     // The messages stay in the queue: nothing the human wrote gets lost.

@@ -10,7 +10,7 @@ import type { Context, MiddlewareHandler } from "hono";
 import { parseRunnerView, type ChatFile, type ChatFiles, type ConversationWithMessages, type Run } from "@godmode/shared";
 import { get, run as sql } from "../db";
 import { logger } from "../log";
-import { isLocalRequest } from "../server/auth";
+import { isLimitedPhone, isLocalRequest, isPhoneRequest } from "../server/auth";
 import { chatFilesBody } from "../server/routes/files";
 import { body } from "../server/validate";
 import { resolveChatFiles } from "../services/chatFiles";
@@ -97,6 +97,8 @@ async function forward(c: Context, runnerId: string, path: string, body?: Uint8A
   if (type) headers["content-type"] = type;
   const grant = c.req.header("x-godmode-grant");
   if (grant) headers["x-godmode-grant"] = grant;
+  // A phone: the runner applies the phones' rules too, and what a limited one writes runs without raw secrets there.
+  if (isPhoneRequest(c)) headers["x-godmode-phone"] = isLimitedPhone(c) ? "1" : "full";
   const res = await l.request(c.req.method, path, { body: body ?? (await bodyBytes(c)), headers, timeoutMs });
   const out = new Headers();
   for (const [k, v] of Object.entries(res.headers)) out.set(k, v);

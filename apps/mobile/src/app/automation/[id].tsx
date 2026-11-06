@@ -258,7 +258,6 @@ function AutomationView({ routine, refetchList }: { routine: Routine; refetchLis
       <Group title={t("common:words.settings")}>
         <SwitchRow
           title={t("automation.enabled")}
-          detail={editable ? t("automation.enabledHint") : t("automation.enabledHintEvents")}
           value={routine.enabled}
           onChange={(enabled) => setRoutineEnabled(routine, enabled)}
         />

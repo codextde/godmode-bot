@@ -1,5 +1,13 @@
 {
   "overview": {
+    "fullAccess": {
+      "title": "Voller Zugriff",
+      "turnOff": "Vollen Zugriff ausschalten",
+      "offTitle": "Vollen Zugriff ausschalten?",
+      "offBody": "Nur Godmode auf deinem Computer kann ihn wieder einschalten.",
+      "offConfirm": "Ausschalten",
+      "offFailed": "Voller Zugriff konnte nicht ausgeschaltet werden"
+    },
     "status": {
       "connected": "Verbunden",
       "connecting": "Verbinde…",
@@ -32,43 +40,36 @@
     },
     "preferences": {
       "title": "Einstellungen",
-      "footer": "Änderungen gelten sofort auf deinem Computer. Laufende Chats übernehmen sie mit der nächsten Nachricht.",
       "yourName": "Dein Name",
       "addName": "Namen hinzufügen"
     },
     "theme": {
       "title": "Erscheinungsbild",
-      "detail": "System folgt der Einstellung dieses Handys.",
       "light": "Hell",
       "dark": "Dunkel"
     },
     "language": {
-      "title": "Sprache",
-      "detail": "System folgt der Sprache dieses Handys. Gilt auch auf deinem Computer."
+      "title": "Sprache"
     },
     "timeFormat": {
       "title": "Uhrzeitformat",
-      "detail": "Automatisch folgt der Region dieses Handys (hier {{example}}). Gilt auch auf deinem Computer.",
       "system": "Automatisch",
       "h24": "15:00",
       "h12": "3:00 PM"
     },
     "mode": {
       "title": "Oberfläche",
-      "detail": "{{blurb}} Gilt auch auf deinem Computer.",
       "easy": "Einfach",
-      "pro": "Profi",
-      "easyBlurb": "Klare Worte und nur, was du im Alltag brauchst. Alles andere ist einen Klick entfernt.",
-      "proBlurb": "Jedes Tool, jede Einstellung, jedes Detail im Blick: Modelle, Läufe, Maschinen, Logs."
+      "pro": "Profi"
     },
     "links": {
       "ai": "KI & Claude",
       "instructions": "Anweisungen",
-      "instructionsDetail": "Regeln für jeden Agenten, Workspace und jedes Projekt",
       "browser": "Browser",
       "computer": "Computer",
       "memory": "Gedächtnis",
       "general": "Allgemein",
+      "notifications": "Mitteilungen",
       "accounts": "Claude-Konten",
       "voice": "Stimme",
       "review": "Auto-Review",
@@ -99,13 +100,11 @@
     },
     "app": {
       "title": "App",
-      "footer": "Entferne dieses Handy jederzeit auf deinem Computer unter Einstellungen → Handy.",
       "thisPhone": "Dieses Handy",
       "version": "Godmode für {{platform}} {{version}}"
     },
     "palette": {
       "title": "Farbpalette",
-      "detail": "Nur für dieses Handy, hell und dunkel.",
       "names": {
         "paper": {
           "label": "Papier",
@@ -146,8 +145,7 @@
       }
     },
     "suggestions": {
-      "title": "Vorschläge anzeigen",
-      "detail": "Ideen wie „Fasse meine ungelesenen E-Mails zusammen“ auf der Startseite und in einem neuen Chat."
+      "title": "Vorschläge anzeigen"
     },
     "features": {
       "title": "Funktionen",
@@ -158,25 +156,18 @@
   "ai": {
     "defaultModel": {
       "title": "Standardmodell",
-      "footer": "Agenten ohne eigenes Modell nutzen dieses. Ändere es pro Agent oder pro Chat im Eingabefeld.",
       "model": "Modell",
       "effort": "Aufwand",
-      "effortDetail": "Wie lange Claude nachdenkt, bevor es handelt.",
-      "fallback": "Ausweichmodell",
-      "fallbackDetail": "Wird genutzt, wenn das Standardmodell überlastet ist."
+      "fallback": "Ausweichmodell"
     },
     "work": {
       "title": "Arbeit",
-      "footer": "Ein Lauf, der länger als das Zeitlimit dauert, wird gestoppt.",
       "timeout": "Zeitlimit pro Lauf",
       "continueLimit": "Nach Nutzungslimits weitermachen",
-      "continueLimitDetail": "Ein Lauf, der Claudes Limit erreicht hat, macht von selbst weiter, sobald es zurückgesetzt ist.",
-      "resume": "Unterbrochene Arbeit fortsetzen",
-      "resumeDetail": "Arbeit, die durch einen Neustart, eine verlorene Internetverbindung oder das Ende eines Zugs unterbrochen wurde, geht von selbst weiter, sobald Godmode und die Verbindung wieder da sind."
+      "resume": "Unterbrochene Arbeit fortsetzen"
     },
     "compact": {
       "title": "Lange Chats",
-      "footer": "Ein Chat, der so viel vom Gedächtnis des Modells füllt, wird von selbst zusammengefasst und geht von der Zusammenfassung aus weiter. Früher hält jeden Schritt schneller und günstiger, später behält mehr Details. Komprimiere jeden Chat von Hand mit dem Ring neben dem Modell.",
       "auto": "Von selbst komprimieren",
       "at": "Bei {{percent}} %",
       "atDefault": "Bei {{percent}} % (Standard)",
@@ -185,7 +176,6 @@
     },
     "watchdog": {
       "title": "Wächter",
-      "footer": "Stoppt Läufe, die hängen oder sich im Kreis drehen, damit sie keine Zeit und Tokens verbrennen.",
       "stalled": "Hängt nach",
       "repeated": "Gleicher Schritt wiederholt"
     }
@@ -193,14 +183,10 @@
   "capabilities": {
     "liveView": "Live-Ansicht",
     "browser": {
-      "footer": "Agenten surfen in eigenen Profilen, Godmode füllt deine gespeicherten Logins aus.",
       "enabled": "Browser für Agenten",
       "headless": "Im Hintergrund ausführen",
-      "headlessDetail": "Auf deinem Computer öffnet sich kein Browserfenster.",
       "stealth": "Wie ein Mensch wirken",
-      "stealthDetail": "Verbirgt Automatisierungssignale, damit Seiten Agenten nicht blockieren.",
-      "mute": "Ton stummschalten",
-      "liveViewDetail": "Sieh dem Browser zu, während ein Agent arbeitet."
+      "mute": "Ton stummschalten"
     },
     "computer": {
       "title": "Computersteuerung",
@@ -804,27 +790,20 @@
     "animations": {
       "title": "Animationen",
       "fullLabel": "Voll",
-      "lightLabel": "Leicht",
-      "full": "Figuren bewegen sich und Antworten erscheinen live.",
-      "light": "Spart Energie auf diesem Handy: Figuren stehen still und nichts läuft in Schleife."
+      "lightLabel": "Leicht"
     },
     "language": "Sprache & Region",
     "chat": {
       "title": "Chat",
-      "footer": "Nur für dieses Handy.",
       "toolCalls": "Werkzeugaufrufe",
       "cardsLabel": "Karten",
-      "compactLabel": "Kompakt",
-      "cards": "Jede Gruppe von Schritten in einer eigenen Karte.",
-      "compact": "Eine dezente Zeile pro Gruppe. Tippe darauf für die Schritte."
+      "compactLabel": "Kompakt"
     },
     "summaries": {
       "title": "KI-Zusammenfassungen",
       "footer": "Kurze Texte, die Haiku über dein Claude-Konto schreibt.",
       "chatTitles": "Chat-Titel",
-      "chatTitlesDetail": "Nach der ersten Nachricht benannt",
-      "notifications": "Benachrichtigungen zusammenfassen",
-      "notificationsDetail": "Lange in zwei oder drei Sätzen"
+      "notifications": "Benachrichtigungen zusammenfassen"
     }
   },
   "voice": {
@@ -974,9 +953,7 @@
     "title": "Browser",
     "loadFailed": "Browser-Einstellungen konnten nicht geladen werden",
     "passkeys": "Passkeys aus Godmode",
-    "passkeysDetail": "Agenten melden sich mit den in Godmode gespeicherten Passkeys an.",
     "profiles": "Profile",
-    "profilesFooter": "Ein Chrome-Profil importierst du auf deinem Computer.",
     "newProfile": "Neues Profil",
     "newTitle": "Neues Profil",
     "renameTitle": "Profil umbenennen",
@@ -1114,5 +1091,14 @@
       "label": "Automatisch aufräumen",
       "footer": "Einmal am Tag, während kein Agent arbeitet, entfernt Godmode, was sich gefahrlos entfernen lässt."
     }
+  },
+  "notifications": {
+    "title": "Mitteilungen",
+    "switch": "Mitteilungen",
+    "footer": "Fragen, Freigaben, Aufgaben für dich, Antworten und Probleme, wie auf deinem Computer.",
+    "denied": "Mitteilungen für Godmode sind in den Einstellungen dieses Handys aus.",
+    "openSettings": "Einstellungen öffnen",
+    "failed": "Mitteilungen konnten nicht geändert werden",
+    "loadFailed": "Mitteilungen konnten nicht geladen werden"
   }
 }

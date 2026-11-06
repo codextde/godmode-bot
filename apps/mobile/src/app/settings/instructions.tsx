@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { MAX_INSTRUCTIONS_LENGTH } from "@godmode/shared";
 import { CharacterAvatar } from "@/components/character";
 import { CloseButton } from "@/components/close-button";
+import { useFullAccess } from "@/components/full-access";
 import { Group, LinkRow, TextEditor, Tile } from "@/components/form";
 import { Icon, type IconName } from "@/components/icon";
 import { SectionTitle, T } from "@/components/ui";
@@ -31,6 +32,9 @@ export default function Instructions() {
   const c = useColors();
   const { t } = useTranslation(["settings", "common"]);
   const settings = useSettings();
+  // Every agent follows these in every run: a phone without full access reads them.
+  const locked = useFullAccess().fullAccess === false;
+  const { t: tc } = useTranslation("components");
   const { workspaces } = useWorkspace();
   const { data: agents } = useAgents();
 
@@ -76,6 +80,8 @@ export default function Instructions() {
             placeholder={t("instructions.example")}
             maxLength={MAX_INSTRUCTIONS_LENGTH}
             minHeight={180}
+            readOnly={locked}
+            hint={locked ? tc("fullAccess.title") : undefined}
             onSave={(appendSystemPrompt) => patchSettings({ runner: { appendSystemPrompt } }, { quiet: true })}
           />
         ) : (

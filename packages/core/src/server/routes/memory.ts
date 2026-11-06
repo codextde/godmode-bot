@@ -2,6 +2,7 @@ import type { Hono } from "hono";
 import { IMPORT_MAX_CHARS, MEMORY_SOURCES } from "@godmode/shared";
 import { acceptOffer, dismissOffer, listOffers } from "../../memory/offers";
 import { importMemory } from "../../memory/importMemory";
+import { isLimitedPhone } from "../auth";
 import { body, z } from "../validate";
 
 const importSchema = z.object({
@@ -18,6 +19,6 @@ export function registerMemoryRoutes(app: Hono): void {
 
   app.post("/api/memory/import", async (c) => {
     const input = await body(c, importSchema);
-    return c.json(await importMemory({ source: input.source as (typeof MEMORY_SOURCES)[number]["id"], text: input.text }), 201);
+    return c.json(await importMemory({ source: input.source as (typeof MEMORY_SOURCES)[number]["id"], text: input.text }, { fillOnly: isLimitedPhone(c) }), 201);
   });
 }

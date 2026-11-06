@@ -52,12 +52,11 @@ export default function ModelAndLimits() {
       <Stack.Screen options={{ title: t("overview.links.ai") }} />
       <CloseButton />
 
-      <Group title={t("ai.defaultModel.title")} footer={t("ai.defaultModel.footer")}>
+      <Group title={t("ai.defaultModel.title")}>
         <PickerRow icon="sparkles" title={t("ai.defaultModel.model")} value={current?.id ?? r.model} options={options} onChange={(model) => void patchSettings({ runner: { model } })} />
         {efforts ? (
           <SegmentRow
             title={t("ai.defaultModel.effort")}
-            detail={t("ai.defaultModel.effortDetail")}
             value={effort}
             options={efforts.map((e) => ({ value: e, label: EFFORT_SHORT[e] }))}
             onChange={(next: Effort) => void patchSettings({ runner: { effort: next } })}
@@ -67,7 +66,6 @@ export default function ModelAndLimits() {
         <PickerRow
           icon="refresh"
           title={t("ai.defaultModel.fallback")}
-          detail={t("ai.defaultModel.fallbackDetail")}
           value={fallback?.id ?? (r.fallbackModel || "none")}
           options={[
             { value: "none", label: t("common:status.none") },
@@ -78,7 +76,7 @@ export default function ModelAndLimits() {
         />
       </Group>
 
-      <Group title={t("ai.work.title")} footer={t("ai.work.footer")}>
+      <Group title={t("ai.work.title")}>
         <StepperRow
           icon="clock"
           title={t("ai.work.timeout")}
@@ -92,20 +90,18 @@ export default function ModelAndLimits() {
         <SwitchRow
           icon="play"
           title={t("ai.work.continueLimit")}
-          detail={t("ai.work.continueLimitDetail")}
           value={r.autoContinueOnLimit}
           onChange={(autoContinueOnLimit) => void patchSettings({ runner: { autoContinueOnLimit } })}
         />
         <SwitchRow
           icon="refresh"
           title={t("ai.work.resume")}
-          detail={t("ai.work.resumeDetail")}
           value={r.resumeAfterRestart ?? true}
           onChange={(resumeAfterRestart) => void patchSettings({ runner: { resumeAfterRestart } })}
         />
       </Group>
 
-      <Group title={t("ai.compact.title")} footer={t("ai.compact.footer")}>
+      <Group title={t("ai.compact.title")}>
         <PickerRow
           icon="layers"
           title={t("ai.compact.auto")}
@@ -119,7 +115,7 @@ export default function ModelAndLimits() {
         />
       </Group>
 
-      <Group title={t("ai.watchdog.title")} footer={t("ai.watchdog.footer")}>
+      <Group title={t("ai.watchdog.title")}>
         <SwitchRow icon="shield" title={t("ai.watchdog.title")} value={r.watchdog} onChange={(watchdog) => void patchSettings({ runner: { watchdog } })} />
         <StepperRow
           icon="pulse"

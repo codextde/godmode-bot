@@ -2,6 +2,7 @@ import { router, Stack } from "expo-router";
 import { ScrollView, StyleSheet } from "react-native";
 import { useTranslation } from "react-i18next";
 import type { Settings } from "@godmode/shared";
+import { useFullAccess } from "@/components/admin";
 import { CloseButton } from "@/components/close-button";
 import { Group, LinkRow, SwitchRow } from "@/components/form";
 import type { IconName } from "@/components/icon";
@@ -29,10 +30,11 @@ const FEATURES: { id: Feature; icon: IconName; phone: boolean }[] = [
 
 const enabledOf = (s: Settings, id: Feature): boolean | undefined => (s as unknown as Partial<Record<Feature, { enabled?: boolean }>>)[id]?.enabled;
 
-/** Settings → Features: every optional feature off from here; only the harmless ones back on. */
+/** Settings → Features: every optional feature off from here; only the harmless ones back on, unless this phone has full access. */
 export default function Features() {
   const { t } = useTranslation(["settings", "common"]);
   const settings = useSettings();
+  const { fullAccess } = useFullAccess();
 
   return (
     <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content}>
@@ -40,7 +42,7 @@ export default function Features() {
       <CloseButton />
       <QueryState query={settings} icon="puzzle" errorTitle={t("features.loadFailed")}>
         {(s) => (
-          <Group footer={t("features.footer")}>
+          <Group footer={fullAccess ? undefined : t("features.footer")}>
             {FEATURES.flatMap(({ id, icon, phone }) => {
               const on = enabledOf(s, id);
               // An older Godmode on the computer doesn't have this feature yet.
@@ -52,7 +54,7 @@ export default function Features() {
                   title={t(`features.${id}.title`)}
                   detail={t(`features.${id}.detail`)}
                   value={on}
-                  disabled={!on && !phone}
+                  disabled={!on && !phone && !fullAccess}
                   onChange={(enabled) => void patchSettings({ [id]: { enabled } } as SettingsPatch)}
                 />
               );

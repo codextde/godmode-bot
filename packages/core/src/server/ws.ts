@@ -3,7 +3,7 @@ import { timedSync } from "../diagnostics/slow";
 import { bus } from "../events/bus";
 import { VERSION } from "../config";
 import { logger } from "../log";
-import { setDeviceSocketHooks } from "../mobile/devices";
+import { deviceHasFullAccess, setDeviceSocketHooks } from "../mobile/devices";
 import { deviceMayUseView } from "../mobile/scope";
 import { liteMessage } from "../services/liteMessage";
 
@@ -562,6 +562,11 @@ function sendMessage(event: Extract<ServerEvent, { type: "message.created" | "me
 
 const MAX_CONVERSATIONS_PER_SOCKET = 20;
 
+/** A paired phone without full access (read when it asks: the computer may switch it while the socket is open). */
+function limitedPhone(ws: HubSocket): boolean {
+  return ws.data.auth === "device" && !(ws.data.deviceId && deviceHasFullAccess(ws.data.deviceId));
+}
+
 function deviceOnline(deviceId: string): boolean {
   for (const ws of clients) if (ws.data.deviceId === deviceId) return true;
   return false;
@@ -656,14 +661,14 @@ export const websocketHandler = {
         changeSubscription(ws, { profileId: msg.profileId, conversationId: msg.conversationId ?? null }, false);
         break;
       case "computer.subscribe":
-        if (validView(msg.view) && (ws.data.auth !== "device" || deviceMayUseView(msg.view))) changeComputerSubscription(ws, msg.view, true);
+        if (validView(msg.view) && (!limitedPhone(ws) || deviceMayUseView(msg.view))) changeComputerSubscription(ws, msg.view, true);
         break;
       case "computer.unsubscribe":
         if (validView(msg.view)) changeComputerSubscription(ws, msg.view, false);
         break;
       case "android.subscribe":
-        // Phones paired with the app don't control Android devices.
-        if (validDeviceId(msg.deviceId) && ws.data.auth !== "device") changeAndroidSubscription(ws, msg.deviceId, msg.mode === "frames" ? "frames" : "video");
+        // Phones paired with the app don't control Android devices, unless the computer gave them full access.
+        if (validDeviceId(msg.deviceId) && !limitedPhone(ws)) changeAndroidSubscription(ws, msg.deviceId, msg.mode === "frames" ? "frames" : "video");
         break;
       case "android.unsubscribe":
         if (validDeviceId(msg.deviceId)) changeAndroidSubscription(ws, msg.deviceId, null);

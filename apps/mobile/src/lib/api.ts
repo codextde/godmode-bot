@@ -26,6 +26,7 @@ import type {
   Bootstrap,
   BrowserProfile,
   ComputerInputEvent,
+  DictationStatus,
   Effort,
   AgentHeartbeatInput,
   Conversation,
@@ -297,10 +298,10 @@ export function retryAddresses() {
  * sent once, so a slow answer never turns into a second message or run. A write moves on only when the answer shows it
  * never reached the computer.
  */
-export async function request<T>(method: string, path: string, body?: unknown, minTimeoutMs = 0): Promise<T> {
+export async function request<T>(method: string, path: string, body?: unknown, minTimeoutMs = 0, extraHeaders?: Record<string, string>): Promise<T> {
   const connection = useSession.getState().connection;
   if (!connection) throw new ApiError(401, t("system:api.notPaired"), "not_paired");
-  const headers: Record<string, string> = { authorization: `Bearer ${connection.token}`, accept: "application/json" };
+  const headers: Record<string, string> = { ...extraHeaders, authorization: `Bearer ${connection.token}`, accept: "application/json" };
   const form = body instanceof FormData;
   if (body !== undefined && !form) headers["content-type"] = "application/json";
   const payload = body === undefined ? undefined : form ? body : JSON.stringify(body);
@@ -486,7 +487,14 @@ export type BrowserInput =
 
 export const api = {
   me: () => get<MobileSession>("/api/mobile/me"),
+  /** Only off: the computer gives a phone full access. */
+  setFullAccess: (fullAccess: false) => patch<MobileSession>("/api/mobile/me", { fullAccess }),
   unpair: () => del<{ ok: true }>("/api/mobile/me"),
+  /** This phone's push notifications: its Expo push token on the computer, or none. */
+  push: {
+    on: (token: string, platform: "ios" | "android") => post<MobileSession>("/api/mobile/me/push", { token, platform }),
+    off: () => del<MobileSession>("/api/mobile/me/push"),
+  },
   bootstrap: () => get<Bootstrap>("/api/bootstrap"),
   workspaces: () => get<Workspace[]>("/api/workspaces"),
 
@@ -585,6 +593,8 @@ export const api = {
       form.append("audio", { name: file.name, type: file.mime, bytes: () => new File(file.uri).bytes() } as unknown as Blob);
       return post<{ text: string }>("/api/voice/transcribe", form, 120_000);
     },
+    /** Whether the computer writes recordings down and which; an older Godmode refuses to say (403). */
+    dictation: () => get<DictationStatus>("/api/voice/dictation"),
   },
 
   conversations: {

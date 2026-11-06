@@ -1,4 +1,4 @@
-import type { Hono } from "hono";
+import type { Context, Hono } from "hono";
 import { existsSync, readFileSync } from "node:fs";
 import { EFFORT_OPTIONS, MAX_INSTRUCTIONS_LENGTH, RUN_STOPPED_BY_USER, isModelId } from "@godmode/shared";
 import {
@@ -13,6 +13,7 @@ import {
   messageImage,
   messageWindow,
   windowMessages,
+  markChatFillOnly,
   markConversationsRead,
   markConversationsUnread,
   sendMessage,
@@ -31,7 +32,7 @@ import { getAgent } from "../../agents/service";
 import { listAttention } from "../../services/attention";
 import { awaySummary } from "../../services/away";
 import { retryRun } from "../../services/retries";
-import { isPhoneRequest, requestDevice, requestVia } from "../auth";
+import { isLimitedPhone, isPhoneRequest, requestDevice, requestVia } from "../auth";
 import { audit } from "../../services/audit";
 import { autoRetryOf } from "../../services/resume";
 import { body, computerTargetSchema, z } from "../validate";
@@ -86,6 +87,9 @@ const sendSchema = z.object({
     .optional(),
 });
 
+/** What a phone without full access starts or writes gets no raw secrets (mobile/scope.ts). */
+const phoneFill = (c: Context): { fillOnly?: true } => (isLimitedPhone(c) ? { fillOnly: true } : {});
+
 function num(v: string | undefined): number | undefined {
   if (v === undefined || v === "") return undefined;
   const n = Number(v);
@@ -122,7 +126,7 @@ export function registerChatRoutes(app: Hono): void {
     // A switched-off agent answers nothing: don't leave an empty chat behind.
     const agent = getAgent(input.agentId);
     if (!agent.enabled) throw conflict(`Agent "${agent.name}" is disabled`);
-    return c.json(createConversation({ ...input, origin: "chat" }), 201);
+    return c.json(createConversation({ ...input, origin: "chat", ...phoneFill(c) }), 201);
   });
 
   app.post("/api/conversations/:id/share", async (c) => {
@@ -218,7 +222,10 @@ export function registerChatRoutes(app: Hono): void {
     );
     const { computerTarget, ...rest } = patch;
     if (computerTarget !== undefined) await shareComputer(c.req.param("id"), computerTarget);
-    return c.json(updateConversation(c.req.param("id"), rest));
+    // Instructions a phone without full access writes: the chat's runs follow them without raw secrets from now on.
+    const id = c.req.param("id");
+    if (isLimitedPhone(c) && rest.instructions !== undefined && rest.instructions.trim() !== getConversationSummary(id).instructions.trim()) markChatFillOnly(id);
+    return c.json(updateConversation(id, rest));
   });
 
   app.delete("/api/conversations/:id", async (c) => {
@@ -237,11 +244,11 @@ export function registerChatRoutes(app: Hono): void {
     if (answered) return c.json(answered, 201);
     const settle = replySettles(id, input.content);
     if (!queue) {
-      const sent = await sendMessage(id, { ...input, trigger: "chat" });
+      const sent = await sendMessage(id, { ...input, trigger: "chat", ...phoneFill(c) });
       settle();
       return c.json(sent, 201);
     }
-    const outcome = await submitMessage(id, { ...input, queueId, steer });
+    const outcome = await submitMessage(id, { ...input, queueId, steer, ...phoneFill(c) });
     settle();
     return c.json(outcome, "queued" in outcome ? 202 : 201);
   });
@@ -307,9 +314,12 @@ export function registerChatRoutes(app: Hono): void {
         /** Work on this runner (another computer) instead of this one. */
         runnerId: z.string().trim().min(1).max(100).nullable().optional(),
         private: z.boolean().optional(),
+        /** No raw secrets in the chat: a phone without full access started it on the computer that sends it here. */
+        fillOnly: z.boolean().optional(),
         ...modelChoice,
       }),
     );
+    if (isLimitedPhone(c)) input.fillOnly = true;
     if (input.private && input.runnerId && input.runnerId !== selfDeviceId()) throw badRequest("A private chat stays on this computer");
     // A secondary names itself by its id in the primary's list: a chat for it starts here.
     if (input.runnerId && input.runnerId === selfDeviceId()) input.runnerId = null;
@@ -344,7 +354,7 @@ export function registerChatRoutes(app: Hono): void {
     const run = getRun(c.req.param("id"));
     const retry = autoRetryOf(run.id);
     // A phone reads the log through /log; where it lies on this computer stays here.
-    return c.json({ ...run, logPath: isPhoneRequest(c) ? null : findRunLog(run), retryAt: retry?.at ?? null, retryCause: retry?.cause ?? null });
+    return c.json({ ...run, logPath: isLimitedPhone(c) ? null : findRunLog(run), retryAt: retry?.at ?? null, retryCause: retry?.cause ?? null });
   });
 
   app.post("/api/runs/:id/cancel", async (c) => {

@@ -22,7 +22,6 @@
     "datePattern": "EEEE, d. MMMM",
     "agentsReady_one": "1 Agent bereit",
     "agentsReady_other": "{{count}} Agenten bereit",
-    "prompt": "Was packen wir heute an?",
     "askAgent": "Frag {{name}} etwas oder übergib eine Aufgabe…",
     "ask": "Frag etwas oder übergib eine Aufgabe…",
     "offline": {
@@ -37,8 +36,6 @@
       "elsewhere_other": "Hier wartet nichts auf dich. {{count}} Sachen warten in anderen Workspaces",
       "moreElsewhere_one": "+{{count}} in anderen Workspaces · Eingang",
       "moreElsewhere_other": "+{{count}} in anderen Workspaces · Eingang",
-      "allInInbox_one": "{{count}} im Eingang",
-      "allInInbox_other": "Alle {{count}} im Eingang",
       "vaultLocked": "Der Tresor ist gesperrt",
       "vaultLockedBody": "Agenten können sich erst anmelden, wenn du ihn auf deinem Computer entsperrst."
     },

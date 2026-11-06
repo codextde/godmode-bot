@@ -69,6 +69,7 @@ import { resourceSnapshot, startDiagnostics, stopDiagnostics } from "./diagnosti
 import { startSelfRepair, stopSelfRepair } from "./diagnostics/selfRepair";
 import { getModelCatalog } from "./runner/models";
 import { refreshMobileAccess, startMobileAccess, stopMobileAccess } from "./mobile/access";
+import { startPush, stopPush } from "./mobile/push";
 import { answerHealth, HEALTH_PATH, runnerFile, runningRunner, runRunnerCli, servingRunner, USAGE as RUNNER_USAGE, type RunnerProcess } from "./remote/cli";
 import { startLinkServer, stopLinkServer } from "./remote/linkServer";
 import { groupSettled, sayGoodbye, startDevices, stopDevices } from "./remote/devices";
@@ -332,6 +333,8 @@ async function serve(values: Record<string, unknown>, role?: CoreConfig["role"])
   } else {
     startMobileAccess({ app, websocket: websocketHandler });
     onSettingsApplied(() => void refreshMobileAccess());
+    // What the desktop notifies about goes to the phones that want notifications too.
+    startPush();
     // The other computers of its device group, if it has one: they reach this one at its link port.
     startDevices({ app, websocket: websocketHandler }, deliverForwarded);
     // Connect to the runners this Godmode works with (and the computers of its group).
@@ -400,6 +403,7 @@ async function serve(values: Record<string, unknown>, role?: CoreConfig["role"])
       await stopPower();
       await stopShared();
       stopMobileAccess();
+      stopPush();
       stopDevices();
       stopRunners();
       stopLinkServer();

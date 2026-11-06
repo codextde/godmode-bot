@@ -9,11 +9,11 @@ import {
   startAccountLogin,
   submitAccountLoginCode,
 } from "../../services/claudeAccounts";
-import { isPhoneRequest } from "../auth";
+import { isLimitedPhone } from "../auth";
 import { body, z } from "../validate";
 
 /** A phone sees the accounts, never a sign-in link: signing in happens on the computer. */
-const forPhone = (c: Context, state: ClaudeAccountsState): ClaudeAccountsState => (isPhoneRequest(c) ? { ...state, login: { ...state.login, url: null } } : state);
+const forPhone = (c: Context, state: ClaudeAccountsState): ClaudeAccountsState => (isLimitedPhone(c) ? { ...state, login: { ...state.login, url: null } } : state);
 
 /** Claude accounts: the list with usage, signing accounts in, the default, removing. */
 export function registerClaudeAccountRoutes(app: Hono): void {

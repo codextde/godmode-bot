@@ -4,8 +4,10 @@ import { Stack } from "expo-router";
 import { RefreshControl, ScrollView, StyleSheet } from "react-native";
 import { useTranslation } from "react-i18next";
 import { formatBytes, type CloudBilling, type CloudSubscriptionStatus, type LicensePlan, type LicenseState, type LicenseStatus } from "@godmode/shared";
+import { useFullAccess } from "@/components/admin";
 import { CloseButton } from "@/components/close-button";
 import { Group } from "@/components/form";
+import { LicenseActions } from "@/components/license-actions";
 import { QueryState } from "@/components/settings-state";
 import { InfoRow } from "@/components/status-rows";
 import type { Tone } from "@/components/ui";
@@ -81,6 +83,7 @@ export default function License() {
         {(s) => (
           <>
             <LicenseGroup state={s} />
+            <LicenseActions state={s} />
 
             {usage.data ? (
               <Group title={t("license.usage.title")} footer={usage.data.since ? t("license.usage.since", { date: day(usage.data.since) }) : undefined}>
@@ -119,6 +122,7 @@ export default function License() {
 
 function LicenseGroup({ state: s }: { state: LicenseState }) {
   const { t } = useTranslation("settings");
+  const { fullAccess } = useFullAccess();
   const status = STATUS[s.status];
   const renewal =
     s.status === "trial" && s.trialEndsAt
@@ -130,7 +134,7 @@ function LicenseGroup({ state: s }: { state: LicenseState }) {
           : null;
   const grace = s.status === "grace" && s.graceEndsAt ? s.graceEndsAt : null;
   const keepsWorking = s.graceEndsAt && (s.status === "invalid" || s.status === "expired") && new Date(s.graceEndsAt) > new Date() ? s.graceEndsAt : null;
-  const footer = [s.enforced ? s.message : t("license.notEnforced"), t("license.onComputer")].filter(Boolean).join("\n\n");
+  const footer = [s.enforced ? s.message : t("license.notEnforced"), fullAccess ? null : t("license.onComputer")].filter(Boolean).join("\n\n");
 
   return (
     <Group title="Godmode Pro" footer={footer}>

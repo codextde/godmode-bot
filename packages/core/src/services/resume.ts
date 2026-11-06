@@ -84,6 +84,7 @@ interface RunRow {
   error: string | null;
   finished_at: string | null;
   created_at: string;
+  fill_only: number;
 }
 
 export interface InterruptedWork {
@@ -253,6 +254,7 @@ async function continueOne(r: RunRow, handoffs: CutOffHandoff[], runId: string |
     parentRunId,
     depth: depthOf(parentRunId),
     runId,
+    fillOnly: r.fill_only === 1,
   });
   if (r.trigger === "routine" && r.routine_id) followAutomation(r, run, LABELS[cause]);
   // In a Slack, Telegram or Teams chat the answer goes back there.

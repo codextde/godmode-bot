@@ -8,7 +8,7 @@ import { config, isLoopbackHost } from "../config";
 import { get, getMeta, insert, run, setMeta } from "../db";
 import { getSettings } from "../services/settings";
 import { authenticateDevice } from "../mobile/devices";
-import { deviceBodyKeys, deviceBodyRefusal, deviceMayCall, deviceMayUseView, deviceQueryRefusal, deviceTargetRefusal } from "../mobile/scope";
+import { deviceBodyKeys, deviceBodyRefusal, deviceHardRule, deviceMayCall, deviceMayUseView, deviceQueryRefusal, deviceTargetRefusal } from "../mobile/scope";
 import { applyDeviceView } from "../mobile/views";
 import { cloudPathRefusal, cloudRefusal } from "../cloud/scope";
 import { hashPassword, safeEqual, sha256, verifyPassword } from "../vault/crypto";
@@ -186,15 +186,31 @@ export function requestDevice(c: Context): MobileDevice | null {
 
 /**
  * Another computer of the device group forwarded a request one of its phones made (remote/deviceRouting.ts). Only a
- * linked controller sets the header, and it only ever narrows what the request may do.
+ * linked controller sets the header: "1" for a limited phone, which only ever narrows what the request may do, "full"
+ * for one with full access there. The controller has this computer's full rights anyway, so "full" only marks the
+ * request as a phone's (audit) and keeps the rules every phone meets.
  */
-function forwardedFromPhone(c: Context): boolean {
-  return (c.env as { channel?: string } | undefined)?.channel === "runner-link" && c.req.header("x-godmode-phone") === "1";
+function forwardedPhone(c: Context): "limited" | "full" | null {
+  if ((c.env as { channel?: string } | undefined)?.channel !== "runner-link") return null;
+  const value = c.req.header("x-godmode-phone");
+  return value === "1" ? "limited" : value === "full" ? "full" : null;
 }
 
 /** A paired phone made this request: here, or on another computer of the device group that forwarded it. */
 export function isPhoneRequest(c: Context): boolean {
-  return !!requestDevice(c) || forwardedFromPhone(c);
+  return !!requestDevice(c) || forwardedPhone(c) !== null;
+}
+
+/** A phone without full access made this request (here or forwarded): the phones' rules apply (mobile/scope.ts). */
+export function isLimitedPhone(c: Context): boolean {
+  const device = requestDevice(c);
+  return device ? !device.fullAccess : forwardedPhone(c) === "limited";
+}
+
+/** The desktop app or the dashboard of this computer: not a phone, the cloud or another computer of the device group. */
+export function isOwnComputer(c: Context): boolean {
+  const kind = c.get("authKind" as never) as AuthKind | undefined;
+  return (kind === "token" || kind === "session") && !isRelayed(c) && !isMobileChannel(c) && (c.env as { channel?: string } | undefined)?.channel !== "runner-link";
 }
 
 /** Where a person's request came from, for the audit: a paired phone, the cloud, another computer of the group, or this computer's app. */
@@ -208,7 +224,7 @@ export function requestVia(c: Context): { via: "phone" | "cloud" | "computer" | 
   const link = c.env as { channel?: string; controllerId?: string } | undefined;
   if (link?.channel !== "runner-link") return { via: "app" };
   const name = (link.controllerId ? get<{ name: string }>("SELECT name FROM link_controllers WHERE id = ?", link.controllerId)?.name : undefined) ?? "unknown";
-  return forwardedFromPhone(c) ? { via: "phone", through: name } : { via: "computer", name };
+  return forwardedPhone(c) ? { via: "phone", through: name } : { via: "computer", name };
 }
 
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]", "::1", "tauri.localhost"]);
@@ -272,10 +288,12 @@ export const requireAuth: MiddlewareHandler = async (c, next) => {
   const kind = auth?.kind;
   if (!kind || (isMobileChannel(c) && kind !== "device")) return c.json({ error: "Unauthorized", code: "unauthorized" }, 401);
   // A phone's request another computer of the group forwarded meets the phones' rules here too, against this computer's
-  // settings and files.
-  const phone = kind === "device" || forwardedFromPhone(c);
+  // settings and files. A phone with full access only meets the few every phone does.
+  const forwarded = forwardedPhone(c);
+  const phone = kind === "device" || forwarded !== null;
+  const limited = kind === "device" ? !auth!.device!.fullAccess : forwarded === "limited";
   if (phone) {
-    const refusal = await deviceRefusal(c);
+    const refusal = (await phoneHardRefusal(c)) ?? (limited ? await deviceRefusal(c) : null);
     if (refusal) return c.json({ error: refusal, code: "device_forbidden" }, 403);
   }
   if (kind === "cloud") {
@@ -302,7 +320,7 @@ export const requireAuth: MiddlewareHandler = async (c, next) => {
   if (auth?.device) c.set("device" as never, auth.device as never);
   if (auth?.user) c.set("cloudUser" as never, auth.user as never);
   await next();
-  if (phone) await applyDeviceView(c);
+  if (limited) await applyDeviceView(c);
 };
 
 /** The cloud user behind a relayed dashboard request (null for everything else). */
@@ -310,7 +328,20 @@ export function requestCloudUser(c: Context): CloudRelayUser | null {
   return (c.get("cloudUser" as never) as CloudRelayUser | undefined) ?? null;
 }
 
-/** Why a phone may not make this request (null = it may). */
+/** What no phone may do, full access or not (mobile/scope.ts HARD). */
+async function phoneHardRefusal(c: Context): Promise<string | null> {
+  const rule = deviceHardRule(c.req.method, c.req.path);
+  if (!rule) return null;
+  let payload: unknown;
+  try {
+    payload = await c.req.json();
+  } catch {
+    return null;
+  }
+  return typeof payload === "object" && payload !== null && !Array.isArray(payload) ? rule(payload as Record<string, unknown>) : null;
+}
+
+/** Why a phone without full access may not make this request (null = it may). */
 async function deviceRefusal(c: Context): Promise<string | null> {
   const denied = "The phone app can't do this. Use Godmode on your computer.";
   if (!deviceMayCall(c.req.method, c.req.path)) return denied;

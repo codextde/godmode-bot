@@ -11,7 +11,7 @@ import { retryAgainNote, retryContext, retryWhy } from "../runner/prompt";
 import { taskForConversation } from "../tasks/service";
 import { HttpError, badRequest, notFound, now, parseJson } from "../util";
 import { audit } from "./audit";
-import { getConversationSummary, sendMessage } from "./conversations";
+import { getConversationSummary, runFillOnly, sendMessage } from "./conversations";
 import { pauseOf } from "./pauses";
 import { getSettings } from "./settings";
 
@@ -60,6 +60,8 @@ export async function retryRun(conversationId: string, runId: string): Promise<S
     prompt,
     marker: [{ type: "retry", mode, runId, at: now(), ...(masked ? { masked: true } : {}) }],
     trigger: "chat",
+    // What a phone without full access asked for stays without raw secrets when it is picked up again.
+    fillOnly: runFillOnly(runId),
   });
   audit("user", "run.retry", conversationId, { runId, newRunId: result.run.id, mode });
   return { ...result, mode };

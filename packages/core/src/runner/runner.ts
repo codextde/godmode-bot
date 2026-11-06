@@ -181,6 +181,8 @@ export interface StartRunInput {
   runId?: string;
   /** The prompt is what the human typed. Default: every chat run. */
   humanTyped?: boolean;
+  /** No raw secrets in this run, whatever its chat may read: a phone without full access wrote it. */
+  fillOnly?: boolean;
 }
 
 export const CLAUDE_NOT_FOUND = RUN_CLI_MISSING;
@@ -251,6 +253,7 @@ interface RunRow {
   started_at: string | null;
   finished_at: string | null;
   created_at: string;
+  fill_only: number;
 }
 
 function toRun(r: RunRow): Run {
@@ -380,6 +383,8 @@ interface Job {
   parentRunId: string | null;
   depth: number;
   voice: boolean;
+  /** No raw secrets in this run (`StartRunInput.fillOnly`). */
+  fillOnly: boolean;
   status: "queued" | "running";
   acc: StreamAccumulator;
   proc: Subprocess | null;
@@ -632,6 +637,7 @@ export async function startRun(input: StartRunInput): Promise<Run> {
     status: "queued",
     prompt: redact(input.prompt),
     created_at: now(),
+    fill_only: input.fillOnly ? 1 : 0,
   });
   const assistant = addMessage({ conversationId: input.conversationId, role: "assistant", content: "", blocks: [], runId });
 
@@ -648,6 +654,7 @@ export async function startRun(input: StartRunInput): Promise<Run> {
     parentRunId: input.parentRunId ?? null,
     depth: input.depth ?? 0,
     voice: input.voice ?? false,
+    fillOnly: !!input.fillOnly,
     status: "queued",
     acc: new StreamAccumulator(),
     proc: null,
@@ -833,6 +840,8 @@ export function resumeRun(
   by: "user" | "auto" = "user",
   answer: ResumedAnswer | null = null,
   settled: (QuestionAnswer & { status: QuestionStatus }) | null = null,
+  /** `fillOnly`: a phone without full access answered; the run goes on without raw secrets, for good. */
+  opts: { fillOnly?: boolean } = {},
 ): Run {
   if (shuttingDown) throw new HttpError(503, "Godmode is shutting down", "shutting_down");
   const row = get<RunRow>("SELECT * FROM runs WHERE id = ?", p.run_id);
@@ -868,6 +877,7 @@ export function resumeRun(
     parentRunId: row.parent_run_id,
     depth: p.depth,
     voice: p.voice === 1,
+    fillOnly: row.fill_only === 1 || !!opts.fillOnly,
     status: "queued",
     acc,
     proc: null,
@@ -893,7 +903,7 @@ export function resumeRun(
   if (!p.delivered && kept === undefined && /•{4,}/.test(job.resumed!.redo ?? "")) {
     job.acc.addNotice("warning", "Godmode restarted while this was paused, so the message is sent again with its saved secrets masked.");
   }
-  sql("UPDATE runs SET status = 'queued' WHERE id = ?", row.id);
+  sql("UPDATE runs SET status = 'queued', fill_only = ? WHERE id = ?", job.fillOnly ? 1 : 0, row.id);
   jobs.set(row.id, job);
   queue.unshift(row.id);
   dropPause(p);
@@ -950,7 +960,7 @@ export function deliverQueued(runId: string): string | null {
   const job = jobs.get(runId);
   // A run that is ending (stopped, timed out, being paused) takes nothing: the message would go down with it.
   if (!job || job.status !== "running" || job.cancelReason || job.timedOut || job.stalled || job.pause) return null;
-  const taken = takeQueued(job.conversationId, getAgent(job.agentId));
+  const taken = takeQueued(job.conversationId, getAgent(job.agentId), job.fillOnly);
   if (!taken.length) return null;
   for (const { message } of taken) job.acc.addUserMessage(message);
   // Stored right away: the messages are out of the queue and live in this turn from now on.
@@ -2020,7 +2030,7 @@ function bodyOf(job: Job, agent: Agent): string {
     const focus = handoffCommand(job.prompt);
     return focus !== null && handoffAllowed(job.conversationId) ? handoffRequest(focus, getSettings().general.userName) : compactAlias(job.prompt);
   }
-  const taken = takeQueued(job.conversationId, agent);
+  const taken = takeQueued(job.conversationId, agent, job.fillOnly);
   for (const { message } of taken) job.acc.addUserMessage(message);
   if (taken.length) scheduleDelta(job);
   const messages = taken.map((t) => t.prompt);
@@ -2243,7 +2253,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   // A project an agent wrote without raw secrets (or without control of this computer) gets no more from its runs.
   const projectFillOnly = !!project?.fillOnly && agent.permissions.secretAccess === "reveal";
   const projectHidden = !!project?.offComputer && agent.computer.enabled;
-  const fillOnly = conv.secret_access === "fill" || glm || projectFillOnly;
+  const fillOnly = conv.secret_access === "fill" || job.fillOnly || glm || projectFillOnly;
   if (projectFillOnly || projectHidden) {
     const limits = [projectFillOnly && "gets no raw secrets (logins are still filled into pages)", projectHidden && "leaves out its description and instructions"];
     job.acc.addNotice(

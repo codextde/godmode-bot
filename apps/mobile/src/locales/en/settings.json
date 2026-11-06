@@ -1,5 +1,13 @@
 {
   "overview": {
+    "fullAccess": {
+      "title": "Full access",
+      "turnOff": "Turn off full access",
+      "offTitle": "Turn off full access?",
+      "offBody": "Only Godmode on your computer can turn it on again.",
+      "offConfirm": "Turn off",
+      "offFailed": "Couldn't turn off full access"
+    },
     "status": {
       "connected": "Connected",
       "connecting": "Connecting…",
@@ -32,43 +40,36 @@
     },
     "preferences": {
       "title": "Preferences",
-      "footer": "Changes apply to your computer right away. Running chats pick them up with their next message.",
       "yourName": "Your name",
       "addName": "Add your name"
     },
     "theme": {
       "title": "Appearance",
-      "detail": "System follows this phone's setting.",
       "light": "Light",
       "dark": "Dark"
     },
     "language": {
-      "title": "Language",
-      "detail": "System follows this phone's language. The same on your computer."
+      "title": "Language"
     },
     "timeFormat": {
       "title": "Time format",
-      "detail": "Automatic follows this phone's region (here {{example}}). The same on your computer.",
       "system": "Automatic",
       "h24": "15:00",
       "h12": "3:00 PM"
     },
     "mode": {
       "title": "Interface",
-      "detail": "{{blurb}} The same on your computer.",
       "easy": "Easy",
-      "pro": "Professional",
-      "easyBlurb": "Plain words and only what you need day to day. Everything else is one click away.",
-      "proBlurb": "Every tool, setting and detail in view: models, runs, machines, logs."
+      "pro": "Professional"
     },
     "links": {
       "ai": "AI & Claude",
       "instructions": "Instructions",
-      "instructionsDetail": "Rules for every agent, workspace and project",
       "browser": "Browser",
       "computer": "Computer",
       "memory": "Memory",
       "general": "General",
+      "notifications": "Notifications",
       "accounts": "Claude accounts",
       "voice": "Voice",
       "review": "Auto review",
@@ -99,13 +100,11 @@
     },
     "app": {
       "title": "App",
-      "footer": "Remove this phone on your computer anytime in Settings → Phone.",
       "thisPhone": "This phone",
       "version": "Godmode for {{platform}} {{version}}"
     },
     "palette": {
       "title": "Palette",
-      "detail": "Just for this phone, light and dark.",
       "names": {
         "paper": {
           "label": "Paper",
@@ -146,8 +145,7 @@
       }
     },
     "suggestions": {
-      "title": "Show suggestions",
-      "detail": "Ideas like “Summarize my unread emails” on Home and in a new chat."
+      "title": "Show suggestions"
     },
     "features": {
       "title": "Features",
@@ -158,25 +156,18 @@
   "ai": {
     "defaultModel": {
       "title": "Default model",
-      "footer": "Agents without a model of their own use this one. Change it per agent, or per chat from the composer.",
       "model": "Model",
       "effort": "Effort",
-      "effortDetail": "How long Claude thinks before it acts.",
-      "fallback": "Fallback",
-      "fallbackDetail": "Used when the default model is overloaded."
+      "fallback": "Fallback"
     },
     "work": {
       "title": "Work",
-      "footer": "A run that takes longer than the timeout is stopped.",
       "timeout": "Timeout per run",
       "continueLimit": "Continue after usage limits",
-      "continueLimitDetail": "A run that hit Claude's limit picks up by itself once it resets.",
-      "resume": "Continue cut-off work",
-      "resumeDetail": "Work cut off by a restart, a lost internet connection or the end of a turn picks up by itself once Godmode and the connection are back."
+      "resume": "Continue cut-off work"
     },
     "compact": {
       "title": "Long chats",
-      "footer": "A chat that fills this much of the model's memory is summarized by itself and goes on from the summary. Earlier keeps every step faster and cheaper, later keeps more detail. Compress any chat by hand with the ring next to the model.",
       "auto": "Compress by itself",
       "at": "At {{percent}}%",
       "atDefault": "At {{percent}}% (default)",
@@ -185,7 +176,6 @@
     },
     "watchdog": {
       "title": "Watchdog",
-      "footer": "Stops runs that stall or go in circles, so they don't burn time and tokens.",
       "stalled": "Stalled after",
       "repeated": "Same step repeated"
     }
@@ -193,14 +183,10 @@
   "capabilities": {
     "liveView": "Live view",
     "browser": {
-      "footer": "Agents browse in their own profiles, with your saved logins filled in by Godmode.",
       "enabled": "Browser for agents",
       "headless": "Run in the background",
-      "headlessDetail": "No browser window opens on your computer.",
       "stealth": "Look like a person",
-      "stealthDetail": "Hides automation signals so sites don't block agents.",
-      "mute": "Mute sound",
-      "liveViewDetail": "Watch the browser while an agent works."
+      "mute": "Mute sound"
     },
     "computer": {
       "title": "Computer use",
@@ -804,27 +790,20 @@
     "animations": {
       "title": "Animations",
       "fullLabel": "Full",
-      "lightLabel": "Light",
-      "full": "Characters move and live replies type out.",
-      "light": "Saves energy on this phone: characters stand still and nothing loops."
+      "lightLabel": "Light"
     },
     "language": "Language & region",
     "chat": {
       "title": "Chat",
-      "footer": "Just for this phone.",
       "toolCalls": "Tool calls",
       "cardsLabel": "Cards",
-      "compactLabel": "Compact",
-      "cards": "Each group of steps in its own card.",
-      "compact": "One muted line per group. Tap it for the steps."
+      "compactLabel": "Compact"
     },
     "summaries": {
       "title": "AI summaries",
       "footer": "Short texts Haiku writes on your Claude account.",
       "chatTitles": "Chat titles",
-      "chatTitlesDetail": "Named from the first message",
-      "notifications": "Notification summaries",
-      "notificationsDetail": "Long ones in two or three sentences"
+      "notifications": "Notification summaries"
     }
   },
   "voice": {
@@ -974,9 +953,7 @@
     "title": "Browser",
     "loadFailed": "Couldn't load the browser settings",
     "passkeys": "Passkeys from Godmode",
-    "passkeysDetail": "Agents sign in with passkeys saved in Godmode.",
     "profiles": "Profiles",
-    "profilesFooter": "Importing a Chrome profile happens on your computer.",
     "newProfile": "New profile",
     "newTitle": "New profile",
     "renameTitle": "Rename profile",
@@ -1114,5 +1091,14 @@
       "label": "Clean up automatically",
       "footer": "Once a day, while no agent works, Godmode removes what is safe to remove."
     }
+  },
+  "notifications": {
+    "title": "Notifications",
+    "switch": "Notifications",
+    "footer": "Questions, approvals, tasks for you, replies and problems, like on your computer.",
+    "denied": "Notifications for Godmode are off in this phone's settings.",
+    "openSettings": "Open Settings",
+    "failed": "Couldn't change notifications",
+    "loadFailed": "Couldn't load notifications"
   }
 }

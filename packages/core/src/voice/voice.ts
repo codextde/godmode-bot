@@ -3,7 +3,7 @@
  * The "browser" providers run entirely in the UI (Web Speech API) and never reach these functions.
  * API keys are vault app secrets: `openai_api_key`, `elevenlabs_api_key`.
  */
-import type { Agent, Settings } from "@godmode/shared";
+import type { Agent, DictationStatus, Settings } from "@godmode/shared";
 import { apiToolKey, apiToolsForAgent, markApiToolUsed } from "../integrations/apiTools";
 import { getSettings } from "../services/settings";
 import * as vault from "../vault/vault";
@@ -167,6 +167,12 @@ export async function transcribe(audio: Blob, opts: { language?: string | null; 
 export async function transcriptionReady(): Promise<boolean> {
   if (getSettings().voice.sttProvider === "hex") return (await hexStatus()).installed;
   return vault.hasAppSecret(OPENAI_API_KEY_SECRET);
+}
+
+/** What a phone's recording would be written down with; the phone dictates on its own when this computer can't. */
+export async function dictationStatus(): Promise<DictationStatus> {
+  const provider = getSettings().voice.sttProvider;
+  return { provider, ready: await transcriptionReady(), formats: provider === "hex" ? ["wav"] : ["wav", "m4a"] };
 }
 
 async function openaiTranscript(

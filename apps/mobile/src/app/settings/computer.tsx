@@ -2,12 +2,16 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import { ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
+import { useFullAccess } from "@/components/admin";
 import { CloseButton } from "@/components/close-button";
-import { Group, PickerRow, StepperRow, SwitchRow, Tile } from "@/components/form";
+import { FieldRow, Group, PickerRow, StepperRow, SwitchRow, Tile } from "@/components/form";
+import { ActionPill, reportInstall } from "@/components/program-parts";
 import { FormSkeleton, isOutdated } from "@/components/settings-state";
 import { ErrorState, LiveDot, T, tap } from "@/components/ui";
+import { patchAnySettings } from "@/lib/admin";
 import { errorText } from "@/lib/api";
 import { t as translate } from "@/lib/i18n";
+import { programsApi } from "@/lib/programs";
 import { queryClient } from "@/lib/query";
 import { settingsApi, sq } from "@/lib/settings-api";
 import { patchSettings, useSettings } from "@/lib/setup";
@@ -22,9 +26,13 @@ function minutes(n: number): string {
   return n < 60 ? `${n} min` : `${n / 60} h`;
 }
 
-/** Computer use and virtual machines: what agents see and control, and the helper that does it. */
+/**
+ * Computer use and virtual machines: what agents see and control, and the helper that does it. A full-access phone also
+ * installs the helper, picks it and switches virtual machines on, like the desktop app.
+ */
 export default function ComputerSettings() {
-  const { t } = useTranslation(["settings", "common"]);
+  const { t } = useTranslation(["settings", "common", "programs"]);
+  const admin = useFullAccess().fullAccess === true;
   const settings = useSettings();
   const status = useQuery({ queryKey: sq.computerStatus, queryFn: settingsApi.computer.status });
   const pull = usePullRefresh(() => Promise.all([settings.refetch(), status.refetch()]));
@@ -32,6 +40,13 @@ export default function ComputerSettings() {
     mutationFn: settingsApi.computer.stopHelper,
     onSettled: () => void queryClient.invalidateQueries({ queryKey: sq.computerStatus }),
     onError: (err) => Alert.alert(t("computer.helper.stopFailed"), errorText(err)),
+  });
+  const installHelper = useMutation({
+    mutationFn: programsApi.installCua,
+    onSettled: (result, err) => {
+      reportInstall(err ?? result, { done: t("programs:installed", { name: "Cua Driver" }), failed: t("programs:installFailed", { name: "Cua Driver" }) });
+      void queryClient.invalidateQueries({ queryKey: sq.computerStatus });
+    },
   });
   const s = settings.data;
   const cua = status.data?.cua;
@@ -83,6 +98,16 @@ export default function ComputerSettings() {
 
           {cua && !isOutdated(status.error) ? (
             <Group title={t("computer.helper.title")} footer={cua.running ? t("computer.helper.footer") : undefined}>
+              {admin ? (
+                <SwitchRow
+                  icon="display"
+                  title={t("programs:computer.useCua")}
+                  detail={t("programs:computer.useCuaDetail")}
+                  disabled={!s.computer.enabled}
+                  value={s.computer.useCuaDriver}
+                  onChange={(useCuaDriver) => void patchAnySettings({ computer: { useCuaDriver } })}
+                />
+              ) : null}
               <View style={styles.row}>
                 <Tile icon="cursor" />
                 <View style={{ flex: 1, minWidth: 0, gap: 1 }}>
@@ -93,6 +118,9 @@ export default function ComputerSettings() {
                     {cua.running ? t("computer.helper.running") : cua.installed ? t("computer.helper.idle") : t("computer.helper.notInstalled")}
                   </T>
                 </View>
+                {admin && !cua.installed && !cua.running ? (
+                  <ActionPill label={t("programs:install")} busyLabel={t("programs:installing")} busy={installHelper.isPending} onPress={() => installHelper.mutate()} />
+                ) : null}
                 {cua.running ? (
                   stopHelper.isPending ? (
                     <ActivityIndicator size="small" />
@@ -104,11 +132,26 @@ export default function ComputerSettings() {
                   )
                 ) : null}
               </View>
+              {admin ? (
+                <FieldRow
+                  label={t("programs:computer.command")}
+                  value={s.computer.cuaDriverCommand}
+                  placeholder={t("programs:computer.commandPlaceholder")}
+                  maxLength={1000}
+                  onCommit={(cuaDriverCommand) => void patchAnySettings({ computer: { cuaDriverCommand: cuaDriverCommand.trim() } })}
+                />
+              ) : null}
             </Group>
           ) : null}
 
-          <Group title={t("capabilities.vm.title")} footer={s.vm.enabled ? t("capabilities.vm.footer") : t("computer.vmOnComputer")}>
-            <SwitchRow icon="vm" title={t("capabilities.vm.title")} disabled={!s.vm.enabled} value={s.vm.enabled} onChange={(enabled) => void patchSettings({ vm: { enabled } })} />
+          <Group title={t("capabilities.vm.title")} footer={s.vm.enabled ? t("capabilities.vm.footer") : admin ? undefined : t("computer.vmOnComputer")}>
+            <SwitchRow
+              icon="vm"
+              title={t("capabilities.vm.title")}
+              disabled={!s.vm.enabled && !admin}
+              value={s.vm.enabled}
+              onChange={(enabled) => void (admin ? patchAnySettings({ vm: { enabled } }) : patchSettings({ vm: { enabled } }))}
+            />
             {s.vm.enabled ? (
               <PickerRow
                 icon="power"

@@ -1,18 +1,30 @@
 import type { Context, Hono } from "hono";
-import type { MobileSession } from "@godmode/shared";
+import { EXPO_PUSH_TOKEN, type MobileDevice, type MobileSession } from "@godmode/shared";
 import { isCloudOnline, phoneGatewayUrl } from "../../cloud/state";
 import { phonePeers } from "../../remote/devices";
 import { mobileStatus, mobileUrls, refreshMobileAccess } from "../../mobile/access";
-import { cancelPairingOffer, claimPairing, createPairingOffer, instanceInfo, renameDevice, revokeDevice } from "../../mobile/devices";
+import { cancelPairingOffer, claimPairing, createPairingOffer, getDevice, instanceInfo, renameDevice, revokeDevice, setDeviceFullAccess, setDevicePushToken } from "../../mobile/devices";
 import { getSettings, updateSettings } from "../../services/settings";
 import { HttpError, conflict } from "../../util";
-import { clientIp, isPhoneRequest, rateLimitLogin, requestDevice, resetLoginAttempts } from "../auth";
+import { clientIp, isLimitedPhone, isOwnComputer, rateLimitLogin, requestDevice, requestVia, resetLoginAttempts } from "../auth";
 import { body, z } from "../validate";
 
 const port = z.number().int().min(1024).max(65535);
 
+/** The computer, or a phone with full access. */
 function onlyComputer(c: Context) {
-  if (isPhoneRequest(c)) throw new HttpError(403, "The phone app can't do this. Use Godmode on your computer.", "device_forbidden");
+  if (isLimitedPhone(c)) throw new HttpError(403, "The phone app can't do this. Use Godmode on your computer.", "device_forbidden");
+}
+
+function session(device: MobileDevice): MobileSession {
+  const group = phonePeers();
+  return { device, instance: instanceInfo(), fullAccess: device.fullAccess, urls: mobileUrls(), ...(group.length ? { group } : {}) };
+}
+
+function phoneOf(c: Context): MobileDevice {
+  const device = requestDevice(c);
+  if (!device) throw new HttpError(400, "Only for the phone app", "not_a_phone");
+  return device;
 }
 
 export function registerMobileRoutes(app: Hono) {
@@ -70,10 +82,21 @@ export function registerMobileRoutes(app: Hono) {
     return c.json({ ok: true as const });
   });
 
+  /** Renames a phone, or switches its full access: on only from this computer's own app or dashboard. */
   app.patch("/api/mobile/devices/:id", async (c) => {
     onlyComputer(c);
-    const { name } = await body(c, z.object({ name: z.string().trim().min(1).max(80) }));
-    return c.json(renameDevice(c.req.param("id"), name));
+    const { name, fullAccess } = await body(
+      c,
+      z
+        .object({ name: z.string().trim().min(1).max(80).optional(), fullAccess: z.boolean().optional() })
+        .strict()
+        .refine((v) => v.name !== undefined || v.fullAccess !== undefined, "Nothing to change"),
+    );
+    const id = c.req.param("id");
+    if (fullAccess && !isOwnComputer(c)) throw new HttpError(403, "Only Godmode on this computer can give a phone full access.", "computer_only");
+    if (name !== undefined) renameDevice(id, name);
+    if (fullAccess !== undefined) setDeviceFullAccess(id, fullAccess, "user", requestVia(c));
+    return c.json(getDevice(id));
   });
 
   app.delete("/api/mobile/devices/:id", (c) => {
@@ -83,18 +106,32 @@ export function registerMobileRoutes(app: Hono) {
   });
 
   /** The phone asking who it is and which computer it controls. */
-  app.get("/api/mobile/me", (c) => {
-    const device = requestDevice(c);
-    if (!device) throw new HttpError(400, "Only for the phone app", "not_a_phone");
-    const group = phonePeers();
-    return c.json({ device, instance: instanceInfo(), urls: mobileUrls(), ...(group.length ? { group } : {}) } satisfies MobileSession);
+  app.get("/api/mobile/me", (c) => c.json(session(phoneOf(c))));
+
+  /** The phone switches its own full access off; only the computer switches it on. */
+  app.patch("/api/mobile/me", async (c) => {
+    const device = phoneOf(c);
+    const { fullAccess } = await body(c, z.object({ fullAccess: z.boolean() }).strict());
+    if (fullAccess) throw new HttpError(403, "Only Godmode on your computer can give a phone full access.", "device_forbidden");
+    return c.json(session(setDeviceFullAccess(device.id, false, `device:${device.id}`, requestVia(c))));
   });
 
   /** The phone unpairs itself. */
   app.delete("/api/mobile/me", (c) => {
-    const device = requestDevice(c);
-    if (!device) throw new HttpError(400, "Only for the phone app", "not_a_phone");
+    const device = phoneOf(c);
     revokeDevice(device.id, `device:${device.id}`);
     return c.json({ ok: true as const });
+  });
+
+  /** The phone switches its notifications on with its Expo push token (mobile/push.ts), or off. */
+  app.post("/api/mobile/me/push", async (c) => {
+    const device = phoneOf(c);
+    const { token } = await body(c, z.object({ token: z.string().max(240).regex(EXPO_PUSH_TOKEN, "Not an Expo push token"), platform: z.enum(["ios", "android"]) }).strict());
+    return c.json(session(setDevicePushToken(device.id, token)));
+  });
+
+  app.delete("/api/mobile/me/push", (c) => {
+    const device = phoneOf(c);
+    return c.json(session(setDevicePushToken(device.id, null)));
   });
 }

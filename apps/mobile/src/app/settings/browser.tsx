@@ -79,12 +79,11 @@ export default function BrowserSettings() {
         )
       ) : (
         <>
-          <Group footer={t("capabilities.browser.footer")}>
+          <Group>
             <SwitchRow icon="globe" title={t("capabilities.browser.enabled")} value={s.browser.enabled} onChange={(enabled) => void patchSettings({ browser: { enabled } })} />
             <SwitchRow
               icon="eye"
               title={t("capabilities.browser.headless")}
-              detail={t("capabilities.browser.headlessDetail")}
               disabled={!s.browser.enabled}
               value={s.browser.headless}
               onChange={(headless) => void patchSettings({ browser: { headless } })}
@@ -92,7 +91,6 @@ export default function BrowserSettings() {
             <SwitchRow
               icon="shield"
               title={t("capabilities.browser.stealth")}
-              detail={t("capabilities.browser.stealthDetail")}
               disabled={!s.browser.enabled}
               value={s.browser.stealth}
               onChange={(stealth) => void patchSettings({ browser: { stealth } })}
@@ -100,7 +98,6 @@ export default function BrowserSettings() {
             <SwitchRow
               icon="key"
               title={t("browser.passkeys")}
-              detail={t("browser.passkeysDetail")}
               disabled={!s.browser.enabled}
               value={s.browser.passkeys}
               onChange={(passkeys) => void patchSettings({ browser: { passkeys } })}
@@ -109,7 +106,6 @@ export default function BrowserSettings() {
             <SwitchRow
               icon="screens"
               title={t("capabilities.liveView")}
-              detail={t("capabilities.browser.liveViewDetail")}
               disabled={!s.browser.enabled}
               value={s.browser.liveView}
               onChange={(liveView) => void patchSettings({ browser: { liveView } })}
@@ -198,7 +194,7 @@ function Profiles({
 
   return (
     <>
-      <Group title={t("browser.profiles")} footer={t("browser.profilesFooter")}>
+      <Group title={t("browser.profiles")}>
         {query.isLoading
           ? [0, 1].map((i) => <ProfileSkeleton key={i} />)
           : query.isError

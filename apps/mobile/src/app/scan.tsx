@@ -11,6 +11,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { parsePairingLink } from "@godmode/shared";
 import { Glass } from "@/components/glass";
 import { Button, GlassIconButton, SMOKE, T } from "@/components/ui";
+import { useSession } from "@/lib/session";
 import { radius, space } from "@/lib/theme";
 
 const WHITE = "#FFFFFF";
@@ -62,7 +63,7 @@ export default function Scan() {
       </View>
 
       <View style={[styles.top, { paddingTop: insets.top + space.sm }]}>
-        <GlassIconButton icon="close" label={t("common:actions.close")} onPress={() => router.back()} dark />
+        <GlassIconButton icon="close" label={t("common:actions.close")} onPress={() => (router.canGoBack() ? router.back() : router.replace(useSession.getState().connection ? "/" : "/welcome"))} dark />
       </View>
 
       <View style={[styles.bottom, { paddingBottom: insets.bottom + space.xl }]}>

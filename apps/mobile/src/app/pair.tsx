@@ -22,7 +22,7 @@ export default function Pair() {
   const [error, setError] = useState<string | null>(null);
   const c = useColors();
 
-  const close = () => (router.canGoBack() ? router.back() : router.replace("/"));
+  const close = () => (router.canGoBack() ? router.back() : router.replace(current ? "/" : "/welcome"));
 
   const connect = async () => {
     if (!payload) return;

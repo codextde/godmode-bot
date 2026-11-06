@@ -2,6 +2,7 @@ import { Stack } from "expo-router";
 import { ScrollView, StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { CALL_LANGUAGES } from "@/components/call-parts";
+import { CallsAdmin } from "@/components/calls-admin";
 import { CloseButton } from "@/components/close-button";
 import { FieldRow, Group, PickerRow, StepperRow, SwitchRow, TextEditor } from "@/components/form";
 import { QueryState } from "@/components/settings-state";
@@ -68,6 +69,8 @@ export default function CallsPersona() {
                   onSave={(inboundGreeting) => patchSettings({ phone: { inboundGreeting: inboundGreeting.trim() } }, { quiet: true })}
                 />
               </View>
+
+              <CallsAdmin phone={p} />
             </>
           );
         }}

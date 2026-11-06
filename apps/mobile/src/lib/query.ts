@@ -16,6 +16,8 @@ export const qk = {
   me: ["me"],
   workspaces: ["workspaces"],
   settings: ["settings"],
+  /** Under settings: whatever refreshes them asks again. */
+  dictation: (provider: string) => ["settings", "dictation", provider],
   agents: ["agents"],
   agent: (id: string) => ["agents", id],
   agentMemory: (id: string) => ["agents", id, "memory"],

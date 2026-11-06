@@ -1,6 +1,6 @@
 import type { Hono } from "hono";
 import { body, z } from "../validate";
-import { MAX_AUDIO_BYTES, speak, transcribe, transcriptionReady } from "../../voice/voice";
+import { dictationStatus, MAX_AUDIO_BYTES, speak, transcribe, transcriptionReady } from "../../voice/voice";
 import { hexLanguage, hexStatus, prepareHex } from "../../voice/hex";
 import { badRequest, HttpError } from "../../util";
 import { isPhoneRequest } from "../auth";
@@ -30,6 +30,8 @@ export function registerVoiceRoutes(app: Hono): void {
       }),
     );
   });
+
+  app.get("/api/voice/dictation", async (c) => c.json(await dictationStatus()));
 
   app.get("/api/voice/hex", async (c) => c.json(await hexStatus()));
 

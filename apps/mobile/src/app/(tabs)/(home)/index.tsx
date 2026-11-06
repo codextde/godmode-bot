@@ -116,10 +116,6 @@ export default function Home() {
         <T variant="largeTitle" style={styles.greeting}>
           {greeting(now)}
           {userName ? `, ${userName}` : ""}.
-          <T variant="largeTitle" color={c.textFaint} style={styles.greeting}>
-            {"\n"}
-            {t("home.prompt")}
-          </T>
         </T>
       </View>
 
@@ -235,7 +231,7 @@ function NeedsYou({ vaultLocked }: { vaultLocked: boolean }) {
         title={t("home.needs.title")}
         count={total}
         tone="warning"
-        action={more ? (elsewhere > 0 ? t("home.needs.moreElsewhere", { count: elsewhere }) : t("home.needs.allInInbox", { count: items.length })) : undefined}
+        action={more ? (elsewhere > 0 ? t("home.needs.moreElsewhere", { count: elsewhere }) : t("home.inbox")) : undefined}
         onAction={() => router.push("/inbox")}
       />
       <Card>

@@ -1646,6 +1646,15 @@ export interface HexStatus {
   progress: { phase: "installing" | "starting" | "downloading" | "verifying" | "loading"; downloadedBytes: number; totalBytes: number } | null;
   error: string | null;
 }
+
+/** Recordings the computer writes down for a phone (GET /api/voice/dictation). */
+export interface DictationStatus {
+  provider: SttProvider;
+  /** It writes recordings down as set up now: Hex with its model, else an OpenAI key. */
+  ready: boolean;
+  /** What it reads: Hex only WAV, OpenAI also AAC (m4a). */
+  formats: ("wav" | "m4a")[];
+}
 export type TtsProvider = "browser" | "openai" | "elevenlabs";
 
 export interface VoiceSettings {

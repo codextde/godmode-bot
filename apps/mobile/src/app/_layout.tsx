@@ -11,6 +11,8 @@ import { useTranslation } from "react-i18next";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { AppLock } from "@/components/app-lock";
+import { PushBridge } from "@/components/push-bridge";
+import { readableLayout } from "@/components/readable";
 import { forgetLocalCopies } from "@/lib/agent-files";
 import { api } from "@/lib/api";
 import { loadAppearance, useAppearance } from "@/lib/appearance";
@@ -91,9 +93,10 @@ export default function RootLayout() {
             <ThemeSync paired={paired} />
             <LanguageSync paired={paired} />
             <TimeFormatSync paired={paired} />
+            <PushBridge paired={paired} />
             <StatusBar style="auto" />
-            <Stack screenOptions={{ headerShadowVisible: false, headerBackButtonDisplayMode: "minimal", contentStyle: page }}>
-              <Stack.Protected guard={paired}>
+            <Stack screenOptions={{ headerShadowVisible: false, headerBackButtonDisplayMode: "minimal", contentStyle: page }} screenLayout={readableLayout}>
+              <Stack.Protected guard={paired} redirectTo="/welcome">
                 <Stack.Screen name="(tabs)" options={{ headerShown: false, contentStyle: { backgroundColor: c.background } }} />
                 <Stack.Screen name="chat/[id]" options={{ headerTransparent: process.env.EXPO_OS === "ios", title: "" }} />
                 <Stack.Screen name="agent/[id]" options={{ headerTransparent: process.env.EXPO_OS === "ios", title: "" }} />
@@ -133,6 +136,12 @@ export default function RootLayout() {
                 <Stack.Screen name="note" options={{ headerTransparent: process.env.EXPO_OS === "ios", title: "" }} />
                 <Stack.Screen name="agent-run" options={{ presentation: "formSheet", sheetAllowedDetents: [0.62, 1], sheetGrabberVisible: true, headerShown: false }} />
                 <Stack.Screen name="goal" options={{ presentation: "formSheet", sheetAllowedDetents: [0.62, 1], sheetGrabberVisible: true, headerShown: false }} />
+                <Stack.Screen name="vault/passphrase" options={{ presentation: "formSheet", sheetAllowedDetents: [0.4, 1], sheetGrabberVisible: true, headerShown: false }} />
+                <Stack.Screen name="vault/login-edit" options={{ presentation: "formSheet", sheetAllowedDetents: [1], sheetGrabberVisible: true, headerShown: false }} />
+                <Stack.Screen name="vault/totp-edit" options={{ presentation: "formSheet", sheetAllowedDetents: [1], sheetGrabberVisible: true, headerShown: false }} />
+                <Stack.Screen name="vault/card-edit" options={{ presentation: "formSheet", sheetAllowedDetents: [1], sheetGrabberVisible: true, headerShown: false }} />
+                <Stack.Screen name="vault/ssh-key-new" options={{ presentation: "formSheet", sheetAllowedDetents: [0.75, 1], sheetGrabberVisible: true, headerShown: false }} />
+                <Stack.Screen name="vault/key-edit" options={{ presentation: "formSheet", sheetAllowedDetents: [0.5, 1], sheetGrabberVisible: true, headerShown: false }} />
                 <Stack.Screen name="settings" options={{ presentation: "modal", headerShown: false, contentStyle: { backgroundColor: c.background } }} />
                 <Stack.Screen name="live" options={{ presentation: "fullScreenModal", headerShown: false, contentStyle: { backgroundColor: "#000" } }} />
               </Stack.Protected>

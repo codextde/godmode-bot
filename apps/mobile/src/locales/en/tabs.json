@@ -22,7 +22,6 @@
     "datePattern": "EEEE, MMMM d",
     "agentsReady_one": "1 agent ready",
     "agentsReady_other": "{{count}} agents ready",
-    "prompt": "What should we get done?",
     "askAgent": "Ask {{name}} anything, or hand over a task…",
     "ask": "Ask anything, or hand over a task…",
     "offline": {
@@ -37,8 +36,6 @@
       "elsewhere_other": "Nothing waits for you here. {{count}} things wait in other workspaces",
       "moreElsewhere_one": "+{{count}} in other workspaces · Inbox",
       "moreElsewhere_other": "+{{count}} in other workspaces · Inbox",
-      "allInInbox_one": "All {{count}} in the Inbox",
-      "allInInbox_other": "All {{count}} in the Inbox",
       "vaultLocked": "The vault is locked",
       "vaultLockedBody": "Agents can't sign in until you unlock it on your computer."
     },

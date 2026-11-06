@@ -1,7 +1,7 @@
 import type { Context, Hono } from "hono";
 import { answerQuestion, getQuestion, listQuestions, type Answerer, type QuestionFilter } from "../../services/questions";
 import { badRequest } from "../../util";
-import { isPhoneRequest, requestCloudUser } from "../auth";
+import { isLimitedPhone, isPhoneRequest, requestCloudUser } from "../auth";
 import { body, z } from "../validate";
 
 const FILTERS: readonly QuestionFilter[] = ["open", "answered", "approved", "declined", "withdrawn", "resolved", "all"];
@@ -19,6 +19,8 @@ const answerSchema = z
     note: z.string().max(2000).optional(),
     text: z.string().max(20_000).optional(),
     attachments: z.array(attachmentSchema).optional(),
+    /** Another computer of the group passes on that a phone without full access answered. */
+    fillOnly: z.boolean().optional(),
   })
   .refine((v) => [v.optionId, v.decision, v.text].filter((x) => x !== undefined).length === 1, "Give exactly one of optionId, decision or text")
   .refine((v) => v.note === undefined || v.decision !== undefined, "A note goes with a decision")
@@ -27,7 +29,12 @@ const answerSchema = z
 /** The human answering: from a paired phone, or from the desktop app / dashboard. */
 export function answererOf(c: Context): Answerer {
   const cloud = requestCloudUser(c);
-  return { actor: "user", via: isPhoneRequest(c) ? "phone" : "app", ...(cloud && cloud.role !== "owner" ? { notOwner: true } : {}) };
+  return {
+    actor: "user",
+    via: isPhoneRequest(c) ? "phone" : "app",
+    ...(cloud && cloud.role !== "owner" ? { notOwner: true } : {}),
+    ...(isLimitedPhone(c) ? { fillOnly: true } : {}),
+  };
 }
 
 export function registerQuestionRoutes(app: Hono): void {
@@ -48,7 +55,8 @@ export function registerQuestionRoutes(app: Hono): void {
   app.get("/api/questions/:id", (c) => c.json(getQuestion(c.req.param("id"))));
 
   app.post("/api/questions/:id/answer", async (c) => {
-    const input = await body(c, answerSchema);
-    return c.json(answerQuestion(c.req.param("id"), input, answererOf(c)));
+    const { fillOnly, ...input } = await body(c, answerSchema);
+    const by = answererOf(c);
+    return c.json(answerQuestion(c.req.param("id"), input, fillOnly ? { ...by, fillOnly } : by));
   });
 }

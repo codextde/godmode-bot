@@ -12,6 +12,7 @@ import { CharacterAvatar } from "@/components/character";
 import { HeaderActions } from "@/components/header-actions";
 import { Icon } from "@/components/icon";
 import { Markdown } from "@/components/markdown";
+import { useRevealLocked } from "@/components/this-phone-access";
 import { Button, Card, EmptyState, ErrorState, LoadingState, Row, T } from "@/components/ui";
 import { api, ApiError, errorText, updateDesktopMessage } from "@/lib/api";
 import { useAgents } from "@/lib/hooks";
@@ -89,6 +90,8 @@ function MemoryView({ agent, memory, refetch }: { agent: Agent; memory: AgentMem
   const dirty = editing && draft.text !== draft.baseText;
   const sections = useMemo(() => splitSections(memory.content), [memory.content]);
   const titled = sections.filter((s) => s.title);
+  const locked = useRevealLocked(agent);
+  const { t: tc } = useTranslation("components");
 
   const save = useMutation({
     mutationFn: ({ text, base }: { text: string; base?: string }) => api.agents.saveMemory(agent.id, text, base),
@@ -157,7 +160,7 @@ function MemoryView({ agent, memory, refetch }: { agent: Agent; memory: AgentMem
           actions={[{ icon: "check", label: t("common:actions.save"), prominent: true, onPress: () => draft && !save.isPending && save.mutate({ text: draft.text, base: draft.base }) }]}
           menu={[{ icon: "close", title: dirty ? t("view.discardChanges") : t("view.stopEditing"), onPress: discard, destructive: dirty }]}
         />
-      ) : (
+      ) : locked ? null : (
         <HeaderActions actions={[{ icon: "pencil", label: t("view.edit"), onPress: startEdit }]} />
       )}
 
@@ -178,6 +181,11 @@ function MemoryView({ agent, memory, refetch }: { agent: Agent; memory: AgentMem
       </Row>
 
       <Budget chars={chars} memory={memory} />
+      {locked ? (
+        <T variant="footnote" muted>
+          {tc("fullAccess.title")}
+        </T>
+      ) : null}
 
       {memory.dreaming ? (
         <Row style={[styles.banner, { backgroundColor: c.dreamSoft }]}>
@@ -211,7 +219,7 @@ function MemoryView({ agent, memory, refetch }: { agent: Agent; memory: AgentMem
           icon="brain"
           title={t("view.emptyTitle")}
           body={t("view.emptyBody", { name: agent.name })}
-          action={<Button title={t("view.writeFirst")} icon="pencil" variant="secondary" onPress={startEdit} />}
+          action={locked ? undefined : <Button title={t("view.writeFirst")} icon="pencil" variant="secondary" onPress={startEdit} />}
         />
       ) : (
         <>
