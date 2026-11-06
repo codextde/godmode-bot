@@ -5,7 +5,7 @@ import { motion } from "motion/react";
 import { Link } from "react-router";
 import { Trans, useTranslation } from "react-i18next";
 import type { Agent, Conversation, Message, MessageBlock, RetryCause, RetryMode } from "@godmode/shared";
-import { ArrowRightLeft, ArrowUpRight, Cpu, HandHelping, Info, KanbanSquare, Loader2, Play, RotateCcw, Square, Timer, Volume2, Workflow } from "lucide-react";
+import { ArrowRightLeft, ArrowUpRight, Cpu, HandHelping, Info, KanbanSquare, Loader2, MessageSquareShare, Play, RotateCcw, Square, Timer, Volume2, Workflow } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { AgentAvatar } from "@/components/common";
@@ -74,7 +74,15 @@ const HANDOFF_PREFIX = /^\[(?:Delegated by ([^\]\n]+?)|From ([^,\]\n]+), another
  * A turn the human didn't write — an automation, another agent handing work over, the task board — shown as what it
  * is, on the left in a dashed card, never as the human's own bubble.
  */
-export function StartedMessage({ message, delegatedFrom }: { message: Message; delegatedFrom?: Conversation["delegatedFrom"] }) {
+export function StartedMessage({
+  message,
+  delegatedFrom,
+  continuedFrom,
+}: {
+  message: Message;
+  delegatedFrom?: Conversation["delegatedFrom"];
+  continuedFrom?: Conversation["continuedFrom"];
+}) {
   const { t } = useTranslation(["chat", "common"]);
   const { data: agents = [] } = useAllAgents();
   const { data: tasks = [] } = useTasks("all");
@@ -102,6 +110,17 @@ export function StartedMessage({ message, delegatedFrom }: { message: Message; d
       <>
         <HandHelping className="size-3.5" aria-hidden />
         <span className="font-medium text-foreground">{t("messages.offer")}</span>
+      </>
+    ) : message.source === "handoff" ? (
+      <>
+        <MessageSquareShare className="size-3.5" aria-hidden />
+        <span className="min-w-0 truncate">
+          {continuedFrom ? (
+            <Trans t={t} i18nKey="messages.continues" values={{ title: continuedFrom.title }} components={{ b: <span className="font-medium text-foreground" /> }} />
+          ) : (
+            <span className="font-medium text-foreground">{t("messages.fromEarlierChat")}</span>
+          )}
+        </span>
       </>
     ) : message.source === "task" ? (
       <>
@@ -131,6 +150,10 @@ export function StartedMessage({ message, delegatedFrom }: { message: Message; d
     message.source === "task" && task ? (
       <Link to={`/tasks?task=${task.id}`} className="inline-flex items-center gap-0.5 underline-offset-2 hover:text-foreground hover:underline">
         {t("messages.openTicket")} <ArrowUpRight className="size-3" />
+      </Link>
+    ) : message.source === "handoff" && continuedFrom ? (
+      <Link to={`/chat/${continuedFrom.conversationId}`} className="inline-flex items-center gap-0.5 underline-offset-2 hover:text-foreground hover:underline">
+        {t("messages.openEarlierChat")} <ArrowUpRight className="size-3" />
       </Link>
     ) : message.source === "delegation" && from && delegatedFrom?.conversationId ? (
       <Link to={`/chat/${delegatedFrom.conversationId}`} className="inline-flex items-center gap-0.5 underline-offset-2 hover:text-foreground hover:underline">

@@ -2089,4 +2089,12 @@ UPDATE settings SET value = json_remove(value, '$.contextBudget')
 WHERE key = 'runner' AND json_valid(value) AND json_type(value, '$.contextBudget') IS NOT NULL;
 `,
   },
+  {
+    id: 130,
+    name: "chat_continued_from",
+    sql: /* sql */ `
+-- The chat a chat continues with a fresh context (chat_handoff, or an auto review moving a long chat on).
+ALTER TABLE conversations ADD COLUMN continued_from TEXT;
+`,
+  },
 ];

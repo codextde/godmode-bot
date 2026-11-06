@@ -132,6 +132,15 @@ export function compactAlias(text: string): string {
   return text.replace(/^(\s*)\/compress(?=\s|$)/, "$1/compact");
 }
 
+/** From this size on the agent is told to start separate work in a fresh chat (`chat_handoff`) instead. */
+export const HANDOFF_HINT_TOKENS = 200_000;
+
+/** `/handoff [what the new chat is for]`: Godmode's command to go on in a fresh chat. Its text, or null for other messages. */
+export function handoffCommand(text: string): string | null {
+  const m = /^\s*\/handoff(?:\s+([\s\S]*))?$/.exec(text);
+  return m ? (m[1] ?? "").trim() : null;
+}
+
 /** `/goal ship it` → { name: "goal", args: "ship it" }; null for plain text and paths like `/Users/me`. */
 export function parseSlashCommand(text: string): { name: string; args: string } | null {
   const m = /^\/([\w][\w:.-]*)(?:\s+([\s\S]*))?$/.exec(text.trim());

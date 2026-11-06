@@ -39,6 +39,7 @@ import { useCoreFileUrl } from "./core-file";
 import { PauseMarker } from "./pause";
 import { QuestionCard, viewOfBlock } from "./question-card";
 import { ArtifactCard } from "@/components/artifacts/artifact-panel";
+import { HandoffCard } from "./handoff-card";
 import { describeTool, describeToolEasy, formatToolInput, hostOf, todoItems, type ToolContext, type ToolKind, type ToolMeta } from "./tool-meta";
 import { SUBAGENT_TOOLS, SubagentCard, SubagentGroup, type ParentAgent, type SubagentEntry } from "./subagents";
 
@@ -64,6 +65,7 @@ type Item =
   | { kind: "delegate"; key: string; block: ToolUseBlock }
   | { kind: "workflow"; key: string; block: ToolUseBlock }
   | { kind: "artifact"; key: string; block: ToolUseBlock }
+  | { kind: "handoff"; key: string; block: ToolUseBlock }
   | { kind: "subagent"; key: string; block: ToolUseBlock; children: MessageBlock[] }
   | { kind: "subagents"; key: string; entries: SubagentEntry[] };
 
@@ -77,9 +79,10 @@ function bareName(name: string): string {
   return name.includes("__") ? name.slice(name.lastIndexOf("__") + 2) : name;
 }
 
-function isStandaloneTool(name: string): "missing-login" | "delegate" | "workflow" | "subagent" | "artifact" | null {
+function isStandaloneTool(name: string): "missing-login" | "delegate" | "workflow" | "subagent" | "artifact" | "handoff" | null {
   const bare = name.includes("__") ? name.slice(name.lastIndexOf("__") + 2) : name;
   if (bare === "report_missing_login") return "missing-login";
+  if (bare === "chat_handoff") return "handoff";
   if (bare === "artifact_create" || bare === "artifact_update") return "artifact";
   if (bare === "agent_delegate") return "delegate";
   if (name === WORKFLOW_TOOL) return "workflow";
@@ -246,6 +249,8 @@ export function MessageBlocks({
             return <WorkflowCard key={item.key} block={item.block} streaming={streaming} />;
           case "artifact":
             return <ArtifactCard key={item.key} block={item.block} streaming={streaming} />;
+          case "handoff":
+            return <HandoffCard key={item.key} block={item.block} streaming={streaming} />;
           case "subagent":
             return <SubagentCard key={item.key} block={item.block} ctx={ctx} childBlocks={item.children} streaming={streaming} agent={agent} />;
           case "subagents":

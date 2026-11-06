@@ -7,7 +7,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { arch, hostname as osHostname, platform } from "node:os";
 import { join } from "node:path";
 import type { Agent, ComputerTarget, PauseReason, QuestionKind, RetryCause, Settings, RunEnd, RunTrigger } from "@godmode/shared";
-import { computerTargetLabel, memoryBudget, withinReach } from "@godmode/shared";
+import { computerTargetLabel, memoryBudget, tokensLabel, withinReach } from "@godmode/shared";
 import { NOTE_MAX_BYTES, type PromptMemory } from "../memory/files";
 import { PROFILE_FILE, PROFILE_MAX, type TeamProfile } from "../memory/profile";
 import { captchaSolvingAvailable } from "../browser/captcha";
@@ -58,6 +58,8 @@ export interface PromptContext {
   teamMemory?: string[];
   /** The run may schedule follow-ups (followup_schedule). */
   followups?: boolean;
+  /** The run may go on in a fresh chat (chat_handoff). */
+  handoff?: boolean;
   /** The human opened a private chat: nothing of it may be kept. */
   privateChat?: boolean;
   /** The run can build artifacts (artifact_create): small web apps shown in Godmode. */
@@ -459,6 +461,11 @@ When you can't go on because ${human} has to do something themselves — solve a
 When a task can't be finished now because you have to wait — for a reply to an email or message, a delivery, a build or deployment, a status or price change, office hours, another person — don't leave it to ${human} to remind you: schedule a follow-up with \`followup_schedule\`. Pick a realistic time (when the answer is likely there; business hours when people are involved) and write the note so you know exactly what to check and do. The same holds for a \`/goal\` whose remaining parts wait on such outside events: schedule the follow-up and end the turn with a short status; Godmode pauses the goal loop until then. When ${human} ends, drops or replaces a \`/goal\`, end it yourself with \`goal_clear\`. Don't wait inside the turn instead: no \`sleep\`, \`until\` or polling loop that runs longer than about ten minutes, in the foreground or as a background task — a run that shows no sign of life that long is stopped. A chat has one follow-up: scheduling again moves it, \`followup_cancel\` removes it. Don't schedule follow-ups for work you can do now or for things that repeat on a schedule${perms.canManageAgents ? " (those are automations)" : ""}.`);
   }
 
+  if (ctx.handoff) {
+    out.push(`### Fresh chats
+A long chat makes you slower and less precise. When ${human} asks for a new or fresh chat (or types \`/handoff\`), or this chat has grown long and the next piece of work stands on its own, go on in a new chat with \`chat_handoff\`: Godmode opens it with this chat's setup and starts it with your brief. Write the brief for a coworker who hasn't seen this chat: the goal, what is done (paths, links, ids, branches), decisions and ${human}'s preferences, the next step and what to avoid. Then end your turn with one short line. Don't hand off in the middle of a step, or work that only makes sense with this chat's details.`);
+  }
+
   if (ctx.calls) {
     out.push(`### Phone calls
 You can phone people with \`phone_call\`: Godmode's voice assistant makes the call for ${human} — booking an appointment, asking a business something, following up with a lead. A call reaches another person on ${human}'s behalf: unless ${human} asked for exactly that call, get their OK first.${ctx.calls.owner ? ` For something urgent and important that can't wait until ${human} looks at the app, add \`call: true\` to \`ask_human\` (they answer on the phone) or to \`notify_user\` (they are told on the phone) — rarely, never for routine news.` : ""}`);
@@ -733,9 +740,11 @@ export function resumeContextPrefix(
     apiTools?: PromptApiTool[];
     ssh?: PromptSshServer[];
     android?: PromptAndroidDevice[];
+    /** The chat's size in tokens when it is long enough that separate work belongs in a fresh chat. */
+    longChat?: number | null;
   } = {},
 ): string {
-  const { now = new Date(), instructions, memoryChanged, vm, sources, followup, humanTasks, apiTools, ssh, android } = opts;
+  const { now = new Date(), instructions, memoryChanged, vm, sources, followup, humanTasks, apiTools, ssh, android, longChat } = opts;
   const where = folder
     ? `Working directory: \`${folder}\` (the folder attached to this chat). Your own repository with CLAUDE.md and MEMORY.md: \`${repoPath}\`.`
     : `Working directory: your own repository \`${repoPath}\`.`;
@@ -772,7 +781,29 @@ export function resumeContextPrefix(
   const waiting = humanTasks?.length
     ? `\n\nStill open on the human's task list from this chat: ${humanTasks.map((t) => `H-${t.number} "${oneLine(t.title, 120)}"${t.status === "doing" ? " (they are on it)" : t.status === "backlog" ? " (parked in their backlog)" : ""}`).join(", ")}. If this message settles one, take it back with human_task_cancel.`
     : "";
-  return `<godmode-context>Current date/time: ${describeNow(now)}\n${where}${attached}${tools}${machine}${remote}${phones}${update}${memory}${pending}${waiting}</godmode-context>\n\n`;
+  const long = longChat
+    ? `\n\nThis chat already carries about ${tokensLabel(longChat)} tokens. If this message starts a new, separate piece of work, go on with it in a fresh chat with chat_handoff.`
+    : "";
+  return `<godmode-context>Current date/time: ${describeNow(now)}\n${where}${attached}${tools}${machine}${remote}${phones}${update}${memory}${pending}${waiting}${long}</godmode-context>\n\n`;
+}
+
+/** What `/handoff` sends: write the brief and go on in a fresh chat. `focus`: what the human said the new chat is for. */
+export function handoffRequest(focus: string, userName: string): string {
+  const human = userName.trim() || "the user";
+  const said = stripNoteTags(focus).trim();
+  return `<godmode-handoff>
+${human} wants this work to go on in a fresh chat, so it doesn't carry this chat's long context along.${said ? ` What the new chat is for, in their words: ${said}` : ""}
+Call \`chat_handoff\` now with a short title and the brief. Don't do any other work in this turn; after the call, end with one short line.
+</godmode-handoff>`;
+}
+
+/** The first turn of a chat that continues another one: the brief the agent wrote there. */
+export function handoffBriefPrompt(fromTitle: string, fromId: string, brief: string): string {
+  return `<godmode-handoff>
+This chat continues "${stripNoteTags(fromTitle)}" (${fromId}), which had grown long. You wrote the brief below there for this chat. It is all you have of that conversation besides your memory and files; \`recall\` finds what was said there. Go on with the work.
+</godmode-handoff>
+
+${stripNoteTags(brief).trim()}`;
 }
 
 /** The human's answer to what the run asked (ask_human, request_approval), as the run reads it when it continues. */

@@ -155,7 +155,8 @@ import { link } from "../remote/runners";
 import { loginFillScope } from "../browser/fill";
 import { errorMessage } from "../computer/engine";
 import { DEVICE_URL, approveOnPage, ensureSignIn, githubLogin, otherRunsSignIn, signInEnd } from "../github/signIn";
-import { chatFillOnly, chatGoal, createConversation, isPrivateChat, maskSecretInChat, sendMessage } from "../services/conversations";
+import { chatFillOnly, chatGoal, createConversation, handoffAllowed, isPrivateChat, maskSecretInChat, sendMessage } from "../services/conversations";
+import { HANDOFF_BRIEF_MAX, HANDOFF_TITLE_MAX, handOff } from "../services/handoff";
 import { assignVm, createVm, getVm, listVms, sharedDirOf, startVm, stopVm, suspendVm, vmInUse, vmOfRun, vmStatus } from "../vm/service";
 import { resolveVmId } from "../vm/assignments";
 import { androidStatus, assignDevice, freshDevices } from "../android/service";
@@ -2245,6 +2246,34 @@ const TOOLS: ToolDef[] = [
       const refused = endGoalAfterTurn(ctx.runId, reason);
       if (refused) return fail(refused);
       return `The goal “${goal.length > 200 ? `${goal.slice(0, 199).trimEnd()}…` : goal}” ends when this turn is over. Finish your answer now and don't work on it any further.`;
+    },
+  }),
+
+  defineTool({
+    name: "chat_handoff",
+    description:
+      "Go on in a fresh chat with a clean brief, so the work doesn't drag this chat's long context along. Use it when the human asks for a new or fresh chat (`/handoff`), or when this chat has grown long and the next piece of work stands on its own. Godmode opens a new chat with this chat's setup (you, its folder, browser, workspace, project, model, instructions) and starts it with your brief; the new chat has your memory and files, not this conversation. A `/goal` of this chat moves along. After the call, end your turn with one short line; don't go on with the work here.",
+    schema: z.object({
+      title: z.string().min(1).max(HANDOFF_TITLE_MAX).describe('Title of the new chat, e.g. "Checkout redesign: mobile layout"'),
+      brief: z
+        .string()
+        .min(1)
+        .max(HANDOFF_BRIEF_MAX)
+        .describe(
+          "Everything the new chat needs, for a coworker who hasn't seen this one: the goal, what is done (paths, links, ids, branches, PR numbers), decisions and the human's preferences from this chat, the next step, what to avoid. Leave out what doesn't matter for going on.",
+        ),
+    }),
+    when: (_agent, ctx) => !isCheckRun(ctx) && handoffAllowed(ctx.conversationId),
+    run: async ({ title, brief }, { ctx }) => {
+      const { conversation, goal } = await handOff({ from: ctx.conversationId, title, brief, runId: ctx.runId, claudeConfigDir: runClaudeConfigDir(ctx.runId) });
+      const followup = getFollowup(ctx.conversationId);
+      return [
+        `The work goes on in the new chat "${conversation.title}" (${conversation.id}), which started with your brief${goal ? "; this chat's /goal moved along and ends here after this turn" : ""}.`,
+        followup ? `This chat still has a follow-up (${followup.note}): remove it with followup_cancel if the new chat takes that over.` : "",
+        "End your turn now with one short line that it goes on there.",
+      ]
+        .filter(Boolean)
+        .join(" ");
     },
   }),
 

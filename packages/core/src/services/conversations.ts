@@ -26,6 +26,7 @@ import { computerTargetLabel, MAX_MESSAGE_ATTACHMENT_BYTES, modelProvider } from
 import { liteMessage } from "./liteMessage";
 import { all, bool, get, insert, int, run as sql, tx, update } from "../db";
 import { bus } from "../events/bus";
+import { config } from "../config";
 import { logger } from "../log";
 import { badRequest, conflict, newId, notFound, now, parseJson } from "../util";
 import { assignmentsChanged, normalizeVmId } from "../vm/assignments";
@@ -78,6 +79,8 @@ interface ConversationRow extends PauseQuestionCols {
   runner_id: string | null;
   runner_state: string | null;
   runner_tools_id: string | null;
+  secret_access: string | null;
+  continued_from: string | null;
   context_tokens: number | null;
   context_window: number | null;
   pinned: number;
@@ -101,6 +104,7 @@ interface ConversationRow extends PauseQuestionCols {
   from_run_id?: string | null;
   from_agent_id?: string | null;
   from_conversation_id?: string | null;
+  continued_from_title?: string | null;
 }
 
 interface MessageRow {
@@ -115,7 +119,7 @@ interface MessageRow {
   created_at: string;
 }
 
-const MESSAGE_SOURCES: readonly MessageSource[] = ["automation", "delegation", "task", "offer"];
+const MESSAGE_SOURCES: readonly MessageSource[] = ["automation", "delegation", "task", "offer", "handoff"];
 
 /* ------------------------------------------------------------------ */
 /* Mapping                                                             */
@@ -199,6 +203,7 @@ function toConversation(r: ConversationRow): Conversation {
           )
         : null,
     delegatedFrom: r.from_run_id && r.from_agent_id ? { agentId: r.from_agent_id, conversationId: r.from_conversation_id ?? null, runId: r.from_run_id } : null,
+    continuedFrom: r.continued_from && r.continued_from_title != null ? { conversationId: r.continued_from, title: r.continued_from_title } : null,
     unread: r.unread_run_id ? { runId: r.unread_run_id, failed: r.unread_status === "failed" } : null,
   };
 }
@@ -212,7 +217,7 @@ function toMessage(r: MessageRow): Message {
     blocks: parseJson<MessageBlock[]>(r.blocks, []),
     runId: r.run_id,
     attachments: parseJson<Attachment[]>(r.attachments, []),
-    // Only the three known values: a restored backup can't invent an author.
+    // Only the known values: a restored backup can't invent an author.
     ...(r.role === "user" && MESSAGE_SOURCES.includes(r.source as MessageSource) ? { source: r.source as MessageSource } : {}),
     createdAt: r.created_at,
   };
@@ -224,12 +229,13 @@ const PAUSE_SQL =
   "p.run_id AS paused_run_id, p.reason AS paused_reason, p.limit_name AS paused_limit, p.resume_at AS paused_resume_at, p.auto AS paused_auto, p.created_at AS paused_at, " +
   PAUSE_QUESTION_SQL;
 // A handed-over chat links back to the run (and through it the chat and agent) that asked. Derived, not stored: when
-// the asking agent or its chat is deleted the link goes null by itself.
+// the asking agent or its chat is deleted the link goes null by itself. A chat continued in a fresh one keeps the id of
+// the one it continues; its title comes along here, and a deleted chat leaves no link.
 const DELEGATED_SQL =
-  "pr.id AS from_run_id, pr.agent_id AS from_agent_id, pc.id AS from_conversation_id, (SELECT ur.status FROM runs ur WHERE ur.id = c.unread_run_id) AS unread_status";
+  "pr.id AS from_run_id, pr.agent_id AS from_agent_id, pc.id AS from_conversation_id, cf.title AS continued_from_title, (SELECT ur.status FROM runs ur WHERE ur.id = c.unread_run_id) AS unread_status";
 const DELEGATED_JOIN =
   "LEFT JOIN runs pr ON c.origin = 'delegation' AND pr.id = (SELECT r.parent_run_id FROM runs r WHERE r.conversation_id = c.id AND r.parent_run_id IS NOT NULL ORDER BY r.created_at, r.rowid LIMIT 1) " +
-  "LEFT JOIN conversations pc ON pc.id = pr.conversation_id";
+  "LEFT JOIN conversations pc ON pc.id = pr.conversation_id LEFT JOIN conversations cf ON cf.id = c.continued_from";
 const FROM_SQL = `conversations c LEFT JOIN followups f ON f.conversation_id = c.id LEFT JOIN paused_runs p ON p.conversation_id = c.id ${PAUSE_QUESTION_JOIN} ${DELEGATED_JOIN}`;
 /**
  * The chat has work ahead: an agent works in it, a run stands still, or it continues by itself later. Not a ticket's
@@ -331,6 +337,8 @@ export function createConversation(
     /** No raw secrets in this chat, whatever its agent may read (see `chatFillOnly`). */
     fillOnly?: boolean;
     private?: boolean;
+    /** The chat this one continues with a fresh context. */
+    continuedFrom?: string | null;
   } & ModelChoice,
 ): Conversation {
   const agent = getAgent(input.agentId); // 404 if the agent doesn't exist
@@ -364,6 +372,7 @@ export function createConversation(
     pinned: 0,
     archived: 0,
     private: int(!!input.private)!,
+    continued_from: input.continuedFrom ?? null,
     last_message_at: null,
     created_at: ts,
     updated_at: ts,
@@ -372,6 +381,39 @@ export function createConversation(
   bus.emit({ type: "conversation.updated", conversation });
   if (vmId) assignmentsChanged();
   return conversation;
+}
+
+/**
+ * A new chat that goes on with the setup of `fromId` — its agent, folder, VM, browser, workspace, project, servers,
+ * phones, instructions, model, shared screen and secret access — but none of its conversation.
+ */
+export function createContinuation(fromId: string, title: string): Conversation {
+  const c = requireConversationRow(fromId);
+  const fresh = createConversation({
+    agentId: c.agent_id,
+    title,
+    workingDirectory: c.working_directory,
+    vmId: c.vm_id,
+    browserProfileId: c.browser_profile_id,
+    workspaceId: c.workspace_id,
+    projectId: c.project_id,
+    sshServerIds: parseServerIds(c.ssh_server_ids),
+    androidDeviceIds: parseDeviceIds(c.android_device_ids),
+    instructions: c.instructions,
+    fillOnly: c.secret_access === "fill",
+    model: c.model,
+    effort: c.effort,
+    ultracode: c.ultracode == null ? null : bool(c.ultracode),
+    continuedFrom: fromId,
+  });
+  if (c.computer_target) update("conversations", fresh.id, { computer_target: c.computer_target });
+  return getConversationSummary(fresh.id);
+}
+
+/** Only a chat the human started here goes on in a fresh one: an app, a messenger or another agent keeps writing to the chat it knows. */
+export function handoffAllowed(conversationId: string): boolean {
+  const c = get<{ origin: string; private: number; runner_id: string | null }>("SELECT origin, private, runner_id FROM conversations WHERE id = ?", conversationId);
+  return !!c && c.origin === "chat" && !bool(c.private) && !c.runner_id && config().role !== "runner";
 }
 
 /**
@@ -1237,6 +1279,7 @@ function speaker(m?: Pick<Message, "source">, runTrigger?: RunTrigger): string {
   if (m?.source === "delegation") return "Delegated task";
   if (m?.source === "task") return "Task";
   if (m?.source === "offer") return "Offer (taken up)";
+  if (m?.source === "handoff") return "Brief from the earlier chat";
   if (runTrigger === "followup") return "Follow-up";
   if (runTrigger === "heartbeat") return "Heartbeat";
   if (runTrigger === "call") return "Phone call";

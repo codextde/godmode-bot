@@ -111,6 +111,7 @@ export function toolLabel(block: Extract<MessageBlock, { type: "tool_use" }>): T
       return { icon: "warning", title: service ? t("system:tools.needsLoginFor", { service }) : t("system:tools.needsLoginForSite") };
     }
     if (tool === "agent_delegate") return { icon: "agents", title: t("system:tools.handedTask"), detail: clip(str(input.task)) || undefined };
+    if (tool === "chat_handoff") return { icon: "compose", title: t("system:tools.continuedInNewChat"), detail: clip(str(input.title)) || undefined };
     if (tool === "notify_user") return { icon: "bell", title: t("system:tools.sentNotification"), detail: clip(str(input.title)) || undefined };
     if (tool === "ask_human") return { icon: "warning", title: t("system:tools.askedYou"), detail: clip(str(input.question)) || undefined };
     if (tool === "request_approval") return { icon: "warning", title: t("system:tools.askedForOk"), detail: clip(str(input.action)) || undefined };

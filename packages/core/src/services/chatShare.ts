@@ -150,7 +150,7 @@ function decode(data: string, depth = 0): Buffer {
 }
 
 const ROLES = new Set<Message["role"]>(["user", "assistant", "system"]);
-const SOURCES = new Set(["automation", "delegation", "task", "offer"]);
+const SOURCES = new Set(["automation", "delegation", "task", "offer", "handoff"]);
 
 function str(v: unknown, max: number): string {
   return typeof v === "string" ? v.slice(0, max) : "";

@@ -611,6 +611,12 @@
       "agentsRatio": "{{done}}/{{total}} agents",
       "technicalDetails": "Technical details",
       "details": "Details"
+    },
+    "handoff": {
+      "newChat": "New chat",
+      "starting": "Starting a new chat…",
+      "continued": "Continued in a new chat",
+      "failed": "Couldn't start a new chat"
     }
   },
   "messages": {
@@ -660,7 +666,10 @@
     "turns_one": "{{count}} turn",
     "turns_other": "{{count}} turns",
     "tokenUsage": "{{input}} in · {{output}} out · {{cached}} cached",
-    "queuedEllipsis": "Queued…"
+    "queuedEllipsis": "Queued…",
+    "continues": "From <b>{{title}}</b>",
+    "fromEarlierChat": "From an earlier chat",
+    "openEarlierChat": "Earlier chat"
   },
   "browser": {
     "title": "Browser",
@@ -1022,7 +1031,10 @@
     "compressNext": "Compress next",
     "hide": "Hide",
     "compressedAuto": "Compressed automatically",
-    "compressed": "Chat compressed"
+    "compressed": "Chat compressed",
+    "newChat": "New chat",
+    "compress": "Compress",
+    "explainBoth": "Compress sums up this chat. New chat goes on in a fresh one with a clean brief from {{name}}. Both keep the next steps fast."
   },
   "drop": {
     "foldersWarning": "Folders can't be attached — drop the files inside instead.",

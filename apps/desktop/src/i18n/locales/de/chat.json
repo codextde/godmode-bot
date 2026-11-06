@@ -611,6 +611,12 @@
       "agentsRatio": "{{done}}/{{total}} Agenten",
       "technicalDetails": "Technische Details",
       "details": "Details"
+    },
+    "handoff": {
+      "newChat": "Neuer Chat",
+      "starting": "Neuer Chat startet…",
+      "continued": "In einem neuen Chat weitergeführt",
+      "failed": "Neuer Chat konnte nicht starten"
     }
   },
   "messages": {
@@ -660,7 +666,10 @@
     "turns_one": "{{count}} Runde",
     "turns_other": "{{count}} Runden",
     "tokenUsage": "{{input}} rein · {{output}} raus · {{cached}} gecacht",
-    "queuedEllipsis": "In der Warteschlange…"
+    "queuedEllipsis": "In der Warteschlange…",
+    "continues": "Aus <b>{{title}}</b>",
+    "fromEarlierChat": "Aus einem früheren Chat",
+    "openEarlierChat": "Früherer Chat"
   },
   "browser": {
     "title": "Browser",
@@ -1022,7 +1031,10 @@
     "compressNext": "Als Nächstes komprimieren",
     "hide": "Ausblenden",
     "compressedAuto": "Automatisch komprimiert",
-    "compressed": "Chat komprimiert"
+    "compressed": "Chat komprimiert",
+    "newChat": "Neuer Chat",
+    "compress": "Komprimieren",
+    "explainBoth": "Komprimieren fasst diesen Chat zusammen. Neuer Chat macht frisch weiter, mit einer klaren Übergabe von {{name}}. Beides hält die nächsten Schritte schnell."
   },
   "drop": {
     "foldersWarning": "Ordner lassen sich nicht anhängen – zieh stattdessen die Dateien darin hierher.",
