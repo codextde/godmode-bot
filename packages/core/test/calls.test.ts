@@ -385,6 +385,8 @@ describe("placing a call", () => {
     expect(endCall.params).toEqual({ system_tool_type: "end_call" });
     expect(endCall.description).toContain("Never on hold music, announcements, silence");
     expect(endCall.description).toContain("goodbye after a transfer or hold was agreed");
+    expect(endCall.description).toContain("right after keypad tones");
+    expect(endCall.description).toContain("To wait, use skip_turn.");
 
     expect(prompt).toContain("A mailbox is only a greeting that asks you to leave a message, usually followed by a beep");
     expect(prompt).toContain("welcome, privacy notice, announcement or keypad menu");
@@ -396,6 +398,10 @@ describe("placing a call", () => {
     expect(tools.voicemail_detection.description).toContain("Never on a company's welcome, privacy notice, announcement, hold music or keypad menu");
     expect(tools.play_keypad_touch_tone.params).toEqual({ system_tool_type: "play_keypad_touch_tone" });
     expect(tools.play_keypad_touch_tone.description).toContain("enter digits you know from the facts");
+    expect(prompt).toContain("After keypad tones, on hold and during announcements you usually have nothing to say: call skip_turn");
+    expect(prompt).toContain("Never call end_call to wait.");
+    expect(tools.skip_turn.params).toEqual({ system_tool_type: "skip_turn" });
+    expect(tools.skip_turn.description).toContain("after keypad tones, on hold music");
   });
 
   test("a mailbox gets the message the agent wrote, and the call ends as voicemail left", async () => {

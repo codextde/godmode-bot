@@ -151,13 +151,16 @@ export interface AgentConfig {
 const systemTool = (name: string, params: Record<string, string> = {}, description = "") => ({ name, description, params: { system_tool_type: name, ...params } as Record<string, string> });
 
 const END_CALL =
-  "Hang up. Only when the conversation is really over: the other side handled the request, said goodbye or said they can't help. Never on hold music, announcements, silence, right after answering an automated assistant, or on an assistant's goodbye after a transfer or hold was agreed.";
+  "Hang up. Only when the conversation is really over: the other side handled the request, said goodbye or said they can't help. Never on hold music, announcements, silence, right after keypad tones or answering an automated assistant, or on an assistant's goodbye after a transfer or hold was agreed. To wait, use skip_turn.";
 
 const VOICEMAIL_DETECTION =
   "Leave the prepared message on a mailbox and hang up. Only after a greeting that asks the caller to leave a message, usually followed by a beep. Never on a company's welcome, privacy notice, announcement, hold music or keypad menu.";
 
 const KEYPAD =
   "Press keys on the phone keypad. Use it when an automated menu asks you to enter digits you know from the facts (a phone or customer number) or to press an option.";
+
+const SKIP_TURN =
+  "Stay silent and keep listening. Use it whenever you have nothing to say yet: after keypad tones, on hold music, during announcements or while a menu or person is about to speak. Never use end_call to wait.";
 
 /** Dynamic variable with what the voice leaves on a mailbox; empty (inbound calls) hangs up without a message. */
 export const VOICEMAIL_VARIABLE = "voicemail_message";
@@ -179,6 +182,7 @@ export function agentBody(c: AgentConfig) {
             end_call: systemTool("end_call", {}, END_CALL),
             voicemail_detection: systemTool("voicemail_detection", { voicemail_message: `{{${VOICEMAIL_VARIABLE}}}` }, VOICEMAIL_DETECTION),
             play_keypad_touch_tone: systemTool("play_keypad_touch_tone", {}, KEYPAD),
+            skip_turn: systemTool("skip_turn", {}, SKIP_TURN),
           },
         },
       },
