@@ -168,6 +168,7 @@ export const DEFAULT_SETTINGS: Settings = {
     cron: "0 5 * * *",
     model: "",
     autoFix: true,
+    team: true,
   },
   mobile: {
     enabled: false,

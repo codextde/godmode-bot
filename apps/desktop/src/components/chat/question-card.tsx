@@ -82,7 +82,7 @@ const PLATFORM: Partial<Record<AnswerVia, string>> = { slack: "Slack", telegram:
 function AnsweredLine({ answer: a, status, choice }: { answer: QuestionAnswer; status: QuestionStatus; choice: string | null }) {
   const { t } = useTranslation("chat");
   const { dateLocale } = useLocale();
-  const where = a.via === "phone" ? "phone" : PLATFORM[a.via] ? "platform" : "here";
+  const where = a.via === "agent" ? "agent" : a.via === "phone" ? "phone" : PLATFORM[a.via] ? "platform" : "here";
   const kind = status === "approved" ? "approved" : status === "declined" ? "declined" : choice ? "chose" : "answered";
   return (
     <Trans

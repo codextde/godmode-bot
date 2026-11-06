@@ -2133,6 +2133,7 @@
     "next": "Next: {{when}}",
     "autoFix": "Fix what it finds",
     "reportOnly": "Off: it only reports.",
+    "team": "Answer the team's questions first",
     "now": "Review now",
     "stop": "Stop",
     "started": "Review started",
