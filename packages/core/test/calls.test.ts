@@ -385,6 +385,17 @@ describe("placing a call", () => {
     expect(endCall.params).toEqual({ system_tool_type: "end_call" });
     expect(endCall.description).toContain("Never on hold music, announcements, silence");
     expect(endCall.description).toContain("goodbye after a transfer or hold was agreed");
+
+    expect(prompt).toContain("A mailbox is only a greeting that asks you to leave a message, usually followed by a beep");
+    expect(prompt).toContain("welcome, privacy notice, announcement or keypad menu");
+    expect(prompt).toContain('"Bitte geben Sie ... ein", "Drücken Sie die 1", "Please enter your number") is never a mailbox: never call voicemail_detection on it');
+    expect(prompt).toContain("enter the digits with play_keypad_touch_tone when the facts above give them");
+    expect(prompt).toContain("or wait: menus move on by themselves");
+    const tools = body.conversation_config.agent.prompt.built_in_tools;
+    expect(tools.voicemail_detection.description).toContain("Only after a greeting that asks the caller to leave a message");
+    expect(tools.voicemail_detection.description).toContain("Never on a company's welcome, privacy notice, announcement, hold music or keypad menu");
+    expect(tools.play_keypad_touch_tone.params).toEqual({ system_tool_type: "play_keypad_touch_tone" });
+    expect(tools.play_keypad_touch_tone.description).toContain("enter digits you know from the facts");
   });
 
   test("a mailbox gets the message the agent wrote, and the call ends as voicemail left", async () => {
@@ -400,7 +411,7 @@ describe("placing a call", () => {
     const out = sentTo("/v1/convai/twilio/outbound-call")[0]!.json!;
     const client = out.conversation_initiation_client_data as { dynamic_variables: Record<string, string>; conversation_config_override: { agent: { prompt: { prompt: string } } } };
     expect(client.dynamic_variables).toEqual({ voicemail_message: message });
-    expect(client.conversation_config_override.agent.prompt.prompt).toContain("let its greeting finish until the beep, then call voicemail_detection");
+    expect(client.conversation_config_override.agent.prompt.prompt).toContain("Let it finish until the beep, then call voicemail_detection");
 
     const [call] = listCalls();
     const greeting = "Die gewünschte Gesprächsperson ist nicht zu erreichen. Hinterlasse eine Nachricht nach dem Signalton.";

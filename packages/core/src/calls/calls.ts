@@ -389,7 +389,7 @@ export interface PlaceCall {
 }
 
 const VOICEMAIL_RULE =
-  "If a mailbox or answering machine picks up, let its greeting finish until the beep, then call voicemail_detection: it leaves the message prepared for this call and hangs up. Don't speak a message of your own.";
+  'A mailbox is only a greeting that asks you to leave a message, usually followed by a beep. Let it finish until the beep, then call voicemail_detection: it leaves the message prepared for this call and hangs up. Don\'t speak a message of your own. A company\'s welcome, privacy notice, announcement or keypad menu ("Bitte geben Sie ... ein", "Drücken Sie die 1", "Please enter your number") is never a mailbox: never call voicemail_detection on it.';
 
 /** The message left on a mailbox when the caller didn't write one: who called and that the owner gets back to them. */
 export function defaultVoicemail(c: { purpose: Exclude<CallPurpose, "inbound">; language: string; agentName: string }): string {
@@ -434,7 +434,7 @@ ${SOUND_HUMAN}
 ${identityRules(name, owner)}
 - Stick to the goal and the facts above. Don't make up details (dates, times, prices, addresses, names, numbers, payment data): ${owner} is bound by what you say. If you are asked something you don't know, say ${owner} will get back to them.
 - Don't agree to costs, contracts or anything beyond the goal unless the facts above clearly allow it. When several options are offered, choose within what the facts allow.
-- If you get an automated menu, use the keypad tones or say the option to reach a person.
+- If an automated menu asks you to enter something (a phone or customer number), enter the digits with play_keypad_touch_tone when the facts above give them. Otherwise say or press the option closest to your goal, or wait: menus move on by themselves.
 - ${VOICEMAIL_RULE}
 - Before you end, repeat what was agreed (date, time, name, price) and get it confirmed. Then say goodbye and end the call.
 - Call end_call only when the call is really over: someone handled your request, said goodbye, or said they can't help. Never because of hold music, an announcement, silence, a "${de ? "Danke" : "thank you"}" from an assistant, after you answered an automated question, or on an assistant's goodbye after you agreed to be transferred or put on hold.

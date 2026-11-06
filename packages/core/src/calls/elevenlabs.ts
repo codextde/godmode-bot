@@ -153,6 +153,12 @@ const systemTool = (name: string, params: Record<string, string> = {}, descripti
 const END_CALL =
   "Hang up. Only when the conversation is really over: the other side handled the request, said goodbye or said they can't help. Never on hold music, announcements, silence, right after answering an automated assistant, or on an assistant's goodbye after a transfer or hold was agreed.";
 
+const VOICEMAIL_DETECTION =
+  "Leave the prepared message on a mailbox and hang up. Only after a greeting that asks the caller to leave a message, usually followed by a beep. Never on a company's welcome, privacy notice, announcement, hold music or keypad menu.";
+
+const KEYPAD =
+  "Press keys on the phone keypad. Use it when an automated menu asks you to enter digits you know from the facts (a phone or customer number) or to press an option.";
+
 /** Dynamic variable with what the voice leaves on a mailbox; empty (inbound calls) hangs up without a message. */
 export const VOICEMAIL_VARIABLE = "voicemail_message";
 
@@ -171,8 +177,8 @@ export function agentBody(c: AgentConfig) {
           temperature: 0.4,
           built_in_tools: {
             end_call: systemTool("end_call", {}, END_CALL),
-            voicemail_detection: systemTool("voicemail_detection", { voicemail_message: `{{${VOICEMAIL_VARIABLE}}}` }),
-            play_keypad_touch_tone: systemTool("play_keypad_touch_tone"),
+            voicemail_detection: systemTool("voicemail_detection", { voicemail_message: `{{${VOICEMAIL_VARIABLE}}}` }, VOICEMAIL_DETECTION),
+            play_keypad_touch_tone: systemTool("play_keypad_touch_tone", {}, KEYPAD),
           },
         },
       },
