@@ -272,7 +272,7 @@ jobs:
           releaseId: ${{ needs.create-release.outputs.release_id }}
           uploadUpdaterJson: true
           updaterJsonPreferNsis: true
-          retryAttempts: 1
+          retryAttempts: 3
 
       - name: Check the macOS signature and notarization
         if: runner.os == 'macOS' && env.APPLE_CERTIFICATE != ''
@@ -295,10 +295,15 @@ jobs:
           scripts/macos-verify.sh "$dmg"
           # GitHub stores spaces in asset names as dots.
           name=$(basename "$dmg" | tr ' ' '.')
-          old=$(gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets?per_page=100" --jq ".[] | select(.name == \"$name\") | .id")
-          if [ -n "$old" ]; then gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/assets/$old"; fi
-          gh api -X POST "https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets?name=$name" \
-            -H "Content-Type: application/x-apple-diskimage" --input "$dmg" --jq .browser_download_url
+          # A failed upload can leave a broken asset behind, so every try replaces whatever is there.
+          for try in 1 2 3 4; do
+            old=$(gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets?per_page=100" --jq ".[] | select(.name == \"$name\") | .id") || true
+            if [ -n "$old" ]; then gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/assets/$old" || true; fi
+            if gh api -X POST "https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets?name=$name" \
+              -H "Content-Type: application/x-apple-diskimage" --input "$dmg" --jq .browser_download_url; then exit 0; fi
+            echo "::warning::DMG upload failed (try $try)"; sleep $((try * 15))
+          done
+          exit 1
 
   updater-manifest:
     name: Check latest.json
