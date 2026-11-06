@@ -3,6 +3,7 @@ import { formatDistanceToNowStrict } from "date-fns";
 import { useTranslation } from "react-i18next";
 import type { Agent, Run } from "@godmode/shared";
 import { useLive } from "@/stores/live";
+import { useNow as useSharedNow } from "@/components/vault/use-now";
 import { AgentAvatar } from "@/components/common";
 import { cn } from "@/lib/utils";
 import { useLocale } from "@/i18n/language";
@@ -10,14 +11,7 @@ import { formatDuration, formatElapsed, RunStatusIcon, TriggerBadge } from "./ru
 
 /** Re-render every `interval` ms while `active`; returns Date.now(). */
 export function useNow(active: boolean, interval = 1000): number {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    if (!active) return;
-    setNow(Date.now());
-    const id = setInterval(() => setNow(Date.now()), interval);
-    return () => clearInterval(id);
-  }, [active, interval]);
-  return now;
+  return useSharedNow(interval, active);
 }
 
 /** Live-aware status + elapsed time of a run. */

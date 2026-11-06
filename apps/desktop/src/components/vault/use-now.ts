@@ -1,9 +1,12 @@
 import { useEffect, useState } from "react";
+import { useMotionRest } from "@/lib/motion-rest";
 
-/** Current time in ms, re-rendering every `intervalMs` (paused while the tab is hidden). */
-export function useNow(intervalMs = 250): number {
+/** Current time in ms, re-rendering every `intervalMs` (paused while the tab is hidden or nobody looks). */
+export function useNow(intervalMs = 250, active = true): number {
   const [now, setNow] = useState(() => Date.now());
+  const resting = useMotionRest();
   useEffect(() => {
+    if (!active || resting) return;
     let id: ReturnType<typeof setInterval> | null = null;
     const start = () => {
       if (id) return;
@@ -21,6 +24,6 @@ export function useNow(intervalMs = 250): number {
       stop();
       document.removeEventListener("visibilitychange", onVis);
     };
-  }, [intervalMs]);
+  }, [intervalMs, active, resting]);
   return now;
 }

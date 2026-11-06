@@ -27,6 +27,7 @@ import { HumanTaskMarker, humanTaskBlock } from "@/components/human-tasks/human-
 import { CallMarker, callBlock } from "@/components/calls/call-chat";
 import { liveMood } from "./conversation-mood";
 import { useReduceAnimations } from "@/lib/motion";
+import { useNow as useSharedNow } from "@/components/vault/use-now";
 import { dateLocale, t } from "@/i18n";
 
 const FALLBACK_AGENT = { avatar: "🤖", color: "violet" };
@@ -339,12 +340,7 @@ function RunMeta({ runId }: { runId: string }) {
 /* ------------------------------------------------------------------ */
 
 export function useNow(intervalMs = 1000) {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), intervalMs);
-    return () => clearInterval(t);
-  }, [intervalMs]);
-  return now;
+  return useSharedNow(intervalMs);
 }
 
 /** Pick an orb animation that loosely matches what the agent is doing. */

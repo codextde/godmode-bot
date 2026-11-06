@@ -5,7 +5,9 @@ import { wsUrl } from "./core";
 import { useLive } from "@/stores/live";
 import { setChatMove, useChatMoves } from "@/stores/chatMoves";
 import { withPending } from "./pending-queue";
+import { useUi } from "@/stores/ui";
 import { qk } from "./queryKeys";
+import { isMotionResting, onMotionRest } from "./motion-rest";
 
 type Listener = (event: ServerEvent) => void;
 const listeners = new Set<Listener>();
@@ -109,12 +111,69 @@ const ENTITY_KEYS: Record<EntityName, readonly unknown[][]> = {
   power: [qk.power],
 };
 
+/**
+ * Nobody looks at the window: streaming replies, live views and activity labels stop at the core, and each run still
+ * going is asked for whole once someone looks again. A chat streaming into a window behind another app otherwise
+ * re-renders its markdown many times a second and keeps the Mac busy for nothing.
+ */
+let holding = false;
+const heldRuns = new Set<string>();
+const heldActivity = new Map<string, string>();
+const HELD = new Set<ServerEvent["type"]>(["run.delta", "run.activity", "browser.frame", "computer.frame", "computer.action", "android.video", "android.action"]);
+
+function hold(event: ServerEvent): boolean {
+  if (!holding || !HELD.has(event.type)) return false;
+  if (event.type === "run.delta") heldRuns.add(event.runId);
+  if (event.type === "run.activity") heldActivity.set(event.runId, event.label);
+  return true;
+}
+
+function sendViews(ws: WebSocket, on: boolean) {
+  for (const viewers of browserViewers.values())
+    ws.send(
+      JSON.stringify(
+        on
+          ? subscribeEvent(viewers)
+          : ({ type: "browser.unsubscribe", profileId: viewers.profileId, ...(viewers.conversationId ? { conversationId: viewers.conversationId } : {}) } satisfies ClientEvent),
+      ),
+    );
+  for (const view of computerViewers.keys()) ws.send(JSON.stringify({ type: on ? "computer.subscribe" : "computer.unsubscribe", view } satisfies ClientEvent));
+  for (const [deviceId, viewers] of androidViewers)
+    ws.send(JSON.stringify(on ? androidSubscribeEvent(deviceId, viewers) : ({ type: "android.unsubscribe", deviceId } satisfies ClientEvent)));
+}
+
+function setHolding(next: boolean) {
+  if (next === holding) return;
+  holding = next;
+  const ws = socket?.readyState === WebSocket.OPEN ? socket : null;
+  ws?.send(JSON.stringify({ type: "deltas.hold", hold: next } satisfies ClientEvent));
+  if (ws) sendViews(ws, !next);
+  if (next) return;
+  const live = useLive.getState();
+  for (const [runId, label] of heldActivity) live.runActivity(runId, label);
+  heldActivity.clear();
+  const runs = new Set([...heldRuns, ...Object.keys(live.runs)]);
+  heldRuns.clear();
+  for (const runId of runs) {
+    resyncAsked.delete(runId);
+    resync(runId);
+  }
+}
+
 export function startRealtime(queryClient: QueryClient) {
   stopped = false;
   client = queryClient;
+  const offRest = onMotionRest((resting) => setHolding(resting && useUi.getState().holdInBackground));
+  const offSetting = useUi.subscribe((s, prev) => {
+    if (s.holdInBackground !== prev.holdInBackground) setHolding(isMotionResting() && s.holdInBackground);
+  });
+  holding = isMotionResting() && useUi.getState().holdInBackground;
   void connect(queryClient);
   staleTimer ??= setInterval(() => void dropEndedRuns(), STALE_CHECK_MS);
   return () => {
+    offRest();
+    offSetting();
+    holding = false;
     stopped = true;
     socket?.close();
     socket = null;
@@ -174,14 +233,13 @@ async function connect(queryClient: QueryClient) {
     useLive.getState().setConnected(true);
     // Streaming replies as what changed instead of the whole block list every time.
     ws.send(JSON.stringify({ type: "deltas.patch" } satisfies ClientEvent));
+    ws.send(JSON.stringify({ type: "deltas.append" } satisfies ClientEvent));
     ws.send(JSON.stringify({ type: "messages.images" } satisfies ClientEvent));
+    if (holding) ws.send(JSON.stringify({ type: "deltas.hold", hold: true } satisfies ClientEvent));
     while (pendingSends.length) ws.send(JSON.stringify(pendingSends.shift()));
     // A new socket doesn't know which chat this window shows.
     if (viewing) ws.send(JSON.stringify({ type: "conversation.view", conversationId: viewing } satisfies ClientEvent));
-    // Resubscribe live views
-    for (const viewers of browserViewers.values()) ws.send(JSON.stringify(subscribeEvent(viewers)));
-    for (const view of computerViewers.keys()) ws.send(JSON.stringify({ type: "computer.subscribe", view } satisfies ClientEvent));
-    for (const [deviceId, viewers] of androidViewers) ws.send(JSON.stringify(androidSubscribeEvent(deviceId, viewers)));
+    if (!holding) sendViews(ws, true);
     if (pingTimer) clearInterval(pingTimer);
     pingTimer = setInterval(() => ws.readyState === WebSocket.OPEN && ws.send(JSON.stringify({ type: "ping" })), 25_000);
     // Refresh everything after a reconnect — we may have missed events.
@@ -194,6 +252,7 @@ async function connect(queryClient: QueryClient) {
     } catch {
       return;
     }
+    if (hold(event)) return;
     handle(queryClient, event);
     for (const l of listeners) {
       try {

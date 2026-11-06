@@ -116,10 +116,67 @@ export const Markdown = memo(function Markdown({ children, className, breaks, ma
   return (
     <MessageFilesScope files={files}>
       <div className={cn("prose-chat min-w-0 break-words", className)}>
-        <ReactMarkdown remarkPlugins={breaks ? remarkPluginsWithBreaks : remarkPlugins} rehypePlugins={rehypePlugins} components={components}>
-          {source}
-        </ReactMarkdown>
+        {marks ? (
+          <StreamingBlocks text={children} marks={marks} files={files?.byRef ?? null} breaks={breaks} />
+        ) : (
+          <ReactMarkdown remarkPlugins={breaks ? remarkPluginsWithBreaks : remarkPlugins} rehypePlugins={rehypePlugins} components={components}>
+            {source}
+          </ReactMarkdown>
+        )}
       </div>
     </MessageFilesScope>
+  );
+});
+
+const FENCE = /^ {0,3}(`{3,}|~{3,})/;
+
+export function blockStarts(text: string): number[] {
+  const starts = [0];
+  let fence: string | null = null;
+  let blank = false;
+  let at = 0;
+  while (at < text.length) {
+    const nl = text.indexOf("\n", at);
+    const end = nl < 0 ? text.length : nl;
+    const line = text.slice(at, end);
+    const open = FENCE.exec(line)?.[1];
+    if (fence) {
+      if (open && open[0] === fence[0] && open.length >= fence.length && !line.slice(line.indexOf(open) + open.length).trim()) fence = null;
+    } else {
+      if (blank && at > 0 && /^\S/.test(line) && !/^[|>]/.test(line)) starts.push(at);
+      if (open) fence = open;
+    }
+    blank = !fence && line.trim() === "";
+    if (nl < 0) break;
+    at = nl + 1;
+  }
+  return starts;
+}
+
+type FileRefs = NonNullable<ReturnType<typeof useMessageFiles>>["byRef"];
+
+function StreamingBlocks({ text, marks, files, breaks }: { text: string; marks: number[]; files: FileRefs | null; breaks?: boolean }) {
+  const starts = blockStarts(text);
+  return starts.map((start, i) => {
+    const end = starts[i + 1] ?? text.length;
+    const last = i === starts.length - 1;
+    const own = marks.filter((m) => m >= start && m < end).map((m) => m - start);
+    if (own[0] !== 0 && marks.some((m) => m < start)) own.unshift(0);
+    return <MarkdownBlock key={start} source={text.slice(start, end)} heal={last} marks={own.length ? own.join(",") : ""} files={files} breaks={breaks} />;
+  });
+}
+
+const MarkdownBlock = memo(function MarkdownBlock({ source, heal, marks, files, breaks }: { source: string; heal: boolean; marks: string; files: FileRefs | null; breaks?: boolean }) {
+  const rehypePlugins = useMemo<Options["rehypePlugins"]>(() => {
+    const plugins: NonNullable<Options["rehypePlugins"]> = [];
+    if (files) plugins.push([rehypeLocalFiles, files]);
+    if (marks) plugins.push([rehypeStreamFade, { marks: marks.split(",").map(Number) }]);
+    return plugins.length ? plugins : undefined;
+  }, [files, marks]);
+  const healed = useMemo(() => (heal ? remend(source, healOptions) : source), [heal, source]);
+  return (
+    <ReactMarkdown remarkPlugins={breaks ? remarkPluginsWithBreaks : remarkPlugins} rehypePlugins={rehypePlugins} components={components}>
+      {healed}
+    </ReactMarkdown>
   );
 });

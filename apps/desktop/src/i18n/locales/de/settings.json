@@ -33,7 +33,9 @@
       "dark": "Dunkel",
       "palette": "Palette",
       "reduceAnimations": "Animationen reduzieren",
-      "reduceAnimationsDescription": "Weniger und kürzere Animationen: Nachrichten erscheinen sofort, Menüs blenden nur ein, keine leuchtenden Rahmen, während Agenten arbeiten."
+      "reduceAnimationsDescription": "Weniger und kürzere Animationen: Nachrichten erscheinen sofort, Menüs blenden nur ein, keine leuchtenden Rahmen, während Agenten arbeiten.",
+      "holdInBackground": "Im Hintergrund Energie sparen",
+      "holdInBackgroundDescription": "Während du in anderen Apps arbeitest, warten laufende Antworten und Live-Ansichten und holen auf, sobald du zurückkommst."
     },
     "chat": {
       "title": "Chat",

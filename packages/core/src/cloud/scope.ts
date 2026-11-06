@@ -575,6 +575,8 @@ export function viewerMaySend(raw: string): boolean {
     case "computer.unsubscribe":
     // Delivery preferences of the live chat view; both only read.
     case "deltas.patch":
+    case "deltas.hold":
+    case "deltas.append":
     case "run.resync":
       return true;
     case "browser.subscribe":

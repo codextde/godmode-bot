@@ -1555,6 +1555,15 @@ function redactedBlocks(job: Job): MessageBlock[] {
   return liveBlocks(job).map((b) => b.redacted);
 }
 
+/** The text a block gained when nothing else about it changed, or null. */
+function grownText(before: MessageBlock | undefined, after: MessageBlock): string | null {
+  if (!before || before.type !== after.type || !("text" in before) || !("text" in after)) return null;
+  if (after.text.length <= before.text.length || !after.text.startsWith(before.text)) return null;
+  const keys = new Set([...Object.keys(before), ...Object.keys(after)]);
+  for (const key of keys) if (key !== "text" && (before as Record<string, unknown>)[key] !== (after as Record<string, unknown>)[key]) return null;
+  return after.text.slice(before.text.length);
+}
+
 /** Tell the clients what changed in the in-flight message since the last delta, and save it every few seconds. */
 function emitDelta(job: Job) {
   if (job.deltaTimer) {
@@ -1566,7 +1575,15 @@ function emitDelta(job: Job) {
     const live = liveOf(job);
     const view = liveBlocks(job);
     const patch: [number, MessageBlock][] = [];
-    for (let i = 0; i < view.length; i++) if (live.sent[i] !== view[i]!.redacted) patch.push([i, view[i]!.redacted]);
+    const compact: { patch: [number, MessageBlock][]; append: [number, string][] } = { patch: [], append: [] };
+    for (let i = 0; i < view.length; i++) {
+      const block = view[i]!.redacted;
+      if (live.sent[i] === block) continue;
+      patch.push([i, block]);
+      const added = grownText(live.sent[i], block);
+      if (added === null) compact.patch.push([i, block]);
+      else compact.append.push([i, added]);
+    }
     const textDelta = redact(job.acc.takeTextDelta());
     if (patch.length || live.sent.length !== view.length || textDelta) {
       live.sent = view.map((b) => b.redacted);
@@ -1580,6 +1597,7 @@ function emitDelta(job: Job) {
         seq: live.seq,
         patch,
         length: view.length,
+        ...(compact.append.length ? { compact } : {}),
         ...(textDelta ? { textDelta } : {}),
       });
     }

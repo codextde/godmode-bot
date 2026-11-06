@@ -1,27 +1,55 @@
+import { useSyncExternalStore } from "react";
+
 /** Window in the background this long, and motion stops. */
-const UNFOCUSED_MS = 15_000;
+const UNFOCUSED_MS = 5_000;
 /** Window in front but nobody touching it this long (the human walked away), and motion stops too. */
 const UNTOUCHED_MS = 3 * 60_000;
 const CLASS = "gm-rest";
 
+const listeners = new Set<() => void>();
+let resting = false;
+
+function setResting(next: boolean) {
+  if (next === resting) return;
+  resting = next;
+  document.documentElement.classList.toggle(CLASS, next);
+  for (const l of listeners) l();
+}
+
+function subscribe(listener: () => void) {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+
+export function isMotionResting(): boolean {
+  return resting;
+}
+
+export function onMotionRest(listener: (resting: boolean) => void): () => void {
+  return subscribe(() => listener(resting));
+}
+
+export function useMotionRest(): boolean {
+  return useSyncExternalStore(subscribe, () => resting);
+}
+
 /**
- * Pauses every CSS animation while nobody is looking (`.gm-rest` on <html>, see index.css). A looping spinner,
+ * Ends every looping CSS animation and the streaming text smoother while nobody is looking (`.gm-rest` on <html>, see index.css). A looping spinner,
  * shimmer or breathing character makes WebKit and the WindowServer draw the window 60-120 times a second, which keeps
  * the Mac awake for nothing when Godmode sits in the background or a tray.
  */
 export function startMotionRest(): () => void {
-  const root = document.documentElement;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let scheduledAt = 0;
 
   const rest = () => {
     clearTimeout(timer);
     timer = undefined;
-    root.classList.add(CLASS);
+    setResting(true);
   };
   const wake = () => {
     if (document.hidden) return rest();
-    root.classList.remove(CLASS);
+    setResting(false);
     const now = Date.now();
     // Pointer moves arrive many times a second: re-arming once a second is plenty.
     if (timer && now - scheduledAt < 1_000) return;
@@ -42,20 +70,14 @@ export function startMotionRest(): () => void {
   window.addEventListener("focus", rearm);
   window.addEventListener("blur", rearm);
   document.addEventListener("visibilitychange", rearm);
-  // Something new on screen (a dialog, a toast, a streaming reply) must play its entrance, not sit on frame 0.
-  const changes = new MutationObserver((records) => {
-    if (records.some((r) => Array.from(r.addedNodes).some((n) => n.nodeType === Node.ELEMENT_NODE))) wake();
-  });
-  changes.observe(document.body, { childList: true, subtree: true });
   wake();
 
   return () => {
     clearTimeout(timer);
-    changes.disconnect();
     for (const e of input) window.removeEventListener(e, wake, { capture: true });
     window.removeEventListener("focus", rearm);
     window.removeEventListener("blur", rearm);
     document.removeEventListener("visibilitychange", rearm);
-    root.classList.remove(CLASS);
+    setResting(false);
   };
 }

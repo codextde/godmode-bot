@@ -31,6 +31,7 @@ import { intlLocale, t as translate } from "@/i18n";
 import { useLocale } from "@/i18n/language";
 import { Markdown } from "./markdown";
 import { useSmoothText } from "./use-smooth-text";
+import { useMotionRest } from "@/lib/motion-rest";
 import { UserBubble } from "./user-bubble";
 import { CopyButton } from "./copy-button";
 import { Lightbox } from "./lightbox";
@@ -456,9 +457,10 @@ function usePictureSrc(picture: Picture): string | null {
 
 function StreamingMarkdown({ text, className }: { text: string; className?: string }) {
   const reduce = useReduceAnimations();
-  const smooth = useSmoothText(text);
+  const resting = useMotionRest();
+  const smooth = useSmoothText(text, !resting);
   return (
-    <Markdown className={className} marks={reduce ? EMPTY_MARKS : smooth.marks}>
+    <Markdown className={className} marks={reduce || resting ? EMPTY_MARKS : smooth.marks}>
       {smooth.text}
     </Markdown>
   );
