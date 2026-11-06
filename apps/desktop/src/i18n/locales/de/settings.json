@@ -1576,7 +1576,12 @@
     "removeFree": "An deinem Abo selbst ändert sich nichts; du kannst den Schlüssel jederzeit wieder hinzufügen.",
     "keep": "Behalten",
     "removeKey": "Schlüssel entfernen",
-    "notEnforced": "Das ist ein eigener Build, er braucht also keine Lizenz: Godmode ist Open Source unter der MIT-Lizenz. Godmode Pro ist für die offiziellen Apps von usegodmode.com."
+    "notEnforced": "Das ist ein eigener Build, er braucht also keine Lizenz: Godmode ist Open Source unter der MIT-Lizenz. Godmode Pro ist für die offiziellen Apps von usegodmode.com.",
+    "partners": {
+      "title": "Verdiene 20 % mit Godmode",
+      "description": "Du bekommst 20 % jeder Zahlung der Leute, die du bringst, 12 Monate lang.",
+      "open": "Partner werden"
+    }
   },
   "logs": {
     "warnings": "Warnungen",
