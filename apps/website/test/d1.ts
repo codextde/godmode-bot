@@ -28,5 +28,11 @@ export function testDb() {
     };
     return stmt;
   };
-  return { prepare, sql };
+  // D1 runs a batch as one transaction; here the statements just run in order.
+  const batch = async (stmts: { run(): Promise<unknown> }[]) => {
+    const out = [];
+    for (const s of stmts) out.push(await s.run());
+    return out;
+  };
+  return { prepare, batch, sql };
 }

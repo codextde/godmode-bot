@@ -210,7 +210,10 @@ const q = (days: number, mode = live ? 'live' : 'test') => `?days=${days}&mode=$
   <main class="pb-20" data-no-pageview>
     <header class="border-b border-line">
       <div class="container-x flex h-16 items-center justify-between gap-4">
-        <a href="/" class="flex items-center gap-2.5"><Logo size={24} /><span class="text-[15px] font-semibold tracking-tight">Sales</span></a>
+        <div class="flex items-center gap-5">
+          <a href="/" class="flex items-center gap-2.5"><Logo size={24} /><span class="text-[15px] font-semibold tracking-tight">Sales</span></a>
+          <a href={`/admin/partners?mode=${live ? 'live' : 'test'}`} class="text-[14px] text-muted hover:text-text">Partners</a>
+        </div>
         <div class="flex items-center gap-1.5 text-[13px]">
           {[7, 30, 90].map((d) => <a href={q(d)} class="tab !h-8" aria-current={d === range ? 'page' : undefined}>{d}d</a>)}
           <span class="mx-2 h-5 w-px bg-line-2"></span>

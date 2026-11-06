@@ -1,0 +1,71 @@
+---
+import Partners from '@/layouts/Partners.astro';
+import Icon from '@/components/ui/Icon.astro';
+import { PARTNERS } from '@/config/partners';
+import { allowed, BOTS } from '@/lib/limit';
+import { afterResponse, partnerIdFromCookies, sameOrigin } from '@/lib/partner-auth';
+import { partnerByEmail, sendLoginMail } from '@/lib/partners';
+
+export const prerender = false;
+Astro.response.headers.set('cache-control', 'no-store');
+
+if (await partnerIdFromCookies(Astro.cookies)) return Astro.redirect('/partners/dashboard', 303);
+
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+let email = '';
+let error = Astro.url.searchParams.get('expired')
+  ? 'That link expired or was already used. Get a new one below.'
+  : Astro.url.searchParams.get('ended')
+    ? 'This partnership has ended.'
+    : '';
+let sent = false;
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData().catch(() => null);
+  email = String(form?.get('email') ?? '').trim().toLowerCase().slice(0, 200);
+  if (!sameOrigin(Astro.request, Astro.url)) error = 'Please send the form from this page.';
+  else if (BOTS.test(Astro.request.headers.get('user-agent') ?? '') || form?.get('website')) error = 'Please try again in your browser.';
+  else if (!(await allowed('PARTNER_LIMIT', Astro.request))) error = 'Too many tries. Wait a minute and try again.';
+  else if (!EMAIL.test(email)) error = 'Enter a valid email address.';
+  else {
+    // Same answer whether or not the address has an account.
+    const p = await partnerByEmail(email);
+    if (p && p.status !== 'banned') {
+      await afterResponse(Astro.locals, () => sendLoginMail(p).catch((e) => console.error('partner login email failed', p.id, e instanceof Error ? e.message : e)));
+    }
+    sent = true;
+    error = '';
+  }
+}
+---
+
+<Partners title="Log in" description={`Log in to your ${PARTNERS.name} dashboard.`} noindex>
+  <main class="relative isolate grid min-h-[78dvh] place-items-center overflow-hidden px-4 pt-[110px] pb-16">
+    <div class="hero-wash pointer-events-none absolute inset-x-0 top-0 -z-10 h-[700px]" aria-hidden="true"></div>
+    <div class="w-full max-w-[440px]">
+      {
+        sent ? (
+          <div class="card p-7 text-center sm:p-9" role="status">
+            <span class="mx-auto grid size-12 place-items-center rounded-2xl bg-brand-soft text-brand"><Icon name="mail" size={22} /></span>
+            <h1 class="mt-5 text-[26px] font-semibold tracking-[-0.03em]">Check your inbox</h1>
+            <p class="mt-2 text-[15px] leading-relaxed text-muted">If {email} has a partner account, a sign-in link is on its way. It works for 30 minutes.</p>
+            <a href="/partners/login" class="link mt-6 inline-flex text-[14.5px]">Use another email</a>
+          </div>
+        ) : (
+          <form method="post" class="card p-7 sm:p-9">
+            <h1 class="text-[26px] font-semibold tracking-[-0.03em]">Log in</h1>
+            <p class="mt-2 text-[15px] text-muted">We email you a sign-in link.</p>
+            <label class="field mt-6">
+              <span>Email</span>
+              <input class="field-input" name="email" type="email" required autocomplete="email" maxlength="200" value={email} autofocus />
+            </label>
+            <label class="sr-only" aria-hidden="true">Website<input name="website" tabindex="-1" autocomplete="off" /></label>
+            {error && <p class="mt-4 rounded-xl bg-[rgb(184_50_59/0.07)] px-4 py-3 text-[14px] text-danger" role="alert">{error}</p>}
+            <button type="submit" class="btn btn-primary btn-lg mt-6 w-full">Send sign-in link</button>
+            <p class="mt-5 text-center text-[14px] text-muted">Not a partner yet? <a href="/partners/join" class="link">Join</a></p>
+          </form>
+        )
+      }
+    </div>
+  </main>
+</Partners>

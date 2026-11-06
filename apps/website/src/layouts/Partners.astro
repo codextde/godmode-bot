@@ -1,0 +1,19 @@
+---
+import Base from './Base.astro';
+import Footer from '@/components/Footer.astro';
+import PartnersNav from '@/components/partners/PartnersNav.astro';
+
+interface Props {
+  title: string;
+  description?: string;
+  noindex?: boolean;
+  signedIn?: boolean;
+}
+const { title, description, noindex = false, signedIn = false } = Astro.props;
+---
+
+<Base title={title} description={description} noindex={noindex}>
+  <PartnersNav signedIn={signedIn} />
+  <slot />
+  <Footer />
+</Base>

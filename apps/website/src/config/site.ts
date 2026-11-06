@@ -40,16 +40,16 @@ export const PRICING = {
     private: {
       id: 'private' as Plan,
       name: 'Godmode Private',
-      price: 79,
+      price: 49,
       interval: 'month',
-      lookupKey: 'godmode_private_monthly_eur',
+      lookupKey: 'godmode_private_monthly',
     },
     company: {
       id: 'company' as Plan,
       name: 'Godmode Company',
       price: 499,
       interval: 'month',
-      lookupKey: 'godmode_company_monthly_eur',
+      lookupKey: 'godmode_company_monthly',
     },
   },
 } as const;
@@ -87,10 +87,10 @@ export const COUPON = {
 
 export const foundingOpen = (taken: number, now = Date.now()) => now < FOUNDING.end && taken < FOUNDING.seats;
 
-/** "€79" / "79 €" */
+/** "€49" / "49 €" */
 export const eur = (amount: number, lang: 'en' | 'de' = 'en') => (lang === 'de' ? `${amount} €` : `€${amount}`);
 
-/** Short price line for a plan, e.g. "€79/month" or "79 €/Monat". */
+/** Short price line for a plan, e.g. "€49/month" or "49 €/Monat". */
 export function priceLabel(plan: Plan, lang: 'en' | 'de' = 'en'): string {
   return `${eur(PRICING.plans[plan].price, lang)}/${lang === 'de' ? 'Monat' : 'month'}`;
 }

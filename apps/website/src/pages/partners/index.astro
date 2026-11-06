@@ -1,0 +1,313 @@
+---
+import Partners from '@/layouts/Partners.astro';
+import Icon from '@/components/ui/Icon.astro';
+import Words from '@/components/ui/Words.astro';
+import Character from '@/components/ui/Character.astro';
+import { euro, KIT, PARTNERS, perCustomer, ratePercent } from '@/config/partners';
+import { PRICING, SITE } from '@/config/site';
+
+const rate = ratePercent();
+const per = { private: perCustomer('private'), company: perCustomer('company') };
+const steps = [
+  ['user-plus', 'Join', 'Sign up in a minute. Your link and code are ready right away.'],
+  ['clapperboard', 'Post clips', 'Cut our recordings or film your own. Hooks, talking points and videos are in the kit.'],
+  ['wallet', 'Get paid', `${rate}% of every payment for ${PARTNERS.months} months, paid out monthly.`],
+];
+const payouts = [
+  `Commission is held ${PARTNERS.holdDays} days for refunds, then it is yours.`,
+  `Paid on the 1st of every month once you have ${euro(PARTNERS.minPayoutEur, 0)} available.`,
+  'Stripe straight to your bank, or PayPal.',
+  'Refunds and chargebacks are taken back from your balance.',
+];
+const rules = [
+  'Mark every post as an ad (#ad)',
+  'No false claims, no income promises',
+  'No spam comments, DMs or emails',
+  'No paid ads on the Godmode name',
+  'Don’t pose as Godmode or Daniel',
+  'No paid or fake installs',
+];
+const faqs = [
+  ['Who can join?', 'Anyone 18 or older who posts short videos on TikTok, Instagram Reels, YouTube Shorts or X. No follower minimum. You are approved right away.'],
+  [
+    'How do you know a customer came from me?',
+    `Your link remembers you in that browser for ${PARTNERS.cookieDays} days; if someone clicks several partner links, the last one counts. Your code entered at checkout always wins over any link.`,
+  ],
+  [
+    'Most people try Godmode free first. Does that count?',
+    `Yes. They use it free for ${PRICING.freeDays} days and pay later; you earn from their first payment on. Many viewers watch on their phone and install on their Mac, so always show your code: it works on any device.`,
+  ],
+  ['What do my viewers get?', `${PARTNERS.discountPercent}% off their first month when they enter your code at checkout.`],
+  [
+    'When do I get paid?',
+    `Each commission is held ${PARTNERS.holdDays} days, then becomes available. On the 1st of the month everything available is paid out once it reaches ${euro(PARTNERS.minPayoutEur, 0)}. Confirm your email first.`,
+  ],
+  [
+    'How do I get paid?',
+    `Stripe pays to your bank in the US, UK, EU, Norway, Iceland, Liechtenstein, Canada and Switzerland. Everywhere else we pay by PayPal.`,
+  ],
+  ['Can I buy through my own link?', 'You can, but self-referrals earn nothing.'],
+  ['What about taxes?', 'You get the full commission in EUR. Declaring it where you live is up to you.'],
+];
+---
+
+<Partners title="Partners: earn 20% for every customer" description={`Post short videos about Godmode and earn ${rate}% of every payment from the customers you bring, for ${PARTNERS.months} months. Free to join, paid monthly.`}>
+  <main>
+    <section class="relative isolate overflow-hidden pt-[120px] pb-12 sm:pt-[150px] sm:pb-16">
+      <div class="hero-wash pointer-events-none absolute inset-x-0 top-0 -z-10 h-[800px]" aria-hidden="true"></div>
+      <div class="container-x grid items-center gap-12 lg:grid-cols-[1.2fr_1fr]">
+        <div>
+          <p class="eyebrow" data-reveal>{PARTNERS.name}</p>
+          <Words as="h1" text={`Clip Godmode. *Earn ${rate}% of every payment.*`} class="h-section mt-5 !text-[clamp(40px,5.6vw,72px)]" delay={80} />
+          <p class="lead mt-6 max-w-[560px] !text-text-2" data-reveal style="--d:350">
+            Post short videos about Godmode. Every customer who signs up through your link or code pays you {rate}% of what they pay, for {PARTNERS.months} months.
+          </p>
+          <div class="mt-9 flex flex-col gap-3 sm:flex-row" data-reveal style="--d:450">
+            <a href="/partners/join" class="btn btn-primary btn-lg group" data-track="partners_hero_join">
+              Join the program <Icon name="arrow-right" size={17} class="arrow" />
+            </a>
+            <a href="/partners/kit" class="btn btn-ghost btn-lg" data-track="partners_hero_kit">Content kit</a>
+          </div>
+          <p class="hero-note mt-6 !justify-start" data-reveal style="--d:520">
+            {
+              ['Free to join', 'Approved instantly', 'Paid monthly'].map((x, i) => (
+                <>
+                  {i > 0 && <span aria-hidden="true" class="text-line-3">·</span>}
+                  <span><Icon name="check" size={15} class="text-brand" stroke={2.4} /> {x}</span>
+                </>
+              ))
+            }
+          </p>
+        </div>
+
+        <div class="price-card is-featured relative p-7 sm:p-9" data-reveal="scale" style="--d:300">
+          <div class="absolute -top-9 right-6" aria-hidden="true">
+            <Character size={72} mood="happy" seed="partners" follow />
+          </div>
+          <p class="text-[15px] font-semibold text-brand">What one customer earns you</p>
+          {
+            (['private', 'company'] as const).map((plan, i) => (
+              <div class:list={['mt-6', i > 0 && 'border-t border-line pt-6']}>
+                <p class="text-[14px] font-medium text-muted">
+                  {PRICING.plans[plan].name} · €{PRICING.plans[plan].price}/month
+                </p>
+                <p class="mt-2 flex items-baseline gap-2">
+                  <span class="text-[52px] leading-none font-[650] tracking-[-0.05em] tabular-nums">{euro(per[plan])}</span>
+                  <span class="text-[15px] text-muted">/month</span>
+                </p>
+                <p class="mt-1.5 text-[14px] text-muted">{euro(per[plan] * PARTNERS.months)} over {PARTNERS.months} months</p>
+              </div>
+            ))
+          }
+          <p class="mt-6 rounded-2xl bg-brand-soft px-4 py-3 text-[14px] text-text-2">
+            Your viewers get {PARTNERS.discountPercent}% off their first month with your code.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section id="calculator" class="relative py-14 sm:py-20" data-track-view="partners_calculator">
+      <div class="container-x">
+        <div class="card-soft grid gap-10 p-6 sm:p-10 lg:grid-cols-[1fr_1fr] lg:p-12" data-calc data-private={per.private} data-company={per.company} data-months={PARTNERS.months}>
+          <div>
+            <p class="eyebrow">Earnings calculator</p>
+            <h2 class="mt-4 text-[clamp(28px,3.4vw,40px)] leading-[1.08] font-[650] tracking-[-0.035em]">How many customers a month?</h2>
+            <div class="mt-8 grid gap-7">
+              <label class="grid gap-3">
+                <span class="flex items-baseline justify-between text-[15px] font-medium text-text-2">
+                  New Private customers <output class="text-[22px] font-semibold tabular-nums text-text" data-out="private">5</output>
+                </span>
+                <input type="range" min="0" max="50" value="5" data-in="private" class="calc-range" aria-label="New Private customers per month" />
+              </label>
+              <label class="grid gap-3">
+                <span class="flex items-baseline justify-between text-[15px] font-medium text-text-2">
+                  New Company customers <output class="text-[22px] font-semibold tabular-nums text-text" data-out="company">0</output>
+                </span>
+                <input type="range" min="0" max="10" value="0" data-in="company" class="calc-range" aria-label="New Company customers per month" />
+              </label>
+            </div>
+          </div>
+          <div class="card flex flex-col justify-center p-7 sm:p-9">
+            <p class="text-[14px] font-medium text-muted">Per month, after a year</p>
+            <p class="mt-2 text-[clamp(44px,6vw,64px)] leading-none font-[650] tracking-[-0.05em] text-brand tabular-nums" data-result="month">{euro(per.private * 5 * PARTNERS.months, 0)}</p>
+            <p class="mt-6 text-[14px] font-medium text-muted">Your first {PARTNERS.months} months in total</p>
+            <p class="mt-2 text-[30px] leading-none font-semibold tracking-[-0.04em] tabular-nums" data-result="year">{euro((per.private * 5 * PARTNERS.months * (PARTNERS.months + 1)) / 2, 0)}</p>
+            <p class="mt-6 text-[13px] text-dim">If every customer stays at least a year.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="how" class="relative py-14 sm:py-20">
+      <div class="container-x">
+        <div class="max-w-[720px]">
+          <p class="eyebrow" data-reveal>How it works</p>
+          <Words text="Three steps. *No minimums.*" class="h-section mt-4" />
+        </div>
+        <ol class="mt-12 grid gap-4 md:grid-cols-3">
+          {
+            steps.map(([icon, title, text], i) => (
+              <li class="card p-6 sm:p-7" data-reveal style={`--d:${i * 90}`}>
+                <div class="flex items-center justify-between">
+                  <span class="step-num">{i + 1}</span>
+                  <Icon name={icon} size={22} class="text-dim" />
+                </div>
+                <h3 class="mt-6 text-[19px] font-semibold tracking-[-0.02em]">{title}</h3>
+                <p class="mt-2 text-[15px] leading-relaxed text-muted">{text}</p>
+              </li>
+            ))
+          }
+        </ol>
+      </div>
+    </section>
+
+    <section id="post" class="relative py-14 sm:py-20" data-track-view="partners_post">
+      <div class="container-x grid items-center gap-12 lg:grid-cols-[1fr_auto]">
+        <div class="max-w-[640px]">
+          <p class="eyebrow" data-reveal>What to post</p>
+          <Words text="Show it doing *real work.*" class="h-section mt-4" />
+          <p class="lead mt-6" data-reveal style="--d:200">
+            The clips that work show a task from start to finish: a login with 2FA, a price comparison, invoices filed into a folder. We give you the recordings to cut.
+          </p>
+          <div class="mt-8 flex flex-wrap gap-2.5" data-reveal style="--d:280">
+            {KIT.hooks.slice(0, 4).map((h) => <span class="idea-chip !cursor-default"><Icon name="quote" size={14} class="text-brand" /><span>{h}</span></span>)}
+          </div>
+          <a href="/partners/kit" class="link mt-8 inline-flex items-center gap-1.5 text-[15px]" data-reveal style="--d:340">
+            Open the content kit <Icon name="arrow-right" size={15} />
+          </a>
+        </div>
+        <div class="mx-auto w-[240px] sm:w-[260px]" data-reveal="scale">
+          <div class="window !rounded-[28px] p-1.5">
+            <video
+              class="block aspect-[9/16] w-full rounded-[22px] bg-surface-2 object-cover"
+              src="/media/ad-vm-9x16.mp4"
+              poster="/media/ad-vm-9x16.jpg"
+              muted
+              loop
+              playsinline
+              autoplay
+              preload="metadata"
+              aria-label="Vertical Godmode demo clip"></video>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="payouts" class="relative py-14 sm:py-20">
+      <div class="container-x grid gap-4 lg:grid-cols-2">
+        <div class="card p-7 sm:p-9" data-reveal>
+          <span class="grid size-11 place-items-center rounded-2xl bg-brand-soft text-brand"><Icon name="banknote" size={20} /></span>
+          <h2 class="mt-5 text-[24px] font-semibold tracking-[-0.025em]">Payouts</h2>
+          <ul class="mt-5 grid gap-3 text-[15px] text-text-2">
+            {payouts.map((x) => <li class="flex items-start gap-2.5"><Icon name="check" size={17} stroke={2.4} class="mt-0.5 flex-none text-brand" />{x}</li>)}
+          </ul>
+        </div>
+        <div class="card p-7 sm:p-9" data-reveal style="--d:90">
+          <span class="grid size-11 place-items-center rounded-2xl bg-peach-soft text-[#8a3d1f]"><Icon name="shield-check" size={20} /></span>
+          <h2 class="mt-5 text-[24px] font-semibold tracking-[-0.025em]">Rules</h2>
+          <ul class="mt-5 grid gap-3 text-[15px] text-text-2 sm:grid-cols-2">
+            {rules.map((x) => <li class="flex items-start gap-2.5"><Icon name="x" size={17} stroke={2.4} class="mt-0.5 flex-none text-[#8a3d1f]" />{x}</li>)}
+          </ul>
+          <a href="/partners/terms" class="link mt-6 inline-flex text-[14.5px]">Program terms</a>
+        </div>
+      </div>
+    </section>
+
+    <section id="faq" class="relative py-14 sm:py-20" data-track-view="partners_faq">
+      <div class="container-x grid gap-12 lg:grid-cols-[0.8fr_1.2fr]">
+        <div class="lg:sticky lg:top-28 lg:self-start">
+          <p class="eyebrow" data-reveal>FAQ</p>
+          <Words text="Questions from *clippers.*" class="h-section mt-4" />
+          <p class="mt-6 max-w-[360px] text-[16px] leading-relaxed text-muted" data-reveal style="--d:200">
+            Something else? Email <a href={`mailto:${SITE.email}`} class="font-medium text-text underline decoration-line-3 underline-offset-2">{SITE.email}</a>.
+          </p>
+        </div>
+        <div class="divide-y divide-line border-y border-line">
+          {
+            faqs.map(([q, a], i) => (
+              <details class="faq group" data-faq={`partners_${i}`}>
+                <summary class="flex cursor-pointer items-center justify-between gap-6 py-6 text-[18px] font-semibold tracking-[-0.015em] transition-colors hover:text-brand">
+                  {q}
+                  <span class="plus grid size-8 flex-none place-items-center rounded-full bg-surface ring-1 ring-line-2 transition-colors group-hover:ring-line-3" aria-hidden="true">
+                    <svg width="12" height="12" viewBox="0 0 12 12"><path d="M6 1v10M1 6h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" /></svg>
+                  </span>
+                </summary>
+                <p class="max-w-[640px] pb-7 text-[16px] leading-[1.7] text-muted">{a}</p>
+              </details>
+            ))
+          }
+        </div>
+      </div>
+    </section>
+
+    <section class="relative py-14 sm:py-20">
+      <div class="container-x">
+        <div class="final-panel relative px-6 py-14 text-center sm:px-10 sm:py-20">
+          <Character size={84} mood="happy" seed="partners-cta" class="mx-auto block" />
+          <h2 class="h-section mx-auto mt-6 max-w-[640px]">Ready to clip?</h2>
+          <p class="lead mx-auto mt-4 max-w-[480px]">Your link and code in a minute.</p>
+          <a href="/partners/join" class="btn btn-primary btn-lg group mt-8" data-track="partners_final_join">
+            Join the program <Icon name="arrow-right" size={17} class="arrow" />
+          </a>
+        </div>
+      </div>
+    </section>
+  </main>
+</Partners>
+
+<style>
+  .calc-range {
+    appearance: none;
+    width: 100%;
+    height: 6px;
+    border-radius: 999px;
+    background: linear-gradient(90deg, var(--brand) var(--fill, 10%), var(--surface-3) var(--fill, 10%));
+    outline: none;
+    cursor: pointer;
+  }
+  .calc-range::-webkit-slider-thumb {
+    appearance: none;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: var(--surface);
+    box-shadow: 0 0 0 1.5px var(--brand) inset, var(--shadow);
+  }
+  .calc-range::-moz-range-thumb {
+    width: 24px;
+    height: 24px;
+    border: 0;
+    border-radius: 50%;
+    background: var(--surface);
+    box-shadow: 0 0 0 1.5px var(--brand) inset, var(--shadow);
+  }
+  .calc-range:focus-visible::-webkit-slider-thumb {
+    outline: 2px solid var(--brand);
+    outline-offset: 3px;
+  }
+</style>
+
+<script>
+  const root = document.querySelector<HTMLElement>('[data-calc]');
+  if (root) {
+    const per = { private: Number(root.dataset.private), company: Number(root.dataset.company) };
+    const months = Number(root.dataset.months);
+    const fmt = new Intl.NumberFormat('en-IE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 });
+    const inputs = [...root.querySelectorAll<HTMLInputElement>('[data-in]')];
+    const update = () => {
+      let monthly = 0;
+      for (const input of inputs) {
+        const plan = input.dataset.in as 'private' | 'company';
+        const n = Number(input.value);
+        monthly += n * per[plan];
+        root.querySelector(`[data-out="${plan}"]`)!.textContent = String(n);
+        input.style.setProperty('--fill', `${(n / Number(input.max)) * 100}%`);
+      }
+      // A new cohort every month, each paying for its first year: month 12 has 12 cohorts, the year adds up 1 + 2 + … + 12.
+      root.querySelector('[data-result="month"]')!.textContent = fmt.format(monthly * months);
+      root.querySelector('[data-result="year"]')!.textContent = fmt.format((monthly * months * (months + 1)) / 2);
+    };
+    inputs.forEach((i) => i.addEventListener('input', update));
+    update();
+  }
+</script>

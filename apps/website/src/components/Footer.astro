@@ -23,6 +23,7 @@ const t = {
     company: 'Company',
     contact: 'Contact',
     support: 'Support',
+    partners: 'Partners',
     legal: 'Legal',
     legalLinks: [
       ['/legal/imprint', 'Imprint'],
@@ -50,6 +51,7 @@ const t = {
     company: 'Unternehmen',
     contact: 'Kontakt',
     support: 'Hilfe',
+    partners: 'Partnerprogramm (EN)',
     legal: 'Rechtliches',
     legalLinks: [
       ['/legal/imprint', 'Impressum'],
@@ -89,6 +91,7 @@ const t = {
         <li><a class="hover:text-text" href="https://codext.de" rel="noopener">Codext GmbH</a></li>
         <li><a class="hover:text-text" href={href(lang, '/#faq')}>FAQ</a></li>
         <li><a class="hover:text-text" href={href(lang, '/support')}>{t.support}</a></li>
+        <li><a class="hover:text-text" href="/partners">{t.partners}</a></li>
       </ul>
     </nav>
     <nav aria-label={t.legal}>

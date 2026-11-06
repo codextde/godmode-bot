@@ -1,0 +1,46 @@
+---
+import Logo from '@/components/ui/Logo.astro';
+
+interface Props {
+  signedIn?: boolean;
+}
+const { signedIn = false } = Astro.props;
+const path = Astro.url.pathname.replace(/\.html$/, '').replace(/\/$/, '');
+const links = [
+  ['/partners', 'Program'],
+  ['/partners/kit', 'Content kit'],
+  ['/partners/terms', 'Terms'],
+];
+---
+
+<header data-nav class="nav fixed inset-x-0 top-0 z-50">
+  <div class="container-x flex h-[68px] items-center justify-between gap-4">
+    <a href="/partners" class="group flex items-center gap-2.5" aria-label="Godmode Partners">
+      <Logo size={30} class="transition-transform duration-500 ease-[var(--ease-spring)] group-hover:rotate-[-8deg]" />
+      <span class="text-[17px] font-semibold tracking-[-0.03em]">Godmode</span>
+      <span class="chip chip-brand !h-6 !px-2.5 !text-[12px] font-semibold">Partners</span>
+    </a>
+
+    <nav class="hidden items-center gap-1 md:flex" aria-label="Partners">
+      {links.map(([href, label]) => <a href={href} class:list={['nav-link', path === href && 'is-active']}>{label}</a>)}
+    </nav>
+
+    <div class="flex items-center gap-1.5">
+      {
+        signedIn ? (
+          <>
+            <a href="/partners/dashboard" class:list={['nav-link hidden sm:inline-flex', path === '/partners/dashboard' && 'is-active']}>Dashboard</a>
+            <form method="post" action="/partners/logout">
+              <button type="submit" class="btn btn-ghost btn-sm">Log out</button>
+            </form>
+          </>
+        ) : (
+          <>
+            <a href="/partners/login" class="nav-link">Log in</a>
+            <a href="/partners/join" class="btn btn-primary btn-sm">Join</a>
+          </>
+        )
+      }
+    </div>
+  </div>
+</header>

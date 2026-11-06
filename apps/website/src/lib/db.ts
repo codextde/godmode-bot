@@ -24,13 +24,14 @@ export async function insertOpenOrder(o: {
   licenseKey: string;
   livemode: boolean;
   attribution: Attribution;
+  partnerId?: number | null;
 }) {
   const a = o.attribution;
   await db()
     .prepare(
       `INSERT OR IGNORE INTO orders (session_id, created_at, plan, mode, status, license_key, utm_source, utm_medium,
-        utm_campaign, utm_content, twclid, referrer, landing, livemode)
-       VALUES (?, ?, ?, ?, 'open', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        utm_campaign, utm_content, twclid, referrer, landing, livemode, partner_id)
+       VALUES (?, ?, ?, ?, 'open', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .bind(
       o.sessionId,
@@ -46,6 +47,7 @@ export async function insertOpenOrder(o: {
       clip(a.referrer),
       clip(a.landing),
       o.livemode ? 1 : 0,
+      o.partnerId ?? null,
     )
     .run();
 }
