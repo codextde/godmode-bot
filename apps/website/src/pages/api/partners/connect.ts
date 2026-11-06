@@ -34,8 +34,9 @@ async function connect({ request, url, cookies }: APIContext, create: boolean) {
           type: 'express',
           country: p.country,
           email: p.email,
-          capabilities: { transfers: { requested: true } },
-          business_profile: { product_description: 'Short videos about Godmode (Godmode Partners affiliate)' },
+          // A DE platform may only open accounts with card_payments next to transfers (Stripe refuses transfers alone).
+          capabilities: { card_payments: { requested: true }, transfers: { requested: true } },
+          business_profile: { mcc: '7311', product_description: 'Short videos about Godmode (Godmode Partners affiliate)' },
           metadata: { partner_id: String(p.id), partner_code: p.code },
         },
         { idempotencyKey: `partner_connect_${p.id}_${new Date().toISOString().slice(0, 10)}` },
