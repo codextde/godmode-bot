@@ -362,6 +362,27 @@ describe("placing a call", () => {
     expect(getCall(c.id).status).toBe("no_answer");
   });
 
+  test("a hotline's hold music, announcements and voice assistant don't end the call", async () => {
+    const { conversation, run } = await startChat({ agentId: agent.id, content: "Ask the hotline about my contract" });
+    await waitForRun(run.id, 10_000);
+    const res = await callTool(ctxFor(conversation.id, run.id), "phone_call", { to: "+49 30 888", goal: "Ask when the contract ends", context: "Stay on the line through music.", contactName: "Hotline" });
+    expect(res.isError).toBeUndefined();
+    const prompt = (sentTo("/v1/convai/twilio/outbound-call")[0]!.json!.conversation_initiation_client_data as { conversation_config_override: { agent: { prompt: { prompt: string } } } }).conversation_config_override.agent.prompt.prompt;
+    expect(prompt).toContain("hold music, announcements or silence");
+    expect(prompt).toContain("stay on the line and say nothing until a person or a voice assistant talks to you");
+    expect(prompt).toContain("Answer its questions briefly (recording consent");
+    expect(prompt).toContain("say your request in the same turn");
+    expect(prompt).toContain("Ja, das ist okay. Ich rufe an wegen ...");
+    expect(prompt).toContain("by saying it or with the keypad tones");
+    expect(prompt).toContain("Call end_call only when the call is really over");
+    expect(prompt).toContain('a "Danke" from an assistant');
+
+    const body = agentBody({ name: "x", prompt: "p", firstMessage: "", language: "de", llm: "m", voiceId: "", maxSeconds: 60 });
+    const endCall = body.conversation_config.agent.prompt.built_in_tools.end_call;
+    expect(endCall.params).toEqual({ system_tool_type: "end_call" });
+    expect(endCall.description).toContain("Never on hold music, announcements, silence");
+  });
+
   test("a mailbox gets the message the agent wrote, and the call ends as voicemail left", async () => {
     const body = agentBody({ name: "x", prompt: "p", firstMessage: "", language: "de", llm: "m", voiceId: "", maxSeconds: 60 });
     expect(body.conversation_config.agent.prompt.built_in_tools.voicemail_detection.params).toEqual({ system_tool_type: "voicemail_detection", voicemail_message: "{{voicemail_message}}" });

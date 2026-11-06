@@ -148,7 +148,10 @@ export interface AgentConfig {
   maxSeconds: number;
 }
 
-const systemTool = (name: string, params: Record<string, string> = {}) => ({ name, description: "", params: { system_tool_type: name, ...params } as Record<string, string> });
+const systemTool = (name: string, params: Record<string, string> = {}, description = "") => ({ name, description, params: { system_tool_type: name, ...params } as Record<string, string> });
+
+const END_CALL =
+  "Hang up. Only when the conversation is really over: the other side handled the request, said goodbye or said they can't help. Never on hold music, announcements, silence or right after answering an automated assistant.";
 
 /** Dynamic variable with what the voice leaves on a mailbox; empty (inbound calls) hangs up without a message. */
 export const VOICEMAIL_VARIABLE = "voicemail_message";
@@ -167,7 +170,7 @@ export function agentBody(c: AgentConfig) {
           llm: c.llm,
           temperature: 0.4,
           built_in_tools: {
-            end_call: systemTool("end_call"),
+            end_call: systemTool("end_call", {}, END_CALL),
             voicemail_detection: systemTool("voicemail_detection", { voicemail_message: `{{${VOICEMAIL_VARIABLE}}}` }),
             play_keypad_touch_tone: systemTool("play_keypad_touch_tone"),
           },
