@@ -6,4 +6,9 @@ export const PANEL = { duration: 0.2, ease: EASE_OUT } as const;
 
 export const useReduceAnimations = () => useUi((s) => s.reduceAnimations);
 
-export const useLightAnimations = () => useUi((s) => s.lightAnimations && !s.reduceAnimations);
+type MotionPrefs = { lightAnimations: boolean; reduceAnimations: boolean };
+
+/** Light animations: compositor-only motion, and the window rests and holds live updates while nobody looks. */
+export const isLightAnimations = (s: MotionPrefs) => s.lightAnimations && !s.reduceAnimations;
+
+export const useLightAnimations = () => useUi(isLightAnimations);

@@ -67,7 +67,6 @@ interface UiState {
   reduceAnimations: boolean;
   /** Cheaper "agent is working" motion: fewer loops, all on the compositor. */
   lightAnimations: boolean;
-  holdInBackground: boolean;
   toolCallView: ToolCallView;
   followUpMode: FollowUpMode;
   enterKey: EnterKey;
@@ -113,7 +112,6 @@ interface UiState {
   setArtifactPanelWidth: (width: number | null) => void;
   setReduceAnimations: (v: boolean) => void;
   setLightAnimations: (v: boolean) => void;
-  setHoldInBackground: (v: boolean) => void;
   setToolCallView: (v: ToolCallView) => void;
   setFollowUpMode: (v: FollowUpMode) => void;
   setEnterKey: (v: EnterKey) => void;
@@ -156,7 +154,6 @@ export const useUi = create<UiState>()(
       artifactPanelWidth: null,
       reduceAnimations: false,
       lightAnimations: false,
-      holdInBackground: true,
       toolCallView: "cards",
       followUpMode: "queue",
       enterKey: "send",
@@ -206,7 +203,6 @@ export const useUi = create<UiState>()(
       setArtifactPanelWidth: (artifactPanelWidth) => set({ artifactPanelWidth }),
       setReduceAnimations: (reduceAnimations) => set({ reduceAnimations }),
       setLightAnimations: (lightAnimations) => set({ lightAnimations }),
-      setHoldInBackground: (holdInBackground) => set({ holdInBackground }),
       setToolCallView: (toolCallView) => set({ toolCallView }),
       setFollowUpMode: (followUpMode) => set({ followUpMode }),
       setEnterKey: (enterKey) => set({ enterKey }),
@@ -246,7 +242,6 @@ export const useUi = create<UiState>()(
         artifactPanelWidth: s.artifactPanelWidth,
         reduceAnimations: s.reduceAnimations,
         lightAnimations: s.lightAnimations,
-        holdInBackground: s.holdInBackground,
         toolCallView: s.toolCallView,
         followUpMode: s.followUpMode,
         enterKey: s.enterKey,

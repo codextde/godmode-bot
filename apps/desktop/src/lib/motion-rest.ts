@@ -1,4 +1,6 @@
 import { useSyncExternalStore } from "react";
+import { useUi } from "@/stores/ui";
+import { isLightAnimations } from "./motion";
 
 /** Window in the background this long, and motion stops. */
 const UNFOCUSED_MS = 5_000;
@@ -34,6 +36,7 @@ export function useMotionRest(): boolean {
 }
 
 /**
+ * Full animations rest only while the window is hidden. Light animations also rest in the background and when untouched.
  * Ends every looping CSS animation and the streaming text smoother while nobody is looking (`.gm-rest` on <html>, see index.css). A looping spinner,
  * shimmer or breathing character makes WebKit and the WindowServer draw the window 60-120 times a second, which keeps
  * the Mac awake for nothing when Godmode sits in the background or a tray.
@@ -50,6 +53,11 @@ export function startMotionRest(): () => void {
   const wake = () => {
     if (document.hidden) return rest();
     setResting(false);
+    if (!isLightAnimations(useUi.getState())) {
+      clearTimeout(timer);
+      timer = undefined;
+      return;
+    }
     const now = Date.now();
     // Pointer moves arrive many times a second: re-arming once a second is plenty.
     if (timer && now - scheduledAt < 1_000) return;
@@ -70,6 +78,9 @@ export function startMotionRest(): () => void {
   window.addEventListener("focus", rearm);
   window.addEventListener("blur", rearm);
   document.addEventListener("visibilitychange", rearm);
+  const offUi = useUi.subscribe((s, prev) => {
+    if (isLightAnimations(s) !== isLightAnimations(prev)) rearm();
+  });
   wake();
 
   return () => {
@@ -78,6 +89,7 @@ export function startMotionRest(): () => void {
     window.removeEventListener("focus", rearm);
     window.removeEventListener("blur", rearm);
     document.removeEventListener("visibilitychange", rearm);
+    offUi();
     setResting(false);
   };
 }

@@ -37,12 +37,10 @@
       "animationsLight": "Light",
       "animationsReduced": "Reduced",
       "animationsDescription": {
-        "full": "Every animation, including the beam around working cards and moving characters.",
-        "light": "Uses less energy: working cards pulse softly instead of a moving beam, one live indicator per place.",
+        "full": "Every animation, also while Godmode is in the background: the beam around working cards, moving characters and live replies.",
+        "light": "Saves energy: working cards pulse softly instead of a moving beam, and while you're in other apps animations and live replies pause and catch up when you come back.",
         "reduced": "Fewer and shorter animations: messages appear instantly, menus only fade, no glowing borders while agents work."
-      },
-      "holdInBackground": "Save energy in the background",
-      "holdInBackgroundDescription": "While you work in other apps, streaming replies and live views wait and catch up the moment you come back."
+      }
     },
     "chat": {
       "title": "Chat",
