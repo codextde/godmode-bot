@@ -3,6 +3,7 @@ import { motion } from "motion/react";
 import type { AgentCharacter, CharacterMood } from "@godmode/shared";
 import { characterPhase, renderCharacterSvg } from "@godmode/shared";
 import { cn } from "@/lib/utils";
+import { isMotionResting } from "@/lib/motion-rest";
 
 /** How far the eyes may travel (viewBox units) and how far away the pointer must be for the full glance (px). */
 const LOOK_MAX = 4;
@@ -99,6 +100,12 @@ export function Character({
     };
   }, [follow]);
 
+  useEffect(() => {
+    const el = ref.current?.querySelector("svg");
+    if (!el) return;
+    return watchBlink(el, characterPhase(phaseSeed));
+  }, [svg, phaseSeed]);
+
   // Idle blinking and breathing only on big characters: on small avatars it is barely visible, yet every one of them
   // repaints the window each frame. Moods that mean something (working, attention, ...) still move at any size.
   const resting = still || ((mood === "idle" || mood === "sleeping") && !isLarge(size, className));
@@ -116,6 +123,35 @@ export function Character({
       dangerouslySetInnerHTML={{ __html: svg }}
     />
   );
+}
+
+const BLINK_EVERY_MS = 5200;
+const BLINK_MS = 130;
+const NO_BLINK = new Set(["attention", "happy", "sleeping", "error"]);
+const blinking = new Map<SVGSVGElement, number>();
+let blinkTimer: ReturnType<typeof setInterval> | null = null;
+
+function blinkTick() {
+  if (document.hidden || isMotionResting() || document.documentElement.dataset.motion === "reduced") return;
+  const now = Date.now();
+  for (const [svg, offset] of blinking) {
+    if ((now + offset) % BLINK_EVERY_MS >= 250) continue;
+    if (NO_BLINK.has(svg.dataset.mood ?? "") || svg.closest(".gm-still")) continue;
+    svg.classList.add("gm-blink");
+    setTimeout(() => svg.classList.remove("gm-blink"), BLINK_MS);
+  }
+}
+
+function watchBlink(svg: SVGSVGElement, phase: number): () => void {
+  blinking.set(svg, Math.round(phase * 1700) % BLINK_EVERY_MS);
+  blinkTimer ??= setInterval(blinkTick, 250);
+  return () => {
+    blinking.delete(svg);
+    if (!blinking.size && blinkTimer) {
+      clearInterval(blinkTimer);
+      blinkTimer = null;
+    }
+  };
 }
 
 /** A small speech bubble for what a character says; the tail points at the speaker. */

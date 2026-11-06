@@ -6,11 +6,16 @@ import styles from "./Motion.module.css";
  * Tick bars — a row of hairline ticks that rise and settle like a quiet equaliser.
  * Used as the "agent is working" signature next to live runs.
  */
-export function WorkingTicks({ count = 14, className, style }: { count?: number; className?: string; style?: CSSProperties }) {
+const STILL_HEIGHTS = [0.35, 0.6, 0.9, 0.55, 0.3, 0.7, 1, 0.5, 0.4];
+
+export function WorkingTicks({ count = 14, still = false, className, style }: { count?: number; still?: boolean; className?: string; style?: CSSProperties }) {
   return (
     <span aria-hidden className={cn(styles.ticks, className)} style={style}>
       {Array.from({ length: count }, (_, i) => (
-        <span key={i} style={{ animationDelay: `${(i * 97) % 1100}ms` }} />
+        <span
+          key={i}
+          style={still ? { animation: "none", transform: `scaleY(${STILL_HEIGHTS[i % STILL_HEIGHTS.length]})`, opacity: 0.7 } : { animationDelay: `${(i * 97) % 1100}ms` }}
+        />
       ))}
     </span>
   );
