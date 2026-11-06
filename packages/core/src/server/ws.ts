@@ -27,6 +27,8 @@ export interface WsData {
   patches?: boolean;
   /** Nobody looks at this window (`deltas.hold`): no streaming until it asks for each run again with `run.resync`. */
   held?: boolean;
+  /** Text blocks that only grew come as the added text (`deltas.append`). */
+  appends?: boolean;
   /** Stored messages come without their screenshots, each its own request (it said `messages.images`). */
   imageUrls?: boolean;
   /** The chat this client shows right now in a visible, focused window (`conversation.view`). */
@@ -504,7 +506,9 @@ function sendWhole(runId: string) {
 }
 
 function sendDelta(event: RunDelta) {
+  const { compact, ...full } = event;
   let payload: string | null = null;
+  let short: string | null = null;
   let others = false;
   for (const ws of audience()) {
     if (!wantsDeltas(ws, event.conversationId)) continue;
@@ -513,7 +517,16 @@ function sendDelta(event: RunDelta) {
       others = true;
       continue;
     }
-    payload ??= JSON.stringify(event);
+    if (compact && ws.data.appends && !ws.data.link) {
+      short ??= JSON.stringify({ ...full, patch: compact.patch, append: compact.append });
+      try {
+        ws.send(short);
+      } catch {
+        /* ignore */
+      }
+      continue;
+    }
+    payload ??= JSON.stringify(full);
     try {
       ws.send(payload);
     } catch {
@@ -679,6 +692,9 @@ export const websocketHandler = {
       }
       case "deltas.patch":
         ws.data.patches = true;
+        break;
+      case "deltas.append":
+        ws.data.appends = true;
         break;
       case "deltas.hold":
         ws.data.held = msg.hold === true;

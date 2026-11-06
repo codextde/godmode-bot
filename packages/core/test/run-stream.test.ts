@@ -163,6 +163,13 @@ describe("the in-flight message", () => {
     expect(have!.blocks).toEqual(stored.blocks);
     expect(stored.blocks.filter((b) => b.type === "tool_use" && b.image).length).toBe(6);
 
+    let short: RunDeltaState | null = null;
+    for (const { compact, ...d } of deltas) {
+      short = applyRunDelta(short, compact ? { ...d, patch: compact.patch, append: compact.append } : d);
+      expect(short).not.toBeNull();
+    }
+    expect(short!.blocks).toEqual(stored.blocks);
+
     // A screenshot travels once: with the delta in which its step got its result.
     const sent = deltas.flatMap((d) => d.patch!.map(([, b]) => b)).filter((b) => b.type === "tool_use" && b.image);
     expect(sent.length).toBe(6);
@@ -172,6 +179,22 @@ describe("the in-flight message", () => {
     expect(logged).toContain('"text":"shot 5"');
     expect(logged).not.toContain("A".repeat(100));
     expect(logged.match(/characters left out/g)).toHaveLength(6);
+  });
+
+  test("text that only grows travels as the added text to clients that asked for it", async () => {
+    const { events, stop } = captureEvents();
+    const started = await startChat({ agentId: agent.id, content: "SLOW_STREAM" });
+    const run = await waitForRun(started.run.id, 20_000);
+    stop();
+    expect(run.status).toBe("succeeded");
+    const deltas = deltasOf(events, run.id);
+    const grown = deltas.filter((d) => d.compact);
+    expect(grown.length).toBeGreaterThan(1);
+    expect(grown.every((d) => d.compact!.append.every(([, added]) => !added.includes("one")) || d.seq === 1)).toBe(true);
+    let short: RunDeltaState | null = null;
+    for (const { compact, ...d } of deltas) short = applyRunDelta(short, compact ? { ...d, patch: compact.patch, append: compact.append } : d);
+    const stored = getMessage(getConversation(started.conversation.id).messages.at(-1)!.id);
+    expect(short!.blocks).toEqual(stored.blocks);
   });
 
   test("a long run keeps its newest screenshots: the clients and the saved message lose the oldest together", async () => {
@@ -206,6 +229,8 @@ describe("the in-flight message", () => {
 
     expect(applyRunDelta(first, delta(3, [[1, text("c")]], 2))).toBeNull();
     expect(applyRunDelta(null, delta(5, [[4, text("e")]], 5))).toBeNull();
+    expect(applyRunDelta(first, { ...delta(2, [], 1), append: [[0, "bc"]] })!.blocks).toEqual([text("abc")]);
+    expect(applyRunDelta(first, { ...delta(2, [], 1), append: [[1, "x"]] })).toBeNull();
     // Joined mid-run with a patch that doesn't cover everything.
     expect(applyRunDelta(null, delta(1, [[1, text("b")]], 2))).toBeNull();
     // The whole list always applies.

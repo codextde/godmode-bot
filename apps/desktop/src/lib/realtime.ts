@@ -233,6 +233,7 @@ async function connect(queryClient: QueryClient) {
     useLive.getState().setConnected(true);
     // Streaming replies as what changed instead of the whole block list every time.
     ws.send(JSON.stringify({ type: "deltas.patch" } satisfies ClientEvent));
+    ws.send(JSON.stringify({ type: "deltas.append" } satisfies ClientEvent));
     ws.send(JSON.stringify({ type: "messages.images" } satisfies ClientEvent));
     if (holding) ws.send(JSON.stringify({ type: "deltas.hold", hold: true } satisfies ClientEvent));
     while (pendingSends.length) ws.send(JSON.stringify(pendingSends.shift()));

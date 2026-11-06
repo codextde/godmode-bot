@@ -52,6 +52,13 @@ export type ServerEvent =
        */
       patch?: [number, MessageBlock][];
       length?: number;
+      /**
+       * Text blocks that only grew, as `[index, added text]`: applied after `patch`. Only to clients that asked for it
+       * (`deltas.append`); the others get those blocks whole in `patch`.
+       */
+      append?: [number, string][];
+      /** The core's own: `patch` and `append` for `deltas.append` clients. Never sent. */
+      compact?: { patch: [number, MessageBlock][]; append: [number, string][] };
       /** Incremental text appended since the last delta (for TTS / typing effects). */
       textDelta?: string;
     }
@@ -265,6 +272,7 @@ export type ClientEvent =
   /** This client applies `run.delta` patches (`applyRunDelta`): send it what changed instead of the whole list. */
   | { type: "deltas.patch" }
   | { type: "deltas.hold"; hold: boolean }
+  | { type: "deltas.append" }
   /** This client loads screenshots by `imageUrl`: send stored messages without their base64 pictures. */
   | { type: "messages.images" }
   /** The client missed a delta of this run (or joined while it ran): send its whole block list once. */
@@ -295,5 +303,10 @@ export function applyRunDelta(have: RunDeltaState | null | undefined, delta: Run
   }
   if (blocks.length !== delta.length) return null;
   for (let i = 0; i < blocks.length; i++) if (!blocks[i]) return null;
+  for (const [index, added] of delta.append ?? []) {
+    const block = blocks[index];
+    if (!block || !("text" in block) || typeof block.text !== "string") return null;
+    blocks[index] = { ...block, text: block.text + added } as MessageBlock;
+  }
   return { blocks, seq: delta.seq, stream: delta.stream };
 }
