@@ -4,6 +4,8 @@ import { File } from "expo-file-system";
 import type {
   Agent,
   AgentCharacter,
+  ArchiveKind,
+  ArchiveList,
   Artifact,
   ArtifactMessageResult,
   ArtifactPatch,
@@ -739,6 +741,12 @@ export const api = {
     /** Android phones connected to the computer for agents. An older Godmode refuses this (403). */
     devices: () => get<AndroidDevice[]>("/api/android/devices"),
     screenshot: (id: string, size = 720) => get<AndroidScreenshot>(`/api/android/devices/${id}/screenshot`, { size }),
+  },
+
+  /** Workspaces, projects, agents and automations kept but out of every list until restored. */
+  archive: {
+    list: () => get<ArchiveList>("/api/archive"),
+    set: (kind: ArchiveKind, id: string, archived: boolean) => post<ArchiveList>("/api/archive", { kind, id, archived }),
   },
 
   artifacts: {

@@ -9,6 +9,7 @@ import { Group, LinkRow, PickerRow, TextEditor } from "@/components/form";
 import { Identity, Sources } from "@/components/setup";
 import { EmptyState, SectionTitle } from "@/components/ui";
 import { api, errorText } from "@/lib/api";
+import { useArchive } from "@/lib/archive";
 import { useAgents } from "@/lib/hooks";
 import { qk, queryClient } from "@/lib/query";
 import { patchProject } from "@/lib/setup";
@@ -18,11 +19,12 @@ import { useWorkspace } from "@/lib/workspace";
 const DEFAULT = "default";
 
 export default function ProjectScreen() {
-  const { t } = useTranslation(["settings", "common"]);
+  const { t } = useTranslation(["settings", "common", "archive"]);
   const { id } = useLocalSearchParams<{ id: string }>();
   const { workspaces, loading } = useWorkspace();
   const { data: agents } = useAgents();
   const profiles = useQuery({ queryKey: qk.browserProfiles, queryFn: api.browser.profiles });
+  const { archive } = useArchive(() => router.back());
   const workspace = workspaces.find((w) => w.projects.some((p) => p.id === id));
   const p = workspace?.projects.find((x) => x.id === id);
 
@@ -120,6 +122,7 @@ export default function ProjectScreen() {
       </Group>
 
       <Group>
+        <LinkRow icon="archive" title={t("archive:archive")} chevron={false} onPress={() => archive({ kind: "project", id: p.id, name: p.name })} />
         <LinkRow icon="trash" title={t("project.delete")} tone="danger" chevron={false} onPress={remove} />
       </Group>
     </ScrollView>

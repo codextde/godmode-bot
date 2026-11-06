@@ -10,6 +10,7 @@ import { Identity, Sources } from "@/components/setup";
 import { EmptyState, SectionTitle } from "@/components/ui";
 import { WorkspaceColors } from "@/components/workspace-color";
 import { api, ApiError, errorText } from "@/lib/api";
+import { useArchive } from "@/lib/archive";
 import { useAgents } from "@/lib/hooks";
 import { qk, queryClient } from "@/lib/query";
 import { firstLine, patchWorkspace } from "@/lib/setup";
@@ -19,11 +20,12 @@ import { useWorkspace } from "@/lib/workspace";
 const DEFAULT = "default";
 
 export default function WorkspaceScreen() {
-  const { t } = useTranslation(["settings", "common"]);
+  const { t } = useTranslation(["settings", "common", "archive"]);
   const { id } = useLocalSearchParams<{ id: string }>();
   const { workspaces, loading } = useWorkspace();
   const { data: agents } = useAgents();
   const profiles = useQuery({ queryKey: qk.browserProfiles, queryFn: api.browser.profiles });
+  const { archive } = useArchive(() => router.back());
   const w = workspaces.find((x) => x.id === id);
 
   if (!w) {
@@ -134,6 +136,7 @@ export default function WorkspaceScreen() {
       </Group>
 
       <Group footer={t("workspace.deleteFooter")}>
+        <LinkRow icon="archive" title={t("archive:archive")} chevron={false} onPress={() => archive({ kind: "workspace", id: w.id, name: w.name })} />
         <LinkRow icon="trash" title={t("workspace.delete")} tone="danger" chevron={false} onPress={remove} />
       </Group>
     </ScrollView>

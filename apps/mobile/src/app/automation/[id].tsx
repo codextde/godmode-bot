@@ -15,6 +15,7 @@ import { openChat } from "@/components/rows";
 import { runStatusLabel } from "@/components/run-row";
 import { Badge, Button, Card, EmptyState, ErrorState, Hairline, LoadingState, Row, SectionTitle, SkeletonRows, T, tap } from "@/components/ui";
 import { api, errorText } from "@/lib/api";
+import { useArchive } from "@/lib/archive";
 import { isFailingRoutine } from "@/lib/desktop-parity";
 import { whenText } from "@/lib/format";
 import { dateLocale } from "@/lib/i18n";
@@ -61,7 +62,7 @@ export default function AutomationScreen() {
 
 function AutomationView({ routine, refetchList }: { routine: Routine; refetchList: () => Promise<unknown> }) {
   const c = useColors();
-  const { t } = useTranslation(["automations", "common"]);
+  const { t } = useTranslation(["automations", "common", "archive"]);
   const id = routine.id;
   const { byId } = useAgents();
   const agent = byId.get(routine.agentId);
@@ -108,6 +109,7 @@ function AutomationView({ routine, refetchList }: { routine: Routine; refetchLis
     void runRoutine(routine).finally(() => setStarting(false));
   };
 
+  const { archive } = useArchive(() => router.back());
   const remove = () =>
     Alert.alert(
       t("automation.deleteTitle", { name: routine.name }),
@@ -145,6 +147,7 @@ function AutomationView({ routine, refetchList }: { routine: Routine; refetchLis
 
   const menu: HeaderMenuItem[] = [
     ...(routine.conversationId ? [{ icon: "chats" as IconName, title: t("automation.openChat"), onPress: () => openChat(routine.conversationId!) }] : []),
+    { icon: "archive", title: t("archive:archive"), onPress: () => archive({ kind: "routine", id: routine.id, name: routine.name }) },
     { icon: "trash", title: t("common:actions.delete"), destructive: true, onPress: remove },
   ];
 

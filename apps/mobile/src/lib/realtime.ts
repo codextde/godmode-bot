@@ -51,6 +51,8 @@ const ENTITY_KEYS: Partial<Record<EntityName, readonly (readonly unknown[])[]>> 
   // Access requests from people on a bot show in Needs you.
   messaging: [qk.attention, ["messaging"]],
   artifacts: [qk.artifacts],
+  // What is archived drops out of (or comes back to) every list.
+  archive: [qk.archive, qk.workspaces, qk.agents, qk.routines, qk.conversations, qk.tasks, qk.followups, qk.bootstrap],
   // Passwords, integrations, plugins and servers (read on the phone).
   credentials: [["vault"]],
   totp: [["vault"]],

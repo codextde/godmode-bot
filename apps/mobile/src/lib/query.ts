@@ -68,6 +68,7 @@ export const qk = {
   offerList: (workspaceId: string | null) => ["offers", workspaceId ?? "all"],
   automationEvents: ["routines", "events", "all"],
   runChildren: (id: string) => ["runs", "children", id],
+  archive: ["archive"],
   artifacts: ["artifacts"],
   artifactList: (workspaceId: string | null) => ["artifacts", "list", workspaceId ?? "all"],
   chatArtifacts: (conversationId: string) => ["artifacts", "chat", conversationId],

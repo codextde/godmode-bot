@@ -1,0 +1,24 @@
+{
+  "title": "Archiv",
+  "empty": "Nichts archiviert",
+  "loadError": "Das Archiv konnte nicht geladen werden",
+  "unavailable": "Aktualisiere Godmode auf deinem Computer, um vom Handy aus zu archivieren.",
+  "sections": {
+    "workspaces": "Workspaces",
+    "projects": "Projekte",
+    "agents": "Agenten",
+    "routines": "Automationen"
+  },
+  "archive": "Archivieren",
+  "restore": "Wiederherstellen",
+  "archivedAt": "Archiviert {{date}}",
+  "confirm": {
+    "title": "{{name}} archivieren?",
+    "body": "Einrichtung und Verlauf bleiben erhalten, es läuft aber nicht, bis du es wiederherstellst."
+  },
+  "archiveError": "{{name}} konnte nicht archiviert werden",
+  "restoreError": "{{name}} konnte nicht wiederhergestellt werden",
+  "banner": {
+    "agent": "{{name}} ist archiviert"
+  }
+}

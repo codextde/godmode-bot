@@ -35,6 +35,7 @@ import { QueueTray } from "@/components/queue-tray";
 import { Button, ErrorState, Skeleton, T, tap } from "@/components/ui";
 import { openHumanTask } from "@/components/human-task-row";
 import { ApiError, api, errorText, updateDesktopMessage } from "@/lib/api";
+import { useArchive } from "@/lib/archive";
 import { encodeFiles, type PendingFile } from "@/lib/attachments";
 import { fetchConversation, loadEarlier } from "@/lib/chat-cache";
 import { isCompressCommand, useContextGauge } from "@/lib/chat-memory";
@@ -177,7 +178,7 @@ export default function Chat() {
   const [compressHiddenAt, setCompressHiddenAt] = useState<number | null>(null);
   const handoffQueued = queue.some((m) => isHandoffCommand(m.content));
   // A switched-off agent answers nothing: the composer keeps a draft and the strip offers the way back.
-  const off = !!agent && !agent.enabled && conversation.data?.origin !== "dream";
+  const off = !!agent && (!agent.enabled || agent.archived) && conversation.data?.origin !== "dream";
   const handoffOk = canHandoff(conversation.data) && !off;
   const longChat =
     !!gauge && gauge.tone !== "calm" && gauge.compressible && !compressing && !handoffQueued && (compressHiddenAt === null || gauge.tokens > compressHiddenAt * 1.2) ? gauge : null;
@@ -453,7 +454,7 @@ export default function Chat() {
             placeholder={
               !agent
                 ? t("thread.placeholder.message")
-                : !agent.enabled
+                : !agent.enabled || agent.archived
                   ? t("conv.switchedOffDraft", { name: agent.name })
                   : waiting
                   ? t("thread.placeholder.answer", { name: agent.name })
@@ -467,7 +468,7 @@ export default function Chat() {
                           ? t("thread.placeholder.queue", { name: agent.name })
                           : t("thread.placeholder.default", { name: agent.name })
             }
-            blocked={!!agent && !agent.enabled}
+            blocked={!!agent && (!agent.enabled || agent.archived)}
             voice
             trailing={
               conversation.data ? (
@@ -762,11 +763,41 @@ function PausedStrip({ conversationId, pause, onContinue }: { conversationId: st
   );
 }
 
-/** Above the composer while the agent is switched off: it answers nothing until it's on again. */
+/** Above the composer while the agent is switched off or archived: it answers nothing until it's back. */
 function SwitchedOffStrip({ agent }: { agent: Agent }) {
   const c = useColors();
-  const { t } = useTranslation(["chat", "common"]);
+  const { t } = useTranslation(["chat", "common", "archive"]);
   const [busy, setBusy] = useState(false);
+  const { restore, pending } = useArchive();
+  if (agent.archived) {
+    const restoring = pending === agent.id;
+    return (
+      <View style={[styles.paused, { backgroundColor: c.surface, borderColor: c.border }]} accessibilityRole="summary">
+        <Icon name="archive" size={15} color={c.textMuted} />
+        <T variant="footnote" muted style={{ flex: 1 }} numberOfLines={2}>
+          {t("archive:banner.agent", { name: agent.name })}
+        </T>
+        {agent.archivedAt ? (
+          <Pressable
+            onPress={() => restore({ kind: "agent", id: agent.id, name: agent.name })}
+            disabled={restoring}
+            hitSlop={10}
+            accessibilityRole="button"
+            accessibilityState={{ busy: restoring, disabled: restoring }}
+            style={{ opacity: restoring ? 0.5 : 1 }}
+          >
+            {restoring ? (
+              <ActivityIndicator size="small" color={c.textMuted} />
+            ) : (
+              <T variant="footnote" color={c.primary} style={{ fontWeight: "600" }}>
+                {t("archive:restore")}
+              </T>
+            )}
+          </Pressable>
+        ) : null}
+      </View>
+    );
+  }
   const switchOn = () => {
     tap();
     setBusy(true);

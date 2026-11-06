@@ -24,6 +24,7 @@ import { isGatewayUrl, useSession } from "@/lib/session";
 import { firstLine, useSettings } from "@/lib/setup";
 import { space, useColors } from "@/lib/theme";
 import { useWorkspace } from "@/lib/workspace";
+import { archiveCount, useArchiveList } from "@/lib/archive";
 
 const PLATFORM: Record<string, string> = { darwin: "macOS", win32: "Windows", linux: "Linux" };
 
@@ -32,7 +33,7 @@ const FEATURES = ["activity", "artifacts", "integrations", "plugins", "messaging
 
 export default function Settings() {
   const c = useColors();
-  const { t } = useTranslation(["settings", "common"]);
+  const { t } = useTranslation(["settings", "common", "archive"]);
   const connection = useSession((s) => s.connection);
   const appLock = useSession((s) => s.appLock);
   const status = useLive((s) => s.status);
@@ -43,6 +44,7 @@ export default function Settings() {
   const catalog = useModelCatalog();
   const { workspaces } = useWorkspace();
   const { data: agents } = useAgents();
+  const archived = archiveCount(useArchiveList().data);
   const biometrics = useQuery({
     queryKey: ["biometrics"],
     queryFn: async () => (await LocalAuthentication.hasHardwareAsync()) && (await LocalAuthentication.isEnrolledAsync()),
@@ -165,6 +167,7 @@ export default function Settings() {
           onPress={() => router.push("/settings/workspaces")}
         />
         <LinkRow icon="agents" title={t("common:words.agents")} value={agents ? String(agents.length) : undefined} onPress={() => router.push("/settings/agents")} />
+        <LinkRow icon="archive" title={t("archive:title")} value={archived ? String(archived) : undefined} onPress={() => router.push("/settings/archive")} />
       </Group>
 
       <ToolsLinks />
