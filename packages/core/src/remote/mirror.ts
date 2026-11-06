@@ -867,7 +867,7 @@ function onComputer(runnerId: string, type: "computer.frame" | "computer.action"
 
 const QUESTION_KINDS = ["question", "approval"] as const;
 const QUESTION_STATUSES = ["open", "answered", "approved", "declined", "withdrawn"] as const;
-const ANSWER_VIA = ["app", "phone", "task", "slack", "telegram", "teams", "call"] as const;
+const ANSWER_VIA = ["app", "phone", "task", "slack", "telegram", "teams", "call", "agent"] as const;
 
 /**
  * What an agent asked in a runner's chat: kept here so the human answers it from this computer's inbox and My tasks.

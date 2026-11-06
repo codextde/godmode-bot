@@ -163,7 +163,7 @@ import { getSettings } from "../services/settings";
 import { agentSettingsRefusal, applyAgentSettings, humanOnlySettings, settingsSections } from "../services/agentSettings";
 import { cancelRun, endGoalAfterTurn, getRun, runClaudeConfigDir, listRuns, markMissingLoginReported, runBrowserProfile, runChatBrowserProfile, waitForRun } from "../runner/runner";
 import { listGoals } from "../tasks/goals";
-import { addTaskNote, createTask, findTask, getTask, listTaskEvents, listTasks, reportBlocked, sendTaskMessage, taskForConversation, updateTask } from "../tasks/service";
+import { addTaskNote, approveTask, createTask, findTask, getTask, listTaskEvents, listTasks, reportBlocked, sendTaskMessage, taskForConversation, updateTask } from "../tasks/service";
 import { describeNow, noteId, tagged } from "../runner/prompt";
 import { zaiKey } from "../runner/claude";
 import { summarizeNotification, wantsSummary } from "../runner/notificationSummary";
@@ -172,7 +172,8 @@ import { checkArtifactRender } from "../services/artifactCheck";
 import { attachArtifactFiles, findMentionedFiles, prepareArtifactFiles, removeArtifactFiles, type PreparedFiles } from "../services/artifactFiles";
 import { NOTE_MAX, cancelFollowup, followupsAllowed, getFollowup, inWords, parseDueAt, scheduleFollowup } from "../services/followups";
 import { autoRetryOf, continueCutOffRun, latestContinuation } from "../services/resume";
-import { askQuestion, listQuestions } from "../services/questions";
+import { answerQuestion, askQuestion, getQuestion, listQuestions } from "../services/questions";
+import { isTeamRun } from "../review/team";
 import { callOwnerWhenAsked, callsEnabled, getCall, heardOnCall, listCalls, ownerCallRefusal, placeCall } from "../calls/calls";
 import { MAX_OPEN_PER_CHAT, createAgentHumanTask, duplicateAsk, findHumanTask, listHumanTasks, withdrawHumanTask } from "../services/humanTasks";
 import { createMod, findMod, installMod, listMods, updateMod } from "../mods/service";
@@ -960,7 +961,7 @@ const canFollowUp = (_agent: Agent, ctx: RunContext) => !isCheckRun(ctx) && foll
 function canAsk(_agent: Agent, ctx: RunContext): boolean {
   try {
     const r = getRun(ctx.runId);
-    return r.trigger !== "check" && r.trigger !== "dream" && !r.parentRunId;
+    return r.trigger !== "check" && r.trigger !== "dream" && !r.parentRunId && !isTeamRun(ctx.runId);
   } catch {
     return false;
   }
@@ -2091,6 +2092,71 @@ const TOOLS: ToolDef[] = [
     run: ({ id, reason }, { agent }) => {
       const t = withdrawHumanTask(findHumanTask(id).id, reason ?? "", { agentId: agent.id });
       return `${humanTaskRef(t)} is off the list.`;
+    },
+  }),
+
+  defineTool({
+    name: "team_questions_list",
+    description:
+      "Open questions and approvals your agents asked the human (ask_human, request_approval) and wait for: who asked, what, the suggested answers, and the chat. You lead the team: settle what you can with team_question_answer so the human gets fewer questions.",
+    schema: z.object({}),
+    when: (agent, ctx) => agent.isDefault && canWithdraw(agent, ctx),
+    run: (_args, { agent }) => {
+      const open = listQuestions({ status: "open", limit: 200, withHeld: true }).filter((q) => q.agentId !== agent.id);
+      if (!open.length) return "No open questions from your team.";
+      const names = new Map(listAgents({ workspaceId: "all" }).map((a) => [a.id, a.name]));
+      return json(
+        open.map((q) => ({
+          id: q.id,
+          kind: q.kind,
+          agent: names.get(q.agentId) ?? null,
+          question: q.title,
+          ...(q.body ? { context: q.body } : {}),
+          ...(q.affects ? { affects: q.affects } : {}),
+          ...(q.options.length ? { options: q.options.map((o) => ({ id: o.id, label: o.label, ...(o.recommended ? { recommended: true } : {}) })) } : {}),
+          chat: q.conversationId,
+          ...(q.taskNumber != null ? { ticket: q.taskNumber } : {}),
+          ...(q.routineName ? { automation: q.routineName } : {}),
+          askedAt: q.createdAt,
+        })),
+      );
+    },
+  }),
+
+  defineTool({
+    name: "team_question_answer",
+    description:
+      "Settle a question or approval one of your agents asked the human, for the human: its run continues at once with your answer, and the human isn't asked. Give exactly one of `option` (a suggested answer's id), `decision` (an approval: approve or decline, with an optional `note`) or `text` (your answer in your own words; also the way to take a question back: \"Decide yourself and say what you assumed\"). Approve only what the human already authorized or what is routine inside the agent's job; never spending, payments, deleting, cancelling or first messages to new people the human didn't ask for. A use of the Mac password stays with the human.",
+    schema: z.object({
+      id: z.string().min(1).max(100).describe("The question's id (team_questions_list)"),
+      option: z.string().max(10).optional(),
+      decision: z.enum(["approve", "decline"]).optional(),
+      note: z.string().max(2000).optional().describe("With a decision: what the agent should know"),
+      text: z.string().max(4000).optional(),
+    }),
+    when: (agent, ctx) => agent.isDefault && canWithdraw(agent, ctx),
+    run: ({ id, option, decision, note, text }, { agent }) => {
+      const q = getQuestion(id);
+      if (q.agentId === agent.id) return fail("That is your own question: the human answers it.");
+      const input = option !== undefined ? { optionId: option } : decision !== undefined ? { decision, note } : { text };
+      const { question } = answerQuestion(id, input, { actor: `agent:${agent.id}`, via: "agent" });
+      const name = listAgents({ workspaceId: "all" }).find((a) => a.id === q.agentId)?.name ?? "The agent";
+      return `${name} continues with your ${question.status === "approved" ? "approval" : question.status === "declined" ? "decision to decline" : "answer"}.`;
+    },
+  }),
+
+  defineTool({
+    name: "task_approve",
+    description:
+      "Approve a ticket an agent delivered (status in_review) after you checked the result: its open pull request is merged and the ticket moves to Done, as when the human presses Approve. When the merge fails the result says why and the ticket stays in review.",
+    schema: z.object({ taskId: z.string().describe('Task id, or its number like "#12"') }),
+    when: (agent, ctx) => isManager(agent) && canWithdraw(agent, ctx),
+    run: async ({ taskId }, { agent }) => {
+      const t = findTask(taskId);
+      if (t.agentId === agent.id) return fail(`#${t.number} is your own work: the human reviews it.`);
+      const done = await approveTask(t.id, `agent:${agent.id}`);
+      audit(`agent:${agent.id}`, "task.approve", t.id, {});
+      return done.status === "done" ? `#${done.number} is approved${done.pullRequest ? " and its pull request merged" : ""}.` : `#${done.number}: its pull request is queued to merge; it moves to Done once GitHub merges it.`;
     },
   }),
 

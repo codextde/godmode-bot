@@ -789,6 +789,8 @@ export interface ContinueAnswer {
   text: string;
   /** Another step was still running when the run was stopped for the question. */
   cutOff: boolean;
+  /** The main agent settled it for the human (its name); unset = the human answered. */
+  by?: string;
 }
 
 /** Tags Godmode's own notes are made of: text from the agent or the human that is quoted in a note must not carry them. */
@@ -816,7 +818,8 @@ export function stripNoteTags(text: string): string {
  * The decision in Godmode's own words — built from what was stored, never from the answer's text — and the quoted
  * question and answer.
  */
-function answerParts(answer: ContinueAnswer, human: string): { said: string; quoted: string } {
+function answerParts(answer: ContinueAnswer, owner: string): { said: string; quoted: string } {
+  const human = answer.by ? `${answer.by}, who leads the team for ${owner},` : owner;
   const text = stripNoteTags(answer.text).trim();
   const id = noteId();
   const tag = `<answer-from-human id="${id}">`;

@@ -929,22 +929,26 @@
       "approved": {
         "here": "You approved · <time>{{time}}</time>",
         "phone": "You approved from your phone · <time>{{time}}</time>",
-        "platform": "You approved in {{platform}} · <time>{{time}}</time>"
+        "platform": "You approved in {{platform}} · <time>{{time}}</time>",
+        "agent": "Godmode approved · <time>{{time}}</time>"
       },
       "declined": {
         "here": "You declined · <time>{{time}}</time>",
         "phone": "You declined from your phone · <time>{{time}}</time>",
-        "platform": "You declined in {{platform}} · <time>{{time}}</time>"
+        "platform": "You declined in {{platform}} · <time>{{time}}</time>",
+        "agent": "Godmode declined · <time>{{time}}</time>"
       },
       "chose": {
         "here": "You chose <b>{{choice}}</b> · <time>{{time}}</time>",
         "phone": "You chose <b>{{choice}}</b> from your phone · <time>{{time}}</time>",
-        "platform": "You chose <b>{{choice}}</b> in {{platform}} · <time>{{time}}</time>"
+        "platform": "You chose <b>{{choice}}</b> in {{platform}} · <time>{{time}}</time>",
+        "agent": "Godmode chose <b>{{choice}}</b> · <time>{{time}}</time>"
       },
       "answered": {
         "here": "You answered · <time>{{time}}</time>",
         "phone": "You answered from your phone · <time>{{time}}</time>",
-        "platform": "You answered in {{platform}} · <time>{{time}}</time>"
+        "platform": "You answered in {{platform}} · <time>{{time}}</time>",
+        "agent": "Godmode answered · <time>{{time}}</time>"
       }
     },
     "approvalWithdrawn": "Approval withdrawn",

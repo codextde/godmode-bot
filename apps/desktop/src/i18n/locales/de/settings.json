@@ -2133,6 +2133,7 @@
     "next": "Nächstes: {{when}}",
     "autoFix": "Gefundenes selbst beheben",
     "reportOnly": "Aus: es meldet nur.",
+    "team": "Fragen des Teams zuerst selbst klären",
     "now": "Jetzt prüfen",
     "stop": "Stoppen",
     "started": "Review gestartet",

@@ -58,6 +58,9 @@ export function ReviewSection({ settings }: { settings: Settings }) {
         <SettingRow label={t("review.autoFix")} htmlFor="review-fix" description={r.autoFix ? undefined : t("review.reportOnly")}>
           <Switch id="review-fix" checked={r.autoFix} onCheckedChange={(autoFix) => onChange({ autoFix })} />
         </SettingRow>
+        <SettingRow label={t("review.team")} htmlFor="review-team">
+          <Switch id="review-team" checked={r.team} onCheckedChange={(team) => onChange({ team })} />
+        </SettingRow>
       </SettingsGroup>
 
       <SettingsGroup title={t("review.history")} icon={<History />} bodyClassName="px-0">

@@ -141,7 +141,7 @@ export function checkSettingsPatch(patch: Record<string, unknown>, needsGrant: (
   const review = patch.review as Record<string, unknown> | undefined;
   if (review !== undefined) {
     if (typeof review !== "object" || review === null || Array.isArray(review)) throw badRequest("Invalid auto review settings");
-    for (const key of ["enabled", "autoFix"] as const) {
+    for (const key of ["enabled", "autoFix", "team"] as const) {
       if (review[key] !== undefined && typeof review[key] !== "boolean") throw badRequest(`review.${key} must be true or false`);
     }
     if (review.cron !== undefined && (typeof review.cron !== "string" || !isValidDreamSchedule(review.cron))) {

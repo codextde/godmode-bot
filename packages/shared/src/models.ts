@@ -497,7 +497,8 @@ export type QuestionStatus = "open" | "answered" | "approved" | "declined" | "wi
 
 /** Where the answer was given: the desktop app or dashboard, the phone app, the task's message box, or a chat platform. */
 /** `phone`: the phone app · `call`: said on a phone call Godmode placed to the owner. */
-export type AnswerVia = "app" | "phone" | "task" | "slack" | "telegram" | "teams" | "call";
+/** `agent`: the main agent settled it for the human (Auto review → Team questions). */
+export type AnswerVia = "app" | "phone" | "task" | "slack" | "telegram" | "teams" | "call" | "agent";
 
 /** An answer the agent suggests. `id` is its position, "1" for the first. */
 export interface QuestionOption {
@@ -1724,6 +1725,8 @@ export interface ReviewSettings {
   model: string;
   /** The review fixes what it finds (agents, automations, chats); off = it only reports. */
   autoFix: boolean;
+  /** The main agent settles the team's questions, approvals and delivered tickets first; only what it can't reaches the human. */
+  team: boolean;
 }
 
 export interface VmSettings {

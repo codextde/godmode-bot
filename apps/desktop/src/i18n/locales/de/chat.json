@@ -929,22 +929,26 @@
       "approved": {
         "here": "Du hast freigegeben · <time>{{time}}</time>",
         "phone": "Du hast am Handy freigegeben · <time>{{time}}</time>",
-        "platform": "Du hast in {{platform}} freigegeben · <time>{{time}}</time>"
+        "platform": "Du hast in {{platform}} freigegeben · <time>{{time}}</time>",
+        "agent": "Godmode hat freigegeben · <time>{{time}}</time>"
       },
       "declined": {
         "here": "Du hast abgelehnt · <time>{{time}}</time>",
         "phone": "Du hast am Handy abgelehnt · <time>{{time}}</time>",
-        "platform": "Du hast in {{platform}} abgelehnt · <time>{{time}}</time>"
+        "platform": "Du hast in {{platform}} abgelehnt · <time>{{time}}</time>",
+        "agent": "Godmode hat abgelehnt · <time>{{time}}</time>"
       },
       "chose": {
         "here": "Du hast <b>{{choice}}</b> gewählt · <time>{{time}}</time>",
         "phone": "Du hast am Handy <b>{{choice}}</b> gewählt · <time>{{time}}</time>",
-        "platform": "Du hast in {{platform}} <b>{{choice}}</b> gewählt · <time>{{time}}</time>"
+        "platform": "Du hast in {{platform}} <b>{{choice}}</b> gewählt · <time>{{time}}</time>",
+        "agent": "Godmode hat <b>{{choice}}</b> gewählt · <time>{{time}}</time>"
       },
       "answered": {
         "here": "Du hast geantwortet · <time>{{time}}</time>",
         "phone": "Du hast am Handy geantwortet · <time>{{time}}</time>",
-        "platform": "Du hast in {{platform}} geantwortet · <time>{{time}}</time>"
+        "platform": "Du hast in {{platform}} geantwortet · <time>{{time}}</time>",
+        "agent": "Godmode hat geantwortet · <time>{{time}}</time>"
       }
     },
     "approvalWithdrawn": "Freigabe zurückgezogen",
