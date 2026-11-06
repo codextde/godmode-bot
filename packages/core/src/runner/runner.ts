@@ -54,6 +54,7 @@ import {
   RUN_STOPPED_BY_USER,
   TASK_PRIORITY_RANK,
   WORKFLOW_TOOL,
+  autoCompactWindow,
   isModelId,
   memoryBudget,
   compactAlias,
@@ -1352,9 +1353,12 @@ export function buildEnv(agent: Agent, inFolder = false, apiKeys = true): Record
   // `claude -p` stops background subagents still running 10 minutes after the main turn ended, and the agent never
   // hears back from them. The watchdog and the run timeout decide when a run has gone quiet for too long instead.
   env.CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS ??= "0";
-  // Long chats are summarized by Claude Code itself once the session fills this share of the window (never above its own threshold).
-  const compactAt = getSettings().runner.autoCompactPercent;
-  if (compactAt === 0) env.DISABLE_AUTO_COMPACT = "1";
+  // Long chats are summarized by Claude Code itself: once they hold the context budget, or fill this share of the window.
+  // What Godmode itself was started with (a run inside a run) mustn't move the threshold.
+  const { autoCompactPercent: compactAt, contextBudget } = getSettings().runner;
+  for (const key of ["CLAUDE_CODE_AUTO_COMPACT_WINDOW", "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE", "DISABLE_AUTO_COMPACT"]) delete env[key];
+  if (contextBudget) env.CLAUDE_CODE_AUTO_COMPACT_WINDOW = String(autoCompactWindow(contextBudget));
+  else if (compactAt === 0) env.DISABLE_AUTO_COMPACT = "1";
   else if (compactAt != null) env.CLAUDE_AUTOCOMPACT_PCT_OVERRIDE = String(compactAt);
   if (getSettings().memory.backend === "claude-mem" && claudeMemPluginDir()) Object.assign(env, claudeMemEnv(agent));
   // API tools that hand their key to runs (Integrations → Tools).

@@ -9,7 +9,7 @@ import { createAgent } from "../src/agents/service";
 import { ensureDefaultProfile } from "../src/browser/manager";
 import { Database } from "bun:sqlite";
 import { config, loadConfig } from "../src/config";
-import { closeDb, getDb, insert, openDb, run as sql, setDb } from "../src/db";
+import { closeDb, get, getDb, insert, openDb, run as sql, setDb } from "../src/db";
 import { setLogLevel } from "../src/log";
 import { createApp } from "../src/server/app";
 import { getAccessToken } from "../src/server/auth";
@@ -445,6 +445,84 @@ suite("agent repositories", () => {
   });
 });
 
+suite("rebuildable folders", () => {
+  test("installed packages of projects nobody worked on for a month go, unless git holds them, a note names them or the agent is working", async () => {
+    const workspace = join(agent.repoPath, "workspace");
+    const project = (name: string, files: string[]) => {
+      const dir = join(workspace, name);
+      for (const f of files) file(join(dir, f), 16 * 1024);
+      age(dir, 40 * DAY);
+      return dir;
+    };
+    const idle = project("old-app", ["package.json", "node_modules/left-pad/index.js"]);
+    const python = project("py-app", ["main.py", "requirements.txt", ".venv/pyvenv.cfg", ".venv/lib/site.py"]);
+    const rust = project("rust-app", ["Cargo.toml", "target/debug/app"]);
+    // An edit in its sources keeps a project's packages.
+    const active = project("new-app", ["package.json", "node_modules/react/index.js"]);
+    file(join(active, "src", "app.ts"), 1024);
+    // Folders that only share a name, or nothing would install again.
+    const plainVenv = project("py-plain", ["requirements.txt", "venv/notes.txt"]);
+    const javaTarget = project("java-app", ["pom.xml", "target/classes/A.class"]);
+    const handMade = project("py-script", ["run.py", ".venv/pyvenv.cfg", ".venv/lib/site.py"]);
+    const loose = project("loose", ["node_modules/x/index.js"]);
+    // A project a note names may be run from there.
+    const daily = project("daily-report", ["package.json", "node_modules/x/index.js"]);
+    file(join(agent.repoPath, "memory", "daily.md"), 0);
+    writeFileSync(join(agent.repoPath, "memory", "daily.md"), "- The daily report runs from workspace/daily-report every morning.\n");
+    // Scratch files and uploads aren't looked into, symlinks aren't followed.
+    const scratch = project("tmp/try", ["node_modules/x/index.js"]);
+    const upload = project("uploads/site", ["node_modules/x/index.js"]);
+    const elsewhere = join(dataDir, "elsewhere-app");
+    file(join(elsewhere, "node_modules", "x", "index.js"));
+    age(elsewhere, 20 * DAY);
+    symlinkSync(elsewhere, join(workspace, "linked"));
+    // Packages git holds.
+    const vendored = project("vendored", ["package.json", "node_modules/lib/index.js"]);
+    await git(["add", "-f", "workspace/vendored/node_modules/lib/index.js"], agent.repoPath);
+    await git(["commit", "-q", "-m", "vendored"], agent.repoPath);
+
+    const folders = item(await scanCleanup(), "build-folders");
+    expect(folders.recommended).toBe(true);
+    const gone = [join(idle, "node_modules"), join(python, ".venv"), join(rust, "target")];
+    expect(paths(folders).sort()).toEqual([...gone].sort());
+    expect(folders.entries).toHaveLength(5);
+    expect(folders.entries.find((e) => e.path === join(vendored, "node_modules"))?.kept).toBe("Tracked by git — it stays.");
+    expect(folders.entries.find((e) => e.path === join(daily, "node_modules"))?.kept).toMatch(/^Named in memory\/daily\.md/);
+    expect(folders.entries.find((e) => e.path === join(idle, "node_modules"))?.name).toBe("Cleaner · old-app/node_modules");
+
+    insert("runs", { id: "run_buildwork001", agent_id: agent.id, conversation_id: "cnv_buildwork", trigger: "chat", status: "running", prompt: "x", created_at: new Date().toISOString() });
+    try {
+      expect(item(await scanCleanup(), "build-folders").entries.every((e) => /Cleaner is working/.test(e.kept ?? ""))).toBe(true);
+      expect((await runCleanup(["build-folders"])).results[0]).toMatchObject({ removed: 0, kept: 5 });
+      expect(gone.map(existsSync)).toEqual([true, true, true]);
+    } finally {
+      sql("DELETE FROM runs WHERE id = 'run_buildwork001'");
+    }
+
+    const result = await runCleanup(["build-folders"]);
+    expect(result.results[0]).toMatchObject({ ok: true, removed: 3, kept: 2 });
+    expect(result.freedBytes).toBeGreaterThanOrEqual(4 * 16 * 1024);
+    expect(gone.map(existsSync)).toEqual([false, false, false]);
+    const stay = [
+      join(idle, "package.json"),
+      join(python, "main.py"),
+      join(rust, "Cargo.toml"),
+      join(active, "node_modules"),
+      join(plainVenv, "venv"),
+      join(javaTarget, "target"),
+      join(scratch, "node_modules"),
+      join(upload, "node_modules"),
+      join(elsewhere, "node_modules"),
+      join(vendored, "node_modules"),
+      join(handMade, ".venv"),
+      join(loose, "node_modules"),
+      join(daily, "node_modules"),
+    ];
+    expect(stay.filter((p) => !existsSync(p))).toEqual([]);
+    expect(paths(item(await scanCleanup(), "build-folders"))).toEqual([]);
+  });
+});
+
 suite("the database", () => {
   const bloat = () => {
     const db = getDb();
@@ -532,6 +610,67 @@ suite("the database", () => {
       sql("DELETE FROM runs WHERE id = 'run_elsewhere0001'");
     }
     expect((await runCleanup(["database"])).results[0]).toMatchObject({ ok: true, removed: 1 });
+  });
+});
+
+suite("old screenshots in chats", () => {
+  let messageNumber = 0;
+  const ago = (days: number) => new Date(Date.now() - days * DAY).toISOString();
+  const message = (chat: string, createdAt: string, blocks: unknown[]) => {
+    const id = `msg_pictures${++messageNumber}`;
+    insert("messages", { id, conversation_id: chat, role: "assistant", content: "Done.", blocks: JSON.stringify(blocks), created_at: createdAt });
+    return id;
+  };
+  const blocksOf = (id: string) => JSON.parse(get<{ blocks: string }>("SELECT blocks FROM messages WHERE id = ?", id)!.blocks);
+  const shot = (id: string, bytes: number) => ({ type: "tool_use", id, name: "browser_screenshot", input: {}, result: "ok", image: "A".repeat(bytes) });
+
+  test("pictures older than 30 days go; the steps, their results and newer pictures stay", async () => {
+    const chat = createConversation({ agentId: agent.id, title: "Screens" }).id;
+    const busyChat = createConversation({ agentId: agent.id, title: "Working" }).id;
+    const old = message(chat, ago(40), [
+      { type: "text", text: "Looking at the page." },
+      { type: "tool_use", id: "tu_1", name: "browser_screenshot", input: { full: true }, result: "Took a screenshot.", image: "A".repeat(40_000) },
+      { type: "tool_use", id: "tu_2", name: "Read", input: { file_path: "/x.png" }, result: "", image: "B".repeat(30_000), isError: false },
+      { type: "tool_use", id: "tu_3", name: "Bash", input: { command: "ls" }, result: "a.txt" },
+    ]);
+    // A message whose run stopped while its screenshots were saved apart.
+    const apartAt = ago(35);
+    const apart = message(chat, apartAt, [{ type: "tool_use", id: "tu_4", name: "computer", input: {}, result: "ok" }]);
+    insert("message_images", { message_id: apart, block_id: "tu_4", image: "C".repeat(20_000) });
+    const recent = message(chat, ago(5), [shot("tu_5", 10_000)]);
+    const working = message(busyChat, ago(40), [shot("tu_6", 10_000)]);
+    insert("runs", { id: "run_pictures0001", agent_id: agent.id, conversation_id: busyChat, trigger: "chat", status: "running", prompt: "x", created_at: new Date().toISOString() });
+    try {
+      const pictures = item(await scanCleanup(), "chat-pictures");
+      expect(pictures.recommended).toBe(true);
+      expect(pictures.entries).toEqual([{ name: "Cleaner · 3 pictures", path: null, bytes: 90_000, modifiedAt: apartAt, kept: null }]);
+
+      const result = await runCleanup(["chat-pictures"]);
+      expect(result.results[0]).toMatchObject({ ok: true, removed: 1, kept: 0 });
+      // The pictures and their keys.
+      expect(result.freedBytes).toBeGreaterThanOrEqual(90_000);
+      expect(result.freedBytes).toBeLessThan(90_100);
+      expect(blocksOf(old)).toEqual([
+        { type: "text", text: "Looking at the page." },
+        { type: "tool_use", id: "tu_1", name: "browser_screenshot", input: { full: true }, result: "Took a screenshot." },
+        { type: "tool_use", id: "tu_2", name: "Read", input: { file_path: "/x.png" }, result: "", isError: false },
+        { type: "tool_use", id: "tu_3", name: "Bash", input: { command: "ls" }, result: "a.txt" },
+      ]);
+      expect(get<{ n: number }>("SELECT COUNT(*) AS n FROM message_images WHERE message_id = ?", apart)?.n).toBe(0);
+      expect(blocksOf(recent)[0].image).toHaveLength(10_000);
+      expect(blocksOf(working)[0].image).toHaveLength(10_000);
+      expect(item(await scanCleanup(), "chat-pictures").count).toBe(0);
+      expect((await runCleanup(["chat-pictures"])).results[0]).toMatchObject({ ok: true, removed: 0, freedBytes: 0 });
+    } finally {
+      sql("DELETE FROM runs WHERE id = 'run_pictures0001'");
+    }
+
+    // Once its chat is done working, the picture it kept goes too; the newer one still stays.
+    expect(item(await scanCleanup(), "chat-pictures").entries).toMatchObject([{ name: "Cleaner · 1 picture", bytes: 10_000 }]);
+    expect((await runCleanup(["chat-pictures"])).results[0]).toMatchObject({ ok: true, removed: 1 });
+    expect(blocksOf(working)[0].image).toBeUndefined();
+    expect(blocksOf(recent)[0].image).toHaveLength(10_000);
+    expect(item(await scanCleanup(), "chat-pictures").count).toBe(0);
   });
 });
 

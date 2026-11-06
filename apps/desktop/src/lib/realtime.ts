@@ -66,7 +66,7 @@ const ENTITY_KEYS: Record<EntityName, readonly unknown[][]> = {
   "human-tasks": [qk.humanTasks, qk.bootstrap],
   artifacts: [qk.artifacts],
   notifications: [qk.notifications, qk.bootstrap],
-  settings: [qk.settings, qk.bootstrap],
+  settings: [qk.settings, qk.bootstrap, qk.optimize],
   runs: [qk.runs],
   models: [qk.models],
   computer: [qk.computer],
@@ -96,7 +96,7 @@ const ENTITY_KEYS: Record<EntityName, readonly unknown[][]> = {
   // Key added or removed, a new answer from the licence server, runs refused or allowed again.
   license: [qk.license],
   // A finished or undone dream rewrote the memory files.
-  dreams: [qk.dreams, qk.agentFilesAll, qk.agentFileAll, qk.agentCommitsAll],
+  dreams: [qk.dreams, qk.agentFilesAll, qk.agentFileAll, qk.agentCommitsAll, qk.optimize],
   followups: [qk.followups],
   offers: [qk.offers],
   // A review started, reported, ended, or one of its changes was undone (that also changed agents, automations or chats).
@@ -104,7 +104,7 @@ const ENTITY_KEYS: Record<EntityName, readonly unknown[][]> = {
   // A beat was recorded, the watchdog stepped in, or an agent's heartbeat settings changed.
   heartbeats: [qk.heartbeats],
   // The background upkeep repaired, updated or cleaned up: system check, permissions, updates, cleanup.
-  system: [qk.doctor, qk.cleanup],
+  system: [qk.doctor, qk.cleanup, qk.optimize],
   // Lid-closed mode switched, paused for the battery, or the lid opened or closed.
   power: [qk.power],
 };

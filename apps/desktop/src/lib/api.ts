@@ -78,6 +78,8 @@ import type { SharedChatPreview, DreamAllResult, Review, ReviewOverview, McpApp,
   CleanupId,
   CleanupReport,
   CleanupRun,
+  OptimizeReport,
+  OptimizeRun,
   ClientLogInput,
   CloudBilling,
   CloudSettings,
@@ -472,6 +474,11 @@ export const api = {
     /** What takes up space, what can go, and a check of the data folder; `refresh` checks the database again too. */
     report: (refresh = false) => get<CleanupReport>("/api/cleanup", { refresh: refresh ? 1 : undefined }),
     run: (ids: CleanupId[]) => post<CleanupRun>("/api/cleanup", { ids }),
+  },
+
+  optimize: {
+    report: () => get<OptimizeReport>("/api/optimize"),
+    run: () => post<OptimizeRun>("/api/optimize"),
   },
 
   vault: {

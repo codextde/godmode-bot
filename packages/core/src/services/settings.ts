@@ -1,5 +1,5 @@
 import type { Settings } from "@godmode/shared";
-import { DEFAULT_AUTO_COMPACT_PERCENT, DEFAULT_CLOUD_SETTINGS, DEFAULT_FALLBACK_MODEL, DEFAULT_LOOP_REPEATS, DEFAULT_MEMORY_CHARS, DEFAULT_MODEL, DEFAULT_PORT, DEFAULT_STALL_MINUTES, MOBILE_DEFAULT_PORT } from "@godmode/shared";
+import { DEFAULT_AUTO_COMPACT_PERCENT, DEFAULT_CLOUD_SETTINGS, DEFAULT_CONTEXT_BUDGET, DEFAULT_FALLBACK_MODEL, DEFAULT_LOOP_REPEATS, DEFAULT_MEMORY_CHARS, DEFAULT_MODEL, DEFAULT_PORT, DEFAULT_STALL_MINUTES, MOBILE_DEFAULT_PORT } from "@godmode/shared";
 import { all, run } from "../db";
 import { bus } from "../events/bus";
 import { parseJson } from "../util";
@@ -36,6 +36,7 @@ export const DEFAULT_SETTINGS: Settings = {
     stallMinutes: DEFAULT_STALL_MINUTES,
     loopRepeats: DEFAULT_LOOP_REPEATS,
     autoCompactPercent: DEFAULT_AUTO_COMPACT_PERCENT,
+    contextBudget: DEFAULT_CONTEXT_BUDGET,
     extraArgs: [],
     appendSystemPrompt: "",
   },
@@ -214,6 +215,8 @@ export function getSettings(): Settings {
 
 /** Deep-merge a partial settings patch and persist changed sections. */
 export function updateSettings(patch: DeepPartial<Settings>): Settings {
+  // A share picked on its own (an older phone app, an agent) means chats compress by share again, not at the budget.
+  if (patch.runner && "autoCompactPercent" in patch.runner && !("contextBudget" in patch.runner)) patch = { ...patch, runner: { ...patch.runner, contextBudget: null } };
   const current = getSettings();
   const next = merge(current, patch);
   for (const key of Object.keys(patch) as Section[]) {

@@ -1,4 +1,4 @@
-import { APP_LANGUAGES, INTERFACE_MODES, PALETTES, THEMES, TIME_FORMATS } from "@godmode/shared";
+import { APP_LANGUAGES, INTERFACE_MODES, MAX_CONTEXT_BUDGET, MIN_CONTEXT_BUDGET, PALETTES, THEMES, TIME_FORMATS } from "@godmode/shared";
 
 /** Ranges for the numbers a phone or an agent may set (as in the app); for text, the maximum length. */
 const SETTING_LIMITS: Record<string, [min: number, max: number]> = {
@@ -6,6 +6,7 @@ const SETTING_LIMITS: Record<string, [min: number, max: number]> = {
   "runner.stallMinutes": [3, 240],
   "runner.loopRepeats": [3, 50],
   "runner.autoCompactPercent": [0, 95],
+  "runner.contextBudget": [MIN_CONTEXT_BUDGET, MAX_CONTEXT_BUDGET],
   "runner.accountSwitchPercent": [50, 100],
   "browser.keepAliveMinutes": [0, 1440],
   "computer.liveViewFps": [1, 10],
@@ -15,6 +16,9 @@ const SETTING_LIMITS: Record<string, [min: number, max: number]> = {
   "phone.maxMinutes": [1, 60],
   "general.userName": [0, 80],
 };
+
+/** Numbers that may also be empty: when chats compress is a budget, a share of the window, or Claude Code's own. */
+export const NULLABLE_SETTINGS: ReadonlySet<string> = new Set(["runner.contextBudget", "runner.autoCompactPercent"]);
 
 /** Settings that take one of a few words. */
 export const SETTING_CHOICES: Record<string, readonly string[]> = {

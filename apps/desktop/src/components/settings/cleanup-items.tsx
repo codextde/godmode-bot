@@ -20,6 +20,8 @@ import {
   Logs,
   ScrollText,
   FolderX,
+  ImageOff,
+  PackageX,
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -62,6 +64,8 @@ const ICONS: Record<CleanupId, ComponentType<{ className?: string }>> = {
   "agent-run-logs": Logs,
   "agent-history": Archive,
   "deleted-files": FolderX,
+  "chat-pictures": ImageOff,
+  "build-folders": PackageX,
 };
 
 const cleanable = (i: CleanupItem) => i.count > 0 && !i.blocked;

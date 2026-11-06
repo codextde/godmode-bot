@@ -8,6 +8,7 @@ import { __clearSlashCommandCache, listSlashCommands } from "../src/runner/comma
 import { StreamAccumulator } from "../src/runner/stream";
 import { getAccessToken } from "../src/server/auth";
 import { run as sql } from "../src/db";
+import { updateSettings } from "../src/services/settings";
 
 let env: TestEnv;
 let agent: Agent;
@@ -121,12 +122,29 @@ describe("slash commands in chat runs", () => {
   test("the chat knows how full its session is; /compress compacts it", async () => {
     const big = await send(conversationId, "BIG_CONTEXT");
     expect(big.conv.context).toEqual({ tokens: 421_602, window: 1_000_000 });
-    expect(big.inv.env.CLAUDE_AUTOCOMPACT_PCT_OVERRIDE).toBe("70");
+    // The context budget (250k) is Claude Code's auto-compact window plus its 33k headroom; the share is left out.
+    expect(big.inv.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW).toBe("283000");
+    expect(big.inv.env.CLAUDE_AUTOCOMPACT_PCT_OVERRIDE).toBeNull();
     const { inv, conv } = await send(conversationId, "/compress keep the open tasks");
     expect(inv.prompt).toBe("/compact keep the open tasks");
     expect(conv.messages.at(-2)!.content).toBe("/compress keep the open tasks");
     expect(conv.context).toEqual({ tokens: 100, window: 1_000_000 });
     expect(conv.messages.at(-1)!.blocks).toContainEqual(expect.objectContaining({ type: "notice", compacted: { auto: false, preTokens: 900, postTokens: 100 } }));
+  });
+
+  test("without a context budget, chats compress at a share of the window or never", async () => {
+    updateSettings({ runner: { contextBudget: null } });
+    try {
+      const share = await send(conversationId, "Hi");
+      expect(share.inv.env.CLAUDE_AUTOCOMPACT_PCT_OVERRIDE).toBe("70");
+      expect(share.inv.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW).toBeNull();
+      updateSettings({ runner: { autoCompactPercent: 0 } });
+      const never = await send(conversationId, "Hi");
+      expect(never.inv.env.DISABLE_AUTO_COMPACT).toBe("1");
+      expect(never.inv.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW).toBeNull();
+    } finally {
+      updateSettings({ runner: { contextBudget: 250_000, autoCompactPercent: 70 } });
+    }
   });
 
   test("plain messages keep the context prefix", async () => {

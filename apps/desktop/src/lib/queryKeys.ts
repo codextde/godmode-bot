@@ -21,6 +21,7 @@ export const qk = {
   toolUpdates: ["doctor", "updates"] as unknown[],
   maintenance: ["doctor", "maintenance"] as unknown[],
   cleanup: ["cleanup"] as unknown[],
+  optimize: ["optimize"] as unknown[],
   power: ["power"] as unknown[],
   models: ["models"] as unknown[],
   vaultStatus: ["vault", "status"] as unknown[],

@@ -1602,6 +1602,7 @@ describe("settings tools", () => {
         "runner.stallMinutes",
         "runner.loopRepeats",
         "runner.autoCompactPercent",
+        "runner.contextBudget",
         "browser.headless",
         "browser.keepAliveMinutes",
         "browser.stealth",

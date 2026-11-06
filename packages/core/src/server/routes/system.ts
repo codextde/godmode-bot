@@ -19,6 +19,7 @@ import { PERMISSION_IDS, PRIVACY_IDS, checkPermissions, fixPermission, openPriva
 import { TOOL_IDS, checkUpdates } from "../../services/updates";
 import { cleanUp, fixAll, inTurn, installUpdates, maintenanceStatus } from "../../services/maintenance";
 import { CLEANUP_IDS, scanCleanup } from "../../services/cleanup";
+import { optimizeNow, optimizeReport } from "../../services/optimize";
 import { disableIdleTimeout } from "../../mcp/http";
 import { getModelCatalog } from "../../runner/models";
 import { getDefaultAgentId } from "../../agents/service";
@@ -175,5 +176,14 @@ export function registerSystemRoutes(app: Hono) {
     const { ids } = await body(c, z.object({ ids: z.array(z.enum(CLEANUP_IDS)).min(1) }));
     disableIdleTimeout(c);
     return c.json(await cleanUp(ids));
+  });
+
+  /** Chats within the context budget, memory tasks use; Optimize now cleans up and starts the dreams. */
+  app.get("/api/optimize", (c) => c.json(optimizeReport()));
+  app.post("/api/optimize", async (c) => {
+    disableIdleTimeout(c);
+    const result = await optimizeNow();
+    audit("user", "optimize.run", null, { freedBytes: result.cleanup.freedBytes, dreams: result.dreams.started.length });
+    return c.json(result);
   });
 }
