@@ -97,6 +97,8 @@ function makeAgent(workspaceId: string | null, permissions: Partial<AgentPermiss
     repoPath: "/tmp/agent",
     lastRunAt: null,
     createdAt: ts,
+    archivedAt: null,
+    archived: false,
     updatedAt: ts,
   };
 }

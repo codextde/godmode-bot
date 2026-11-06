@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 import { AgentAvatar, EmptyState, Kbd, PageBody, PageHeader } from "@/components/common";
 import { Character } from "@/components/character";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { ArchiveLink } from "@/components/archive/archive-link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -148,6 +149,7 @@ export default function AgentsPage() {
         description={description}
         actions={
           <>
+            <ArchiveLink />
             <Button variant="outline" onClick={() => navigate(`/?prompt=${encodeURIComponent(CREATE_PROMPT)}`)} className="hidden @md:inline-flex">
               <Sparkles /> {t("agentsPage.askGodmode")}
             </Button>

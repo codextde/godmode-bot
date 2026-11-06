@@ -823,7 +823,7 @@ function teamLeadOf(r: Row, callerId: string): Agent {
   const caller = getAgent(callerId);
   if (!caller.isDefault && !caller.permissions.canManageAgents) throw badRequest(`${ref} isn't one you gave`);
   if (!r.agent_id) throw badRequest(`${ref} is ${humanName()}'s own task`);
-  const agents = listAgents();
+  const agents = listAgents({ includeArchived: true });
   const author = agents.find((a) => a.id === r.agent_id);
   if (!author || !chainOf(author, agents, Infinity).some((a) => a.id === caller.id)) throw badRequest(`${ref} isn't one you or your team gave`);
   return caller;

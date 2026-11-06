@@ -7,6 +7,7 @@
  */
 import type { Followup, FollowupReason, Run } from "@godmode/shared";
 import { all, get, insert, run as exec } from "../db";
+import { archivedChatSql } from "../db/archived";
 import { bus } from "../events/bus";
 import { logger } from "../log";
 import { badRequest, conflict, notFound, now } from "../util";
@@ -48,6 +49,9 @@ interface FollowupRow {
 }
 
 const SELECT = "SELECT f.*, c.title AS title FROM followups f JOIN conversations c ON c.id = f.conversation_id";
+/** Follow-ups of archived chats (their agent, workspace or project) wait in place until it is restored. */
+const ACTIVE = `NOT ${archivedChatSql("c")}`;
+const FROM_ACTIVE = `FROM followups f JOIN conversations c ON c.id = f.conversation_id WHERE ${ACTIVE}`;
 
 function toFollowup(r: FollowupRow): Followup {
   return {
@@ -72,8 +76,8 @@ export function getFollowup(conversationId: string): Followup | null {
 
 export function listFollowups(opts: { agentId?: string } = {}): Followup[] {
   const rows = opts.agentId
-    ? all<FollowupRow>(`${SELECT} WHERE f.agent_id = ? ORDER BY f.due_at`, opts.agentId)
-    : all<FollowupRow>(`${SELECT} ORDER BY f.due_at`);
+    ? all<FollowupRow>(`${SELECT} WHERE f.agent_id = ? AND ${ACTIVE} ORDER BY f.due_at`, opts.agentId)
+    : all<FollowupRow>(`${SELECT} WHERE ${ACTIVE} ORDER BY f.due_at`);
   return rows.map(toFollowup);
 }
 
@@ -291,7 +295,7 @@ function arm() {
   if (timer) clearTimeout(timer);
   timer = null;
   if (!started) return;
-  const next = all<{ conversation_id: string; due_at: string }>("SELECT conversation_id, due_at FROM followups ORDER BY due_at").find(
+  const next = all<{ conversation_id: string; due_at: string }>(`SELECT f.conversation_id, f.due_at ${FROM_ACTIVE} ORDER BY f.due_at`).find(
     (f) => !busy(f.conversation_id),
   );
   if (!next) return;
@@ -315,7 +319,7 @@ export function sweep(): Promise<void> {
 
 async function startDue() {
   if (licenseBlocks()) {
-    const due = get<{ n: number }>("SELECT COUNT(*) AS n FROM followups WHERE due_at <= ?", now())?.n ?? 0;
+    const due = get<{ n: number }>(`SELECT COUNT(*) AS n ${FROM_ACTIVE} AND f.due_at <= ?`, now())?.n ?? 0;
     if (!due) return;
     try {
       requireLicense();
@@ -324,7 +328,7 @@ async function startDue() {
     }
     return;
   }
-  for (const r of all<FollowupRow>(`${SELECT} WHERE f.due_at <= ? ORDER BY f.due_at`, now())) {
+  for (const r of all<FollowupRow>(`${SELECT} WHERE f.due_at <= ? AND ${ACTIVE} ORDER BY f.due_at`, now())) {
     if (busy(r.conversation_id)) continue;
     const reason: FollowupReason = Date.now() - Date.parse(r.due_at) > LATE_MS ? "late" : "due";
     try {

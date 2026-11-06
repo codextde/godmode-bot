@@ -1,0 +1,29 @@
+{
+  "title": "Archive",
+  "empty": "Nothing archived",
+  "loadError": "Couldn't load the archive",
+  "sections": {
+    "workspaces": "Workspaces",
+    "projects": "Projects",
+    "agents": "Agents",
+    "routines": "Automations"
+  },
+  "projectCount_one": "{{count}} project",
+  "projectCount_other": "{{count}} projects",
+  "archived": "Archived",
+  "archive": "Archive",
+  "restore": "Restore",
+  "archivedAt": "Archived {{date}}",
+  "open": "Archive",
+  "toast": {
+    "archived": "{{name}} archived",
+    "restored": "{{name}} restored",
+    "undo": "Undo",
+    "archiveError": "Couldn't archive {{name}}",
+    "restoreError": "Couldn't restore {{name}}"
+  },
+  "banner": {
+    "agent": "{{name}} is archived",
+    "agentHint": "It doesn't run, and no other agent sees it."
+  }
+}

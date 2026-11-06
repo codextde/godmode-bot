@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { formatDistanceToNowStrict } from "date-fns";
 import { useTranslation } from "react-i18next";
 import {
+  Archive,
   ArrowRight,
   Bot,
   EllipsisVertical,
@@ -54,6 +55,8 @@ import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
 import { type WorkspacesSort, type WorkspacesView, useUi } from "@/stores/ui";
 import { WorkspaceDialog } from "@/components/workspaces/workspace-dialog";
+import { ArchiveLink } from "@/components/archive/archive-link";
+import { useArchive } from "@/components/archive/use-archive";
 import { SourcesSummary } from "@/components/workspaces/workspace-sources";
 import { WorkspaceTile } from "@/components/workspaces/workspace-tile";
 import { type WorkspaceActivity, projectKey, useWorkspaceActivity } from "@/components/workspaces/workspace-activity";
@@ -112,7 +115,8 @@ function useScopeCounts(): { get: (workspaceId: string | null) => Counts; loadin
 
 export default function WorkspacesPage() {
   const reduce = useReduceAnimations();
-  const { t } = useTranslation(["workspaces", "common"]);
+  const { t } = useTranslation(["workspaces", "common", "archive"]);
+  const { archive } = useArchive();
   const qc = useQueryClient();
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
@@ -269,6 +273,9 @@ export default function WorkspacesPage() {
         </DropdownMenuItem>
         <WorkspaceMoveMenu workspace={ws} />
         <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={() => archive({ kind: "workspace", id: ws.id, name: ws.name })}>
+          <Archive /> {t("archive:archive")}
+        </DropdownMenuItem>
         <DropdownMenuItem variant="destructive" onClick={() => setDeleting(ws)}>
           <Trash2 /> {t("common:actions.delete")}
         </DropdownMenuItem>
@@ -293,9 +300,12 @@ export default function WorkspacesPage() {
         title={t("page.title")}
         description={t("page.description")}
         actions={
-          <Button onClick={openCreate}>
-            <Plus /> {t("dialog.newTitle")}
-          </Button>
+          <>
+            <ArchiveLink />
+            <Button onClick={openCreate}>
+              <Plus /> {t("dialog.newTitle")}
+            </Button>
+          </>
         }
       />
       <PageBody>

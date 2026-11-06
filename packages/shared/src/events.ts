@@ -187,6 +187,8 @@ export type ServerEvent =
 
 export type EntityName =
   | "workspaces"
+  /** Something was archived or restored (workspaces, projects, agents, automations and what is in them). */
+  | "archive"
   /** Claude accounts: added, signed in again, removed, made default, their usage or limits changed. */
   | "claude-accounts"
   | "agents"

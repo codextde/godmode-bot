@@ -66,6 +66,7 @@ import {
 } from "@godmode/shared";
 import { config } from "../config";
 import { all, get, insert, run as sql, tx } from "../db";
+import { archivedChatSql } from "../db/archived";
 import { bus } from "../events/bus";
 import { setRunSnapshots, setWelcomeEvents } from "../server/ws";
 import { excerpt, logger } from "../log";
@@ -604,12 +605,14 @@ export async function startRun(input: StartRunInput): Promise<Run> {
   if (shuttingDown) throw new HttpError(503, "Godmode is shutting down", "shutting_down");
   requireLicense();
   const agent = getAgent(input.agentId);
+  if (agent.archived) throw conflict(`Agent "${agent.name}" is archived`);
   if (!agent.enabled) throw conflict(`Agent "${agent.name}" is disabled`);
   const conv = get<{ agent_id: string; runner_id: string | null }>("SELECT agent_id, runner_id FROM conversations WHERE id = ?", input.conversationId);
   if (!conv) throw notFound("Conversation");
   // Its runs happen on the runner; the request should have been forwarded there.
   if (conv.runner_id) throw conflict("This chat works on a runner");
   if (conv.agent_id !== agent.id) throw badRequest("The conversation belongs to another agent");
+  if (get(`SELECT 1 FROM conversations c WHERE c.id = ? AND ${archivedChatSql("c")}`, input.conversationId)) throw conflict("This chat's workspace or project is archived");
   if (!input.prompt.trim()) throw badRequest("Prompt is empty");
 
   const runId = input.runId ?? newId("run");
@@ -838,6 +841,7 @@ export function resumeRun(
   if (p.reason === "question" && !answer) {
     throw new HttpError(409, `${agent.name} is waiting for your answer — answer the question to continue.`, "needs_answer");
   }
+  if (agent.archived) throw conflict(`Agent "${agent.name}" is archived`);
   if (!agent.enabled) throw conflict(`Agent "${agent.name}" is disabled`);
   const ts = now();
   let blocks = getMessage(p.message_id).blocks.map((b) => (b.type === "pause" && !b.resumedAt ? { ...b, resumedAt: ts } : b));
@@ -1052,7 +1056,7 @@ export async function shutdownRunner(): Promise<void> {
     new Promise((r) => setTimeout(r, KILL_GRACE_MS + 2000)),
   ]);
   try {
-    await stopClaudeMemWorkers(listAgents({ workspaceId: "all" }));
+    await stopClaudeMemWorkers(listAgents({ workspaceId: "all", includeArchived: true }));
   } catch (err) {
     log.warn("could not stop claude-mem workers", err);
   }

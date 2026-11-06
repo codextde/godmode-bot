@@ -3,7 +3,7 @@ import { Link, NavLink, useNavigate, useParams } from "react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "motion/react";
 import { Trans, useTranslation } from "react-i18next";
-import { ArrowLeft, Bot, Brain, ChevronDown, Copy, Ellipsis, FolderOpen, GitCommitHorizontal, Globe, HeartPulse, LayoutGrid, MessageCircleQuestion, MessageSquare, MessagesSquare, Pause, Play, Settings2, StepForward, Trash2, Workflow } from "lucide-react";
+import { Archive, ArchiveRestore, ArrowLeft, Bot, Brain, ChevronDown, Copy, Ellipsis, FolderOpen, GitCommitHorizontal, Globe, HeartPulse, LayoutGrid, MessageCircleQuestion, MessageSquare, MessagesSquare, Pause, Play, Settings2, StepForward, Trash2, Workflow } from "lucide-react";
 import type { Agent } from "@godmode/shared";
 import { leadOf, reportsOf } from "@godmode/shared";
 import { api, ApiRequestError, errorMessage } from "@/lib/api";
@@ -20,6 +20,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useSidebar } from "@/components/ui/sidebar";
+import { useArchive } from "@/components/archive/use-archive";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { folderName, useShortPath } from "@/components/chat/folder-picker";
 import {
@@ -125,8 +126,10 @@ export default function AgentDetailPage() {
 }
 
 function AgentHeader({ agent }: { agent: Agent }) {
-  const { t } = useTranslation(["agents", "common"]);
+  const { t } = useTranslation(["agents", "common", "archive"]);
   const navigate = useNavigate();
+  const { archive, restore, pending: archiving } = useArchive();
+  const target = { kind: "agent" as const, id: agent.id, name: agent.name };
   const chat = useStartAgentChat();
   const toggle = useToggleAgent();
   const duplicate = useDuplicateAgent();
@@ -153,6 +156,11 @@ function AgentHeader({ agent }: { agent: Agent }) {
               <h1 className="truncate text-[23px] leading-tight font-medium tracking-[-0.03em] @2xl:text-[26px]">{agent.name}</h1>
               {agent.isDefault && (
                 <span className="rounded-[5px] border bg-secondary px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">{t("agentDetail.builtIn")}</span>
+              )}
+              {agent.archived && (
+                <span className="flex items-center gap-1 rounded-[5px] border bg-secondary px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
+                  <Archive className="size-3" /> {t("archive:archived")}
+                </span>
               )}
             </div>
             {agent.role ? (
@@ -200,49 +208,59 @@ function AgentHeader({ agent }: { agent: Agent }) {
             </div>
           </div>
           <div className="flex w-full flex-wrap items-center gap-2 @4xl:w-auto">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <label className="mr-1 flex cursor-pointer items-center gap-2 rounded-md border bg-card px-2.5 py-1.5 text-xs text-muted-foreground shadow-card">
-                  <Switch
-                    checked={agent.enabled}
-                    onCheckedChange={(enabled) => toggle.mutate({ id: agent.id, enabled })}
-                    disabled={toggle.isPending}
-                    aria-label={agent.enabled ? t("agentDetail.switchOffLabel", { name: agent.name }) : t("agentDetail.switchOnLabel", { name: agent.name })}
-                  />
-                  <span className="@max-md:sr-only">{agent.enabled ? t("common:status.on") : t("common:status.off")}</span>
-                </label>
-              </TooltipTrigger>
-              <TooltipContent>{agent.enabled ? t("agentDetail.switchOffHint") : t("agentDetail.switchOn")}</TooltipContent>
-            </Tooltip>
-            {(agent.openQuestions ?? 0) > 0 && (
-              <Button asChild variant="outline" className="border-warning/40">
-                <Link to="/inbox">
-                  <MessageCircleQuestion className="text-warning" />
-                  {(agent.openQuestions ?? 0) > 1 ? t("agentDetail.answerQuestions", { count: agent.openQuestions }) : t("agentDetail.answer")}
-                </Link>
-              </Button>
-            )}
-            {(agent.pausedRuns ?? 0) > 0 && (
-              <Button variant="outline" onClick={() => resume.mutate(agent)} disabled={resume.isPending || !agent.enabled}>
-                {resume.isPending ? <Spinner /> : <StepForward />} {t("common:actions.continue")}
-              </Button>
-            )}
-            {running && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button variant="outline" onClick={() => pause.mutate(agent)} disabled={pause.isPending}>
-                    {pause.isPending ? <Spinner /> : <Pause className="fill-current" />} {t("agentDetail.pause")}
+            {agent.archived ? (
+              agent.archivedAt && (
+                <Button onClick={() => restore(target)} disabled={archiving === agent.id}>
+                  {archiving === agent.id ? <Spinner /> : <ArchiveRestore />} {t("archive:restore")}
+                </Button>
+              )
+            ) : (
+              <>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <label className="mr-1 flex cursor-pointer items-center gap-2 rounded-md border bg-card px-2.5 py-1.5 text-xs text-muted-foreground shadow-card">
+                      <Switch
+                        checked={agent.enabled}
+                        onCheckedChange={(enabled) => toggle.mutate({ id: agent.id, enabled })}
+                        disabled={toggle.isPending}
+                        aria-label={agent.enabled ? t("agentDetail.switchOffLabel", { name: agent.name }) : t("agentDetail.switchOnLabel", { name: agent.name })}
+                      />
+                      <span className="@max-md:sr-only">{agent.enabled ? t("common:status.on") : t("common:status.off")}</span>
+                    </label>
+                  </TooltipTrigger>
+                  <TooltipContent>{agent.enabled ? t("agentDetail.switchOffHint") : t("agentDetail.switchOn")}</TooltipContent>
+                </Tooltip>
+                {(agent.openQuestions ?? 0) > 0 && (
+                  <Button asChild variant="outline" className="border-warning/40">
+                    <Link to="/inbox">
+                      <MessageCircleQuestion className="text-warning" />
+                      {(agent.openQuestions ?? 0) > 1 ? t("agentDetail.answerQuestions", { count: agent.openQuestions }) : t("agentDetail.answer")}
+                    </Link>
                   </Button>
-                </TooltipTrigger>
-                <TooltipContent>{t("agentDetail.pauseHint")}</TooltipContent>
-              </Tooltip>
+                )}
+                {(agent.pausedRuns ?? 0) > 0 && (
+                  <Button variant="outline" onClick={() => resume.mutate(agent)} disabled={resume.isPending || !agent.enabled}>
+                    {resume.isPending ? <Spinner /> : <StepForward />} {t("common:actions.continue")}
+                  </Button>
+                )}
+                {running && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button variant="outline" onClick={() => pause.mutate(agent)} disabled={pause.isPending}>
+                        {pause.isPending ? <Spinner /> : <Pause className="fill-current" />} {t("agentDetail.pause")}
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>{t("agentDetail.pauseHint")}</TooltipContent>
+                  </Tooltip>
+                )}
+                <Button variant="outline" onClick={() => setRunTask(true)} disabled={!agent.enabled}>
+                  <Play /> {t("agentDetail.runTask")}
+                </Button>
+                <Button onClick={() => chat.mutate(agent)} disabled={chat.isPending}>
+                  {chat.isPending ? <Spinner /> : <MessageSquare />} {t("agentDetail.chat")}
+                </Button>
+              </>
             )}
-            <Button variant="outline" onClick={() => setRunTask(true)} disabled={!agent.enabled}>
-              <Play /> {t("agentDetail.runTask")}
-            </Button>
-            <Button onClick={() => chat.mutate(agent)} disabled={chat.isPending}>
-              {chat.isPending ? <Spinner /> : <MessageSquare />} {t("agentDetail.chat")}
-            </Button>
             {!agent.isDefault && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -257,6 +275,16 @@ function AgentHeader({ agent }: { agent: Agent }) {
                   <DropdownMenuItem onClick={() => duplicate.mutate(agent)} disabled={duplicate.isPending}>
                     <Copy /> {t("agentDetail.duplicate")}
                   </DropdownMenuItem>
+                  {!agent.archived && (
+                    <DropdownMenuItem
+                      onClick={() => {
+                        archive(target);
+                        navigate("/agents");
+                      }}
+                    >
+                      <Archive /> {t("archive:archive")}
+                    </DropdownMenuItem>
+                  )}
                   <DropdownMenuItem variant="destructive" onClick={() => setConfirmDelete(true)}>
                     <Trash2 /> {t("agentDetail.deleteAgent")}
                   </DropdownMenuItem>

@@ -25,6 +25,7 @@ import type { ComputerTarget, ConversationContext, ConversationPatch, Conversati
 import { computerTargetLabel, MAX_MESSAGE_ATTACHMENT_BYTES, modelProvider } from "@godmode/shared";
 import { liteMessage } from "./liteMessage";
 import { all, bool, get, insert, int, run as sql, tx, update } from "../db";
+import { archivedChatSql } from "../db/archived";
 import { bus } from "../events/bus";
 import { config } from "../config";
 import { logger } from "../log";
@@ -566,7 +567,8 @@ function imageMime(data: Uint8Array): string {
 export function listConversations(
   opts: { agentId?: string; workspaceId?: string; projectId?: string; search?: string; limit?: number; archived?: boolean; ongoing?: boolean } = {},
 ): Conversation[] {
-  const where: string[] = ["c.private = 0", "c.archived = ?"];
+  // Chats of an archived agent, workspace or project are put away with it.
+  const where: string[] = ["c.private = 0", "c.archived = ?", `NOT ${archivedChatSql("c")}`];
   const params: (string | number)[] = [opts.archived ? 1 : 0];
   if (opts.ongoing) where.push(`(${ONGOING_SQL})`);
   if (opts.agentId) {

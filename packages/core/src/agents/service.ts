@@ -56,6 +56,7 @@ import { reloadSchedules } from "../scheduler/scheduler";
 import { requestAppTriggerSync } from "../integrations/composioTriggers";
 import { badRequest, newId, notFound, now, parseJson, slugify } from "../util";
 import { assignmentsChanged, normalizeVmId } from "../vm/assignments";
+import { activeAgentSql, archivedAgentSql } from "../db/archived";
 import { normalizeSshServerIds, parseServerIds } from "../ssh/assignments";
 import { normalizeAndroidDeviceIds, parseDeviceIds } from "../android/assignments";
 import {
@@ -108,6 +109,9 @@ interface AgentRow {
   last_run_at: string | null;
   created_at: string;
   updated_at: string;
+  archived_at?: string | null;
+  /** Derived in SELECT_AGENT: archived itself or through its workspace or project. */
+  archived?: number;
 }
 
 const BASE_PERMISSIONS: AgentPermissions = {
@@ -169,8 +173,9 @@ function normalizePersonality(value: string | null | undefined): string {
 
 function toModel(r: AgentRow): Agent {
   const enabled = bool(r.enabled);
+  const archived = r.archived === undefined ? isAgentArchived(r.id) : bool(r.archived);
   // The status column holds idle/running; "error" is derived from the failed run so a restart can't erase it.
-  const status: AgentStatus = !enabled ? "disabled" : r.status === "running" ? "running" : r.failed_run_id ? "error" : "idle";
+  const status: AgentStatus = !enabled || archived ? "disabled" : r.status === "running" ? "running" : r.failed_run_id ? "error" : "idle";
   return {
     id: r.id,
     workspaceId: r.workspace_id,
@@ -209,8 +214,20 @@ function toModel(r: AgentRow): Agent {
     openQuestions: get<{ n: number }>("SELECT COUNT(*) AS n FROM paused_runs WHERE agent_id = ? AND reason = 'question'", r.id)?.n ?? 0,
     lastRunAt: r.last_run_at,
     createdAt: r.created_at,
+    archivedAt: r.archived_at ?? null,
+    archived,
     updatedAt: r.updated_at,
   };
+}
+
+/** Archived itself or through its workspace or project. */
+export function isAgentArchived(id: string): boolean {
+  return !!get(`SELECT 1 FROM agents a WHERE a.id = ? AND ${archivedAgentSql("a")}`, id);
+}
+
+/** Switched on and not archived: may run. */
+export function isAgentActive(agent: Pick<Agent, "enabled" | "archived">): boolean {
+  return agent.enabled && !agent.archived;
 }
 
 function toRow(a: Agent): Record<string, string | number | null> {
@@ -352,7 +369,7 @@ type LeadSubject = Pick<Agent, "id" | "workspaceId" | "isDefault" | "reportsTo" 
 /** The stored lead for `agent` (null = the built-in agent), or a 400 saying why `leadId` can't lead it. */
 function resolveLead(leadId: string | null | undefined, agent: LeadSubject): string | null {
   if (!leadId) return null;
-  const agents = listAgents();
+  const agents = listAgents({ includeArchived: true });
   const lead = agents.find((a) => a.id === leadId);
   if (agent.isDefault) throw badRequest("Godmode leads the team and reports to you");
   if (!lead) throw badRequest("That agent doesn't exist anymore");
@@ -519,7 +536,8 @@ export async function stopAgentRuns(agentId: string): Promise<void> {
 /* Queries                                                              */
 /* ------------------------------------------------------------------ */
 
-const ORDER = "ORDER BY is_default DESC, name COLLATE NOCASE ASC";
+const ORDER = "ORDER BY a.is_default DESC, a.name COLLATE NOCASE ASC";
+const SELECT_AGENT = `SELECT a.*, ${archivedAgentSql("a")} AS archived FROM agents a`;
 
 export function getDefaultAgentId(): string | null {
   return get<{ id: string }>("SELECT id FROM agents WHERE is_default = 1 ORDER BY created_at LIMIT 1")?.id ?? null;
@@ -527,21 +545,33 @@ export function getDefaultAgentId(): string | null {
 
 /**
  * workspaceId: "all"/undefined = every agent; null/"global" = global agents only;
- * a workspace id = that workspace's agents plus the default agent.
+ * a workspace id = that workspace's agents plus the default agent. Archived agents only with `includeArchived`.
  */
-export function listAgents(opts: { workspaceId?: string | null | "all" } = {}): Agent[] {
+export function listAgents(opts: { workspaceId?: string | null | "all"; includeArchived?: boolean } = {}): Agent[] {
   const ws = opts.workspaceId;
+  const active = opts.includeArchived ? "" : `AND NOT ${archivedAgentSql("a")}`;
   let rows: AgentRow[];
-  if (ws === undefined || ws === "all") rows = all<AgentRow>(`SELECT * FROM agents ${ORDER}`);
-  else if (ws === null || ws === "global") rows = all<AgentRow>(`SELECT * FROM agents WHERE workspace_id IS NULL ${ORDER}`);
-  else rows = all<AgentRow>(`SELECT * FROM agents WHERE workspace_id = ? OR is_default = 1 ${ORDER}`, ws);
-  return rows.map(toModel);
+  if (ws === undefined || ws === "all") rows = all<AgentRow>(`${SELECT_AGENT} WHERE 1 ${active} ${ORDER}`);
+  else if (ws === null || ws === "global") rows = all<AgentRow>(`${SELECT_AGENT} WHERE a.workspace_id IS NULL ${active} ${ORDER}`);
+  else rows = all<AgentRow>(`${SELECT_AGENT} WHERE (a.workspace_id = ? OR a.is_default = 1) ${active} ${ORDER}`, ws);
+  const agents = rows.map(toModel);
+  return opts.includeArchived ? agents : agents.map(skipArchivedLead);
 }
 
-/** Look up an agent by id (or slug). */
+/** Reports of an archived agent report to its nearest active lead while it is archived (the stored lead stays). */
+function skipArchivedLead(agent: Agent): Agent {
+  if (!agent.reportsTo || !isAgentArchived(agent.reportsTo)) return agent;
+  let lead: string | null = agent.reportsTo;
+  for (let hops = 0; lead && hops < 32 && isAgentArchived(lead); hops++) {
+    lead = get<{ reports_to: string | null }>("SELECT reports_to FROM agents WHERE id = ?", lead)?.reports_to ?? null;
+  }
+  return { ...agent, reportsTo: lead && !isAgentArchived(lead) && lead !== agent.id ? lead : null };
+}
+
+/** Look up an agent by id (or slug), archived or not. */
 export function getAgent(id: string): Agent {
   const row =
-    get<AgentRow>("SELECT * FROM agents WHERE id = ?", id) ?? get<AgentRow>("SELECT * FROM agents WHERE slug = ?", id);
+    get<AgentRow>(`${SELECT_AGENT} WHERE a.id = ?`, id) ?? get<AgentRow>(`${SELECT_AGENT} WHERE a.slug = ?`, id);
   if (!row) throw notFound("Agent");
   return toModel(row);
 }
@@ -551,7 +581,7 @@ export function peersFor(agent: Agent): Agent[] {
   // Agent managers (the default orchestrator) can reach every agent; others their workspace + global agents. The
   // same rule (withinReach) drives the "Can hand work to" field, so the form and the core can't disagree.
   const reach = { id: agent.id, workspaceId: agent.workspaceId, canManageAgents: agent.permissions.canManageAgents };
-  const peers = all<AgentRow>(`SELECT * FROM agents WHERE enabled = 1 AND id != ? ${ORDER}`, agent.id)
+  const peers = all<AgentRow>(`${SELECT_AGENT} WHERE ${activeAgentSql("a")} AND a.id != ? ${ORDER}`, agent.id)
     .map(toModel)
     .filter((p) => withinReach(reach, p));
   const allowed = agent.permissions.delegateTo;
@@ -561,7 +591,8 @@ export function peersFor(agent: Agent): Agent[] {
 /** Who leads the agent, the line up to the built-in agent, and who reports to it. */
 export function teamOf(agent: Agent): { lead: Agent | null; chain: Agent[]; reports: Agent[] } {
   const agents = listAgents();
-  return { lead: leadOf(agent, agents) ?? null, chain: chainOf(agent, agents), reports: reportsOf(agent, agents) };
+  const self = skipArchivedLead(agent);
+  return { lead: leadOf(self, agents) ?? null, chain: chainOf(self, agents), reports: reportsOf(self, agents) };
 }
 
 /* ------------------------------------------------------------------ */
@@ -631,6 +662,8 @@ async function createAgentRecord(input: AgentInput, isDefault: boolean, actor: s
     repoPath: repoPathFor(slug),
     lastRunAt: null,
     createdAt: ts,
+    archivedAt: null,
+    archived: false,
     updatedAt: ts,
   };
   insert("agents", toRow(agent));
@@ -814,7 +847,7 @@ function registerSettingsHook() {
     if (name === lastUserName) return;
     lastUserName = name;
     void (async () => {
-      for (const agent of listAgents()) {
+      for (const agent of listAgents({ includeArchived: true })) {
         // Missing repositories are created lazily (ensureAgentRepo) with the current name anyway.
         if (!existsSync(join(agent.repoPath, ".git"))) continue;
         await refreshAgentFiles(agent.id, "Update user name").catch((err) =>
@@ -840,12 +873,12 @@ async function ensureDefaultAgentOnce(): Promise<Agent> {
   const agent = await ensureDefaultRecord();
   repairReportingLines();
   // Startup repair for every other agent too, e.g. after a backup was restored without agent repositories.
-  for (const other of listAgents()) {
+  for (const other of listAgents({ includeArchived: true })) {
     if (other.id === agent.id) continue;
     await ensureAgentRepo(other).catch((err) => log.error(`failed to repair the repository of agent ${other.slug}`, err));
   }
   // CLAUDE.md files written while runs had a cost cap still mention it.
-  for (const a of listAgents()) {
+  for (const a of listAgents({ includeArchived: true })) {
     const file = join(a.repoPath, "CLAUDE.md");
     if (!existsSync(file) || !readFileSync(file, "utf8").includes("Each run is capped at $")) continue;
     await refreshAgentFiles(a.id, "Remove the run cost cap").catch((err) => log.warn(`failed to refresh CLAUDE.md of agent ${a.slug}`, err));
@@ -935,7 +968,7 @@ export function repairReportingLines(): number {
          SELECT 1 FROM agents l WHERE l.id = agents.reports_to AND l.workspace_id IS NOT NULL AND l.workspace_id IS NOT agents.workspace_id)`,
     ).changes;
     // Loops: an agent whose chain comes back to itself reports to the built-in agent again (one per loop is enough).
-    const agents = listAgents();
+    const agents = listAgents({ includeArchived: true });
     for (const a of agents) {
       const chain = chainOf(a, agents, Infinity);
       const last = chain[chain.length - 1];
@@ -962,7 +995,7 @@ export async function moveAgent(id: string, input: AgentMoveInput, actor = "user
   if (agent.isDefault) throw badRequest("Godmode leads the team and reports to you");
   const workspaceId = input.workspaceId === undefined ? agent.workspaceId : input.workspaceId;
   if (workspaceId) assertWorkspace(workspaceId);
-  const agents = listAgents();
+  const agents = listAgents({ includeArchived: true });
   const team: Agent[] = [];
   if (workspaceId !== agent.workspaceId) {
     const seen = new Set([agent.id]);
@@ -998,7 +1031,7 @@ export async function moveAgent(id: string, input: AgentMoveInput, actor = "user
 export async function duplicateAgent(id: string, actor = "user"): Promise<Agent> {
   const source = getAgent(id);
   if (source.isDefault) throw badRequest("The built-in agent can't be duplicated");
-  const names = new Set(listAgents().map((a) => a.name.toLowerCase()));
+  const names = new Set(listAgents({ includeArchived: true }).map((a) => a.name.toLowerCase()));
   let name = `${source.name} copy`;
   for (let i = 2; names.has(name.toLowerCase()); i++) name = `${source.name} copy ${i}`;
   const created = await createAgentRecord(

@@ -24,7 +24,7 @@ import { HttpError, badRequest, newId, now } from "../util";
 import { assignmentsChanged, vmExists } from "../vm/assignments";
 import { audit } from "./audit";
 import { getConversationSummary } from "./conversations";
-import { getProject, uniqueSlug as projectSlug } from "./projects";
+import { getProject, listProjects, uniqueSlug as projectSlug } from "./projects";
 import { getWorkspace, uniqueSlug as workspaceSlug } from "./workspaces";
 import { relocateSources, sourceRows } from "./workspaceSources";
 
@@ -384,7 +384,9 @@ export function moveWorkspace(id: string, input: WorkspaceMoveInput, actor = "us
     const ts = now();
     const projectId = newId("prj");
     const items: ScopeRestore["items"] = {};
-    const subprojects = source.projects.map((p) => p.id);
+    // Archived ones go along too (and stay archived).
+    const sourceProjects = listProjects(id, { includeArchived: true });
+    const subprojects = sourceProjects.map((p) => p.id);
 
     const moved = tx(() => {
       insert("projects", {
@@ -401,7 +403,7 @@ export function moveWorkspace(id: string, input: WorkspaceMoveInput, actor = "us
         updated_at: ts,
       });
       // Its projects keep browsing with its default profile, which goes along.
-      for (const p of source.projects) {
+      for (const p of sourceProjects) {
         run(
           "UPDATE projects SET workspace_id = ?, slug = ?, browser_profile_id = COALESCE(browser_profile_id, ?), updated_at = ? WHERE id = ?",
           dest.id,

@@ -102,6 +102,7 @@ export async function runConditionCheck(routineId: string, opts: { scheduled?: b
   const routine = getRoutine(routineId);
   const trigger = conditionOf(routine);
   const agent = getAgent(routine.agentId);
+  if (agent.archived || routine.archived) throw conflict(`“${agent.archived ? agent.name : routine.name}” is archived`);
   if (!agent.enabled) throw conflict(`Agent "${agent.name}" is disabled`);
   if (opts.scheduled && !routine.enabled) throw conflict(`“${routine.name}” is paused`);
   const held = opts.scheduled ? standInHold(agent.id, routine.prompt) : null;

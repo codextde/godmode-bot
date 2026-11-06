@@ -57,6 +57,7 @@ import {
 } from "@godmode/shared";
 import { config } from "../config";
 import { all, get, getMeta, insert, run as sql, setMeta, tx, update } from "../db";
+import { archivedScopeSql } from "../db/archived";
 import { bus } from "../events/bus";
 import { logger } from "../log";
 import { HttpError, badRequest, conflict, newId, notFound, now, parseJson, slugify } from "../util";
@@ -332,7 +333,8 @@ export async function restoreTaskCheckout(conversationId: string, dir: string): 
 /** Tasks of a scope: "all" (default), "global" or a workspace id. The board's, or the archived ones (latest first). */
 export function listTasks(opts: { workspaceId?: string; archived?: boolean } = {}): Task[] {
   const ws = opts.workspaceId ?? "all";
-  const where = [opts.archived ? "t.archived_at IS NOT NULL" : "t.archived_at IS NULL"];
+  // Tickets of an archived workspace or project are put away with it.
+  const where = [opts.archived ? "t.archived_at IS NOT NULL" : "t.archived_at IS NULL", `NOT ${archivedScopeSql("t.workspace_id", "t.project_id")}`];
   if (ws === "global") where.push("t.workspace_id IS NULL");
   else if (ws !== "all") where.push("t.workspace_id = ?");
   const order = opts.archived ? "ORDER BY t.archived_at DESC, t.number DESC" : "ORDER BY t.position ASC, t.number ASC";
@@ -1256,6 +1258,16 @@ interface Resume {
   reason: string | null;
 }
 
+/** Start every ticket waiting in Todo, the most urgent first, then the earliest due (at startup, after a restore). */
+export function startTodoTickets(): void {
+  for (const t of all<{ id: string }>(
+    `SELECT id FROM tasks WHERE status = 'todo' AND agent_id IS NOT NULL AND archived_at IS NULL
+     ORDER BY CASE priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'low' THEN 3 ELSE 2 END, due_date IS NULL, due_date, position`,
+  )) {
+    void dispatch(t.id);
+  }
+}
+
 export async function dispatch(id: string, resume?: Resume): Promise<void> {
   if (busy.has(id)) {
     again.add(id);
@@ -1267,11 +1279,18 @@ export async function dispatch(id: string, resume?: Resume): Promise<void> {
     if (!task || task.archived_at || !task.agent_id || !STARTABLE.includes(task.status)) return;
     // Waits in Todo for tickets that aren't finished yet: it starts when they are (dependencyChanged).
     if (task.status === "todo" && unfinishedDependencies(id).length) return;
+    // In an archived workspace or project it waits where it is until that is restored.
+    if (get(`SELECT 1 FROM tasks t WHERE t.id = ? AND ${archivedScopeSql("t.workspace_id", "t.project_id")}`, id)) return;
     let agent: Agent;
     try {
       agent = getAgent(task.agent_id);
     } catch {
       return block(id, "The assigned agent doesn't exist anymore.", { kind: "setup", from: STARTABLE });
+    }
+    if (agent.archived) {
+      // Todo waits for the agent's restore; one the human starts says why it can't.
+      if (task.status === "todo") return;
+      return block(id, `${agent.name} is archived — restore it or assign another agent.`, { kind: "setup", from: STARTABLE });
     }
     if (!agent.enabled) return block(id, `${agent.name} is disabled — turn it on or assign another agent.`, { kind: "setup", from: STARTABLE });
     // Before a worktree is made for a run that can't start.
@@ -1881,8 +1900,8 @@ async function continueWithParts(id: string): Promise<void> {
   } catch {
     agent = null;
   }
-  if (!agent?.enabled) {
-    block(id, agent ? `${agent.name} is switched off, so it couldn't continue with the finished parts — turn it on or assign another agent.` : "Its agent is gone, so nobody continues it.", { kind: "setup" });
+  if (!agent?.enabled || agent.archived) {
+    block(id, agent ? `${agent.name} is ${agent.archived ? "archived" : "switched off"}, so it couldn't continue with the finished parts — turn it on or assign another agent.` : "Its agent is gone, so nobody continues it.", { kind: "setup" });
     return;
   }
   const parts = all<TaskRow>("SELECT * FROM tasks WHERE parent_id = ? ORDER BY number", id);
@@ -2328,13 +2347,7 @@ export function startTasks(): void {
     log.warn("could not sweep task attachments", err);
   }
   reconcileTasks("Interrupted (Godmode restarted).", { retry: true });
-  // The most urgent first, then the earliest due.
-  for (const t of all<{ id: string }>(
-    `SELECT id FROM tasks WHERE status = 'todo' AND agent_id IS NOT NULL AND archived_at IS NULL
-     ORDER BY CASE priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'low' THEN 3 ELSE 2 END, due_date IS NULL, due_date, position`,
-  )) {
-    void dispatch(t.id);
-  }
+  startTodoTickets();
   if (!watchTimer) {
     watchTimer = setInterval(() => {
       void checkPullRequests().catch((err) => log.warn("could not check pull requests", err));

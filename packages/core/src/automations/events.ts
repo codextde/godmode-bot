@@ -173,6 +173,14 @@ function agentEnabled(agentId: string): boolean {
   return get<{ enabled: number }>("SELECT enabled FROM agents WHERE id = ?", agentId)?.enabled === 1;
 }
 
+/** Why an automation takes no events now: archived, paused or its agent off; null = it does. */
+function offReason(routine: Routine): string | null {
+  if (routine.archived) return "The automation is archived";
+  if (!routine.enabled) return "The automation is paused";
+  if (!agentEnabled(routine.agentId)) return "The agent is disabled";
+  return null;
+}
+
 function pendingCount(routineId: string): number {
   return get<{ n: number }>("SELECT COUNT(*) AS n FROM automation_events WHERE routine_id = ? AND status = 'pending'", routineId)?.n ?? 0;
 }
@@ -184,10 +192,8 @@ function pendingCount(routineId: string): number {
 export function ingestEvent(routineId: string, incoming: IncomingEvent): AutomationEvent | null {
   const routine = getRoutine(routineId);
   let status: AutomationEventStatus = "pending";
-  let note: string | null = null;
-  if (!routine.enabled) note = "The automation is paused";
-  else if (!agentEnabled(routine.agentId)) note = "The agent is disabled";
-  else if (pendingCount(routineId) >= MAX_PENDING) note = `${MAX_PENDING} events were already waiting`;
+  let note = offReason(routine);
+  if (!note && pendingCount(routineId) >= MAX_PENDING) note = `${MAX_PENDING} events were already waiting`;
   if (note) status = "skipped";
   // A skipped event is never run: keep its title for the record, not its (possibly large) data.
   const event = insertEvent(routineId, { ...incoming, payload: status === "skipped" ? null : incoming.payload, status, note });
@@ -459,9 +465,10 @@ export async function dispatch(routineId: string, opts: { byHuman?: boolean } = 
   const firstTest = waiting.findIndex((e) => e.source === "manual");
   const pending = firstTest === 0 ? waiting.slice(0, 1) : firstTest > 0 ? waiting.slice(0, firstTest) : waiting;
   const ids = pending.map((e) => e.id);
-  if (!routine.enabled || !agentEnabled(routine.agentId)) {
+  const off = offReason(routine);
+  if (off) {
     const waitingIds = all<{ id: string }>("SELECT id FROM automation_events WHERE routine_id = ? AND status = 'pending'", routineId).map((r) => r.id);
-    setEventStatus(waitingIds, "skipped", routine.enabled ? "The agent is disabled" : "The automation is paused");
+    setEventStatus(waitingIds, "skipped", off);
     emitRoutine(routineId);
     return null;
   }
@@ -606,6 +613,7 @@ export async function sendTestEvent(routineId: string, payload?: unknown, opts: 
   if (routine.trigger.type !== "app" && routine.trigger.type !== "webhook") {
     throw badRequest("Only automations started by an app event or a webhook take test events");
   }
+  if (routine.archived) throw conflict(`“${routine.name}” is archived`);
   if (!routine.enabled) throw conflict(`“${routine.name}” is paused`);
   const event = ingestEvent(routineId, {
     source: "manual",
