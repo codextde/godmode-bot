@@ -20,6 +20,7 @@ import type {
   AnswerQuestionResult,
   AgentQuestion,
   AndroidDevice,
+  AndroidInputEvent,
   AndroidScreenshot,
   AppNotification,
   Bootstrap,
@@ -741,6 +742,8 @@ export const api = {
     /** Android phones connected to the computer for agents. An older Godmode refuses this (403). */
     devices: () => get<AndroidDevice[]>("/api/android/devices"),
     screenshot: (id: string, size = 720) => get<AndroidScreenshot>(`/api/android/devices/${id}/screenshot`, { size }),
+    /** A touch, key or text, only on a phone a chat uses. Coordinates are pixels of `frame`, the picture the human saw. */
+    input: (id: string, event: AndroidInputEvent, frame: { width: number; height: number }) => post<{ ok: true }>(`/api/android/devices/${id}/input`, { event, frame }),
   },
 
   /** Workspaces, projects, agents and automations kept but out of every list until restored. */
@@ -780,9 +783,11 @@ export const api = {
   },
 
   calls: {
-    /** Calls agents made and took, newest first. Placed on the computer, never from the phone. */
+    /** Calls agents made and took, newest first. */
     list: (limit = 100) => get<PhoneCall[]>("/api/calls", { limit }),
     get: (id: string) => get<PhoneCall>(`/api/calls/${id}`),
+    /** Godmode's voice calls someone for the human, like the desktop's New call (only while calls are on there). */
+    place: (input: { to: string; goal: string; context?: string; contactName?: string; language: string }) => post<PhoneCall>("/api/calls", input, 30_000),
   },
 
   humanTasks: {

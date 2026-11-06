@@ -11,7 +11,31 @@
     "incomingWith": "Incoming call with {{name}}",
     "outgoingWith": "Outgoing call with {{name}}",
     "incomingCall": "Incoming call",
-    "noGoal": "No goal given"
+    "noGoal": "No goal given",
+    "emptyBodyOn": "Agents can phone a business to book an appointment, follow up with a lead, or call you when a question can't wait. Godmode's voice can also call someone for you right now.",
+    "placeCall": "Place a call"
+  },
+  "new": {
+    "title": "New call",
+    "intro": "Godmode's voice calls for you and works toward the goal. You get the transcript, a summary and the outcome afterwards.",
+    "call": "Call",
+    "number": "Number",
+    "numberHint": "With the country code.",
+    "badNumber": "Add the country code, e.g. +49.",
+    "who": "Who",
+    "whoPlaceholder": "Person or business",
+    "goal": "Goal",
+    "goalPlaceholder": "Book a haircut for next week, ideally Tuesday or Wednesday after 5 pm.",
+    "context": "Good to know (optional)",
+    "contextPlaceholder": "Customer number, what's been agreed before, what not to say yes to.",
+    "language": "Language",
+    "confirmTitle": "Call {{name}} now?",
+    "confirmBody": "Godmode calls {{name}} now as your assistant and works toward your goal. The transcript and summary show up here when the call ends.",
+    "callNow": "Call now",
+    "failed": "Couldn't place the call",
+    "loadFailed": "Couldn't load your settings",
+    "offTitle": "Phone calls are off",
+    "offBody": "Turn on phone calls in Godmode on your computer (Settings → Phone calls). Then you can place calls from here."
   },
   "detail": {
     "title": "Call",

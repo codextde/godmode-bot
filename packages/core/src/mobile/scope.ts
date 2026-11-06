@@ -1,10 +1,11 @@
 /**
  * What a paired phone may call. The app controls Godmode — chats (with files from the phone, the model and the queue),
- * tasks, runs, automations, the screens agents work on, and the setup: instructions, the defaults agents run with,
+ * tasks, runs, automations, calls, the screens agents work on, and the setup: instructions, the defaults agents run with,
  * workspaces, projects and agents — and reads the vault, integrations and agents' folders without their secrets
  * (mobile/views.ts), but never reaches secrets, backups, security or this computer's other files (only the ones attached
  * to tasks, and what it uploads itself). It can't point an agent at a folder, a program or a
- * permission the computer didn't give it, and only controls screens the human shared in a chat and Godmode's VMs.
+ * permission the computer didn't give it, and only controls screens the human shared in a chat, Android phones a chat
+ * uses and Godmode's VMs.
  */
 import { lstatSync, realpathSync, type Stats } from "node:fs";
 import { join, relative, sep } from "node:path";
@@ -58,8 +59,10 @@ const ROUTES: [method: string, path: RegExp][] = [
   ["PATCH", new RegExp(`^/api/human-tasks/${ID}$`)],
   ["DELETE", new RegExp(`^/api/human-tasks/${ID}$`)],
   ["POST", new RegExp(`^/api/human-tasks/${ID}/close$`)],
-  // Calls agents made and took: read, never placed from the phone (nor their setup).
+  // Calls agents made and took: read, and placed like the desktop's New call (see BODIES). The numbers they go out from,
+  // the owner's PIN, the setup and test calls stay on the computer.
   ["GET", /^\/api\/calls$/],
+  ["POST", /^\/api\/calls$/],
   ["GET", /^\/api\/calls\/call_[^/]+$/],
   ["GET", /^\/api\/calls\/call_[^/]+\/audio$/],
 
@@ -176,9 +179,11 @@ const ROUTES: [method: string, path: RegExp][] = [
   ["GET", /^\/api\/computer\/status$/],
   ["POST", /^\/api\/computer\/cua\/stop$/],
 
-  // Android phones agents use: seen and watched, never controlled, connected or changed from a phone.
+  // Android phones agents use: seen and watched; controlled only while a chat uses them (deviceTargetRefusal). Connecting,
+  // renaming, assigning, forgetting and shell commands stay on the computer.
   ["GET", /^\/api\/android\/devices$/],
   ["GET", new RegExp(`^/api/android/devices/${ID}/screenshot$`)],
+  ["POST", new RegExp(`^/api/android/devices/${ID}/input$`)],
 
   ["GET", /^\/api\/vms$/],
   ["GET", new RegExp(`^/api/vms/${ID}/screenshot$`)],
@@ -372,6 +377,9 @@ const BODIES: [method: string, path: RegExp, keys: string[]][] = [
   ["POST", new RegExp(`^/api/browser/profiles/${ID}/launch$`), []],
   ["POST", /^\/api\/computer\/input$/, ["view", "event", "frame"]],
   ["POST", new RegExp(`^/api/vms/${ID}/input$`), ["event", "frame"]],
+  ["POST", new RegExp(`^/api/android/devices/${ID}/input$`), ["event", "frame"]],
+  // What the desktop's New call sends: never the number it goes out from, a mailbox message or who it is for.
+  ["POST", /^\/api\/calls$/, ["to", "goal", "context", "contactName", "language"]],
   ["POST", new RegExp(`^/api/vms/${ID}/(start|stop|suspend|restart)$`), []],
   ["POST", /^\/api\/vault\/lock$/, []],
   ["PATCH", new RegExp(`^/api/mods/${ID}$`), ["enabled"]],
@@ -549,6 +557,20 @@ function cleanupRefusal(body: Record<string, unknown>): string | null {
   const ids = body.ids;
   if (!Array.isArray(ids)) return null;
   return ids.every((id) => typeof id === "string" && PHONE_CLEANUP.includes(id)) ? null : "Clean this up in Godmode on your computer.";
+}
+
+const ANDROID_INPUT = new RegExp(`^/api/android/devices/(${ID})/input$`);
+
+/** Why a phone may not control what the path names (null = it may): an Android phone only while a chat uses it. */
+export function deviceTargetRefusal(method: string, path: string): string | null {
+  const android = method === "POST" ? ANDROID_INPUT.exec(path) : null;
+  if (android && !deviceMayUseAndroid(android[1]!)) return "Only Android phones a chat uses can be controlled from the phone.";
+  return null;
+}
+
+/** Like a shared screen: an Android phone is the phone's to control while a chat (not archived) uses it. */
+export function deviceMayUseAndroid(deviceId: string): boolean {
+  return !!get<{ id: string }>("SELECT id FROM conversations WHERE archived = 0 AND EXISTS (SELECT 1 FROM json_each(android_device_ids) WHERE value = ?) LIMIT 1", deviceId);
 }
 
 /** A phone may watch and control a screen only while it is shared in a chat. */

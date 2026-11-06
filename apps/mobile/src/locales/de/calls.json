@@ -11,7 +11,31 @@
     "incomingWith": "Eingehender Anruf von {{name}}",
     "outgoingWith": "Ausgehender Anruf an {{name}}",
     "incomingCall": "Eingehender Anruf",
-    "noGoal": "Kein Ziel angegeben"
+    "noGoal": "Kein Ziel angegeben",
+    "emptyBodyOn": "Agenten können ein Unternehmen anrufen, um einen Termin zu buchen, bei einem Lead nachzuhaken oder dich anrufen, wenn eine Frage nicht warten kann. Die Stimme von Godmode kann auch jetzt gleich für dich jemanden anrufen.",
+    "placeCall": "Anruf starten"
+  },
+  "new": {
+    "title": "Neuer Anruf",
+    "intro": "Die Stimme von Godmode ruft für dich an und arbeitet aufs Ziel hin. Danach bekommst du Transkript, Zusammenfassung und Ergebnis.",
+    "call": "Anrufen",
+    "number": "Nummer",
+    "numberHint": "Mit Ländervorwahl.",
+    "badNumber": "Füg die Ländervorwahl hinzu, z. B. +49.",
+    "who": "Wer",
+    "whoPlaceholder": "Person oder Firma",
+    "goal": "Ziel",
+    "goalPlaceholder": "Einen Haarschnitt für nächste Woche buchen, am liebsten Dienstag oder Mittwoch nach 17 Uhr.",
+    "context": "Gut zu wissen (optional)",
+    "contextPlaceholder": "Kundennummer, was vorher vereinbart wurde, wozu du nicht Ja sagen willst.",
+    "language": "Sprache",
+    "confirmTitle": "{{name}} jetzt anrufen?",
+    "confirmBody": "Godmode ruft {{name}} jetzt als deine Assistenz an und arbeitet auf dein Ziel hin. Transkript und Zusammenfassung erscheinen hier, sobald der Anruf endet.",
+    "callNow": "Jetzt anrufen",
+    "failed": "Anruf konnte nicht gestartet werden",
+    "loadFailed": "Deine Einstellungen konnten nicht geladen werden",
+    "offTitle": "Anrufe sind aus",
+    "offBody": "Schalte Anrufe in Godmode auf deinem Computer ein (Einstellungen → Anrufe). Dann kannst du auch von hier aus anrufen."
   },
   "detail": {
     "title": "Anruf",
