@@ -288,12 +288,22 @@ describe("agent access", () => {
     subdomainLogin = createCredential({ name: "Gist", url: "https://gist.github.com", username: "gist", workspaceId: "ws_a" }).id;
   });
 
-  test("scoping: global agent sees global and every workspace's logins", () => {
+  test("scoping: global agent sees only global logins", () => {
     const ids = credentialsForAgent(makeAgent(null)).map((c) => c.id);
+    expect(ids).toContain(globalLogin);
+    expect(ids).not.toContain(wsALogin);
+    expect(ids).not.toContain(wsBLogin);
+    expect(credentialsForAgent(makeAgent(null)).every((c) => c.password === undefined)).toBe(true);
+  });
+
+  test("scoping: Godmode sees global and every workspace's logins, an allow-list still limits it", () => {
+    const godmode = { ...makeAgent(null), isDefault: true };
+    const ids = credentialsForAgent(godmode).map((c) => c.id);
     expect(ids).toContain(globalLogin);
     expect(ids).toContain(wsALogin);
     expect(ids).toContain(wsBLogin);
-    expect(credentialsForAgent(makeAgent(null)).every((c) => c.password === undefined)).toBe(true);
+    expect(revealForAgent(godmode, wsALogin).password).toBe("gh-work-pass");
+    expect(credentialsForAgent({ ...makeAgent(null, { credentialIds: [globalLogin] }), isDefault: true }).map((c) => c.id)).toEqual([globalLogin]);
   });
 
   test("scoping: workspace agent sees global + own workspace", () => {
@@ -355,7 +365,7 @@ describe("agent access", () => {
     expect(revealForAgent(agent, globalLogin)).toMatchObject({ username: "me", password: "gh-pass", url: "https://github.com/login" });
     expect(revealForAgent(agent, subdomainLogin).password).toBeNull();
     expect(httpStatus(() => revealForAgent(agent, wsBLogin))).toBe(403);
-    expect(revealForAgent(makeAgent(null), wsALogin).password).toBe("gh-work-pass");
+    expect(httpStatus(() => revealForAgent(makeAgent(null), wsALogin))).toBe(403);
     expect(httpStatus(() => revealForAgent(makeAgent("ws_a", { credentialIds: [globalLogin] }), wsALogin))).toBe(403);
     expect(httpStatus(() => revealForAgent(agent, "cred_missing"))).toBe(404);
   });

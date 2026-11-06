@@ -18,7 +18,7 @@ import { createTotp, currentCodes } from "../src/vault/totp";
 import { createConversation, getConversationSummary, listMessages, sendMessage, updateConversation } from "../src/services/conversations";
 import { createWorkspace, getWorkspace, updateWorkspace } from "../src/services/workspaces";
 import { createProject } from "../src/services/projects";
-import { getAgent, updateAgent } from "../src/agents/service";
+import { ensureDefaultAgent, getAgent, updateAgent } from "../src/agents/service";
 import { cancelRun, getRun, waitForRun } from "../src/runner/runner";
 import { getAccessToken } from "../src/server/auth";
 import { createApp } from "../src/server/app";
@@ -1052,16 +1052,19 @@ describe("logins and 2FA codes in the VM", () => {
       expect(currentCodes([totp.id]).map((c) => c.code)).toContain(digits);
       expect(JSON.stringify(code)).not.toContain(digits);
 
-      // A workspace agent only reaches logins and 2FA entries in its scope; a global agent reaches them all.
+      // Workspace and other global agents only reach logins and 2FA entries in their scope; Godmode reaches them all.
       const member = await makeAgent({ name: "Fill member", workspaceId: createWorkspace({ name: "Own client" }).id });
       const scoped = { ...ctx, agentId: member.id };
       before = keys().length;
       expect(out(await callVmTool(scoped, "fill_login", { credentialId: foreign.id, field: "password", screenshot: false }))).toContain("not available to this agent");
       expect(out(await callVmTool(scoped, "fill_totp", { totpId: foreignTotp.id, screenshot: false }))).toContain("not available to you");
       expect(out(await callVmTool(scoped, "fill_totp", { totpId: totp.id, credentialId: foreign.id, screenshot: false }))).toContain("not available to you");
+      expect(out(await callVmTool(ctx, "fill_login", { credentialId: foreign.id, field: "password", screenshot: false }))).toContain("not available to this agent");
+      expect(out(await callVmTool(ctx, "fill_totp", { totpId: foreignTotp.id, screenshot: false }))).toContain("not available to you");
       await Bun.sleep(200);
       expect(keys().length).toBe(before);
-      expect(out(await callVmTool(ctx, "fill_login", { credentialId: foreign.id, field: "password", screenshot: false }))).toBe('Typed the password of "Foreign" into a password field of Safari.');
+      const godmode = { ...ctx, agentId: (await ensureDefaultAgent()).id };
+      expect(out(await callVmTool(godmode, "fill_login", { credentialId: foreign.id, field: "password", screenshot: false }))).toBe('Typed the password of "Foreign" into a password field of Safari.');
       expect(out(await callVmTool(ctx, "fill_totp", { credentialId: unicode.id, screenshot: false }))).toContain("missing_totp");
 
       const audited = listAudit(100).filter((a) => a.details.runId === ctx.runId);

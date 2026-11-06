@@ -258,7 +258,7 @@
     },
     "workspace": {
       "label": "Workspace",
-      "global": "Global — sees all logins, only global tools"
+      "global": "Global — sees only global logins & tools"
     },
     "project": {
       "label": "Project",
