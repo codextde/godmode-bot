@@ -294,6 +294,37 @@ export function checkoutDir(taskId: string): string {
   return join(config().tasksDir, taskId);
 }
 
+/**
+ * The worktree of the task whose chat works in `dir`, set up again from the task's branch after the cleanup removed
+ * it. null = `dir` isn't a task's worktree; "fallback" = it couldn't, and the task may work without one; "failed" = a
+ * coding task, which never works outside its own worktree.
+ */
+export async function restoreTaskCheckout(conversationId: string, dir: string): Promise<"restored" | "fallback" | "failed" | null> {
+  const task = get<TaskRow>("SELECT * FROM tasks WHERE conversation_id = ?", conversationId);
+  if (!task || checkoutDir(task.id) !== dir) return null;
+  if (existsSync(dir)) return "restored";
+  const unavailable = task.type === "coding" ? "failed" : "fallback";
+  const source = task.branch ? taskRepo(task) : null;
+  if (!task.branch || !source || "error" in source) return unavailable;
+  setActivity(task.id, "Setting the worktree up again…");
+  try {
+    await prepareWorktree({
+      dir,
+      repo: source.repo,
+      base: task.base_branch || source.branch,
+      branch: task.branch,
+      fresh: false,
+      trashDir: join(reposDir(), ".trash"),
+    });
+    return "restored";
+  } catch (err) {
+    log.warn(`could not set up the worktree of task ${task.id} again`, err);
+    return unavailable;
+  } finally {
+    setActivity(task.id, null);
+  }
+}
+
 /* ------------------------------------------------------------------ */
 /* Queries                                                             */
 /* ------------------------------------------------------------------ */

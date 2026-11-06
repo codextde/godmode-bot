@@ -2068,4 +2068,16 @@ INSERT OR REPLACE INTO meta (key, value) VALUES ('memory.usesSince', strftime('%
 ALTER TABLE phone_calls ADD COLUMN end_reason TEXT NOT NULL DEFAULT '';
 `,
   },
+  {
+    id: 128,
+    name: "covering_indexes",
+    sql: /* sql */ `
+-- finished_at sits behind the large columns (snapshots, prompts, results): without these, the last dream, an agent's
+-- pending activity and the count of this computer's chats walked every row's overflow pages.
+CREATE INDEX IF NOT EXISTS idx_dreams_finished ON dreams(status, finished_at);
+CREATE INDEX IF NOT EXISTS idx_runs_agent_finished ON runs(agent_id, finished_at, status, trigger, conversation_id);
+DROP INDEX IF EXISTS idx_conversations_runner;
+CREATE INDEX idx_conversations_runner ON conversations(runner_id);
+`,
+  },
 ];
