@@ -264,6 +264,7 @@ export type ClientEvent =
   | { type: "conversation.unsubscribe"; conversationId: ID }
   /** This client applies `run.delta` patches (`applyRunDelta`): send it what changed instead of the whole list. */
   | { type: "deltas.patch" }
+  | { type: "deltas.hold"; hold: boolean }
   /** This client loads screenshots by `imageUrl`: send stored messages without their base64 pictures. */
   | { type: "messages.images" }
   /** The client missed a delta of this run (or joined while it ran): send its whole block list once. */

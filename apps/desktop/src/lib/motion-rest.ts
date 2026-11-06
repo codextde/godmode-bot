@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from "react";
 
 /** Window in the background this long, and motion stops. */
-const UNFOCUSED_MS = 15_000;
+const UNFOCUSED_MS = 5_000;
 /** Window in front but nobody touching it this long (the human walked away), and motion stops too. */
 const UNTOUCHED_MS = 3 * 60_000;
 const CLASS = "gm-rest";
@@ -19,6 +19,14 @@ function setResting(next: boolean) {
 function subscribe(listener: () => void) {
   listeners.add(listener);
   return () => listeners.delete(listener);
+}
+
+export function isMotionResting(): boolean {
+  return resting;
+}
+
+export function onMotionRest(listener: (resting: boolean) => void): () => void {
+  return subscribe(() => listener(resting));
 }
 
 export function useMotionRest(): boolean {

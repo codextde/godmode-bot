@@ -33,7 +33,9 @@
       "dark": "Dark",
       "palette": "Palette",
       "reduceAnimations": "Reduce animations",
-      "reduceAnimationsDescription": "Fewer and shorter animations: messages appear instantly, menus only fade, no glowing borders while agents work."
+      "reduceAnimationsDescription": "Fewer and shorter animations: messages appear instantly, menus only fade, no glowing borders while agents work.",
+      "holdInBackground": "Save energy in the background",
+      "holdInBackgroundDescription": "While you work in other apps, streaming replies and live views wait and catch up the moment you come back."
     },
     "chat": {
       "title": "Chat",

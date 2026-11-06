@@ -25,6 +25,8 @@ export interface WsData {
   conversations?: Set<string>;
   /** The client applies `run.delta` patches (it said `deltas.patch`); the others get the whole block list. */
   patches?: boolean;
+  /** Nobody looks at this window (`deltas.hold`): no streaming until it asks for each run again with `run.resync`. */
+  held?: boolean;
   /** Stored messages come without their screenshots, each its own request (it said `messages.images`). */
   imageUrls?: boolean;
   /** The chat this client shows right now in a visible, focused window (`conversation.view`). */
@@ -454,6 +456,7 @@ function deliverNow(event: ServerEvent) {
 
 /** Streaming replies are frequent; phones only get them for the chats they have open. */
 function wantsDeltas(ws: HubSocket, conversationId: string): boolean {
+  if (ws.data.held) return false;
   return ws.data.auth !== "device" || !!ws.data.conversations?.has(conversationId);
 }
 
@@ -676,6 +679,9 @@ export const websocketHandler = {
       }
       case "deltas.patch":
         ws.data.patches = true;
+        break;
+      case "deltas.hold":
+        ws.data.held = msg.hold === true;
         break;
       case "messages.images":
         ws.data.imageUrls = true;
