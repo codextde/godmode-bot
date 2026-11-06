@@ -69,6 +69,7 @@ function skipReason(routineId: string): string | null {
     return "deleted";
   }
   if (routine.trigger.type !== "schedule") return "not scheduled";
+  if (routine.archived) return "archived";
   if (!routine.enabled) return "turned off";
   if (get<{ enabled: number }>("SELECT enabled FROM agents WHERE id = ?", routine.agentId)?.enabled !== 1) return "agent turned off";
   if (activeMainRun(routineId)) return "already running";

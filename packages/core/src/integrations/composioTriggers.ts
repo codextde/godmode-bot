@@ -8,6 +8,7 @@
  */
 import type { ComposioTriggerType, ServerEvent } from "@godmode/shared";
 import { all, getMeta, setMeta } from "../db";
+import { archivedRoutineSql } from "../db/archived";
 import { bus } from "../events/bus";
 import { logger } from "../log";
 import {
@@ -196,11 +197,11 @@ export function normalizeTriggerMessage(input: unknown): TriggerMessage | null {
   return null;
 }
 
-type AppRoutineRow = RoutineRow & { agent_enabled: number; agent_workspace_id: string | null };
+type AppRoutineRow = RoutineRow & { agent_enabled: number; agent_workspace_id: string | null; any_archived: number };
 
 function appRoutines(): AppRoutineRow[] {
   return all<AppRoutineRow>(
-    `SELECT r.*, a.enabled AS agent_enabled, a.workspace_id AS agent_workspace_id FROM routines r JOIN agents a ON a.id = r.agent_id
+    `SELECT r.*, a.enabled AS agent_enabled, a.workspace_id AS agent_workspace_id, ${archivedRoutineSql("r")} AS any_archived FROM routines r JOIN agents a ON a.id = r.agent_id
      WHERE CASE WHEN json_valid(r.trigger) THEN json_extract(r.trigger, '$.type') END = 'app'`,
   );
 }
@@ -487,7 +488,7 @@ async function syncOnce() {
     const trigger = parseTrigger(row.trigger);
     if (trigger.type !== "app") continue;
     const state = parseJson<TriggerState>(row.trigger_state, {});
-    const wanted = row.enabled === 1 && row.agent_enabled === 1;
+    const wanted = row.enabled === 1 && row.agent_enabled === 1 && !row.any_archived;
     if (!configured) {
       changed = setError(row, state, NOT_CONFIGURED) || changed;
       continue;

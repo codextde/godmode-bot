@@ -40,6 +40,7 @@ export const qk = {
   cardList: (workspaceId: string) => ["cards", "list", workspaceId],
   cardPurchases: ["cards", "purchases"] as unknown[],
   workspaces: ["workspaces"] as unknown[],
+  archive: ["archive"] as unknown[],
   /** Task board; lists are patched in place by `task.updated` events (see realtime.ts). */
   tasks: ["tasks"] as unknown[],
   taskList: (workspaceId: string) => ["tasks", "list", workspaceId],

@@ -4,6 +4,7 @@
  */
 import type { AttentionItem, RunPause } from "@godmode/shared";
 import { all, get } from "../db";
+import { archivedAgentSql, archivedChatSql } from "../db/archived";
 import { parseJson } from "../util";
 import { listQuestions } from "./questions";
 import { listHumanTasks } from "./humanTasks";
@@ -211,5 +212,10 @@ export function listAttention(): AttentionItem[] {
     });
   }
 
-  return items.sort((a, b) => RANK[a.kind] - RANK[b.kind] || b.since.localeCompare(a.since) || a.id.localeCompare(b.id));
+  // What an archived agent, workspace or project left waits with it (tickets stay: the board shows them).
+  const archivedAgents = new Set(all<{ id: string }>(`SELECT a.id FROM agents a WHERE ${archivedAgentSql("a")}`).map((r) => r.id));
+  const archivedChat = (id: string) => !!get(`SELECT 1 FROM conversations c WHERE c.id = ? AND ${archivedChatSql("c")}`, id);
+  return items
+    .filter((i) => i.kind === "review" || i.kind === "blocked" || !((i.agentId && archivedAgents.has(i.agentId)) || (i.conversationId && archivedChat(i.conversationId))))
+    .sort((a, b) => RANK[a.kind] - RANK[b.kind] || b.since.localeCompare(a.since) || a.id.localeCompare(b.id));
 }

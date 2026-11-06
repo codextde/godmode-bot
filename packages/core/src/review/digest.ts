@@ -9,6 +9,7 @@ import { randomBytes } from "node:crypto";
 import type { Agent, ReviewMetrics, Routine } from "@godmode/shared";
 import { memoryBudget } from "@godmode/shared";
 import { all, get } from "../db";
+import { archivedChatSql } from "../db/archived";
 import { truncate } from "../util";
 import { listAgents } from "../agents/service";
 import { listRoutines } from "../services/routines";
@@ -109,7 +110,7 @@ function chatStates(at: Date): ChatState[] {
        c.claude_session_id, (SELECT COUNT(*) FROM messages m WHERE m.conversation_id = c.id) AS messages,
        f.note AS f_note, f.due_at AS f_due, f.created_at AS f_created, p.reason AS paused
      FROM conversations c LEFT JOIN followups f ON f.conversation_id = c.id LEFT JOIN paused_runs p ON p.conversation_id = c.id
-     WHERE c.private = 0 AND c.origin NOT IN ('dream', 'review')`,
+     WHERE c.private = 0 AND c.origin NOT IN ('dream', 'review') AND NOT ${archivedChatSql("c")}`,
   );
   const goalSince = at.getTime() - GOAL_DAYS * 86_400_000;
   const goalChats = new Set(
@@ -289,7 +290,7 @@ function errorsSection({ state }: DigestInput, names: Map<string, string>): stri
   const out = ["## Errors", ""];
   const failed = all<{ id: string; agent_id: string; conversation_id: string; trigger: string; error: string | null; created_at: string }>(
     `SELECT r.id, r.agent_id, r.conversation_id, r.trigger, r.error, r.created_at FROM runs r JOIN conversations c ON c.id = r.conversation_id
-     WHERE r.status = 'failed' AND r.created_at >= ? AND r.trigger NOT IN (${notWork}) AND c.private = 0 ORDER BY r.created_at DESC LIMIT 400`,
+     WHERE r.status = 'failed' AND r.created_at >= ? AND r.trigger NOT IN (${notWork}) AND c.private = 0 AND NOT ${archivedChatSql("c")} ORDER BY r.created_at DESC LIMIT 400`,
     state.since,
     ...NOT_WORK,
   );

@@ -32,7 +32,7 @@ const SHOWN_TICKETS = 6;
  * tickets on the board, the follow-ups it promised and its next automations. Built from data the app already keeps live.
  */
 export function Plate({ agent, onRunTask }: { agent: Agent; onRunTask: () => void }) {
-  const { t } = useTranslation("agents");
+  const { t } = useTranslation(["agents", "archive"]);
   const { dateLocale } = useLocale();
   const live = useAgentLiveRuns(agent.id);
   // Standing-still runs come from the runs themselves: board and automation chats are archived and not in the chat list.
@@ -75,7 +75,9 @@ export function Plate({ agent, onRunTask }: { agent: Agent; onRunTask: () => voi
           ))}
         </div>
       ) : empty ? (
-        !agent.enabled ? (
+        agent.archived ? (
+          <p className="text-sm text-muted-foreground">{t("archive:banner.agent", { name: agent.name })}</p>
+        ) : !agent.enabled ? (
           <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
             {t("plate.switchedOff", { name: agent.name })}
             <Button size="sm" variant="outline" disabled={toggle.isPending} onClick={() => toggle.mutate({ id: agent.id, enabled: true })}>

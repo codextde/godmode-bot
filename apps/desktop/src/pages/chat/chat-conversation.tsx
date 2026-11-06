@@ -7,6 +7,7 @@ import { characterGreeting, computerTargetLabel, handoffCommand } from "@godmode
 import { Archive, ArchiveRestore, ArrowUpRight, Brain, ClipboardCheck, MessageSquareDashed, MessageSquarePlus, Moon, Power, PowerOff, Sparkles, Wand2 } from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
 import { toast } from "sonner";
+import { useArchive } from "@/components/archive/use-archive";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
@@ -656,7 +657,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                     </div>
                   </motion.div>
                 )}
-                {agent && !agent.enabled && conv.origin !== "dream" && (
+                {agent && (!agent.enabled || agent.archived) && conv.origin !== "dream" && (
                   <motion.div
                     key="off"
                     initial={{ opacity: 0, height: 0 }}
@@ -954,10 +955,29 @@ function ConversationView({ conversationId }: { conversationId: string }) {
   );
 }
 
-/** A switched-off agent answers nothing: say so where the human types, with the way back. */
+/** A switched-off or archived agent answers nothing: say so where the human types, with the way back. */
 function SwitchedOffBar({ agent }: { agent: Agent }) {
-  const { t } = useTranslation("chat");
+  const { t } = useTranslation(["chat", "archive"]);
   const toggle = useToggleAgent();
+  const { restore, pending } = useArchive();
+  if (agent.archived) {
+    return (
+      <div className="mb-2 flex items-center gap-3 rounded-xl border bg-card py-2 pr-2 pl-2.5 shadow-card" role="status">
+        <span className="grid size-8 shrink-0 place-items-center rounded-lg border bg-muted text-muted-foreground">
+          <Archive className="size-4" aria-hidden />
+        </span>
+        <div className="min-w-0 flex-1 leading-snug">
+          <p className="truncate text-[13px] font-medium">{t("archive:banner.agent", { name: agent.name })}</p>
+          <p className="text-xs text-muted-foreground">{t("archive:banner.agentHint")}</p>
+        </div>
+        {agent.archivedAt && (
+          <Button size="sm" variant="outline" className="shrink-0" disabled={pending === agent.id} onClick={() => restore({ kind: "agent", id: agent.id, name: agent.name })}>
+            {pending === agent.id ? <Spinner /> : <ArchiveRestore />} {t("archive:restore")}
+          </Button>
+        )}
+      </div>
+    );
+  }
   return (
     <div className="mb-2 flex items-center gap-3 rounded-xl border bg-card py-2 pr-2 pl-2.5 shadow-card" role="status">
       <span className="grid size-8 shrink-0 place-items-center rounded-lg border bg-muted text-muted-foreground">

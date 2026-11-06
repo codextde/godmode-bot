@@ -1,0 +1,29 @@
+{
+  "title": "Archiv",
+  "empty": "Nichts archiviert",
+  "loadError": "Das Archiv konnte nicht geladen werden",
+  "sections": {
+    "workspaces": "Workspaces",
+    "projects": "Projekte",
+    "agents": "Agenten",
+    "routines": "Automationen"
+  },
+  "projectCount_one": "{{count}} Projekt",
+  "projectCount_other": "{{count}} Projekte",
+  "archived": "Archiviert",
+  "archive": "Archivieren",
+  "restore": "Wiederherstellen",
+  "archivedAt": "Archiviert am {{date}}",
+  "open": "Archiv",
+  "toast": {
+    "archived": "{{name}} archiviert",
+    "restored": "{{name}} wiederhergestellt",
+    "undo": "Rückgängig",
+    "archiveError": "{{name}} konnte nicht archiviert werden",
+    "restoreError": "{{name}} konnte nicht wiederhergestellt werden"
+  },
+  "banner": {
+    "agent": "{{name}} ist archiviert",
+    "agentHint": "Er läuft nicht, und kein anderer Agent sieht ihn."
+  }
+}

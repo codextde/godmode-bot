@@ -1,7 +1,7 @@
 import { Link, useNavigate } from "react-router";
 import { formatDistanceToNowStrict } from "date-fns";
 import { useTranslation } from "react-i18next";
-import { Check, Copy, Ellipsis, FolderInput, History, MessageSquare, Pause, Pencil, Play, Power, PowerOff, StepForward, Trash2, Workflow } from "lucide-react";
+import { Archive, Check, Copy, Ellipsis, FolderInput, History, MessageSquare, Pause, Pencil, Play, Power, PowerOff, StepForward, Trash2, Workflow } from "lucide-react";
 import type { Agent } from "@godmode/shared";
 import { AgentAvatar, ScopeBadge } from "@/components/common";
 import { WorkingTicks } from "@/components/aicss/Motion";
@@ -22,6 +22,7 @@ import { GroupIcon } from "./agent-groups";
 import { planMove, useMoveAgent } from "./agent-dnd";
 import { cn } from "@/lib/utils";
 import { useLocale } from "@/i18n/language";
+import { useArchive } from "@/components/archive/use-archive";
 import { AgentStatus, useAgentLiveRun, useAgentMood, useAgentPause, useDuplicateAgent, useStartAgentChat, useToggleAgent } from "./agent-actions";
 
 export function AgentCard({
@@ -135,7 +136,7 @@ export function AgentMenu({
   onDelete: (agent: Agent) => void;
   className?: string;
 }) {
-  const { t } = useTranslation(["agents", "common"]);
+  const { t } = useTranslation(["agents", "common", "archive"]);
   const navigate = useNavigate();
   const live = useAgentLiveRun(agent.id);
   const running = !!live || agent.status === "running";
@@ -143,6 +144,7 @@ export function AgentMenu({
   const toggle = useToggleAgent();
   const duplicate = useDuplicateAgent();
   const { pause, resume } = useAgentPause();
+  const { archive } = useArchive();
   const paused = (agent.pausedRuns ?? 0) > 0;
   return (
     <DropdownMenu>
@@ -184,6 +186,11 @@ export function AgentMenu({
         <DropdownMenuItem onClick={() => toggle.mutate({ id: agent.id, enabled: !agent.enabled })}>
           {agent.enabled ? <PowerOff /> : <Power />} {agent.enabled ? t("agentCard.menu.switchOff") : t("agentCard.menu.switchOn")}
         </DropdownMenuItem>
+        {!agent.isDefault && (
+          <DropdownMenuItem onClick={() => archive({ kind: "agent", id: agent.id, name: agent.name })}>
+            <Archive /> {t("archive:archive")}
+          </DropdownMenuItem>
+        )}
         {!agent.isDefault && (
           <DropdownMenuItem variant="destructive" onClick={() => onDelete(agent)}>
             <Trash2 /> {t("common:actions.delete")}

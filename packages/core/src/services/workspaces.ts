@@ -32,6 +32,7 @@ interface WorkspaceRow {
   claude_accounts: string | null;
   created_at: string;
   updated_at: string;
+  archived_at?: string | null;
 }
 
 const SELECT = `SELECT w.*, (SELECT b.id FROM browser_profiles b WHERE b.workspace_id = w.id AND b.is_default = 1 ORDER BY b.created_at LIMIT 1) AS browser_profile_id
@@ -57,6 +58,7 @@ function toModel(
     autoMerge: !!r.auto_merge,
     projects,
     createdAt: r.created_at,
+    archivedAt: r.archived_at ?? null,
     updatedAt: r.updated_at,
   };
 }
@@ -74,10 +76,12 @@ function cleanName(name: string | undefined): string {
   return trimmed;
 }
 
-export function listWorkspaces(): Workspace[] {
+/** Active workspaces A–Z; `archived: true` = the archived ones instead. */
+export function listWorkspaces(opts: { archived?: boolean } = {}): Workspace[] {
   const sources = sourcesByOwner();
   const projects = projectsByWorkspace(sources.projects);
-  return all<WorkspaceRow>(`${SELECT} ORDER BY w.name COLLATE NOCASE ASC`).map((r) =>
+  const where = opts.archived ? "w.archived_at IS NOT NULL" : "w.archived_at IS NULL";
+  return all<WorkspaceRow>(`${SELECT} WHERE ${where} ORDER BY w.name COLLATE NOCASE ASC`).map((r) =>
     toModel(r, sources.workspaces.get(r.id) ?? [], projects.get(r.id) ?? []),
   );
 }
@@ -233,7 +237,7 @@ export async function deleteWorkspace(id: string, force = false): Promise<void> 
     );
   }
 
-  const agents = listAgents({ workspaceId: id }).filter((a) => a.workspaceId === id && !a.isDefault);
+  const agents = listAgents({ workspaceId: id, includeArchived: true }).filter((a) => a.workspaceId === id && !a.isDefault);
   await removeWorkspaceTasks(id);
   for (const agent of agents) await stopAgentRuns(agent.id);
   const clones = gitSourceRows(id);

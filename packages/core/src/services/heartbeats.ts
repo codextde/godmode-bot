@@ -28,6 +28,7 @@ import {
   waitsForTickets,
 } from "@godmode/shared";
 import { all, get, insert, run as exec } from "../db";
+import { activeAgentSql } from "../db/archived";
 import { bus } from "../events/bus";
 import { logger } from "../log";
 import { badRequest, conflict, newId, now, parseJson } from "../util";
@@ -304,7 +305,7 @@ async function beatOnce(agentId: string, reason: "scheduled" | "now"): Promise<H
   const at = Date.now();
   const lastBeat = lastBeatAt(agentId);
   const skip = (summary: string) => record(agentId, { reason, outcome: "skipped", summary, wakes: "[]", waiting: "[]", changes: 0, run_id: null, conversation_id: null });
-  if (!agent.enabled) return skip(`${agent.name} is switched off`);
+  if (!agent.enabled || agent.archived) return skip(`${agent.name} is ${agent.archived ? "archived" : "switched off"}`);
   if (licenseBlocks()) return skip("Godmode needs an active licence to start work");
 
   const tickets = agentTickets(agentId).sort(byUrgency);
@@ -379,6 +380,7 @@ async function beatOnce(agentId: string, reason: "scheduled" | "now"): Promise<H
 /** The human's "Wake now". */
 export async function beatNow(agentId: string): Promise<HeartbeatBeat> {
   const agent = getAgent(agentId);
+  if (agent.archived) throw badRequest(`${agent.name} is archived — restore it first`);
   if (!agent.enabled) throw badRequest(`${agent.name} is switched off — turn it on first`);
   return beat(agentId, "now");
 }
@@ -387,7 +389,7 @@ export function heartbeatState(agentId: string): AgentHeartbeatState {
   const agent = getAgent(agentId);
   const hb = agent.heartbeat;
   let nextAt: string | null = null;
-  if (agent.enabled && hb.enabled) {
+  if (agent.enabled && !agent.archived && hb.enabled) {
     const due = nextHeartbeatAt(hb, lastBeatAt(agentId));
     const when = due && due.getTime() < Date.now() ? nextAllowedAt(hb, new Date()) : due;
     nextAt = when ? when.toISOString() : null;
@@ -452,7 +454,7 @@ export function sweepHeartbeats(): Promise<void> {
   sweeping ??= (async () => {
     prune();
     const at = new Date();
-    for (const a of all<{ id: string }>("SELECT id FROM agents WHERE enabled = 1 AND json_extract(heartbeat, '$.enabled') = 1")) {
+    for (const a of all<{ id: string }>(`SELECT a.id FROM agents a WHERE ${activeAgentSql("a")} AND json_extract(a.heartbeat, '$.enabled') = 1`)) {
       if (beating.has(a.id)) continue;
       try {
         const hb = getAgent(a.id).heartbeat;

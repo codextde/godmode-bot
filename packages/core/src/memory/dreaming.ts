@@ -701,6 +701,7 @@ function emitDreams() {
 /** Start a dream for the agent now. Throws 409 when the agent is disabled or already dreaming. */
 export async function startDream(agentId: string, reason: DreamReason = "manual"): Promise<Dream> {
   const agent = getAgent(agentId);
+  if (agent.archived) throw conflict(`Agent "${agent.name}" is archived`);
   if (!agent.enabled) throw conflict(`Agent "${agent.name}" is disabled`);
   if (starting.has(agentId) || activeDreamRow(agentId)) throw conflict(`${agent.name} is already dreaming`);
   starting.add(agentId);
@@ -1135,7 +1136,7 @@ export function mentionsTime(text: string): boolean {
 /** Whether a scheduled dream should run for the agent now. */
 export function dreamDue(agent: Agent, settings: Settings = getSettings(), at = new Date()): boolean {
   const s = settings.memory.dreaming;
-  if (!agent.enabled || activeDreamRow(agent.id) || starting.has(agent.id)) return false;
+  if (!agent.enabled || agent.archived || activeDreamRow(agent.id) || starting.has(agent.id)) return false;
   const pending = pendingActivity(agent.id);
   if (pending.exchanges >= Math.max(1, Math.floor(s.minNewExchanges))) return true;
   const { target } = memoryBudget(s.maxMemoryChars);
@@ -1155,7 +1156,7 @@ export function dreamDue(agent: Agent, settings: Settings = getSettings(), at = 
  * undone, or couldn't get the memory under what a chat loads, the scheduled dream takes over.
  */
 export function memoryOverflowing(agent: Agent, settings: Settings = getSettings(), at = new Date()): boolean {
-  if (!settings.memory.injectMemory || !agent.enabled || activeDreamRow(agent.id) || starting.has(agent.id)) return false;
+  if (!settings.memory.injectMemory || !agent.enabled || agent.archived || activeDreamRow(agent.id) || starting.has(agent.id)) return false;
   const { target, limit } = memoryBudget(settings.memory.dreaming.maxMemoryChars);
   const latest = get<{ status: DreamStatus; created_at: string; memory_chars: number | null }>(
     "SELECT status, created_at, memory_chars FROM dreams WHERE agent_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 1",

@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { formatDistanceToNowStrict, format } from "date-fns";
 import {
+  Archive,
   CircleAlert,
   Clock,
   Copy,
@@ -27,6 +28,7 @@ import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
 import { dateLocale } from "@/i18n";
 import { AgentAvatar } from "@/components/common";
+import { useArchive } from "@/components/archive/use-archive";
 import { RunStatusBadge } from "@/components/runs/run-status";
 import { copyText } from "@/components/chat/copy-button";
 import { EventsSheet } from "@/components/automations/events-sheet";
@@ -129,7 +131,8 @@ const RUN_ICONS = { schedule: Play, condition: ScanSearch, app: FlaskConical, we
 
 /** One automation as a rich row: trigger, trigger health, next run / last event, enable switch and actions. */
 export function RoutineItem({ routine, agent, onEdit }: { routine: Routine; agent?: Agent; onEdit: (r: Routine) => void }) {
-  const { t } = useTranslation(["agents", "common"]);
+  const { t } = useTranslation(["agents", "common", "archive"]);
+  const { archive } = useArchive();
   const toggle = useToggleRoutine();
   const run = useRunRoutine();
   const del = useDeleteRoutine();
@@ -302,6 +305,9 @@ export function RoutineItem({ routine, agent, onEdit }: { routine: Routine; agen
                 </>
               )}
               <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => archive({ kind: "routine", id: routine.id, name: routine.name })}>
+                <Archive /> {t("archive:archive")}
+              </DropdownMenuItem>
               <DropdownMenuItem variant="destructive" onClick={() => setConfirmDelete(true)}>
                 <Trash2 /> {t("common:actions.delete")}
               </DropdownMenuItem>

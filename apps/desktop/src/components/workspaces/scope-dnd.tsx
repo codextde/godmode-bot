@@ -17,9 +17,10 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import { ArrowRight, Ban, Bot, Check, CornerDownRight, Ellipsis, FolderInput, KeyRound, Layers, LayersPlus, MonitorCog, Trash2 } from "lucide-react";
+import { Archive, ArrowRight, Ban, Bot, Check, CornerDownRight, Ellipsis, FolderInput, KeyRound, Layers, LayersPlus, MonitorCog, Trash2 } from "lucide-react";
 import type { Project, ScopeMoveCounts, ScopeMoveResult, Workspace } from "@godmode/shared";
 import { DeleteProjectDialog } from "@/components/projects/delete-project";
+import { useArchive } from "@/components/archive/use-archive";
 import { besideCursor, innermost, swallowNextClick } from "@/components/agents/agent-dnd";
 import {
   AlertDialog,
@@ -704,8 +705,9 @@ export function WorkspaceMoveMenu({ workspace }: { workspace: Workspace }) {
 
 /** A project's menu: make it a workspace of its own, or move it to another (the same as dragging it). */
 export function ProjectMoveMenu({ project, className }: { project: Project; className?: string }) {
-  const { t } = useTranslation(["workspaces", "common"]);
+  const { t } = useTranslation(["workspaces", "common", "archive"]);
   const { workspaces, move } = useContext(Ctx);
+  const { archive } = useArchive();
   const [deleting, setDeleting] = useState(false);
   return (
     <>
@@ -739,6 +741,9 @@ export function ProjectMoveMenu({ project, className }: { project: Project; clas
           </DropdownMenuSub>
         )}
         <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={() => archive({ kind: "project", id: project.id, name: project.name })}>
+          <Archive /> {t("archive:archive")}
+        </DropdownMenuItem>
         <DropdownMenuItem variant="destructive" onClick={() => setDeleting(true)}>
           <Trash2 /> {t("common:actions.delete")}
         </DropdownMenuItem>

@@ -498,6 +498,9 @@ export function CommandPalette() {
           <CommandItem value={`needs you inbox to-dos questions approvals my tasks ${t("nav.inbox")}`} onSelect={() => go("/inbox")}>
             <Inbox /> {t("nav.inbox")}
           </CommandItem>
+          <CommandItem value={`archive archived workspaces projects agents automations ${t("nav.archive")}`} onSelect={() => go("/archive")}>
+            <Archive /> {t("nav.archive")}
+          </CommandItem>
           <CommandItem onSelect={() => go("/archived")}>
             <Archive /> {t("nav.archivedChats")}
           </CommandItem>

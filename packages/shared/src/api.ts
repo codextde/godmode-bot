@@ -856,3 +856,20 @@ export interface ClientLogInput {
 
 export type { Agent, Attachment, Conversation, Credential, Message, Routine, Run, TotpEntry, Workspace };
 
+
+/** What can be archived (services/archive.ts). */
+export type ArchiveKind = "workspace" | "project" | "agent" | "routine";
+
+export interface ArchiveRequest {
+  kind: ArchiveKind;
+  id: ID;
+  archived: boolean;
+}
+
+/** Everything archived by itself, newest first (what is archived only through its workspace, project or agent comes back with it). */
+export interface ArchiveList {
+  workspaces: Workspace[];
+  projects: Project[];
+  agents: Agent[];
+  routines: Routine[];
+}

@@ -70,6 +70,8 @@ function agentModel(p: Partial<Agent> & { id: string }): Agent {
     repoPath: "",
     lastRunAt: null,
     createdAt: "",
+    archivedAt: null,
+    archived: false,
     updatedAt: "",
   };
 }

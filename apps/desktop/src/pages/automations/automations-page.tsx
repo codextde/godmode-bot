@@ -10,6 +10,7 @@ import { errorMessage } from "@/lib/api";
 import { useLocale } from "@/i18n/language";
 import { cn } from "@/lib/utils";
 import { AgentAvatar, EmptyState, PageBody, PageHeader } from "@/components/common";
+import { ArchiveLink } from "@/components/archive/archive-link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -131,9 +132,12 @@ export default function AutomationsPage() {
         title={t("page.title")}
         description={t("page.description")}
         actions={
-          <Button onClick={openNew}>
-            <Plus /> {t("page.new")}
-          </Button>
+          <>
+            <ArchiveLink />
+            <Button onClick={openNew}>
+              <Plus /> {t("page.new")}
+            </Button>
+          </>
         }
       />
       <PageBody className="space-y-6">

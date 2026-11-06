@@ -11,6 +11,7 @@ import { registerClaudeAccountRoutes } from "./routes/claudeAccounts";
 import { registerVaultRoutes } from "./routes/vault";
 import { registerCardRoutes } from "./routes/cards";
 import { registerWorkspaceRoutes } from "./routes/workspaces";
+import { registerArchiveRoutes } from "./routes/archive";
 import { registerAgentRoutes } from "./routes/agents";
 import { registerReviewRoutes } from "./routes/reviews";
 import { registerChatRoutes } from "./routes/chat";
@@ -204,6 +205,7 @@ export function createApp() {
   registerVaultRoutes(app);
   registerCardRoutes(app);
   registerWorkspaceRoutes(app);
+  registerArchiveRoutes(app);
   registerAgentRoutes(app);
   registerChatRoutes(app);
   registerMcpAppRoutes(app);

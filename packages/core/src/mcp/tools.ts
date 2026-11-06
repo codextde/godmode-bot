@@ -104,6 +104,7 @@ import { NOTE_MAX as WORKSPACE_NOTE_MAX } from "../memory/workspace";
 import { COMPOSIO_API_KEY_SECRET, listConnections } from "../integrations/composio";
 import { listTriggerTypes } from "../integrations/composioTriggers";
 import { createWorkspace, listWorkspaces, updateWorkspace } from "../services/workspaces";
+import { coveredAgents, listArchive, setArchived } from "../services/archive";
 import { createAgent, deleteAgent, getAgent, listAgents, peersFor, teamOf, updateAgent } from "../agents/service";
 import { AGENT_TEMPLATES } from "../agents/templates";
 import { TEAM_TEMPLATES, installTeam, seatsOf } from "../agents/teams";
@@ -360,10 +361,10 @@ const scopeFields = {
 const asInput = (s: WorkspaceSource): WorkspaceSourceInput =>
   s.kind === "git" ? { kind: "git", url: s.url ?? "", branch: s.branch } : s.kind === "remote" ? { kind: "remote", serverId: s.serverId ?? "", path: s.path } : { kind: "folder", path: s.path };
 
-/** A workspace by id or (case-insensitive) name. */
-function findWorkspace(ref: string): Workspace | null {
+/** A workspace by id or (case-insensitive) name; archived ones only with `archived`. */
+function findWorkspace(ref: string, archived = false): Workspace | null {
   const key = ref.trim().toLowerCase();
-  const all = listWorkspaces();
+  const all = archived ? [...listWorkspaces(), ...listWorkspaces({ archived: true })] : listWorkspaces();
   return all.find((w) => w.id === ref.trim()) ?? all.find((w) => w.name.toLowerCase() === key || w.slug === key) ?? null;
 }
 
@@ -378,7 +379,8 @@ function setupOffHostRefusal(ctx: RunContext): string | null {
 
 /** Changing context is changing what the agents that get it follow: the agent_update rules hold for each. */
 function memberRefusal(caller: Agent, ctx: RunContext, members: (a: Agent) => boolean, what: string): string | null {
-  for (const m of listAgents({ workspaceId: "all" })) {
+  // Archived members get the context too once they are restored.
+  for (const m of listAgents({ workspaceId: "all", includeArchived: true })) {
     if (m.id === caller.id || !members(m)) continue;
     const refusal = revealTargetRefusal(caller, ctx, m, what) ?? computerTargetRefusal(caller, m, what);
     if (refusal) return refusal;
@@ -557,7 +559,7 @@ function assertAssignableProfile(profileId: string, workspaceId: string | null):
     throw new HttpError(403, `Browser profile ${profileId} belongs to another workspace; give the agent a global profile or one of its own workspace.`);
   }
   // Its logins are that agent's.
-  const user = listAgents({ workspaceId: "all" }).find((a) => a.browser.profileId === profileId);
+  const user = listAgents({ workspaceId: "all", includeArchived: true }).find((a) => a.browser.profileId === profileId);
   if (user) throw new HttpError(403, `Browser profile ${profileId} is ${user.name}'s; create a new one with browser_profile_create.`);
 }
 
@@ -2893,7 +2895,8 @@ Polished, calm, real hierarchy, responsive from 360 px, light and dark; no emoji
     when: isManager,
     run: (_args, { agent }) => {
       const names = workspaceNames();
-      const agents = listAgents({ workspaceId: "all" });
+      // An archived agent's profile is still its own.
+      const agents = listAgents({ workspaceId: "all", includeArchived: true });
       const profiles = listProfiles().filter((p) => !agent.workspaceId || !p.workspaceId || p.workspaceId === agent.workspaceId);
       return json(
         profiles.map((p) => {
@@ -2907,7 +2910,9 @@ Polished, calm, real hierarchy, responsive from 360 px, light and dark; no emoji
             createdByAgent: !!p.createdByAgentId,
             cookieCount: p.cookieCount,
             assignable: !!p.createdByAgentId && !users.length,
-            usedBy: users.filter((a) => !agent.workspaceId || !a.workspaceId || a.workspaceId === agent.workspaceId).map((a) => ({ id: a.id, name: a.name })),
+            usedBy: users
+              .filter((a) => !agent.workspaceId || !a.workspaceId || a.workspaceId === agent.workspaceId)
+              .map((a) => ({ id: a.id, name: a.name, ...(a.archived ? { archived: true } : {}) })),
           };
         }),
       );
@@ -3801,6 +3806,90 @@ Polished, calm, real hierarchy, responsive from 360 px, light and dark; no emoji
   }),
 
   defineTool({
+    name: "archive",
+    description:
+      "Archive a workspace, project, agent or automation, or restore one with `archived: false`. Archived ones keep their setup, memory and history but never run (their runs stop), and no list, team, prompt or dream names them; archiving a workspace or project puts away everything in it. Prefer it to deleting a line of work that ended. archive_list shows what is archived.",
+    schema: z.object({
+      kind: z.enum(["workspace", "project", "agent", "routine"]).describe("routine = an automation"),
+      id: z.string().describe("Its id (a workspace also by name)"),
+      archived: z.boolean().optional().describe("false restores it (default true)"),
+    }),
+    when: managesSetup,
+    run: async ({ kind, id, archived = true }, { agent, ctx }) => {
+      const verb = archived ? "archive" : "restore";
+      let name: string;
+      let refusal: string | null;
+      let restoreFillOnly = false;
+      try {
+        if (kind === "workspace") {
+          const workspace = findWorkspace(id, true);
+          if (!workspace) return fail(`There is no workspace "${id}". workspaces_list and archive_list show them.`);
+          if (agent.workspaceId === workspace.id) return fail("That is your own workspace: archiving it would archive you too.");
+          ({ id, name } = workspace);
+          refusal = setupOffHostRefusal(ctx) ?? memberRefusal(agent, ctx, (a) => a.workspaceId === workspace.id, `${verb} its workspace`);
+        } else if (kind === "project") {
+          const project = getProject(id);
+          if (agent.projectId === project.id) return fail("That is your own project: archiving it would archive you too.");
+          const ids = projectAgentIds(project.id);
+          name = project.name;
+          refusal = setupOffHostRefusal(ctx) ?? memberRefusal(agent, ctx, (a) => ids.has(a.id), `${verb} its project`);
+        } else if (kind === "agent") {
+          const target = getAgent(id);
+          if (target.id === agent.id) return fail("You can't archive yourself.");
+          if (target.isDefault) return fail("The built-in agent can't be archived.");
+          ({ id, name } = target);
+          refusal = offHostRefusal(ctx, target, `${verb} it`) ?? revealTargetRefusal(agent, ctx, target, `${verb} it`);
+        } else {
+          const routine = getRoutine(id);
+          const owner = getAgent(routine.agentId);
+          name = routine.name;
+          refusal = offHostRefusal(ctx, owner, `${verb} its automations`);
+          // Putting one away is like pausing it; bringing one back is like turning it on: it runs fill-only from now on
+          // when the caller couldn't read the raw secrets its agent may.
+          if (!refusal && !archived) {
+            const secrets = automationSecrets(agent, ctx, owner, "restore its automations");
+            if (typeof secrets === "string") refusal = secrets;
+            else if (secrets.fillOnly && !routine.fillOnly) restoreFillOnly = true;
+          }
+        }
+      } catch {
+        return fail(`There is no ${kind === "routine" ? "automation" : kind} "${id}".`);
+      }
+      if (refusal) return fail(refusal);
+      // Archiving whoever handed this run its work would stop that work, and with it the answer this run owes.
+      if (archived && kind !== "routine" && ctx.runId) {
+        const above = runsAbove(ctx.runId).slice(1);
+        const covered = new Set(coveredAgents(kind, id));
+        const handedBy = above.length ? all<{ agent_id: string }>(`SELECT agent_id FROM runs WHERE id IN (${above.map(() => "?").join(", ")})`, ...above) : [];
+        if (handedBy.some((r) => covered.has(r.agent_id))) return fail(`"${name}" handed you the work you are doing: archiving it now would stop that work. Report back instead.`);
+      }
+      if (restoreFillOnly) updateRoutine(id, { fillOnly: true });
+      if (!(await setArchived(kind, id, archived))) {
+        return archived ? `"${name}" is already archived.` : `"${name}" isn't archived by itself: restore its ${kind === "routine" ? "agent" : kind === "agent" ? "workspace or project" : "workspace"} instead (archive_list shows what is archived).`;
+      }
+      audit(`agent:${agent.id}`, archived ? "archive" : "archive.restore", id, { kind, name, ...(restoreFillOnly ? { fillOnly: true } : {}) });
+      return archived ? `Archived ${kind === "routine" ? "the automation" : `the ${kind}`} "${name}".` : `Restored "${name}" from the archive.${restoreFillOnly ? ` It runs fill-only now: ${name} gets no raw secrets.` : ""}`;
+    },
+  }),
+
+  defineTool({
+    name: "archive_list",
+    description: "What is archived: workspaces, projects, agents and automations, newest first (archive restores one). What an archived workspace or project holds comes back with it and isn't listed on its own.",
+    schema: z.object({}),
+    when: managesSetup,
+    run: () => {
+      const list = listArchive();
+      const at = (x: { archivedAt: string | null }) => x.archivedAt;
+      return json({
+        workspaces: list.workspaces.map((w) => ({ id: w.id, name: w.name, archivedAt: at(w), projects: w.projects.length })),
+        projects: list.projects.map((p) => ({ id: p.id, name: p.name, workspaceId: p.workspaceId, archivedAt: at(p) })),
+        agents: list.agents.map((a) => ({ id: a.id, name: a.name, role: a.role || null, workspaceId: a.workspaceId, archivedAt: at(a) })),
+        automations: list.routines.map((r) => ({ id: r.id, name: r.name, agentId: r.agentId, archivedAt: at(r) })),
+      });
+    },
+  }),
+
+  defineTool({
     name: "plugins_list",
     description:
       "List the Claude Code plugins installed in Godmode (the Plugins page): whole plugins installed from a git repository (skills, subagents, commands, hooks, MCP servers — with their repository, commit and whether an update waits) and small plugins of TypeScript hooks that run inside every turn (they block or rewrite tool calls, rewrite prompts, mask tool output, post notes). For each: whether it is switched on, whose runs load it, and what Claude Code's validator said. With `plugin` (an id or name) the answer includes its files (for one from a repository: its manifest and hooks).",
@@ -4017,7 +4106,7 @@ Polished, calm, real hierarchy, responsive from 360 px, light and dark; no emoji
         if (!input.name) return fail("A new MCP server needs a `name`.");
         if (!input.transport) return fail('A new MCP server needs a `transport`: "stdio", "http" or "sse".');
       }
-      const team = listAgents({ workspaceId: "all" });
+      const team = listAgents({ workspaceId: "all", includeArchived: true });
       const agentId = input.agentId !== undefined ? input.agentId : (existing?.agentId ?? null);
       const pinned = agentId ? team.find((a) => a.id === agentId) : null;
       if (agentId && !pinned) return fail(`There is no agent "${agentId}". agents_list shows them.`);

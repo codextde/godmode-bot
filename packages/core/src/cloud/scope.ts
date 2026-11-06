@@ -147,6 +147,7 @@ const RULES: [methods: string, path: string, rule: Rule][] = [
   ["POST", "/api/projects/:id/sources/:sourceId/sync", A],
   ["POST", "/api/projects/:id/move", restoresItems],
   ["POST", "/api/workspaces/:id/move", S],
+  ["GET|POST", "/api/archive", A],
   ["GET", "/api/agents", A],
   ["POST", "/api/agents", agentPermissions],
   ["GET", "/api/agent-templates", A],

@@ -12,6 +12,7 @@ import { Cron } from "croner";
 import type { Routine, Run } from "@godmode/shared";
 import { MAX_RUNS_PER_WINDOW, MAX_START_WINDOW_MINUTES } from "@godmode/shared";
 import { all, get, getMeta, run as exec, setMeta } from "../db";
+import { activeAgentSql } from "../db/archived";
 import { logger } from "../log";
 import { getAgent } from "../agents/service";
 import { computeNextRunAt, drawnStart, emitRoutine, getRoutine, lastScheduledStart, nextRandomStart, runsOf, startWindowOf, windowPartMs } from "../services/routines";
@@ -117,7 +118,7 @@ function handledUntil(id: string): number {
 function nextRunAt(routine: Routine): string | null {
   const scheduled = jobs.get(routine.id)?.job.nextRun();
   if (scheduled) return scheduled.toISOString();
-  if (!routine.enabled) return null;
+  if (!routine.enabled || routine.archived) return null;
   const minutes = startWindowOf(routine.trigger);
   if (!minutes) return computeNextRunAt(routine.cron, routine.timezone);
   try {
@@ -136,7 +137,9 @@ export async function triggerRoutine(id: string, opts: { scheduled?: boolean; ti
   const routine = getRoutine(id);
   if (routine.trigger.type !== "schedule") throw badRequest(`“${routine.name}” is not a scheduled automation`);
   const agent = getAgent(routine.agentId);
+  if (agent.archived) throw conflict(`Agent "${agent.name}" is archived`);
   if (!agent.enabled) throw conflict(`Agent "${agent.name}" is disabled`);
+  if (routine.archived) throw conflict(`Routine "${routine.name}" is archived`);
   if (opts.scheduled && !routine.enabled) throw conflict(`Routine "${routine.name}" is disabled`);
   if (opts.scheduled && !runsRoutineHere(routine.runOn)) {
     throw conflict(`Routine "${routine.name}" runs on ${routine.runOn ? runOnName(routine.runOn) : "the computer that runs the group's schedules"}`);
@@ -279,7 +282,7 @@ interface ScheduleRow {
 function scheduleRows(): ScheduleRow[] {
   return all<ScheduleRow>(
     `SELECT r.id, r.cron, r.timezone, r.trigger, r.run_on, r.created_at FROM routines r JOIN agents a ON a.id = r.agent_id
-      WHERE r.enabled = 1 AND a.enabled = 1 AND CASE WHEN json_valid(r.trigger) THEN json_extract(r.trigger, '$.type') END = 'schedule'`,
+      WHERE r.enabled = 1 AND r.archived_at IS NULL AND ${activeAgentSql("a")} AND CASE WHEN json_valid(r.trigger) THEN json_extract(r.trigger, '$.type') END = 'schedule'`,
   ).filter((r) => runsRoutineHere(r.run_on));
 }
 
@@ -412,7 +415,7 @@ export function reloadSchedules(): void {
          CASE WHEN json_valid(r.trigger) THEN json_extract(r.trigger, '$.type') END AS type,
          CASE WHEN json_valid(r.trigger) THEN json_extract(r.trigger, '$.startWindowMinutes') END AS start_window,
          CASE WHEN json_valid(r.trigger) THEN json_extract(r.trigger, '$.runsPerWindow') END AS runs
-       FROM routines r JOIN agents a ON a.id = r.agent_id WHERE r.enabled = 1 AND a.enabled = 1)
+       FROM routines r JOIN agents a ON a.id = r.agent_id WHERE r.enabled = 1 AND r.archived_at IS NULL AND ${activeAgentSql("a")})
       WHERE type IN ('schedule', 'condition')`,
   ).filter((r) => runsRoutineHere(r.run_on));
   const byId = new Map(wanted.map((r) => [r.id, r]));

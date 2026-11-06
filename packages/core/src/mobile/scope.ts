@@ -32,6 +32,8 @@ const ROUTES: [method: string, path: RegExp][] = [
   ["PATCH", new RegExp(`^/api/projects/${ID}$`)],
   ["DELETE", new RegExp(`^/api/projects/${ID}$`)],
   ["POST", new RegExp(`^/api/projects/${ID}/sources/${ID}/sync$`)],
+  ["GET", /^\/api\/archive$/],
+  ["POST", /^\/api\/archive$/],
   ["GET", /^\/api\/settings$/],
   ["PUT", /^\/api\/settings$/],
   ["GET", /^\/api\/notifications$/],
@@ -327,6 +329,7 @@ const BODIES: [method: string, path: RegExp, keys: string[]][] = [
   ["POST", /^\/api\/agents$/, ["workspaceId", ...AGENT_KEYS]],
   ["PATCH", new RegExp(`^/api/agents/${ID}$`), AGENT_KEYS],
   ["POST", new RegExp(`^/api/(workspaces|projects)/${ID}/sources/${ID}/sync$`), []],
+  ["POST", /^\/api\/archive$/, ["kind", "id", "archived"]],
   // A chat's project, browser profile and instructions; never its folder, screen, VM, servers or phones.
   ["PATCH", new RegExp(`^/api/conversations/${ID}$`), ["title", "pinned", "archived", "model", "effort", "ultracode", "projectId", "browserProfileId", "instructions"]],
   ["PATCH", new RegExp(`^/api/conversations/${ID}/pause$`), ["auto"]],
