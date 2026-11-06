@@ -1,5 +1,5 @@
 import type { AppLanguage, CaptchaSolver, Effort, InterfaceMode, Palette, Theme, TimeFormat } from "@godmode/shared";
-import { APP_LANGUAGES, CAPTCHA_SOLVERS, TIME_FORMATS, EFFORT_OPTIONS, INTERFACE_MODES, PALETTES, THEMES, MAX_CONTEXT_BUDGET, MAX_INSTRUCTIONS_LENGTH, MAX_MEMORY_CHARS, MIN_CONTEXT_BUDGET, MIN_MEMORY_CHARS, POWER_MIN_BATTERY_OPTIONS, isClockTime, isModelId, isValidBranch, modelProvider, parseGitUrl, toE164 } from "@godmode/shared";
+import { APP_LANGUAGES, CAPTCHA_SOLVERS, TIME_FORMATS, EFFORT_OPTIONS, INTERFACE_MODES, PALETTES, THEMES, MAX_INSTRUCTIONS_LENGTH, MAX_MEMORY_CHARS, MIN_MEMORY_CHARS, POWER_MIN_BATTERY_OPTIONS, isClockTime, isModelId, isValidBranch, modelProvider, parseGitUrl, toE164 } from "@godmode/shared";
 import { isAbsolute } from "node:path";
 import { isPremiumNumber } from "../calls/numbers";
 import { get } from "../db";
@@ -46,10 +46,6 @@ export function checkSettingsPatch(patch: Record<string, unknown>, needsGrant: (
   const compactAt = (runner as { autoCompactPercent?: unknown } | undefined)?.autoCompactPercent;
   if (compactAt !== undefined && compactAt !== null && !(typeof compactAt === "number" && Number.isInteger(compactAt) && compactAt >= 0 && compactAt <= 95)) {
     throw badRequest("Auto-compress must be a whole percent between 0 (off) and 95, or empty for Claude Code's own threshold");
-  }
-  const budget = (runner as { contextBudget?: unknown } | undefined)?.contextBudget;
-  if (budget !== undefined && budget !== null && !(typeof budget === "number" && Number.isInteger(budget) && budget >= MIN_CONTEXT_BUDGET && budget <= MAX_CONTEXT_BUDGET)) {
-    throw badRequest(`The context budget must be a whole number of tokens between ${MIN_CONTEXT_BUDGET.toLocaleString("en-US")} and ${MAX_CONTEXT_BUDGET.toLocaleString("en-US")}, or empty`);
   }
   const memory = patch.memory as { dreaming?: unknown } | undefined;
   if (memory !== undefined && (typeof memory !== "object" || memory === null || Array.isArray(memory))) throw badRequest("Invalid memory settings");

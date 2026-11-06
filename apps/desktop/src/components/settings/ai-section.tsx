@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Cpu, Gauge, ShieldAlert, SlidersHorizontal, Sparkles, TerminalSquare } from "lucide-react";
 import { toast } from "sonner";
 import { Trans, useTranslation } from "react-i18next";
-import { DEFAULT_LOOP_REPEATS, DEFAULT_STALL_MINUTES, EFFORT_OPTIONS, ULTRACODE_HINT, ULTRACODE_HINT_DE, effortLabel, findModel, type ClaudeModel, type Effort, type Settings } from "@godmode/shared";
+import { DEFAULT_AUTO_COMPACT_PERCENT, DEFAULT_LOOP_REPEATS, DEFAULT_STALL_MINUTES, EFFORT_OPTIONS, ULTRACODE_HINT, ULTRACODE_HINT_DE, effortLabel, findModel, type ClaudeModel, type Effort, type Settings } from "@godmode/shared";
 import { ReasoningEffort } from "@/components/aicss/ReasoningEffort";
 import {
   AlertDialog,
@@ -19,7 +19,6 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectSepa
 import { Switch } from "@/components/ui/switch";
 import { InlineCode } from "@/components/onboarding/doctor-checklist";
 import { useModelCatalog } from "@/lib/hooks";
-import { CompressSelect } from "./compress-select";
 import { cn } from "@/lib/utils";
 import {
   Callout,
@@ -252,7 +251,24 @@ export function AiSection({ settings }: { settings: Settings }) {
           htmlFor="auto-compact"
           description={t("ai.limits.compactDescription")}
         >
-          <CompressSelect id="auto-compact" runner={r} onChange={(runner) => patch({ runner })} />
+          <Select
+            value={r.autoCompactPercent === undefined ? String(DEFAULT_AUTO_COMPACT_PERCENT) : r.autoCompactPercent === null ? "claude" : String(r.autoCompactPercent)}
+            onValueChange={(v) => patch({ runner: { autoCompactPercent: v === "claude" ? null : Number(v) } })}
+          >
+            <SelectTrigger id="auto-compact" className="w-44">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent align="end">
+              {[40, 50, 60, 70, 80].map((p) => (
+                <SelectItem key={p} value={String(p)}>
+                  {p === DEFAULT_AUTO_COMPACT_PERCENT ? t("ai.limits.compactAtDefault", { percent: p }) : t("ai.limits.compactAt", { percent: p })}
+                </SelectItem>
+              ))}
+              <SelectItem value="claude">{t("ai.limits.compactNearlyFull")}</SelectItem>
+              <SelectSeparator />
+              <SelectItem value="0">{t("ai.limits.compactNever")}</SelectItem>
+            </SelectContent>
+          </Select>
         </SettingRow>
         <SettingRow
           label={t("ai.limits.autoContinue")}

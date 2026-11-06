@@ -280,10 +280,9 @@
       "minutes": "min",
       "times": "times",
       "compact": "Compress long chats",
-      "compactDescription": "A chat is summarized by itself once it holds this many tokens, and goes on from the summary. Models work best below about 250k. Compress by hand any time with the ring next to the model, or /compress.",
-      "compactAt": "At {{percent}}% of the window",
-      "compactAtTokens": "At {{tokens}}",
-      "compactAtTokensDefault": "At {{tokens}} (recommended)",
+      "compactDescription": "Once a chat fills this much of the model's memory, it is summarized by itself and goes on from the summary. Earlier keeps every step faster and cheaper; later keeps more detail. Compress by hand any time with the ring next to the model, or /compress.",
+      "compactAt": "At {{percent}}%",
+      "compactAtDefault": "At {{percent}}% (default)",
       "compactNearlyFull": "When nearly full",
       "compactNever": "Never by itself",
       "autoContinue": "Continue after a usage limit",
@@ -910,7 +909,7 @@
   "cleanup": {
     "scanError": "Couldn't look at the data folder",
     "title": "Cleanup",
-    "description": "Chats within their context budget, memory tasks actually use, and a data folder that stays lean.",
+    "description": "Compact chats, memory tasks actually use, and a data folder that stays lean.",
     "optimize": {
       "title": "Optimize",
       "now": "Optimize now",
@@ -926,11 +925,9 @@
         "caption": "per chat",
         "full": "Full",
         "off": "Off",
-        "over_one": "{{count}} chat past it, compressed on its next turn",
-        "over_other": "{{count}} chats past it, compressed on their next turn",
-        "overNoBudget_one": "{{count}} chat past {{tokens}} this week",
-        "overNoBudget_other": "{{count}} chats past {{tokens}} this week",
-        "within": "Every chat of the week within it",
+        "over_one": "{{count}} chat past {{tokens}} this week",
+        "over_other": "{{count}} chats past {{tokens}} this week",
+        "within": "Every chat of the week under 250k",
         "fullest": "Fullest chats this week"
       },
       "memory": {
@@ -959,8 +956,9 @@
         "cleanupOff": "Cleanup by hand",
         "dreams": "Dreams at {{time}}",
         "dreamsOff": "Dreaming off",
-        "budget": "Compresses at {{tokens}}",
-        "budgetOff": "No context budget"
+        "compress": "Compresses at {{pct}}%",
+        "compressFull": "Compresses when nearly full",
+        "compressOff": "Compressing is off"
       }
     },
     "files": {

@@ -161,11 +161,10 @@
     },
     "compact": {
       "title": "Long chats",
-      "footer": "A chat is summarized by itself once it holds this many tokens and goes on from the summary. Models work best below about 250k. Compress any chat by hand with the ring next to the model.",
+      "footer": "A chat that fills this much of the model's memory is summarized by itself and goes on from the summary. Earlier keeps every step faster and cheaper, later keeps more detail. Compress any chat by hand with the ring next to the model.",
       "auto": "Compress by itself",
-      "at": "At {{percent}}% of the window",
-      "atTokens": "At {{tokens}}",
-      "atTokensDefault": "At {{tokens}} (recommended)",
+      "at": "At {{percent}}%",
+      "atDefault": "At {{percent}}% (default)",
       "nearlyFull": "When nearly full",
       "never": "Never by itself"
     },

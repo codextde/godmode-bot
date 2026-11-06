@@ -5,8 +5,7 @@ import { qk, queryClient } from "./query";
 import { useSettings } from "./setup";
 
 export function useContextGauge(context: ConversationContext | null | undefined): ContextGauge | null {
-  const runner = useSettings().data?.runner;
-  return contextGauge(context, runner?.autoCompactPercent, runner?.contextBudget);
+  return contextGauge(context, useSettings().data?.runner.autoCompactPercent);
 }
 
 /** Sends /compress: Claude Code summarizes the chat so far (queued behind work that is running). */

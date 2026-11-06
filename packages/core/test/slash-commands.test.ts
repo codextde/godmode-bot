@@ -122,9 +122,8 @@ describe("slash commands in chat runs", () => {
   test("the chat knows how full its session is; /compress compacts it", async () => {
     const big = await send(conversationId, "BIG_CONTEXT");
     expect(big.conv.context).toEqual({ tokens: 421_602, window: 1_000_000 });
-    // The context budget (250k) is Claude Code's auto-compact window plus its 33k headroom; the share is left out.
-    expect(big.inv.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW).toBe("283000");
-    expect(big.inv.env.CLAUDE_AUTOCOMPACT_PCT_OVERRIDE).toBeNull();
+    expect(big.inv.env.CLAUDE_AUTOCOMPACT_PCT_OVERRIDE).toBe("70");
+    expect(big.inv.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW).toBeNull();
     const { inv, conv } = await send(conversationId, "/compress keep the open tasks");
     expect(inv.prompt).toBe("/compact keep the open tasks");
     expect(conv.messages.at(-2)!.content).toBe("/compress keep the open tasks");
@@ -132,18 +131,14 @@ describe("slash commands in chat runs", () => {
     expect(conv.messages.at(-1)!.blocks).toContainEqual(expect.objectContaining({ type: "notice", compacted: { auto: false, preTokens: 900, postTokens: 100 } }));
   });
 
-  test("without a context budget, chats compress at a share of the window or never", async () => {
-    updateSettings({ runner: { contextBudget: null } });
+  test("chats compress at a share of the window, or never", async () => {
     try {
-      const share = await send(conversationId, "Hi");
-      expect(share.inv.env.CLAUDE_AUTOCOMPACT_PCT_OVERRIDE).toBe("70");
-      expect(share.inv.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW).toBeNull();
       updateSettings({ runner: { autoCompactPercent: 0 } });
       const never = await send(conversationId, "Hi");
       expect(never.inv.env.DISABLE_AUTO_COMPACT).toBe("1");
       expect(never.inv.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW).toBeNull();
     } finally {
-      updateSettings({ runner: { contextBudget: 250_000, autoCompactPercent: 70 } });
+      updateSettings({ runner: { autoCompactPercent: 70 } });
     }
   });
 

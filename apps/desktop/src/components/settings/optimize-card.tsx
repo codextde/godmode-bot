@@ -7,7 +7,9 @@ import { Link } from "react-router";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import type { OptimizeReport, OptimizeRun } from "@godmode/shared";
-import { DEFAULT_CONTEXT_BUDGET, formatBytes, tokensLabel } from "@godmode/shared";
+import { formatBytes, tokensLabel } from "@godmode/shared";
+
+const LARGE_CHAT = 250_000;
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
@@ -28,7 +30,7 @@ function toastRun(run: OptimizeRun, dreaming: boolean) {
   });
 }
 
-/** Chats within the context budget and memory tasks actually use, with one click to optimize everything. */
+/** Compact chats and memory tasks actually use, with one click to optimize everything. */
 export function OptimizeCard() {
   const reduce = useReduceAnimations();
   const { t } = useTranslation("settings");
@@ -153,18 +155,17 @@ function Meter({ value, max, over }: { value: number; max: number; over: boolean
 
 function ContextTile({ report, open, onToggle }: { report: OptimizeReport; open: boolean; onToggle: () => void }) {
   const { t } = useTranslation("settings");
-  const { budget, share, over, largest } = report.context;
-  const limit = budget ?? DEFAULT_CONTEXT_BUDGET;
+  const { share, over, largest } = report.context;
   const lines: { text: string; tone?: "warn" | "ok" | "muted" }[] = [
     over
-      ? { text: t(budget ? "cleanup.optimize.context.over" : "cleanup.optimize.context.overNoBudget", { count: over, tokens: tokensLabel(limit) }), tone: "warn" }
+      ? { text: t("cleanup.optimize.context.over", { count: over, tokens: tokensLabel(LARGE_CHAT) }), tone: "warn" }
       : { text: t("cleanup.optimize.context.within"), tone: "ok" },
   ];
   return (
     <Tile
       icon={<MessagesSquare />}
       label={t("cleanup.optimize.context.label")}
-      value={budget ? tokensLabel(budget) : share === 0 ? t("cleanup.optimize.context.off") : share ? `${share}%` : t("cleanup.optimize.context.full")}
+      value={share === 0 ? t("cleanup.optimize.context.off") : share ? `${share}%` : t("cleanup.optimize.context.full")}
       caption={t("cleanup.optimize.context.caption")}
       lines={lines}
       more={largest.length ? t("cleanup.optimize.context.fullest") : undefined}
@@ -175,7 +176,6 @@ function ContextTile({ report, open, onToggle }: { report: OptimizeReport; open:
 }
 
 function ContextList({ report }: { report: OptimizeReport }) {
-  const limit = report.context.budget ?? DEFAULT_CONTEXT_BUDGET;
   return (
     <>
       {report.context.largest.map((c) => (
@@ -185,8 +185,8 @@ function ContextList({ report }: { report: OptimizeReport }) {
               <span className="block truncate font-medium text-foreground">{c.title}</span>
               <span className="block truncate text-muted-foreground">{c.agentName}</span>
             </span>
-            <Meter value={c.tokens} max={limit} over={c.tokens > limit} />
-            <span className={cn("w-10 shrink-0 text-right tabular-nums", c.tokens > limit ? "text-warning" : "text-muted-foreground")}>{tokensLabel(c.tokens)}</span>
+            <Meter value={c.tokens} max={LARGE_CHAT} over={c.tokens > LARGE_CHAT} />
+            <span className={cn("w-10 shrink-0 text-right tabular-nums", c.tokens > LARGE_CHAT ? "text-warning" : "text-muted-foreground")}>{tokensLabel(c.tokens)}</span>
           </Link>
         </li>
       ))}
@@ -263,7 +263,11 @@ function Automatic({ report }: { report: OptimizeReport }) {
         : t("cleanup.optimize.auto.dreamsOff"),
       to: "/settings/memory",
     },
-    { on: automatic.budget, text: automatic.budget && context.budget ? t("cleanup.optimize.auto.budget", { tokens: tokensLabel(context.budget) }) : t("cleanup.optimize.auto.budgetOff"), to: "/settings/ai#auto-compact" },
+    {
+      on: automatic.compress,
+      text: !automatic.compress ? t("cleanup.optimize.auto.compressOff") : context.share === null ? t("cleanup.optimize.auto.compressFull") : t("cleanup.optimize.auto.compress", { pct: context.share }),
+      to: "/settings/ai#auto-compact",
+    },
   ];
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t bg-paper-2/60 px-5 py-3 text-xs">

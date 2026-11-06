@@ -2080,4 +2080,13 @@ DROP INDEX IF EXISTS idx_conversations_runner;
 CREATE INDEX idx_conversations_runner ON conversations(runner_id);
 `,
   },
+  {
+    id: 129,
+    name: "drop_context_budget",
+    sql: /* sql */ `
+-- Chats compress at a share of the window again (runner.autoCompactPercent, 70% by default), not at a token budget.
+UPDATE settings SET value = json_remove(value, '$.contextBudget')
+WHERE key = 'runner' AND json_valid(value) AND json_type(value, '$.contextBudget') IS NOT NULL;
+`,
+  },
 ];
