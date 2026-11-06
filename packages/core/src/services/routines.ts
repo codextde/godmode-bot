@@ -22,6 +22,7 @@ import { appTriggerHealth, getTriggerType, missingConfigFields, requestAppTrigge
 import { badRequest, conflict, newId, notFound, now, parseJson } from "../util";
 import { runsRoutineHere } from "../remote/group";
 import { resolveRunOn, runPinnedElsewhere } from "../remote/routinePins";
+import { archivedAgentSql, archivedRoutineSql } from "../db/archived";
 
 const log = logger("routines");
 
@@ -48,6 +49,9 @@ export interface RoutineRow {
   webhook_token_enc: string | null;
   created_at: string;
   updated_at: string;
+  archived_at?: string | null;
+  /** Derived in SELECT_ROUTINE: archived itself or through its agent. */
+  archived?: number;
 }
 
 /**
@@ -144,8 +148,15 @@ function agentEnabled(agentId: string): boolean {
   return bool(get<{ enabled: number }>("SELECT enabled FROM agents WHERE id = ?", agentId)?.enabled);
 }
 
-function triggerStatusOf(r: RoutineRow, trigger: RoutineTrigger, state: TriggerState): RoutineTriggerStatus {
+function routineArchived(r: RoutineRow): boolean {
+  return r.archived === undefined ? !!get(`SELECT 1 FROM routines r WHERE r.id = ? AND ${archivedRoutineSql("r")}`, r.id) : bool(r.archived);
+}
+
+const SELECT_ROUTINE = `SELECT r.*, ${archivedRoutineSql("r")} AS archived FROM routines r`;
+
+function triggerStatusOf(r: RoutineRow, trigger: RoutineTrigger, state: TriggerState, archived: boolean): RoutineTriggerStatus {
   const base = { lastEventAt: state.lastEventAt ?? null, lastCheckAt: state.lastCheckAt ?? null, observation: state.observation ?? null };
+  if (archived) return { ...base, state: "off", message: "Archived" };
   if (!bool(r.enabled)) return { ...base, state: "off", message: "Paused" };
   if (!agentEnabled(r.agent_id)) return { ...base, state: "off", message: "The agent is disabled" };
   if (state.limitedUntil && Date.parse(state.limitedUntil) > Date.now()) {
@@ -176,6 +187,7 @@ function triggerStatusOf(r: RoutineRow, trigger: RoutineTrigger, state: TriggerS
 function toModel(r: RoutineRow, pending = 0): Routine {
   const trigger = parseTrigger(r.trigger);
   const state = parseJson<TriggerState>(r.trigger_state, {});
+  const archived = routineArchived(r);
   return {
     id: r.id,
     agentId: r.agent_id,
@@ -194,10 +206,12 @@ function toModel(r: RoutineRow, pending = 0): Routine {
     lastRunAt: r.last_run_at,
     nextRunAt: r.next_run_at,
     lastStatus: r.last_status as RunStatus | null,
-    triggerStatus: triggerStatusOf(r, trigger, state),
+    triggerStatus: triggerStatusOf(r, trigger, state, archived),
     webhookPath: trigger.type === "webhook" ? webhookPathOf(r) : null,
     pendingEvents: pending,
     createdAt: r.created_at,
+    archivedAt: r.archived_at ?? null,
+    archived,
     updatedAt: r.updated_at,
   };
 }
@@ -501,7 +515,7 @@ function sameTrigger(a: RoutineTrigger, b: RoutineTrigger): boolean {
 /* ------------------------------------------------------------------ */
 
 /** Write state/routines.json into the agent repository and commit (asynchronous, serialized per repo). */
-function syncRoutinesFile(agentId: string): void {
+export function syncRoutinesFile(agentId: string): void {
   let dir: string;
   try {
     dir = getAgent(agentId).repoPath;
@@ -551,16 +565,24 @@ export function emitRoutine(id: string) {
 /* CRUD                                                                 */
 /* ------------------------------------------------------------------ */
 
-export function listRoutines(opts: { agentId?: string } = {}): Routine[] {
-  const rows = opts.agentId
-    ? all<RoutineRow>("SELECT * FROM routines WHERE agent_id = ? ORDER BY name COLLATE NOCASE ASC", opts.agentId)
-    : all<RoutineRow>("SELECT * FROM routines ORDER BY name COLLATE NOCASE ASC");
+/** Active automations A–Z (of one agent, or all); archived ones (themselves or through their agent) only with `includeArchived`. */
+export function listRoutines(opts: { agentId?: string; includeArchived?: boolean } = {}): Routine[] {
+  const where = [opts.agentId ? "r.agent_id = ?" : "1", opts.includeArchived ? "1" : `NOT ${archivedRoutineSql("r")}`].join(" AND ");
+  const rows = all<RoutineRow>(`${SELECT_ROUTINE} WHERE ${where} ORDER BY r.name COLLATE NOCASE ASC`, ...(opts.agentId ? [opts.agentId] : []));
   const pending = pendingCounts();
   return rows.map((r) => toModel(r, pending.get(r.id) ?? 0));
 }
 
+/** Automations archived by themselves, not through their agent. */
+export function archivedRoutines(): Routine[] {
+  const pending = pendingCounts();
+  return all<RoutineRow>(
+    `${SELECT_ROUTINE} WHERE r.archived_at IS NOT NULL AND NOT EXISTS (SELECT 1 FROM agents a WHERE a.id = r.agent_id AND ${archivedAgentSql("a")})`,
+  ).map((r) => toModel(r, pending.get(r.id) ?? 0));
+}
+
 export function getRoutineRow(id: string): RoutineRow {
-  const row = get<RoutineRow>("SELECT * FROM routines WHERE id = ?", id);
+  const row = get<RoutineRow>(`${SELECT_ROUTINE} WHERE r.id = ?`, id);
   if (!row) throw notFound("Routine");
   return row;
 }

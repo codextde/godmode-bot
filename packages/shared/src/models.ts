@@ -44,6 +44,8 @@ export interface Workspace {
   /** Optional projects inside the workspace, A–Z. */
   projects: Project[];
   createdAt: ISODate;
+  /** Archived: out of every list, prompt, dream and schedule until restored (with everything in it). null = active. */
+  archivedAt: ISODate | null;
   updatedAt: ISODate;
 }
 
@@ -74,6 +76,8 @@ export interface Project {
   /** An agent that could not control this computer wrote its context: agents that do get it without its description and instructions. Cleared like `fillOnly`. */
   offComputer: boolean;
   createdAt: ISODate;
+  /** Archived by itself (its workspace's archive covers it too). null = active. */
+  archivedAt: ISODate | null;
   updatedAt: ISODate;
 }
 
@@ -217,6 +221,10 @@ export interface Agent {
   openQuestions?: number;
   lastRunAt: ISODate | null;
   createdAt: ISODate;
+  /** Archived by itself. null = not. */
+  archivedAt: ISODate | null;
+  /** Archived by itself or through its workspace or project: it doesn't run and no list, prompt or dream names it. */
+  archived: boolean;
   updatedAt: ISODate;
 }
 
@@ -337,6 +345,10 @@ export interface Routine {
   /** Events waiting for the automation to finish its current run. */
   pendingEvents: number;
   createdAt: ISODate;
+  /** Archived by itself. null = not. */
+  archivedAt: ISODate | null;
+  /** Archived by itself or through its agent: it never fires. */
+  archived: boolean;
   updatedAt: ISODate;
 }
 

@@ -936,7 +936,7 @@ async function deliverInbound(c: PhoneCall): Promise<boolean> {
   } catch {
     agent = null;
   }
-  if (!agent?.enabled) {
+  if (!agent?.enabled || agent.archived) {
     if (ownersCall) tell();
     return true;
   }

@@ -148,7 +148,7 @@ export interface AgentPresence {
  * it, so the card, the chart, the header and the phone say the same. Queued never counts as working.
  */
 export function agentPresence(
-  agent: Pick<Agent, "enabled" | "status" | "pausedRuns" | "openQuestions" | "failedRunId">,
+  agent: Pick<Agent, "enabled" | "status" | "pausedRuns" | "openQuestions" | "failedRunId"> & { archived?: boolean },
   live: { running?: number; queued?: number; needsLogin?: boolean } = {},
 ): AgentPresence {
   const running = Math.max(live.running ?? 0, agent.status === "running" ? 1 : 0);
@@ -157,7 +157,7 @@ export function agentPresence(
   const paused = agent.pausedRuns ?? 0;
   const needsLogin = !!live.needsLogin;
   const failed = !!agent.failedRunId;
-  const state: AgentPresenceState = !agent.enabled
+  const state: AgentPresenceState = !agent.enabled || agent.archived
     ? "off"
     : running > 0
       ? "working"

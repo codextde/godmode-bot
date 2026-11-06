@@ -2097,4 +2097,16 @@ WHERE key = 'runner' AND json_valid(value) AND json_type(value, '$.contextBudget
 ALTER TABLE conversations ADD COLUMN continued_from TEXT;
 `,
   },
+  {
+    id: 131,
+    name: "archive",
+    sql: /* sql */ `
+-- Archived workspaces, projects, agents and automations (services/archive.ts): kept, but out of every list, prompt,
+-- dream and schedule until restored. A workspace's or project's archive covers what is in it.
+ALTER TABLE workspaces ADD COLUMN archived_at TEXT;
+ALTER TABLE projects ADD COLUMN archived_at TEXT;
+ALTER TABLE agents ADD COLUMN archived_at TEXT;
+ALTER TABLE routines ADD COLUMN archived_at TEXT;
+`,
+  },
 ];

@@ -4,6 +4,7 @@
  */
 import type { Agent, Project, ProjectInput, WorkspaceSource } from "@godmode/shared";
 import { all, get, insert, int, run, tx, update } from "../db";
+import { archivedProjectSql } from "../db/archived";
 import { bus } from "../events/bus";
 import { logger } from "../log";
 import { badRequest, newId, notFound, now, slugify } from "../util";
@@ -25,6 +26,7 @@ interface ProjectRow {
   off_computer: number;
   created_at: string;
   updated_at: string;
+  archived_at?: string | null;
 }
 
 const DEFAULT_ICON = "📁";
@@ -44,6 +46,7 @@ function toModel(r: ProjectRow, sources: WorkspaceSource[] = listSources(r.works
     fillOnly: !!r.fill_only,
     offComputer: !!r.off_computer,
     createdAt: r.created_at,
+    archivedAt: r.archived_at ?? null,
     updatedAt: r.updated_at,
   };
 }
@@ -74,10 +77,10 @@ function cleanProfile(workspaceId: string, value: string | null | undefined): st
   return id;
 }
 
-/** Projects by workspace id, A–Z, with their sources (`sources` by project id). */
+/** Active projects by workspace id, A–Z, with their sources (`sources` by project id). */
 export function projectsByWorkspace(sources: Map<string, WorkspaceSource[]>): Map<string, Project[]> {
   const out = new Map<string, Project[]>();
-  for (const r of all<ProjectRow>("SELECT * FROM projects ORDER BY name COLLATE NOCASE ASC")) {
+  for (const r of all<ProjectRow>("SELECT * FROM projects WHERE archived_at IS NULL ORDER BY name COLLATE NOCASE ASC")) {
     const list = out.get(r.workspace_id) ?? [];
     list.push(toModel(r, sources.get(r.id) ?? []));
     out.set(r.workspace_id, list);
@@ -85,11 +88,19 @@ export function projectsByWorkspace(sources: Map<string, WorkspaceSource[]>): Ma
   return out;
 }
 
-export function listProjects(workspaceId?: string): Project[] {
+/** Active projects A–Z (of one workspace, or all). */
+export function listProjects(workspaceId?: string, opts: { includeArchived?: boolean } = {}): Project[] {
   const rows = workspaceId
-    ? all<ProjectRow>("SELECT * FROM projects WHERE workspace_id = ? ORDER BY name COLLATE NOCASE ASC", workspaceId)
-    : all<ProjectRow>("SELECT * FROM projects ORDER BY name COLLATE NOCASE ASC");
+    ? all<ProjectRow>(`SELECT * FROM projects WHERE workspace_id = ? ${opts.includeArchived ? "" : "AND archived_at IS NULL"} ORDER BY name COLLATE NOCASE ASC`, workspaceId)
+    : all<ProjectRow>(`SELECT p.* FROM projects p WHERE NOT ${archivedProjectSql("p")} ORDER BY p.name COLLATE NOCASE ASC`);
   return rows.map((r) => toModel(r));
+}
+
+/** Projects archived by themselves, not through their workspace. */
+export function archivedProjects(): Project[] {
+  return all<ProjectRow>(
+    "SELECT p.* FROM projects p WHERE p.archived_at IS NOT NULL AND NOT EXISTS (SELECT 1 FROM workspaces w WHERE w.id = p.workspace_id AND w.archived_at IS NOT NULL)",
+  ).map((r) => toModel(r));
 }
 
 export function getProject(id: string): Project {
@@ -164,6 +175,8 @@ export function updateProject(id: string, patch: Partial<Omit<ProjectInput, "wor
 /** Delete a project. Its chats, tickets and agents stay in the workspace; its clones go to the trash. */
 export async function deleteProject(id: string): Promise<void> {
   const project = getProject(id);
+  // Its agents, chats and tickets would come back without it.
+  if (project.archivedAt) throw badRequest(`Restore ${project.name} before deleting it`);
   const clones = gitSourceRows(project.workspaceId, id);
   let moved = { agents: 0, tasks: 0 };
   tx(() => {

@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { Trans, useTranslation } from "react-i18next";
 import type { Project, Workspace } from "@godmode/shared";
@@ -39,10 +39,21 @@ export function useWorkspaceShortcuts() {
 /** Switches the active scope: all workspaces, global only, or a single workspace. */
 export function WorkspaceSwitcher() {
   const { t } = useTranslation("layout");
-  const { data: workspaces = [] } = useWorkspaces();
+  const { data: workspaces = [], isSuccess } = useWorkspaces();
   const scope = useUi((s) => s.workspace);
   const projectScope = useUi((s) => s.project);
   const setScope = useUi((s) => s.setWorkspace);
+  // The picked workspace or project was archived or deleted (also by an agent): show everything again. One that is
+  // just being created isn't listed yet: only what was there before and is gone counts.
+  const known = useRef<Set<string> | null>(null);
+  useEffect(() => {
+    if (!isSuccess) return;
+    const ids = new Set(workspaces.flatMap((w) => [w.id, ...w.projects.map((p) => p.id)]));
+    const gone = (id: string) => !ids.has(id) && (!known.current || known.current.has(id));
+    if (scope !== "all" && scope !== "global" && gone(scope)) setScope("all");
+    else if (projectScope && gone(projectScope)) setScope(scope);
+    known.current = ids;
+  }, [isSuccess, workspaces]); // eslint-disable-line react-hooks/exhaustive-deps
   const recentIds = useUi((s) => s.recentWorkspaces);
   const navigate = useNavigate();
   // Workspaces whose projects are unfolded in the list (the current one starts open; a search shows all).

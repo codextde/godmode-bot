@@ -194,7 +194,8 @@ Take this as the state of the work. Reply with one short line that you have it; 
 export async function restartChat(runId: string, conversationId: string, summary: string, reason: string): Promise<string> {
   const c = chat(conversationId);
   if (c.runner_id) return "That chat works on another computer of the group: report it instead.";
-  if (!getAgent(c.agent_id).enabled) return "That chat's agent is turned off: leave it.";
+  const owner = getAgent(c.agent_id);
+  if (!owner.enabled || owner.archived) return `That chat's agent is ${owner.archived ? "archived" : "turned off"}: leave it.`;
   if (c.pinned) return "The human pinned that chat: leave it.";
   if (busy(conversationId)) return "A run is working in that chat right now: try again in a later review.";
   if (pauseOf(conversationId)) return "That chat stands still (paused or waiting for an answer): leave it.";

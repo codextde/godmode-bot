@@ -2,6 +2,8 @@ import type { ComponentType } from "react";
 import { GATEWAY_DONE } from "@godmode/shared";
 import type { LucideIcon } from "lucide-react";
 import {
+  Archive,
+  ArchiveRestore,
   CreditCard,
   AlarmClock,
   AlarmClockOff,
@@ -517,6 +519,8 @@ const GODMODE_TOOLS = new Set([
   "project_create",
   "project_update",
   "project_delete",
+  "archive",
+  "archive_list",
   "notify_user",
   "followup_schedule",
   "followup_cancel",
@@ -759,6 +763,12 @@ function godmodeMeta(tool: string, input: Input, ctx: ToolContext): Omit<ToolMet
       return { kind: "agents", icon: FolderKanban, title: t("chat:tools.godmode.updatedProject") };
     case "project_delete":
       return { kind: "agents", icon: FolderKanban, title: t("chat:tools.godmode.deletedProject") };
+    case "archive":
+      return input.archived === false
+        ? { kind: "agents", icon: ArchiveRestore, title: t("chat:tools.godmode.restoredFromArchive") }
+        : { kind: "agents", icon: Archive, title: t("chat:tools.godmode.archived") };
+    case "archive_list":
+      return { kind: "agents", icon: Archive, title: t("chat:tools.godmode.lookedAtArchive") };
     case "notify_user":
       return { kind: "notify", icon: Bell, title: t("chat:tools.godmode.sentNotification"), detail: str(input.title) || undefined };
     case "followup_schedule":

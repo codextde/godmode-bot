@@ -42,7 +42,8 @@ function mainAgentId(): string | null {
   const id = getDefaultAgentId();
   if (!id) return null;
   try {
-    return getAgent(id).enabled ? id : null;
+    const agent = getAgent(id);
+    return agent.enabled && !agent.archived ? id : null;
   } catch {
     return null;
   }

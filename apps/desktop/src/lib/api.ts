@@ -1,4 +1,4 @@
-import type { SharedChatPreview, DreamAllResult, Review, ReviewOverview, McpApp, DeviceGroup, DeviceGroupPatch, DeviceInvite, HandoffInput, HandoffResult, JoinGroupInput, MoveChatInput, RetireRunnerInput, RetireRunnerResult,
+import type { ArchiveKind, ArchiveList, SharedChatPreview, DreamAllResult, Review, ReviewOverview, McpApp, DeviceGroup, DeviceGroupPatch, DeviceInvite, HandoffInput, HandoffResult, JoinGroupInput, MoveChatInput, RetireRunnerInput, RetireRunnerResult,
   AndroidAssignInput,
   SearchResults,
   HexStatus,
@@ -565,6 +565,11 @@ export const api = {
     delete: (id: string, force = false) => del<{ ok: true }>(`/api/workspaces/${id}`, { force: force ? 1 : undefined }),
     syncSource: (id: string, sourceId: string) => post<WorkspaceSource>(`/api/workspaces/${id}/sources/${sourceId}/sync`),
     move: (id: string, input: WorkspaceMoveInput, grant?: string) => request<ScopeMoveResult>("POST", `/api/workspaces/${id}/move`, input, withGrant(grant)),
+  },
+
+  archive: {
+    list: () => get<ArchiveList>("/api/archive"),
+    set: (kind: ArchiveKind, id: string, archived: boolean) => post<ArchiveList>("/api/archive", { kind, id, archived }),
   },
 
   projects: {

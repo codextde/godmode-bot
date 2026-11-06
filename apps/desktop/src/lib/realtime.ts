@@ -53,6 +53,8 @@ function resync(runId: string) {
 
 const ENTITY_KEYS: Record<EntityName, readonly unknown[][]> = {
   workspaces: [qk.workspaces],
+  // What is archived drops out of (or comes back to) every list.
+  archive: [qk.archive, qk.workspaces, qk.agents, qk.routines, qk.conversationsAll, qk.tasks, qk.followups, qk.bootstrap],
   "claude-accounts": [qk.claudeAccounts],
   agents: [qk.agents, qk.bootstrap],
   routines: [qk.routines, qk.bootstrap],

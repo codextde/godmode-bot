@@ -38,6 +38,7 @@ declare module "i18next" {
       calls: typeof import("./locales/en/calls.json");
       permissions: typeof import("./locales/en/permissions.json");
       instructions: typeof import("./locales/en/instructions.json");
+      archive: typeof import("./locales/en/archive.json");
       devices: typeof import("./locales/en/devices.json");
       auth: typeof import("./locales/en/auth.json");
       templates: typeof import("./locales/en/templates.json");
