@@ -13,7 +13,7 @@ export type LiveScreen =
   | { kind: "browser"; key: string; id: string; conversationId: string | null; title: string; running: boolean }
   | { kind: "vm"; key: string; id: string; title: string; vm: Vm }
   | { kind: "share"; key: string; view: string; title: string; conversationId: string }
-  /** An Android phone agents work on: watched from here, not controlled. */
+  /** An Android phone agents work on: watched from here, and controlled while a chat uses it. */
   | { kind: "android"; key: string; id: string; title: string; device: AndroidDevice };
 
 export function screenHref(screen: LiveScreen) {

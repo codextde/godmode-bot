@@ -2,13 +2,14 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { Image } from "expo-image";
 import { router, useLocalSearchParams } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, TextInput, useWindowDimensions, View, type GestureResponderEvent } from "react-native";
 import { KeyboardStickyView, useKeyboardState } from "react-native-keyboard-controller";
 import Animated, { FadeIn, FadeOut, ZoomIn } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { browserView, type ComputerInputEvent } from "@godmode/shared";
+import { browserView, type AndroidInputEvent, type AndroidKey, type ComputerInputEvent } from "@godmode/shared";
+import { AndroidTouchSurface } from "@/components/android-touch";
 import { Glass, GlassGroup } from "@/components/glass";
 import { Icon } from "@/components/icon";
 import { frameUri, phoneState, vmState } from "@/components/screen-tile";
@@ -38,6 +39,19 @@ const KEYS: Key[] = [
   { label: "↓", key: "ArrowDown", a11y: "down" },
   { label: "→", key: "ArrowRight", a11y: "right" },
 ];
+
+/** The same keys as an Android phone has them; Enter goes with the type box. */
+const PHONE_KEYS: (Key & { key: AndroidKey })[] = [
+  { label: "tab", key: "tab", a11y: "tab" },
+  { label: "⌫", key: "delete", a11y: "delete" },
+  { label: "←", key: "left", a11y: "left" },
+  { label: "↑", key: "up", a11y: "up" },
+  { label: "↓", key: "down", a11y: "down" },
+  { label: "→", key: "right", a11y: "right" },
+];
+
+/** What `input text` can type on an Android phone. */
+const TYPABLE = /^[\x20-\x7e\n\t]*$/;
 
 const MAC_KEYS: Key[] = [
   { label: "⌘ space", key: "space", modifiers: ["cmd"], a11y: "spotlight" },
@@ -80,10 +94,12 @@ export default function Live() {
   const keyboard = useKeyboardState((k) => (k.isVisible ? k.height : 0));
   const [text, setText] = useState("");
   const [ripple, setRipple] = useState<{ x: number; y: number; id: number; secondary: boolean } | null>(null);
-  // An Android phone is watched from here; taking it over stays on the computer.
-  const canControl = params.kind === "android" ? false : params.kind !== "vm" || vm?.state === "running";
+  const android = params.kind === "android";
+  // Only a phone a chat uses, like a screen shared in a chat: the computer refuses the others.
+  const phoneInChat = !!phone?.assignments.some((a) => a.kind === "conversation");
+  const canControl = android ? phone?.state === "connected" && phoneInChat : params.kind !== "vm" || vm?.state === "running";
   // Shared screens and VMs are whole Macs: they take right clicks and shortcuts; a browser tab doesn't.
-  const mac = params.kind !== "browser";
+  const mac = params.kind === "vm" || params.kind === "share";
 
   const input = useMutation({
     mutationFn: async (event: BrowserInput & ComputerInputEvent) => {
@@ -105,6 +121,28 @@ export default function Live() {
     onSettled: () => queryClient.invalidateQueries({ queryKey: qk.vms }),
     onError: (err) => Alert.alert(t("live.vmFailed"), errorText(err)),
   });
+
+  // One after another, so a typed word and its Enter arrive in order; a failure is said once, not for every tap after it.
+  const phoneQueue = useRef(Promise.resolve());
+  const phoneFailedAt = useRef(0);
+  const sendPhone = useCallback(
+    (event: AndroidInputEvent) => {
+      if (!frame) return;
+      const size = { width: frame.width, height: frame.height };
+      phoneQueue.current = phoneQueue.current.then(
+        () =>
+          api.android.input(params.id, event, size).then(
+            () => void setTimeout(() => queryClient.refetchQueries({ queryKey: qk.androidScreen(params.id) }), 350),
+            (err) => {
+              if (Date.now() - phoneFailedAt.current < 3000) return;
+              phoneFailedAt.current = Date.now();
+              Alert.alert(t("live.inputFailed"), errorText(err));
+            },
+          ),
+      );
+    },
+    [frame, params.id, t],
+  );
 
   const launch = useMutation({
     mutationFn: () => api.browser.launch(params.id),
@@ -135,22 +173,36 @@ export default function Live() {
 
   const sendKey = (k: Key) => {
     tap();
+    if (android) return sendPhone({ type: "key", key: k.key as AndroidKey });
     input.mutate(k.modifiers ? { type: "key", key: k.key, modifiers: k.modifiers } : { type: "key", key: k.key });
   };
 
+  const typable = !android || TYPABLE.test(text);
+
   const sendText = () => {
     const value = text;
-    if (!value) return;
+    if (!value || !typable) return;
     setText("");
-    input.mutate({ type: "text", text: value });
+    if (android) sendPhone({ type: "text", text: value });
+    else input.mutate({ type: "text", text: value });
   };
 
   // Text still in the box goes in first, then Return: what "Enter" means while typing.
   const enter = async () => {
     const value = text;
+    if (!typable) return;
     setText("");
+    if (android) {
+      if (value) sendPhone({ type: "text", text: value });
+      return sendKey({ label: "Enter", key: "enter", a11y: "enter" });
+    }
     if (value && !(await input.mutateAsync({ type: "text", text: value }).then(() => true, () => false))) return;
     sendKey({ label: "Enter", key: "Enter", a11y: "enter" });
+  };
+
+  const navKey = (key: AndroidKey) => {
+    tap();
+    sendPhone({ type: "key", key });
   };
 
   const subtitle =
@@ -178,12 +230,17 @@ export default function Live() {
         contentContainerStyle={{ width, height: box.height + top, paddingTop: top, alignItems: "center", justifyContent: "center" }}
         maximumZoomScale={control ? 1 : 4}
         minimumZoomScale={1}
+        scrollEnabled={!(android && control)}
         centerContent
         showsHorizontalScrollIndicator={false}
         showsVerticalScrollIndicator={false}
         bouncesZoom
       >
-        {uri ? (
+        {uri && android && control && frame ? (
+          <AndroidTouchSurface frame={frame} scale={fit} onInput={sendPhone} style={shown}>
+            <Image source={{ uri }} style={StyleSheet.absoluteFill} contentFit="contain" transition={0} cachePolicy="none" />
+          </AndroidTouchSurface>
+        ) : uri ? (
           <Pressable
             onPress={(e) => press(e, "left")}
             onLongPress={mac ? (e) => press(e, "right") : undefined}
@@ -279,7 +336,7 @@ export default function Live() {
           {typing && (
             <Animated.View entering={FadeIn} style={{ width: "100%", maxWidth: 520, gap: 8 }}>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="always" contentContainerStyle={styles.keys}>
-                {[...KEYS, ...(params.kind === "vm" ? MAC_KEYS : [])].map((k) => (
+                {(android ? PHONE_KEYS : [...KEYS, ...(params.kind === "vm" ? MAC_KEYS : [])]).map((k) => (
                   <Pressable key={k.a11y} accessibilityRole="button" accessibilityLabel={t(`live.keys.${k.a11y}`)} onPress={() => sendKey(k)}>
                     {({ pressed }) => (
                       <Glass style={[styles.key, pressed && styles.keyPressed]} scheme="dark" fallback={SMOKE}>
@@ -291,6 +348,11 @@ export default function Live() {
                   </Pressable>
                 ))}
               </ScrollView>
+              {!typable && (
+                <T variant="caption" color={DIM} style={{ textAlign: "center" }}>
+                  {t("live.phone.plainOnly")}
+                </T>
+              )}
               <Glass style={styles.typeBox} scheme="dark" fallback={SMOKE}>
                 <TextInput
                   autoFocus
@@ -312,6 +374,13 @@ export default function Live() {
               </Glass>
             </Animated.View>
           )}
+          {android && control && !typing && (
+            <GlassGroup style={styles.tools} spacing={14}>
+              <GlassIconButton icon="back" label={t("live.phone.back")} onPress={() => navKey("back")} dark />
+              <GlassIconButton icon="navHome" label={t("live.phone.home")} onPress={() => navKey("home")} dark />
+              <GlassIconButton icon="navRecents" label={t("live.phone.recents")} onPress={() => navKey("recents")} dark />
+            </GlassGroup>
+          )}
           <GlassGroup style={styles.tools} spacing={14}>
             <Pressable
               onPress={() => {
@@ -330,17 +399,27 @@ export default function Live() {
             {control && (
               <>
                 <GlassIconButton icon="keyboard" label={t("live.type")} onPress={() => setTyping((v) => !v)} dark />
-                <GlassIconButton icon="up" label={t("live.scrollUp")} onPress={() => scroll(-500)} dark />
-                <GlassIconButton icon="down" label={t("live.scrollDown")} onPress={() => scroll(500)} dark />
+                {!android && (
+                  <>
+                    <GlassIconButton icon="up" label={t("live.scrollUp")} onPress={() => scroll(-500)} dark />
+                    <GlassIconButton icon="down" label={t("live.scrollDown")} onPress={() => scroll(500)} dark />
+                  </>
+                )}
               </>
             )}
           </GlassGroup>
           {control && !typing && (
             <T variant="caption" color={DIM}>
-              {mac ? t("live.tapHintMac") : t("live.tapHint")}
+              {android ? t("live.phone.hint") : mac ? t("live.tapHintMac") : t("live.tapHint")}
             </T>
           )}
         </KeyboardStickyView>
+      ) : android && uri && phone?.state === "connected" && !phoneInChat ? (
+        <View style={[styles.bottom, { paddingBottom: insets.bottom + 14 }]}>
+          <T variant="caption" color={DIM} style={{ textAlign: "center" }}>
+            {t("live.phone.chatOnly", { name: phone.name })}
+          </T>
+        </View>
       ) : null}
     </View>
   );

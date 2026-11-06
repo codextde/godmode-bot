@@ -66,6 +66,14 @@
     "scrollDown": "Nach unten scrollen",
     "tapHintMac": "Tippen zum Klicken, halten für Rechtsklick",
     "tapHint": "Tipp ins Bild, um dort zu klicken",
+    "phone": {
+      "hint": "Tippe, halte oder wische im Bild",
+      "back": "Zurück",
+      "home": "Startbildschirm",
+      "recents": "Letzte Apps",
+      "plainOnly": "Auf Android lassen sich so nur einfache Buchstaben, Ziffern und Satzzeichen tippen.",
+      "chatOnly": "Du kannst {{name}} von hier aus steuern, solange ein Chat es nutzt."
+    },
     "keys": {
       "escape": "Escape",
       "tab": "Tab",

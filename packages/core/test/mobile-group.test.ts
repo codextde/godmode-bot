@@ -228,6 +228,29 @@ describe("what routes keep from phones", () => {
     expect(((await (await desktop("/api/calls/call_in/audio")).json()) as { code?: string }).code).not.toBe("device_forbidden");
   });
 
+  test("places calls with the desktop's fields and controls only the Android phones a chat uses", async () => {
+    updateSettings({ phone: { enabled: false } });
+    const call = { to: "+4915112345678", goal: "Book a table", contactName: "Trattoria", language: "it" };
+    expect((await linked("POST", "/api/calls", call)).json<{ code: string }>().code).toBe("calls_disabled");
+    expect((await linked("POST", "/api/calls", { ...call, numberId: "phnum_1" })).status).toBe(403);
+    expect((await linked("POST", "/api/calls", { ...call, voicemail: "Call back" })).status).toBe(403);
+
+    insert("android_devices", { id: "adr_group", serial: "serial-group", name: "Pixel", created_at: now(), updated_at: now() });
+    const tap = { event: { type: "tap", x: 1, y: 1 }, frame: { width: 100, height: 200 } };
+    const unused = await linked("POST", "/api/android/devices/adr_group/input", tap);
+    expect(unused.status).toBe(403);
+    expect(unused.json<{ code: string }>().code).toBe("device_forbidden");
+    // The other computer's own app may; the phone isn't plugged in here.
+    expect((await linked("POST", "/api/android/devices/adr_group/input", tap, { phone: false })).status).toBe(409);
+
+    const chat = (await (await desktop("/api/chat", send("POST", { agentId: agent.id, content: "Use the Pixel" }))).json()) as StartChatResult;
+    await waitForRun(chat.run.id, 20_000);
+    expect((await desktop(`/api/android/devices/adr_group/assign`, send("POST", { kind: "conversation", id: chat.conversation.id, assigned: true }))).status).toBe(200);
+    expect((await linked("POST", "/api/android/devices/adr_group/input", tap)).status).toBe(409);
+    expect((await linked("POST", "/api/android/devices/adr_group/exec", { command: "id" })).status).toBe(403);
+    expect((await linked("POST", "/api/android/devices/adr_group/assign", { kind: "conversation", id: chat.conversation.id, assigned: false })).status).toBe(403);
+  });
+
   test("undoing a review's change never lifts an automation's fill-only from a phone", async () => {
     const routine = createRoutine({ agentId: agent.id, name: "Nightly", cron: "0 8 * * *", prompt: "Check", fillOnly: true, enabled: false });
     const action = (undo: unknown) => ({ kind: "automation_updated", text: "Changed", targetId: routine.id, conversationId: null, undo, undoneAt: null, at: now() });

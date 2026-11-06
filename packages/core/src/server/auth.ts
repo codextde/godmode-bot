@@ -8,7 +8,7 @@ import { config, isLoopbackHost } from "../config";
 import { get, getMeta, insert, run, setMeta } from "../db";
 import { getSettings } from "../services/settings";
 import { authenticateDevice } from "../mobile/devices";
-import { deviceBodyKeys, deviceBodyRefusal, deviceMayCall, deviceMayUseView, deviceQueryRefusal } from "../mobile/scope";
+import { deviceBodyKeys, deviceBodyRefusal, deviceMayCall, deviceMayUseView, deviceQueryRefusal, deviceTargetRefusal } from "../mobile/scope";
 import { applyDeviceView } from "../mobile/views";
 import { cloudPathRefusal, cloudRefusal } from "../cloud/scope";
 import { hashPassword, safeEqual, sha256, verifyPassword } from "../vault/crypto";
@@ -314,6 +314,8 @@ export function requestCloudUser(c: Context): CloudRelayUser | null {
 async function deviceRefusal(c: Context): Promise<string | null> {
   const denied = "The phone app can't do this. Use Godmode on your computer.";
   if (!deviceMayCall(c.req.method, c.req.path)) return denied;
+  const target = deviceTargetRefusal(c.req.method, c.req.path);
+  if (target) return target;
   const query = deviceQueryRefusal(c.req.method, c.req.path, new URL(c.req.url).searchParams);
   if (query) return query;
   const keys = deviceBodyKeys(c.req.method, c.req.path);

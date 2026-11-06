@@ -1,6 +1,7 @@
 import { Stack } from "expo-router";
 import { ScrollView, StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
+import { CALL_LANGUAGES } from "@/components/call-parts";
 import { CloseButton } from "@/components/close-button";
 import { FieldRow, Group, PickerRow, StepperRow, SwitchRow, TextEditor } from "@/components/form";
 import { QueryState } from "@/components/settings-state";
@@ -9,7 +10,6 @@ import { languageName } from "@/lib/languages";
 import { patchSettings, useSettings } from "@/lib/setup";
 import { space } from "@/lib/theme";
 
-const LANGUAGES = ["en", "de", "fr", "es", "it", "nl", "pl", "pt", "tr", "sv", "da", "no", "fi", "cs", "ro", "el", "uk", "ru", "ar", "hi", "ja", "ko", "zh"] as const;
 const LONGEST = [1, 2, 3, 5, 10, 15, 20, 30, 45, 60] as const;
 const HOURS = Array.from({ length: 24 }, (_, h) => `${String(h).padStart(2, "0")}:00`);
 
@@ -25,7 +25,7 @@ export default function CallsPersona() {
       <QueryState query={settings} icon="call" errorTitle={t("calls.loadFailed")}>
         {(s) => {
           const p = s.phone;
-          const languages = [...(LANGUAGES.includes(p.language as never) ? [] : [p.language]), ...LANGUAGES].map((code) => ({ value: code, label: languageName(code) }));
+          const languages = [...(CALL_LANGUAGES.includes(p.language as never) ? [] : [p.language]), ...CALL_LANGUAGES].map((code) => ({ value: code, label: languageName(code) }));
           const hours = (value: string) => (HOURS.includes(value) ? HOURS : [value, ...HOURS]).map((h) => ({ value: h, label: h }));
           const quiet = !!(p.quietFrom && p.quietTo);
           return (

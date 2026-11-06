@@ -2,14 +2,14 @@
   "expo": {
     "name": "Godmode",
     "slug": "godmode",
-    "version": "0.2.0",
+    "version": "0.3.0",
     "orientation": "default",
     "icon": "./assets/icon.png",
     "scheme": "godmode",
     "userInterfaceStyle": "automatic",
     "ios": {
       "bundleIdentifier": "de.codext.godmode",
-      "buildNumber": "3",
+      "buildNumber": "6",
       "icon": "./assets/godmode.icon",
       "supportsTablet": true,
       "infoPlist": {

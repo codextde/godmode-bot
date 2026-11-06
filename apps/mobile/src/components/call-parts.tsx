@@ -5,6 +5,9 @@ import { Badge, tap } from "./ui";
 import { api } from "@/lib/api";
 import { t } from "@/lib/i18n";
 
+/** Languages a call can be held in, like the desktop offers them. */
+export const CALL_LANGUAGES = ["en", "de", "fr", "es", "it", "nl", "pl", "pt", "tr", "sv", "da", "no", "fi", "cs", "ro", "el", "uk", "ru", "ar", "hi", "ja", "ko", "zh"] as const;
+
 /** Events refresh the calls; while one is on it is polled as well, so its status never lags. */
 const LIVE_POLL = 5_000;
 
