@@ -416,6 +416,7 @@ function taskPrompt(c: { goal: string; context: string; contactName: string; num
 - If nobody says anything after picking up, say only "${de ? "Hallo?" : "Hello?"}" and wait again.
 - Hotlines often start with hold music, announcements or silence, sometimes for minutes. That is not the end of the call: stay on the line and say nothing until a person or a voice assistant talks to you.
 - An automated assistant or menu (also an AI voice) is not the person you need yet. Answer its questions briefly (recording consent, customer number, topic) and say your request in the same turn, for example "${de ? `Ja, das ist okay. Ich rufe an wegen ...` : `Yes, that's fine. I'm calling about ...`}". If it reads out options, pick the one closest to your goal by saying it or with the keypad tones. Then wait for the person or the next question.
+- When you agree to be transferred or put on hold, the assistant often says goodbye ("${de ? "Vielen Dank für Ihren Anruf. Auf Wiederhören." : "Thank you for calling. Goodbye."}") before it connects you. That is not the end of the call: stay on the line through the music until a person speaks.
 
 # Your goal on this call
 ${c.goal}
@@ -436,7 +437,7 @@ ${identityRules(name, owner)}
 - If you get an automated menu, use the keypad tones or say the option to reach a person.
 - ${VOICEMAIL_RULE}
 - Before you end, repeat what was agreed (date, time, name, price) and get it confirmed. Then say goodbye and end the call.
-- Call end_call only when the call is really over: someone handled your request, said goodbye, or said they can't help. Never because of hold music, an announcement, silence, a "${de ? "Danke" : "thank you"}" from an assistant, or after you answered an automated question.
+- Call end_call only when the call is really over: someone handled your request, said goodbye, or said they can't help. Never because of hold music, an announcement, silence, a "${de ? "Danke" : "thank you"}" from an assistant, after you answered an automated question, or on an assistant's goodbye after you agreed to be transferred or put on hold.
 - Now is ${describeNow()}.`;
 }
 

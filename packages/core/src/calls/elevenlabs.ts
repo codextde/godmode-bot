@@ -151,7 +151,7 @@ export interface AgentConfig {
 const systemTool = (name: string, params: Record<string, string> = {}, description = "") => ({ name, description, params: { system_tool_type: name, ...params } as Record<string, string> });
 
 const END_CALL =
-  "Hang up. Only when the conversation is really over: the other side handled the request, said goodbye or said they can't help. Never on hold music, announcements, silence or right after answering an automated assistant.";
+  "Hang up. Only when the conversation is really over: the other side handled the request, said goodbye or said they can't help. Never on hold music, announcements, silence, right after answering an automated assistant, or on an assistant's goodbye after a transfer or hold was agreed.";
 
 /** Dynamic variable with what the voice leaves on a mailbox; empty (inbound calls) hangs up without a message. */
 export const VOICEMAIL_VARIABLE = "voicemail_message";
