@@ -1576,7 +1576,12 @@
     "removeFree": "Your subscription itself isn't changed; you can add the key again any time.",
     "keep": "Keep it",
     "removeKey": "Remove key",
-    "notEnforced": "This is a build of your own, so it doesn't need a licence: Godmode is open source under the MIT License. Godmode Pro is for the official apps from usegodmode.com."
+    "notEnforced": "This is a build of your own, so it doesn't need a licence: Godmode is open source under the MIT License. Godmode Pro is for the official apps from usegodmode.com.",
+    "partners": {
+      "title": "Earn 20% with Godmode",
+      "description": "Get 20% of every payment from the people you bring, for 12 months.",
+      "open": "Become a partner"
+    }
   },
   "logs": {
     "warnings": "Warnings",
