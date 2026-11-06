@@ -26,7 +26,7 @@ import { FollowupMarker, followupBlock } from "./followup";
 import { HumanTaskMarker, humanTaskBlock } from "@/components/human-tasks/human-task-chat";
 import { CallMarker, callBlock } from "@/components/calls/call-chat";
 import { liveMood } from "./conversation-mood";
-import { useReduceAnimations } from "@/lib/motion";
+import { useLightAnimations, useReduceAnimations } from "@/lib/motion";
 import { useNow as useSharedNow } from "@/components/vault/use-now";
 import { dateLocale, t } from "@/i18n";
 
@@ -377,13 +377,14 @@ export function LiveAssistantMessage({
   startedAt: number;
 }) {
   const reduce = useReduceAnimations();
+  const lite = useLightAnimations();
   const { t } = useTranslation(["chat", "common"]);
   const now = useNow(1000);
   const label = liveActivityLabel(live);
   const since = live?.startedAt ?? startedAt;
   return (
     <motion.div initial={reduce ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="flex gap-3" aria-live="polite" aria-busy="true">
-      <AgentAvatar agent={agent ?? FALLBACK_AGENT} size="md" mood={liveMood(live).mood} still className="mt-0.5" />
+      <AgentAvatar agent={agent ?? FALLBACK_AGENT} size="md" mood={liveMood(live).mood} still={lite} className="mt-0.5" />
       <div className="min-w-0 flex-1">
         <AgentHeader agent={agent}>
           <span className="flex min-w-0 items-center gap-2 rounded-md border bg-card py-1 pr-2 pl-1.5 text-xs shadow-card">

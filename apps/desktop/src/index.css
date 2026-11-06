@@ -7,6 +7,7 @@
 @custom-variant dark (&:is(.dark *));
 @custom-variant full-motion (&:where([data-motion=full], [data-motion=full] *));
 @custom-variant calm-motion (&:where([data-motion=reduced], [data-motion=reduced] *));
+@custom-variant rich-motion (&:where([data-motion=full]:not([data-lite]), [data-motion=full]:not([data-lite]) *));
 
 /* ------------------------------------------------------------------ */
 /* Godmode design tokens — warm paper + anthracite, one quiet accent   */
@@ -364,11 +365,32 @@
   80%, 100% { transform: scale(3); opacity: 0; }
 }
 
+/* aicss label shine: a soft brightness valley sweeps through the text. Light animations: a band slides over it instead. */
 @utility text-shimmer {
-  position: relative;
-  color: var(--muted-foreground);
-  clip-path: inset(0);
-  &::after {
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  background: linear-gradient(
+    90deg,
+    var(--muted-foreground) 0%,
+    var(--muted-foreground) 30%,
+    color-mix(in oklab, var(--muted-foreground) 40%, transparent) 45%,
+    color-mix(in oklab, var(--muted-foreground) 40%, transparent) 55%,
+    var(--muted-foreground) 70%,
+    var(--muted-foreground) 100%
+  );
+  background-size: 300% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  animation: label-shine 2.25s cubic-bezier(0.25, 0.1, 0.25, 1) infinite;
+  :where([data-lite]) & {
+    position: relative;
+    color: var(--muted-foreground);
+    -webkit-text-fill-color: currentColor;
+    background: none;
+    animation: none;
+    clip-path: inset(0);
+  }
+  :where([data-lite]) &::after {
     content: "";
     position: absolute;
     top: 0;
@@ -383,10 +405,14 @@
       color-mix(in oklab, var(--gm-surface, var(--background)) 60%, transparent) 65%,
       transparent 100%
     );
-    animation: label-shine 2.25s cubic-bezier(0.25, 0.1, 0.25, 1) infinite;
+    animation: label-sweep 2.25s cubic-bezier(0.25, 0.1, 0.25, 1) infinite;
   }
 }
 @keyframes label-shine {
+  0%, 18% { background-position: 100% 0; }
+  82%, 100% { background-position: 0% 0; }
+}
+@keyframes label-sweep {
   0%, 18% { transform: translateX(-110%); }
   82%, 100% { transform: translateX(280%); }
 }
@@ -401,6 +427,13 @@
 /* AI motion                                                            */
 /* ------------------------------------------------------------------ */
 
+@property --gm-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+
+/* "Agent is working": a single thin beam of light travels around the border. Light animations: the ring pulses. */
 @utility glow-border {
   position: relative;
   isolation: isolate;
@@ -410,19 +443,33 @@
     inset: -1px;
     border-radius: inherit;
     padding: 1px;
-    background: var(--brand);
+    background: conic-gradient(
+      from var(--gm-angle),
+      transparent 0deg,
+      transparent 280deg,
+      color-mix(in oklab, var(--brand) 70%, transparent) 330deg,
+      var(--brand) 350deg,
+      transparent 360deg
+    );
     -webkit-mask:
       linear-gradient(#000 0 0) content-box,
       linear-gradient(#000 0 0);
     -webkit-mask-composite: xor;
     mask-composite: exclude;
-    animation: gm-glow 2.4s ease-in-out infinite;
+    animation: gm-angle 3.2s linear infinite;
     pointer-events: none;
     z-index: 1;
+  }
+  :where([data-lite]) &::before {
+    background: var(--brand);
+    animation: gm-glow 2.4s ease-in-out infinite;
   }
   &:has(> .gm-beam)::before {
     content: none;
   }
+}
+@keyframes gm-angle {
+  to { --gm-angle: 360deg; }
 }
 @keyframes gm-glow {
   0%, 100% { opacity: 0.12; }
@@ -763,33 +810,34 @@
   @apply list-none pl-0.5;
 }
 
-:root .gm-char :is(.gm-bob, .gm-squish, .gm-look, .gm-eyes, .gm-fx, .gm-z) {
+/* Light animations: mood motion on the svg root (composited), blinking is a class toggle (character.tsx). */
+:root[data-lite] .gm-char :is(.gm-bob, .gm-squish, .gm-look, .gm-eyes, .gm-fx, .gm-z) {
   animation: none;
 }
-:root .gm-char {
+:root[data-lite] .gm-char {
   transform-origin: 50% 94%;
   animation: gmc-breathe 4.2s ease-in-out infinite;
   animation-delay: calc(var(--gm-phase, 0s) * -1);
 }
-:root .gm-char[data-mood="working"] {
+:root[data-lite] .gm-char[data-mood="working"] {
   animation: gmc-busy 0.9s ease-in-out infinite;
 }
-:root .gm-char[data-mood="happy"] {
+:root[data-lite] .gm-char[data-mood="happy"] {
   animation: gmc-hop 1.6s cubic-bezier(0.3, 0, 0.3, 1) infinite;
 }
-:root .gm-char[data-mood="attention"] {
+:root[data-lite] .gm-char[data-mood="attention"] {
   animation: gmc-wiggle 2.4s ease-in-out infinite;
 }
-:root .gm-char[data-mood="error"] {
+:root[data-lite] .gm-char[data-mood="error"] {
   animation: gmc-shudder 3s ease-in-out infinite;
 }
-:root .gm-char[data-mood="sleeping"] {
+:root[data-lite] .gm-char[data-mood="sleeping"] {
   animation-duration: 6s;
 }
-:root .gm-char .gm-eyes {
+:root[data-lite] .gm-char .gm-eyes {
   transition: transform 0.12s ease-out;
 }
-:root .gm-char.gm-blink .gm-eyes {
+:root[data-lite] .gm-char.gm-blink .gm-eyes {
   transform: scaleY(0.08);
 }
 

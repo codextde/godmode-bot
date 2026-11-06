@@ -32,8 +32,15 @@
       "light": "Hell",
       "dark": "Dunkel",
       "palette": "Palette",
-      "reduceAnimations": "Animationen reduzieren",
-      "reduceAnimationsDescription": "Weniger und kürzere Animationen: Nachrichten erscheinen sofort, Menüs blenden nur ein, keine leuchtenden Rahmen, während Agenten arbeiten.",
+      "animations": "Animationen",
+      "animationsFull": "Voll",
+      "animationsLight": "Leicht",
+      "animationsReduced": "Reduziert",
+      "animationsDescription": {
+        "full": "Alle Animationen, auch der Lichtstreifen um arbeitende Karten und bewegte Figuren.",
+        "light": "Spart Energie: Arbeitende Karten pulsieren sanft statt eines laufenden Lichtstreifens, eine Live-Anzeige pro Stelle.",
+        "reduced": "Weniger und kürzere Animationen: Nachrichten erscheinen sofort, Menüs blenden nur ein, keine leuchtenden Rahmen, während Agenten arbeiten."
+      },
       "holdInBackground": "Im Hintergrund Energie sparen",
       "holdInBackgroundDescription": "Während du in anderen Apps arbeitest, warten laufende Antworten und Live-Ansichten und holen auf, sobald du zurückkommst."
     },
