@@ -854,7 +854,8 @@
       "automation": "Automation",
       "delegation": "From another agent",
       "task": "Board ticket",
-      "offer": "Offer you took up"
+      "offer": "Offer you took up",
+      "handoff": "Brief from an earlier chat"
     },
     "copyReply": "Copy reply",
     "followup": {

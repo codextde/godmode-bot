@@ -86,7 +86,7 @@ function withoutCompactCard(blocks: MessageBlock[]): MessageBlock[] {
   return blocks.filter((b) => !(b.type === "command" && b.name === "compact"));
 }
 
-const SOURCE_CAPTION = { automation: "message.source.automation", delegation: "message.source.delegation", task: "message.source.task", offer: "message.source.offer" } as const;
+const SOURCE_CAPTION = { automation: "message.source.automation", delegation: "message.source.delegation", task: "message.source.task", offer: "message.source.offer", handoff: "message.source.handoff" } as const;
 
 export const UserMessage = memo(function UserMessage({ message }: { message: Message }) {
   const c = useColors();

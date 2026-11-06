@@ -854,7 +854,8 @@
       "automation": "Automation",
       "delegation": "Von einem anderen Agenten",
       "task": "Aufgabe vom Board",
-      "offer": "Angebot, das du angenommen hast"
+      "offer": "Angebot, das du angenommen hast",
+      "handoff": "Übergabe aus einem früheren Chat"
     },
     "copyReply": "Antwort kopieren",
     "followup": {
