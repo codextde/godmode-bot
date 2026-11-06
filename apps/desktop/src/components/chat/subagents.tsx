@@ -149,7 +149,7 @@ export function SubagentCard({ block, ctx, childBlocks, streaming, agent }: { bl
   const waiting = running && background && streaming;
 
   return (
-    <div id={subagentAnchor(block.id)} className={cn("scroll-mt-24 rounded-xl border bg-card shadow-card", failed && "border-destructive/30", running && "full-motion:glow-border")}>
+    <div id={subagentAnchor(block.id)} className={cn("scroll-mt-24 rounded-xl border bg-card shadow-card", failed && "border-destructive/30")}>
       <button
         type="button"
         onClick={() => (side ? side.toggle() : setOpen(!expanded))}
@@ -256,7 +256,7 @@ export function SubagentGroup({ entries, ctx, streaming, agent }: { entries: Sub
     .map(([phase, n]) => t(`blocks.subagents.${phase}`, { count: n }));
 
   return (
-    <div className={cn("rounded-xl border bg-card shadow-card", working > 0 && "full-motion:glow-border", anyFailed && working === 0 && "border-destructive/30")}>
+    <div className={cn("rounded-xl border bg-card shadow-card", anyFailed && working === 0 && "border-destructive/30")}>
       <div className="flex items-center gap-3 px-3 pt-2.5 pb-1.5">
         <AvatarStack blocks={entries.map((e) => e.block)} agent={agent} size={26} streaming={streaming} />
         <span className="min-w-0 flex-1">

@@ -1,3 +1,4 @@
+import { GlowBeam } from "@/components/glow-beam";
 import {
   useCallback,
   useEffect,
@@ -423,6 +424,7 @@ export function Composer({
         className,
       )}
     >
+      {glow && <GlowBeam />}
       <AnimatePresence>
         {menuOpen && (
           <SlashMenu
@@ -546,7 +548,7 @@ export function Composer({
                 transition={reduce ? { duration: 0.15, ease: "easeOut" } : undefined}
                 className="hidden min-w-0 items-center gap-2 pr-1.5 text-xs text-muted-foreground @xl/composer:flex"
               >
-                <WorkingTicks count={9} className="text-brand-strong" />
+                <WorkingTicks count={9} still className="text-brand-strong" />
                 <span className="truncate">{transcribing ? t("composer.transcribing") : t(steerByDefault ? "composer.workingSteer" : "composer.workingQueued")}</span>
               </motion.span>
             )}

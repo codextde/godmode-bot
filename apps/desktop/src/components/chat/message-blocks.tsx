@@ -552,7 +552,7 @@ function CardToolGroup({ steps, ctx, streaming }: { steps: Step[]; ctx: ToolCont
   }
 
   return (
-    <div className={cn("rounded-xl border bg-card shadow-card", runningIdx >= 0 && "full-motion:glow-border")}>
+    <div className="rounded-xl border bg-card shadow-card">
       <button
         type="button"
         onClick={() => setManual(!expanded)}
@@ -810,7 +810,7 @@ function ToolStep({
 
   if (standalone) {
     return (
-      <div className={cn("rounded-xl border bg-card shadow-card transition", failed && "border-destructive/30", running && "full-motion:glow-border")}>
+      <div className={cn("rounded-xl border bg-card shadow-card transition", failed && "border-destructive/30")}>
         {header}
         <div className={cn((hasPicture(block) || open) && "px-3 pb-3")}>{body}</div>
       </div>
@@ -1134,7 +1134,7 @@ function DelegateCard({ block, streaming, parentRunId }: { block: ToolUseBlock; 
                         ? { text: input.wait === false ? t("blocks.delegate.handedOver") : t("blocks.delegate.done"), tone: "text-success", check: true }
                         : null;
   return (
-    <div className={cn("rounded-xl border bg-card shadow-card", (running || status === "running") && "full-motion:glow-border", (block.isError || status === "failed") && "border-destructive/30")}>
+    <div className={cn("rounded-xl border bg-card shadow-card", (block.isError || status === "failed") && "border-destructive/30")}>
       <div className="flex items-start gap-3 p-3.5">
         {agent ? (
           <AgentAvatar agent={agent} size="md" />
@@ -1297,7 +1297,7 @@ function WorkflowCard({ block, streaming }: { block: ToolUseBlock; streaming: bo
   const script = typeof input.script === "string" ? input.script : "";
 
   return (
-    <div className={cn("rounded-xl border bg-card shadow-card", failed && "border-destructive/30", running && "full-motion:glow-border")}>
+    <div className={cn("rounded-xl border bg-card shadow-card", failed && "border-destructive/30")}>
       <button
         type="button"
         onClick={() => setOpen(!expanded)}
