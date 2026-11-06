@@ -31,14 +31,19 @@ export function parseVerdict(said: string): boolean | null {
   return word === "UNFINISHED" ? true : word === "FINISHED" ? false : null;
 }
 
-const CLOSE = /\bnothing\b[^.!?\n]{0,40}\b(?:needed|required|left|to do)\b|\bno action\b[^.!?\n]{0,20}\b(?:needed|required)\b|\bnichts\b[^.!?\n]{0,40}\b(?:nötig|zu tun|erforderlich|gebraucht|offen)\b/i;
-const ANNOUNCES = /\b(?:next,? I(?:['’]ll| will)|now (?:let me|I(?:['’]ll| will))|let me (?:now|continue)|shall I|want me to|should I (?:continue|go on|proceed)|als nächstes|soll ich)\b/i;
+const CLOSES = [
+  /^(?:so )?(?:there(?:['’]s| is) )?(?:nothing|no action)(?: (?:else|more|further))? (?:is )?(?:needed|required|left to do|to do)(?: (?:from|by|for) you)?(?: (?:right now|now|today|for now))?[.!]?$/i,
+  /^(?:es ist |von dir ist )?(?:nichts|keine aktion)(?: weiter(?:es)?| mehr)? (?:nötig|erforderlich|zu tun|offen)(?: (?:für dich|von dir))?(?: (?:jetzt|heute|gerade))?[.!]?$/i,
+  /^du musst (?:jetzt |heute |gerade )?nichts (?:weiter |mehr )?tun[.!]?$/i,
+];
+const ANNOUNCES =
+  /\b(?:next,? I(?:['’]ll| will)|I(?:['’]ll| will) (?:now|next|then)|now (?:let me|I(?:['’]ll| will))|let me|next step|shall I|want me to|should I (?:continue|go on|proceed)|still (?:running|in progress|to do)|als nächstes|soll ich|ich (?:mache|schaue) (?:jetzt|als nächstes))\b/i;
 
-/** The message closes outright with nothing left ("Nothing needed from you.") and announces nothing on the way. */
+/** The message ends on its own line with nothing left ("Nothing needed from you.") and announces nothing on the way. */
 export function closesOutright(answer: string): boolean {
   const text = stripNoteTags(answer).trim();
-  const last = text.split(/\n\s*\n/).at(-1) ?? "";
-  return CLOSE.test(last) && !ANNOUNCES.test(text);
+  const last = (text.split(/\n\s*\n/).at(-1) ?? "").trim().replace(/\s+/g, " ");
+  return CLOSES.some((c) => c.test(last)) && !ANNOUNCES.test(text);
 }
 
 export async function stoppedEarly(task: string, answer: string): Promise<boolean | null> {

@@ -601,6 +601,26 @@ describe("every task works in its own worktree", () => {
     expect(run.cwd).toBe(realpathSync(bot.repoPath));
   });
 
+  test("a coding task whose removed worktree can't be set up again never works outside it", async () => {
+    const root = tempRoot();
+    const gone = join(root, "gone-coding");
+    await git(["clone", "-q", url, gone], root);
+    const ws = createWorkspace({ name: "Coding folder that goes", sources: [{ kind: "folder", path: gone }] }).id;
+    const bot = await makeAgent({ name: "Gone Coder", workspaceId: ws });
+    const task = createTask({ workspaceId: ws, title: "TASK_EDIT in a folder that goes", type: "coding", agentId: bot.id });
+    await settled(task.id, ["in_review"]);
+    const t = getTask(task.id);
+    await removeCheckout(t.worktree!);
+    rmSync(gone, { recursive: true, force: true });
+    const before = invocations(env).length;
+    await sendTaskMessage(t.id, "TASK_EDIT once more");
+    await until(() => getTask(t.id).runId !== t.runId, 10_000, "follow-up run");
+    await until(() => getRun(getTask(t.id).runId!).status === "failed", 20_000, "follow-up run fails");
+    expect(getRun(getTask(t.id).runId!).error).toContain("Move the task to Todo");
+    expect(invocations(env).length).toBe(before);
+    expect(existsSync(t.worktree!)).toBe(false);
+  });
+
   test("a full clone from before worktrees is kept, and a new task never works on its default branch", async () => {
     const task = createTask({ title: "TASK_EDIT legacy clone", type: "coding", repoUrl: url, status: "backlog" });
     const before = await git(["rev-parse", "main"], remote);

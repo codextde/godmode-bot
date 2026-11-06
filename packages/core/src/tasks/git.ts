@@ -302,6 +302,17 @@ export async function prepareWorktree(opts: {
   });
 }
 
+/** Moved aside at once, so the path is either whole or gone while it is removed (a run may start there meanwhile). */
+function moveAside(dir: string): string {
+  const aside = `${dir}.removing-${newId("r", 8)}`;
+  try {
+    renameSync(dir, aside);
+    return aside;
+  } catch {
+    return dir;
+  }
+}
+
 /** A checkout holds tens of thousands of files (node_modules): removed off the event loop, never with rmSync. */
 function removeTree(dir: string): Promise<void> {
   return rm(dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 200 });
@@ -312,8 +323,10 @@ export async function removeCheckout(dir: string): Promise<void> {
   if (!existsSync(dir)) return;
   const worktree = existsSync(join(dir, ".git")) && !isDir(join(dir, ".git"));
   const common = worktree ? await repoKey(dir).catch(() => null) : null;
-  await removeTree(dir);
+  const aside = moveAside(dir);
+  if (aside === dir) await removeTree(dir);
   if (common) await serialized(common, () => gitOk(["--git-dir", common, "worktree", "prune"], tmpdir()));
+  if (aside !== dir) await removeTree(aside);
 }
 
 /**
@@ -324,14 +337,18 @@ export async function removeCheckoutUnless(dir: string, keep: () => Promise<stri
   if (!existsSync(dir)) return null;
   const worktree = existsSync(join(dir, ".git")) && !isDir(join(dir, ".git"));
   const key = existsSync(join(dir, ".git")) ? await repoKey(dir).catch(() => null) : null;
+  let aside = dir;
   const work = async () => {
     const reason = await keep();
     if (reason) return reason;
-    await removeTree(dir);
+    aside = moveAside(dir);
+    if (aside === dir) await removeTree(dir);
     if (key && worktree) await gitOk(["--git-dir", key, "worktree", "prune"], tmpdir());
     return null;
   };
-  return key ? serialized(key, work) : work();
+  const reason = await (key ? serialized(key, work) : work());
+  if (aside !== dir) await removeTree(aside);
+  return reason;
 }
 
 /** Run `work` while no task fetches into, pushes from or makes worktrees of Godmode's clone at `dir`. */

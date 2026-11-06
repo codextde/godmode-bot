@@ -2087,7 +2087,8 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   if (folder && folder === conv.working_directory && !isDirectory(folder)) {
     const { restoreTaskCheckout } = await import("../tasks/service");
     const restored = await restoreTaskCheckout(job.conversationId, folder);
-    if (restored === false) {
+    if (restored === "failed") return { status: "failed", error: "The task's worktree is gone and couldn't be set up again. Move the task to Todo to set it up again." };
+    if (restored === "fallback") {
       folder = agent.workingDirectory;
       job.acc.addNotice("warning", `The task's worktree is gone and couldn't be set up again, so this works in ${agent.name}'s own folder.`);
     }

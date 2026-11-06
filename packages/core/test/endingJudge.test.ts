@@ -14,19 +14,24 @@ Nothing needed from you.`;
 describe("a turn that closes outright", () => {
   test("a finished report that ends with nothing needed isn't judged at all", () => {
     expect(closesOutright(report)).toBe(true);
-    expect(closesOutright("Today's check is done and nothing is left to do; the next check runs tomorrow at 10:00.")).toBe(true);
     expect(closesOutright("Alles geprüft.\n\nNichts zu tun für dich.")).toBe(true);
     expect(closesOutright("Checked all three stores.\n\nNo action needed.")).toBe(true);
+    expect(closesOutright("Checked all three stores.\n\nNothing else is needed from you today.")).toBe(true);
   });
 
   test("announcing or offering more work still goes to the judge", () => {
     expect(closesOutright("Spend is EUR 80. Next I'll query the downloads per ad.\n\nNothing needed from you.")).toBe(false);
-    expect(closesOutright("Spend is EUR 80. Want me to pause A2 too?\n\nNothing needed from you so far.")).toBe(false);
-    expect(closesOutright("Spend is EUR 80. Now let me check the downloads.")).toBe(false);
+    expect(closesOutright("Spend is EUR 80. Want me to pause A2 too?\n\nNothing needed from you.")).toBe(false);
+    expect(closesOutright("Done with 2 of 5 files.\n\nI'll now migrate the other three.\n\nNothing needed from you.")).toBe(false);
+    expect(closesOutright("Let me run the full suite next.\n\nNothing required from you.")).toBe(false);
   });
 
-  test("nothing needed earlier in the message doesn't close it", () => {
+  test("only a last paragraph that is nothing but the close counts", () => {
+    expect(closesOutright("Fixed the parser.\n\nThe remaining CI failure has nothing to do with this change. I'll look into the flaky e2e test now.")).toBe(false);
+    expect(closesOutright("Parser behoben.\n\nDer Fehler hat nichts mit meiner Änderung zu tun. Ich schaue mir jetzt die Tests an.")).toBe(false);
+    expect(closesOutright("Nothing left to do on the parser. Remaining: update the UI and run the tests.")).toBe(false);
     expect(closesOutright("Nothing needed from you for the ads.\n\nThe store check is still running, I'll report once it's through.")).toBe(false);
+    expect(closesOutright("Today's check is done and nothing is left to do; the next check runs tomorrow at 10:00.")).toBe(false);
   });
 });
 
