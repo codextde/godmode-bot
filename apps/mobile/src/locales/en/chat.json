@@ -66,6 +66,14 @@
     "scrollDown": "Scroll down",
     "tapHintMac": "Tap to click, hold to right-click",
     "tapHint": "Tap the picture to click there",
+    "phone": {
+      "hint": "Tap, hold or swipe on the picture",
+      "back": "Back",
+      "home": "Home",
+      "recents": "Recent apps",
+      "plainOnly": "Only plain letters, digits and punctuation can be typed into Android this way.",
+      "chatOnly": "You can control {{name}} from here while a chat uses it."
+    },
     "keys": {
       "escape": "Escape",
       "tab": "Tab",

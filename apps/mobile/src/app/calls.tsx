@@ -1,28 +1,33 @@
 import { FlashList, type ListRenderItem } from "@shopify/flash-list";
 import { useQuery } from "@tanstack/react-query";
-import { Stack } from "expo-router";
+import { router, Stack } from "expo-router";
 import { memo, useCallback } from "react";
 import { Pressable, RefreshControl, StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { isCallActive, type Agent, type PhoneCall } from "@godmode/shared";
 import { CallStatusBadge, callListQuery, callName, formatCallTime, openCall } from "@/components/call-parts";
 import { CharacterAvatar } from "@/components/character";
+import { HeaderActions } from "@/components/header-actions";
 import { Icon } from "@/components/icon";
-import { EmptyState, ErrorState, Hairline, Row, SkeletonRows, T } from "@/components/ui";
+import { Button, EmptyState, ErrorState, Hairline, Row, SkeletonRows, T } from "@/components/ui";
 import { ApiError, errorText } from "@/lib/api";
 import { shortTime } from "@/lib/format";
 import { useAgents } from "@/lib/hooks";
+import { useSettings } from "@/lib/setup";
 import { usePullRefresh } from "@/lib/use-pull-refresh";
 import { radius, space, useColors } from "@/lib/theme";
 
-/** Calls agents made and took: who they talked to, how it went. Placed in Godmode on the computer. */
+/** Calls agents made and took: who they talked to, how it went. New ones are placed from here like on the computer. */
 export default function Calls() {
   const { t } = useTranslation("calls");
   const list = useQuery(callListQuery);
+  const on = !!useSettings().data?.phone?.enabled;
   const { byId } = useAgents();
   const pull = usePullRefresh(list.refetch);
   const calls = list.data ?? [];
   const live = calls.filter(isCallActive).length;
+  const unavailable = list.error instanceof ApiError && list.error.code === "device_forbidden";
+  const newCall = () => router.push("/call-new");
 
   const renderItem: ListRenderItem<PhoneCall> = useCallback(
     ({ item, index }) => (
@@ -37,6 +42,7 @@ export default function Calls() {
   return (
     <>
       <Stack.Title>{t("list.title")}</Stack.Title>
+      {!unavailable && <HeaderActions actions={[{ icon: "plus", label: t("new.title"), onPress: newCall }]} />}
       <FlashList
         data={list.isLoading ? [] : calls}
         keyExtractor={(c) => c.id}
@@ -57,7 +63,7 @@ export default function Calls() {
             <View style={{ paddingTop: space.md }}>
               <SkeletonRows count={6} avatar={40} />
             </View>
-          ) : list.error instanceof ApiError && list.error.code === "device_forbidden" ? (
+          ) : unavailable ? (
             <EmptyState icon="call" title={t("unavailableTitle")} body={t("unavailableBody")} />
           ) : list.isError ? (
             <ErrorState title={t("list.loadFailed")} error={errorText(list.error)} onRetry={() => void list.refetch()} />
@@ -65,7 +71,8 @@ export default function Calls() {
             <EmptyState
               icon="call"
               title={t("list.emptyTitle")}
-              body={t("list.emptyBody")}
+              body={on ? t("list.emptyBodyOn") : t("list.emptyBody")}
+              action={on ? <Button title={t("list.placeCall")} icon="plus" onPress={newCall} /> : undefined}
             />
           )
         }

@@ -147,10 +147,14 @@ describe("device scope", () => {
     expect(deviceMayCall("POST", "/api/vms/vm_1/exec")).toBe(false);
     expect(deviceMayCall("GET", "/api/android/devices")).toBe(true);
     expect(deviceMayCall("GET", "/api/android/devices/adr_1/screenshot")).toBe(true);
-    expect(deviceMayCall("POST", "/api/android/devices/adr_1/input")).toBe(false);
-    expect(deviceMayCall("POST", "/api/android/devices/adr_1/exec")).toBe(false);
-    expect(deviceMayCall("POST", "/api/android/connect")).toBe(false);
+    expect(deviceMayCall("POST", "/api/android/devices/adr_1/input")).toBe(true);
+    expect(deviceBodyKeys("POST", "/api/android/devices/adr_1/input")).toEqual(["event", "frame"]);
+    for (const action of ["exec", "assign", "disconnect", "input/raw"]) expect(deviceMayCall("POST", `/api/android/devices/adr_1/${action}`)).toBe(false);
+    for (const action of ["connect", "refresh", "install"]) expect(deviceMayCall("POST", `/api/android/${action}`)).toBe(false);
+    expect(deviceMayCall("POST", "/api/android/devices/adr_1/../adr_2/input")).toBe(false);
+    expect(deviceMayCall("GET", "/api/android/devices/adr_1/input")).toBe(false);
     expect(deviceMayCall("PATCH", "/api/android/devices/adr_1")).toBe(false);
+    expect(deviceMayCall("DELETE", "/api/android/devices/adr_1")).toBe(false);
     expect(deviceMayCall("DELETE", "/api/vms/vm_1")).toBe(false);
     expect(deviceMayCall("GET", "/api/credentials")).toBe(true);
     expect(deviceMayCall("POST", "/api/credentials/c1/reveal")).toBe(false);
@@ -452,18 +456,26 @@ describe("device scope", () => {
     expect(deviceBodyKeys("POST", "/api/artifacts/start")).toEqual(["prompt", "agentId", "workspaceId"]);
   });
 
-  test("reads calls, never places them", () => {
+  test("reads calls and places them like the desktop's New call, never sets them up", () => {
     expect(deviceMayCall("GET", "/api/calls")).toBe(true);
     expect(deviceMayCall("GET", "/api/calls/call_4f9Kd81LmQ2xYz0a")).toBe(true);
     expect(deviceMayCall("GET", "/api/calls/call_4f9Kd81LmQ2xYz0a/audio")).toBe(true);
+    expect(deviceMayCall("POST", "/api/calls")).toBe(true);
+    expect(deviceBodyKeys("POST", "/api/calls")).toEqual(["to", "goal", "context", "contactName", "language"]);
+    for (const key of ["voicemail", "numberId", "purpose", "agentId", "conversationId", "pin", "ownerNumber"]) expect(deviceBodyKeys("POST", "/api/calls")).not.toContain(key);
     expect(deviceMayCall("GET", "/api/calls/setup")).toBe(false);
     expect(deviceMayCall("GET", "/api/calls/pin")).toBe(false);
     expect(deviceMayCall("PUT", "/api/calls/pin")).toBe(false);
     expect(deviceMayCall("DELETE", "/api/calls/pin")).toBe(false);
     expect(deviceMayCall("GET", "/api/calls/numbers")).toBe(false);
-    expect(deviceMayCall("POST", "/api/calls")).toBe(false);
+    expect(deviceMayCall("POST", "/api/calls/")).toBe(false);
     expect(deviceMayCall("POST", "/api/calls/test")).toBe(false);
     expect(deviceMayCall("POST", "/api/calls/numbers")).toBe(false);
+    expect(deviceMayCall("POST", "/api/calls/setup")).toBe(false);
+    expect(deviceMayCall("POST", "/api/calls/pin")).toBe(false);
+    expect(deviceMayCall("POST", "/api/calls/call_1")).toBe(false);
+    expect(deviceMayCall("PUT", "/api/calls")).toBe(false);
+    expect(deviceMayCall("DELETE", "/api/calls/call_1")).toBe(false);
     expect(deviceMayCall("GET", "/api/agent-templates")).toBe(true);
     expect(deviceMayCall("POST", "/api/notifications/read")).toBe(true);
     expect(deviceMayCall("DELETE", "/api/notifications")).toBe(true);
@@ -701,6 +713,55 @@ describe("phone access", () => {
     expect(screen.status).toBe(403);
     expect(((await screen.json()) as { error: string }).error).toMatch(/shared in a chat/);
     expect((await phone("/api/vms/vm_missing/input", json("POST", { event: { type: "text", text: "hi" }, frame: { width: 1, height: 1 }, cwd: "/" }))).status).toBe(403);
+  });
+
+  test("phones place calls with the desktop's fields, only while calls are on", async () => {
+    const { token: device } = await pair("Caller");
+    const json = (method: string, body: unknown) => ({ bearer: device, method, body: JSON.stringify(body) });
+    const call = { to: "+4915112345678", goal: "Book a table for two", context: "Friday at 8", contactName: "Trattoria", language: "de" };
+    updateSettings({ phone: { enabled: false } });
+    const off = await phone("/api/calls", json("POST", call));
+    expect(off.status).toBe(409);
+    expect(((await off.json()) as { code: string }).code).toBe("calls_disabled");
+    for (const refused of [{ numberId: "phnum_1" }, { voicemail: "Call me back" }, { purpose: "inform" }, { agentId: "agt_1" }, { pin: "1234" }]) {
+      const res = await phone("/api/calls", json("POST", { ...call, ...refused }));
+      expect(res.status).toBe(403);
+      expect(((await res.json()) as { code: string }).code).toBe("device_forbidden");
+    }
+  });
+
+  test("phones control an Android phone only while a chat uses it", async () => {
+    const { token: device } = await pair("Remote");
+    const json = (method: string, body: unknown) => ({ bearer: device, method, body: JSON.stringify(body) });
+    const stamp = new Date().toISOString();
+    run("INSERT INTO android_devices (id, serial, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)", "adr_used", "serial-used", "Pixel", stamp, stamp);
+    const agent = await ensureDefaultAgent();
+    const chat = createConversation({ agentId: agent.id, title: "Book on the phone" });
+    const tap = { event: { type: "tap", x: 10, y: 20 }, frame: { width: 360, height: 780 } };
+
+    const unused = await phone("/api/android/devices/adr_used/input", json("POST", tap));
+    expect(unused.status).toBe(403);
+    expect(((await unused.json()) as { error: string }).error).toMatch(/a chat uses/);
+
+    run("UPDATE conversations SET android_device_ids = ? WHERE id = ?", JSON.stringify(["adr_used"]), chat.id);
+    // Past the phone's rules: the computer answers that the phone isn't plugged in.
+    expect((await phone("/api/android/devices/adr_used/input", json("POST", tap))).status).toBe(409);
+    expect((await phone("/api/android/devices/adr_used/input", json("POST", { event: { type: "key", key: "home" } }))).status).toBe(409);
+    expect((await phone("/api/android/devices/adr_other/input", json("POST", tap))).status).toBe(403);
+    expect((await phone("/api/android/devices/adr_used/input", json("POST", { ...tap, serial: "other" }))).status).toBe(403);
+    for (const [method, path, body] of [
+      ["POST", "/api/android/devices/adr_used/exec", { command: "id" }],
+      ["POST", "/api/android/devices/adr_used/assign", { kind: "conversation", id: chat.id, assigned: false }],
+      ["POST", "/api/android/devices/adr_used/disconnect", {}],
+      ["PATCH", "/api/android/devices/adr_used", { name: "Mine" }],
+      ["DELETE", "/api/android/devices/adr_used", undefined],
+      ["POST", "/api/android/connect", { host: "10.0.0.2" }],
+    ] as const) {
+      expect((await phone(path, body === undefined ? { bearer: device, method } : json(method, body))).status).toBe(403);
+    }
+
+    run("UPDATE conversations SET archived = 1 WHERE id = ?", chat.id);
+    expect((await phone("/api/android/devices/adr_used/input", json("POST", tap))).status).toBe(403);
   });
 
   test("phones set a chat's project, browser profile and instructions, start private chats, search and dictate", async () => {
@@ -988,8 +1049,9 @@ describe("phone access", () => {
     expect((await phone("/api/calls/setup", { bearer: device })).status).toBe(403);
     expect((await phone("/api/calls/numbers", { bearer: device })).status).toBe(403);
     expect((await phone("/api/calls/call_0000000000000000/audio", { bearer: device })).status).toBe(404);
-    expect((await phone("/api/calls", json("POST", { to: "+4915112345678", goal: "Book a table" }))).status).toBe(403);
     expect((await phone("/api/calls/test", json("POST", {}))).status).toBe(403);
+    expect((await phone("/api/calls/pin", json("PUT", { pin: "1234" }))).status).toBe(403);
+    expect((await phone("/api/calls/numbers", json("POST", { number: "+4930123456", sid: "AC1", token: "t" }))).status).toBe(403);
 
     const templates = await phone("/api/agent-templates", { bearer: device });
     expect(templates.status).toBe(200);

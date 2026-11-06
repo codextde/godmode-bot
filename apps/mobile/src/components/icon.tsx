@@ -44,6 +44,9 @@ const ICONS = {
   link: ["link", "link"],
   camera: ["camera.fill", "photo_camera"],
   back: ["chevron.backward", "arrow_back"],
+  /** An Android phone's Home and Recents buttons. */
+  navHome: ["circle", "radio_button_unchecked"],
+  navRecents: ["square", "crop_square"],
   doc: ["doc.text", "description"],
   attach: ["paperclip", "attach_file"],
   photo: ["photo", "image"],
