@@ -734,12 +734,10 @@
   animation: none !important;
 }
 
-/* Nobody looking (lib/motion-rest.ts): freeze every loop so the window stops redrawing. Characters snap to their
-   resting pose instead of freezing mid-blink. */
 .gm-rest *,
 .gm-rest *::before,
 .gm-rest *::after {
-  animation-play-state: paused !important;
+  animation-iteration-count: 1 !important;
 }
 .gm-rest .gm-char,
 .gm-rest .gm-char * {
