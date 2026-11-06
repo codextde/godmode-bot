@@ -7,8 +7,9 @@
  * the answer. The question row is written in the same transaction as the pause row (runner.ts `suspend`), so an open
  * question always belongs to a run that stands still for it; stopping that run withdraws it.
  *
- * Only the human answers: through the API (desktop, dashboard, a paired phone), by writing into the chat, or — from
- * Slack, Telegram or Teams — as the platform account marked as the owner. Agents have no tool that answers.
+ * The human answers: through the API (desktop, dashboard, a paired phone), by writing into the chat, or — from Slack,
+ * Telegram or Teams — as the platform account marked as the owner. The main agent may settle another agent's question
+ * for them (`via: "agent"`, review/teamQuestions.ts); no other agent answers.
  */
 import type {
   AgentQuestion,
@@ -30,7 +31,7 @@ import { bus } from "../events/bus";
 import { logger } from "../log";
 import { HttpError, badRequest, newId, notFound, now, parseJson } from "../util";
 import { redact } from "../vault/vault";
-import { getAgent } from "../agents/service";
+import { getAgent, getDefaultAgentId } from "../agents/service";
 import { askPause, getRun, questionRefusal, resumeRun } from "../runner/runner";
 import { describeNow, stripNoteTags, type ContinueAnswer } from "../runner/prompt";
 import { audit } from "./audit";
@@ -70,6 +71,17 @@ export interface Answerer {
   via: AnswerVia;
   /** A Godmode Cloud user who isn't the owner: may not approve what uses the Mac password. */
   notOwner?: boolean;
+}
+
+/** Who the asking agent is told answered: the main agent's name for `via: "agent"`, else the human. */
+function answeredBy(via: AnswerVia | null): string | undefined {
+  if (via !== "agent") return undefined;
+  const id = getDefaultAgentId();
+  try {
+    return id ? getAgent(id).name : "Godmode";
+  } catch {
+    return "Godmode";
+  }
 }
 
 export const MAC_PASSWORD_RUN = "Use your Mac password to run a command as administrator";
@@ -166,7 +178,7 @@ export function getQuestion(id: string): AgentQuestion {
 /** `resolved` = answered, approved or declined. */
 export type QuestionFilter = QuestionStatus | "resolved" | "all";
 
-export function listQuestions(opts: { status?: QuestionFilter; conversationId?: string; agentId?: string; limit?: number } = {}): AgentQuestion[] {
+export function listQuestions(opts: { status?: QuestionFilter; conversationId?: string; agentId?: string; limit?: number; withHeld?: boolean } = {}): AgentQuestion[] {
   const where: string[] = [];
   const params: string[] = [];
   const status = opts.status ?? "all";
@@ -187,7 +199,9 @@ export function listQuestions(opts: { status?: QuestionFilter; conversationId?: 
   return all<QuestionRow>(
     `${SELECT}${where.length ? ` WHERE ${where.join(" AND ")}` : ""} ORDER BY q.status = 'open' DESC, q.created_at DESC LIMIT ${limit}`,
     ...params,
-  ).map(toQuestion);
+  )
+    .filter((r) => opts.withHeld || !held.has(r.id))
+    .map(toQuestion);
 }
 
 /** The question the chat's run stands still for, if any. */
@@ -197,7 +211,7 @@ export function openQuestionOf(conversationId: string): AgentQuestion | null {
 }
 
 export function openQuestionCount(): number {
-  return get<{ n: number }>("SELECT COUNT(*) AS n FROM questions WHERE status = 'open'")?.n ?? 0;
+  return all<{ id: string }>("SELECT id FROM questions WHERE status = 'open'").filter((r) => !held.has(r.id)).length;
 }
 
 function emit(q: AgentQuestion, created = false) {
@@ -343,9 +357,47 @@ export function questionNotice(q: AgentQuestion, agentName: string): { title: st
   };
 }
 
-/** The run stands still for the question now: tell the human (notification, event, audit). */
+/**
+ * Questions the main agent looks at first (review/teamQuestions.ts): the human isn't told until it hands one on. Held questions
+ * stay off the human's lists; a restart hands every one on (`publishUnannounced`).
+ */
+const held = new Set<string>();
+let holder: ((q: AgentQuestion) => boolean) | null = null;
+
+export function setQuestionHolder(fn: typeof holder): void {
+  holder = fn;
+}
+
+export function isHeld(id: string): boolean {
+  return held.has(id);
+}
+
+/** The run stands still for the question now: tell the human (notification, event, audit), or let the main agent look first. */
 export function announceQuestion(id: string): void {
   const q = getQuestion(id);
+  audit(`agent:${q.agentId}`, "question.ask", q.id, { kind: q.kind, title: q.title, runId: q.runId, conversationId: q.conversationId, taskId: q.taskId, routineId: q.routineId });
+  log.info("agent asks the human", { questionId: q.id, kind: q.kind, runId: q.runId });
+  if (holder?.(q)) {
+    held.add(id);
+    return;
+  }
+  publish(q);
+}
+
+/** The main agent didn't settle it: now the human is told. */
+export function releaseQuestion(id: string): void {
+  if (!held.delete(id)) return;
+  const r = row(id);
+  if (r?.status === "open" && !r.notification_id) publish(toQuestion(r));
+}
+
+/** Open questions the human was never told about (held when Godmode stopped). */
+export function publishUnannounced(): void {
+  held.clear();
+  for (const r of all<QuestionRow>(`${SELECT} WHERE q.status = 'open' AND q.notification_id IS NULL`)) publish(toQuestion(r));
+}
+
+function publish(q: AgentQuestion): void {
   let agentName = "An agent";
   try {
     agentName = getAgent(q.agentId).name;
@@ -354,10 +406,8 @@ export function announceQuestion(id: string): void {
   }
   const { title, body } = questionNotice(q, agentName);
   const n = notify("question", title, body, questionLink(q));
-  sql("UPDATE questions SET notification_id = ? WHERE id = ?", n.id, id);
-  audit(`agent:${q.agentId}`, "question.ask", q.id, { kind: q.kind, title: q.title, runId: q.runId, conversationId: q.conversationId, taskId: q.taskId, routineId: q.routineId });
+  sql("UPDATE questions SET notification_id = ? WHERE id = ?", n.id, q.id);
   emit(q, true);
-  log.info("agent asks the human", { questionId: q.id, kind: q.kind, runId: q.runId });
 }
 
 /* ------------------------------------------------------------------ */
@@ -407,7 +457,7 @@ export async function questionHere(id: string, conversationId: string | null): P
 export function answerQuestion(id: string, input: AnswerQuestionInput, by: Answerer): { question: AgentQuestion; run: Run } {
   const r = row(id);
   if (!r) throw notFound("Question");
-  if (by.notOwner && input.decision === "approve" && (r.title === MAC_PASSWORD_RUN || r.title === MAC_PASSWORD_FILL)) {
+  if ((by.notOwner || by.via === "agent") && input.decision === "approve" && (r.title === MAC_PASSWORD_RUN || r.title === MAC_PASSWORD_FILL)) {
     throw new HttpError(403, "Only the owner can approve a use of the Mac password.", "mac_password_owner_only");
   }
   const elsewhere = get<{ runner_id: string | null }>("SELECT runner_id FROM conversations WHERE id = ?", r.conversation_id)?.runner_id ?? null;
@@ -475,7 +525,9 @@ export function answerQuestion(id: string, input: AnswerQuestionInput, by: Answe
     outcome: outcomeOf(status, optionId),
     text: attachments.length ? promptWithFiles(raw, agent, attachments) : raw,
     cutOff: r.cut_off === 1,
+    by: answeredBy(by.via),
   };
+  held.delete(id);
   let run: Run;
   try {
     run = resumeRun(paused, "user", answer, { status, optionId, text: stored, attachments, at: ts, via: by.via });
@@ -635,6 +687,7 @@ function continueAnswerOf(r: QuestionRow): ResumedAnswer {
     outcome: outcomeOf(r.status, r.option_id),
     text,
     cutOff: r.cut_off === 1,
+    by: answeredBy(r.answered_via),
   };
 }
 

@@ -2176,21 +2176,21 @@ async function autoMerge(id: string): Promise<boolean> {
  * The human approves the delivered work: its open pull request is merged first (an error says why it couldn't be, and
  * the ticket stays in review), then the ticket is done. A pull request a merge queue takes stays in review until merged.
  */
-export async function approveTask(id: string): Promise<Task> {
+export async function approveTask(id: string, actor: TaskActor = "user"): Promise<Task> {
   const task = requireRow(id);
   if (task.status !== "in_review") throw conflict("Only a ticket in review can be approved");
   if (mergeable(task)) {
     if (busy.has(id)) throw conflict(`Godmode is ${activity.get(id)?.replace(/…$/, "").toLowerCase() ?? "busy with the task"} — try again in a moment`);
     busy.add(id);
     try {
-      const { queued, problem } = await mergeTaskPullRequest(task, "user");
+      const { queued, problem } = await mergeTaskPullRequest(task, actor);
       if (problem) throw new HttpError(409, redact(problem), "merge_failed");
       if (queued) return getTask(id);
     } finally {
       release(id);
     }
   }
-  return requireRow(id).status === "in_review" ? updateTask(id, { status: "done" }, "user") : getTask(id);
+  return requireRow(id).status === "in_review" ? updateTask(id, { status: "done" }, actor) : getTask(id);
 }
 
 /**
