@@ -72,6 +72,7 @@ interface CallRow {
   owner_verified: number;
   pin_wrong: number;
   error: string | null;
+  end_reason: string;
   reported_at: string | null;
   created_at: string;
   updated_at: string;
@@ -106,6 +107,7 @@ function toModel(r: CallRow): PhoneCall {
     ownerVerified: bool(r.owner_verified),
     pinWrong: bool(r.pin_wrong),
     error: r.error,
+    endReason: r.end_reason,
     createdAt: r.created_at,
     endedAt: r.ended_at,
   };
@@ -677,7 +679,7 @@ async function refresh(r: CallRow): Promise<void> {
   sql(
     `UPDATE phone_calls SET status = ?, transcript = ?, summary = ?, outcome = ?, answer = ?, successful = ?, duration_secs = ?, cost_usd = ?,
        has_audio = ?, from_owner = ?, owner_verified = ?, pin_wrong = ?, purge_pending = ?, contact_name = CASE WHEN contact_name = '' THEN ? ELSE contact_name END,
-       number = CASE WHEN number = '' THEN ? ELSE number END, error = ?, updated_at = ?, ended_at = ? WHERE id = ?`,
+       number = CASE WHEN number = '' THEN ? ELSE number END, error = ?, end_reason = ?, updated_at = ?, ended_at = ? WHERE id = ?`,
     status,
     JSON.stringify(pin.transcript),
     pin.text(c.summary),
@@ -694,6 +696,7 @@ async function refresh(r: CallRow): Promise<void> {
     ((pin.verified || (fromOwner && !pinRequired())) && getSettings().general.userName.trim()) || pin.text(c.data.caller_name ?? ""),
     toE164(c.externalNumber) ?? toE164(c.data.callback_number ?? "") ?? "",
     status === "failed" ? c.terminationReason || "The call broke off" : null,
+    ended ? c.terminationReason : "",
     ts,
     ended ? (r.ended_at ?? ts) : null,
     r.id,
@@ -816,6 +819,7 @@ export function heardOnCall(c: PhoneCall, agentLabel: string, otherLabel: string
     c.outcome && `Outcome: ${stripNoteTags(c.outcome)}`,
     c.answer && c.purpose !== "task" && `What they said: ${stripNoteTags(c.answer)}`,
     c.transcript.length && `Transcript:\n${transcriptText(c.transcript, agentLabel, otherLabel)}`,
+    c.endReason && `How it ended: ${/end_call/i.test(c.endReason) ? `${agentLabel} hung up (end_call)` : c.endReason}`,
   ].filter(Boolean);
   if (!lines.length) return "";
   const owner = ownerName();

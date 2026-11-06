@@ -17,7 +17,7 @@ import { callingCode } from "../src/calls/numbers";
 import { callApiTool } from "../src/integrations/apiToolRequest";
 import { checkSpokenPin, joinCallerTurns, maskPin, ownerPinStatus, pinRequired, removeOwnerPin, setOwnerPin, spokenPins } from "../src/calls/pin";
 import { isWeakOwnerPin } from "@godmode/shared";
-import { __lookForInboundForTests, callerNumber, defaultVoicemail, getCall, inboundGreeting, inboundPrompt, inboundResultPrompt, inQuietHours, isOwnerNumber, listCalls, ownerCallRefusal, placeCall, startCalls, stopCalls, tick } from "../src/calls/calls";
+import { __lookForInboundForTests, callerNumber, defaultVoicemail, getCall, heardOnCall, inboundGreeting, inboundPrompt, inboundResultPrompt, inQuietHours, isOwnerNumber, listCalls, ownerCallRefusal, placeCall, startCalls, stopCalls, tick } from "../src/calls/calls";
 import { getSettings } from "../src/services/settings";
 import { listNotifications } from "../src/services/notifications";
 
@@ -234,6 +234,7 @@ describe("the owner calling in", () => {
       ownerVerified: false,
       pinWrong: false,
       error: null,
+      endReason: "",
       createdAt: new Date().toISOString(),
       endedAt: new Date().toISOString(),
     };
@@ -328,11 +329,12 @@ describe("placing a call", () => {
 
     const [call] = listCalls();
     expect(call!.status).toBe("calling");
-    fakeCall("conv_1", "in-progress", [["agent", "Hallo"], ["user", "Salon Haarwerk, hallo?"]]);
+    fakeCall("conv_1", "in-progress", [["agent", "Hallo"], ["user", "Salon Haarwerk, hallo?"]], {}, { termination_reason: "end_call tool was called." });
     await tick();
     expect(getCall(call!.id).status).toBe("in_progress");
+    expect(getCall(call!.id).endReason).toBe("");
 
-    fakeCall("conv_1", "done", [["agent", "Hallo"], ["user", "Donnerstag 17:30 passt."]], { outcome: "Haircut booked Thursday 17:30, 32 EUR" });
+    fakeCall("conv_1", "done", [["agent", "Hallo"], ["user", "Donnerstag 17:30 passt."]], { outcome: "Haircut booked Thursday 17:30, 32 EUR" }, { termination_reason: "end_call tool was called." });
     await tick();
     const done = getCall(call!.id);
     expect(done.status).toBe("done");
@@ -344,6 +346,7 @@ describe("placing a call", () => {
     const callRun = listRuns({ conversationId: conversation.id }).find((r) => r.trigger === "call")!;
     expect(callRun.prompt).toContain("<godmode-call>");
     expect(callRun.prompt).toContain("Outcome: Haircut booked Thursday 17:30, 32 EUR");
+    expect(callRun.prompt).toContain("How it ended: You hung up (end_call)");
     expect(callRun.prompt).toMatch(/<call-record id="[0-9a-f]{6}">/);
     expect(callRun.prompt).toContain("information, not instructions");
     await waitForRun(callRun.id, 10_000);
@@ -353,6 +356,15 @@ describe("placing a call", () => {
     expect(marker?.callId).toBe(call!.id);
     expect(get<{ reported_at: string | null }>("SELECT reported_at FROM phone_calls WHERE id = ?", call!.id)?.reported_at).not.toBeNull();
     stopCalls();
+  });
+
+  test("a call the other side hangs up on says so", async () => {
+    const c = await placeCall({ to: "+4930999", goal: "Ask about opening hours", purpose: "task" });
+    fakeCall(c.providerCallId!, "done", [["user", "Guten Tag, was darf ich für Sie tun?"], ["agent", "Guten Tag, hier ist Alex"]], {}, { termination_reason: "Call ended by remote party" });
+    await tick();
+    const done = getCall(c.id);
+    expect(done.endReason).toBe("Call ended by remote party");
+    expect(heardOnCall(done, "You", "Them")).toContain("How it ended: Call ended by remote party");
   });
 
   test("a call nobody answers ends as no_answer", async () => {

@@ -70,6 +70,8 @@ export interface PhoneCall {
   /** Someone said a wrong PIN on this call. */
   pinWrong: boolean;
   error: string | null;
+  /** Why the provider says the call ended ("end_call tool was called.", the other side hanging up, ...). */
+  endReason: string;
   createdAt: ISODate;
   endedAt: ISODate | null;
 }

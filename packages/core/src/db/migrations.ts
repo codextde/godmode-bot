@@ -2060,4 +2060,12 @@ CREATE TABLE memory_note_uses (
 INSERT OR REPLACE INTO meta (key, value) VALUES ('memory.usesSince', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
 `,
   },
+  {
+    id: 127,
+    name: "phone_call_end_reason",
+    sql: /* sql */ `
+-- Why a call ended, as the provider reports it: tells our voice hanging up apart from the other side.
+ALTER TABLE phone_calls ADD COLUMN end_reason TEXT NOT NULL DEFAULT '';
+`,
+  },
 ];
