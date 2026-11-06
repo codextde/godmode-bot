@@ -294,6 +294,32 @@ export function checkoutDir(taskId: string): string {
   return join(config().tasksDir, taskId);
 }
 
+/**
+ * The worktree of the task whose chat works in `dir`, set up again from the task's branch after the cleanup removed
+ * it. null = `dir` isn't a task's worktree; false = it couldn't be set up again.
+ */
+export async function restoreTaskCheckout(conversationId: string, dir: string): Promise<boolean | null> {
+  const task = get<TaskRow>("SELECT * FROM tasks WHERE conversation_id = ?", conversationId);
+  if (!task || checkoutDir(task.id) !== dir) return null;
+  if (existsSync(dir)) return true;
+  const source = task.branch ? taskRepo(task) : null;
+  if (!task.branch || !source || "error" in source) return false;
+  try {
+    await prepareWorktree({
+      dir,
+      repo: source.repo,
+      base: task.base_branch || source.branch,
+      branch: task.branch,
+      fresh: false,
+      trashDir: join(reposDir(), ".trash"),
+    });
+    return true;
+  } catch (err) {
+    log.warn(`could not set up the worktree of task ${task.id} again`, err);
+    return false;
+  }
+}
+
 /* ------------------------------------------------------------------ */
 /* Queries                                                             */
 /* ------------------------------------------------------------------ */

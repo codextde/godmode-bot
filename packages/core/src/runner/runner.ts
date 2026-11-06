@@ -2082,7 +2082,16 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   const reviewing = job.trigger === "review";
   const upkeep = dreaming || reviewing;
   // A dream always works in the agent's repository, on its memory files; an auto review reads from there.
-  const folder = upkeep ? null : (conv.working_directory ?? agent.workingDirectory);
+  let folder = upkeep ? null : (conv.working_directory ?? agent.workingDirectory);
+  // A finished task's worktree the cleanup removed comes back from its branch when a message reaches its chat.
+  if (folder && folder === conv.working_directory && !isDirectory(folder)) {
+    const { restoreTaskCheckout } = await import("../tasks/service");
+    const restored = await restoreTaskCheckout(job.conversationId, folder);
+    if (restored === false) {
+      folder = agent.workingDirectory;
+      job.acc.addNotice("warning", `The task's worktree is gone and couldn't be set up again, so this works in ${agent.name}'s own folder.`);
+    }
+  }
   const problem = folder && (isDirectory(folder) ? workingDirectoryProblem(folder) : `The folder ${folder} doesn't exist anymore.`);
   if (problem) {
     const fix = conv.working_directory ? "Pick another folder for this chat." : `Change the default folder in ${agent.name}'s settings.`;

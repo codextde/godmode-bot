@@ -9,6 +9,7 @@
  */
 import { createHash } from "node:crypto";
 import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import type { PullRequestState, TaskPullRequest } from "@godmode/shared";
@@ -301,12 +302,17 @@ export async function prepareWorktree(opts: {
   });
 }
 
+/** A checkout holds tens of thousands of files (node_modules): removed off the event loop, never with rmSync. */
+function removeTree(dir: string): Promise<void> {
+  return rm(dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 200 });
+}
+
 /** Remove a task's checkout; a worktree is unregistered from its repository too. Its branch stays (it may hold work). */
 export async function removeCheckout(dir: string): Promise<void> {
   if (!existsSync(dir)) return;
   const worktree = existsSync(join(dir, ".git")) && !isDir(join(dir, ".git"));
   const common = worktree ? await repoKey(dir).catch(() => null) : null;
-  rmSync(dir, { recursive: true, force: true });
+  await removeTree(dir);
   if (common) await serialized(common, () => gitOk(["--git-dir", common, "worktree", "prune"], tmpdir()));
 }
 
@@ -321,7 +327,7 @@ export async function removeCheckoutUnless(dir: string, keep: () => Promise<stri
   const work = async () => {
     const reason = await keep();
     if (reason) return reason;
-    rmSync(dir, { recursive: true, force: true });
+    await removeTree(dir);
     if (key && worktree) await gitOk(["--git-dir", key, "worktree", "prune"], tmpdir());
     return null;
   };

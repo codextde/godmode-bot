@@ -32,7 +32,7 @@ import {
 import { getFollowup, scheduleFollowup } from "../src/services/followups";
 import { pauseConversation } from "../src/services/pauses";
 import { sendMessage } from "../src/services/conversations";
-import { __setGhForTests, compareUrl, openPullRequest, pushBranch, removeSecrets, repoCacheDir } from "../src/tasks/git";
+import { __setGhForTests, compareUrl, openPullRequest, pushBranch, removeCheckout, removeSecrets, repoCacheDir } from "../src/tasks/git";
 import { HttpError } from "../src/util";
 import { redact, rememberSecret, rememberSecretValues, withoutSecrets } from "../src/vault/vault";
 import { listNotifications } from "../src/services/notifications";
@@ -567,6 +567,38 @@ describe("every task works in its own worktree", () => {
     expect(await git(["status", "--porcelain"], t.worktree!)).toBe("");
     expect(await git(["rev-list", "--count", `main..${t.branch}`], remote)).toBe("2");
     expect(readdirSync(join(env.dataDir, "repos", ".trash")).some((n) => n.startsWith(t.id))).toBe(true);
+  });
+
+  test("a message to a task whose worktree the cleanup removed sets it up again from the task's branch", async () => {
+    const task = createTask({ workspaceId: repoWorkspace, title: "TASK_EDIT cleaned up", type: "coding", agentId: repoAgent.id });
+    await settled(task.id, ["in_review"]);
+    const t = getTask(task.id);
+    await removeCheckout(t.worktree!);
+    await sendTaskMessage(t.id, "TASK_EDIT once more");
+    await until(() => getTask(t.id).runId !== t.runId, 10_000, "follow-up run");
+    await settled(t.id, ["in_review"]);
+    expect(getRun(getTask(t.id).runId!).status).toBe("succeeded");
+    expect(await git(["branch", "--show-current"], t.worktree!)).toBe(t.branch!);
+    expect(await git(["rev-list", "--count", `main..${t.branch}`], remote)).toBe("2");
+  });
+
+  test("a removed worktree that can't be set up again falls back to the agent's own folder", async () => {
+    const root = tempRoot();
+    const gone = join(root, "gone");
+    await git(["clone", "-q", url, gone], root);
+    const ws = createWorkspace({ name: "Folder that goes", sources: [{ kind: "folder", path: gone }] }).id;
+    const bot = await makeAgent({ name: "Gone Bot", workspaceId: ws });
+    const task = createTask({ workspaceId: ws, title: "Say hello from a folder that goes", agentId: bot.id });
+    await settled(task.id, ["in_review"]);
+    const t = getTask(task.id);
+    await removeCheckout(t.worktree!);
+    rmSync(gone, { recursive: true, force: true });
+    await sendTaskMessage(t.id, "Say hello again");
+    await until(() => getTask(t.id).runId !== t.runId, 10_000, "follow-up run");
+    await until(() => getRun(getTask(t.id).runId!).status !== "running" && getRun(getTask(t.id).runId!).status !== "queued", 20_000, "follow-up run ends");
+    expect(getRun(getTask(t.id).runId!).status).toBe("succeeded");
+    const run = invocations(env).findLast((i) => i.prompt.includes("Say hello again"))!;
+    expect(run.cwd).toBe(realpathSync(bot.repoPath));
   });
 
   test("a full clone from before worktrees is kept, and a new task never works on its default branch", async () => {
