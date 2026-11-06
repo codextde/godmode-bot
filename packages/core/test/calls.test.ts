@@ -376,11 +376,15 @@ describe("placing a call", () => {
     expect(prompt).toContain("by saying it or with the keypad tones");
     expect(prompt).toContain("Call end_call only when the call is really over");
     expect(prompt).toContain('a "Danke" from an assistant');
+    expect(prompt).toContain("When you agree to be transferred or put on hold, the assistant often says goodbye");
+    expect(prompt).toContain("Vielen Dank für Ihren Anruf. Auf Wiederhören.");
+    expect(prompt).toContain("on an assistant's goodbye after you agreed to be transferred or put on hold");
 
     const body = agentBody({ name: "x", prompt: "p", firstMessage: "", language: "de", llm: "m", voiceId: "", maxSeconds: 60 });
     const endCall = body.conversation_config.agent.prompt.built_in_tools.end_call;
     expect(endCall.params).toEqual({ system_tool_type: "end_call" });
     expect(endCall.description).toContain("Never on hold music, announcements, silence");
+    expect(endCall.description).toContain("goodbye after a transfer or hold was agreed");
   });
 
   test("a mailbox gets the message the agent wrote, and the call ends as voicemail left", async () => {
