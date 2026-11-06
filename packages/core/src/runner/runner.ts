@@ -57,6 +57,8 @@ import {
   isModelId,
   memoryBudget,
   compactAlias,
+  handoffCommand,
+  HANDOFF_HINT_TOKENS,
   modelProvider,
   parseSlashCommand,
   type ActivityNames,
@@ -90,6 +92,7 @@ import {
   emitConversationUpdated,
   DEFAULT_CONVERSATION_TITLE,
   getMessage,
+  handoffAllowed,
   listMessages,
   setConversationState,
   titleFromContent,
@@ -134,6 +137,7 @@ import {
   lateAnswerContext,
   queuedMessagesContext,
   firstTurnContext,
+  handoffRequest,
   resumeContextPrefix,
   stripNoteTags,
   type PromptApiTool,
@@ -1945,7 +1949,7 @@ const GLM_HIDDEN_TOOLS = [
 ];
 
 /** Who wrote a user message, as a recap names them. */
-const SOURCE_SPEAKER: Record<NonNullable<Message["source"]> | "human", string> = { human: "User", automation: "Automation", delegation: "Delegated task", task: "Task", offer: "Your offer, taken up by the user" };
+const SOURCE_SPEAKER: Record<NonNullable<Message["source"]> | "human", string> = { human: "User", automation: "Automation", delegation: "Delegated task", task: "Task", offer: "Your offer, taken up by the user", handoff: "Your brief from the earlier chat" };
 
 function recapPrefix(job: Job): string {
   // A run that continues after a pause sends a note instead of its prompt: its own task and answer so far belong to the recap.
@@ -2008,7 +2012,10 @@ function describeFailure(job: Job, attempt: Attempt): string {
  */
 function bodyOf(job: Job, agent: Agent): string {
   const resumed = job.resumed;
-  if (!resumed) return compactAlias(job.prompt);
+  if (!resumed) {
+    const focus = handoffCommand(job.prompt);
+    return focus !== null && handoffAllowed(job.conversationId) ? handoffRequest(focus, getSettings().general.userName) : compactAlias(job.prompt);
+  }
   const taken = takeQueued(job.conversationId, agent);
   for (const { message } of taken) job.acc.addUserMessage(message);
   if (taken.length) scheduleDelta(job);
@@ -2070,8 +2077,9 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     memory_digest: string | null;
     secret_access: string | null;
     private: number;
+    context_tokens: number | null;
   }>(
-    "SELECT claude_session_id, claude_session_cost_usd, working_directory, model, effort, ultracode, instructions, instructions_digest, memory_digest, secret_access, private FROM conversations WHERE id = ?",
+    "SELECT claude_session_id, claude_session_cost_usd, working_directory, model, effort, ultracode, instructions, instructions_digest, memory_digest, secret_access, private, context_tokens FROM conversations WHERE id = ?",
     job.conversationId,
   );
   if (!conv) return { status: "cancelled", error: "Conversation was deleted" };
@@ -2329,6 +2337,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
         profile: settings.memory.injectMemory && job.trigger !== "check" ? teamProfile(agent) : null,
         teamMemory: job.trigger !== "check" ? teamBelow(agent).map((a) => a.name) : [],
         followups: job.trigger !== "check" && job.trigger !== "delegation" && !job.private,
+        handoff: job.trigger !== "check" && handoffAllowed(job.conversationId),
         privateChat: job.private,
         artifacts: artifactsHere,
         artifactBuilder: builderModel,
@@ -2518,6 +2527,11 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
       "SELECT number, title, status FROM human_tasks WHERE conversation_id = ? AND status IN ('backlog', 'open', 'doing') AND question_id IS NULL ORDER BY number",
       job.conversationId,
     );
+    // A long chat: separate work the human starts here belongs in a fresh one.
+    const longChat =
+      job.humanTyped && !command && handoffCommand(job.prompt) === null && (conv.context_tokens ?? 0) >= HANDOFF_HINT_TOKENS && handoffAllowed(job.conversationId)
+        ? conv.context_tokens
+        : null;
     // The human answered a question, but the run that took the answer broke off before Claude read it.
     const late = !command && !dreaming && !job.resumed?.answer ? owedAnswer(job.conversationId) : null;
     if (late) job.lateAnswer = late.questionId;
@@ -2526,7 +2540,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     const lateNote = late && !carried ? lateAnswerContext(settings.general.userName, late) : "";
     const prompt =
       resuming && !command
-        ? resumeContextPrefix(folder, agent.repoPath, { instructions: restate ? standing : undefined, memoryChanged, vm: promptVm, sources: promptSources, followup, humanTasks, apiTools, ssh, android: phones }) +
+        ? resumeContextPrefix(folder, agent.repoPath, { instructions: restate ? standing : undefined, memoryChanged, vm: promptVm, sources: promptSources, followup, humanTasks, apiTools, ssh, android: phones, longChat }) +
           lateNote +
           body
         : (command || upkeep ? "" : firstTurnContext()) + lateNote + body;

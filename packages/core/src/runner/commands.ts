@@ -135,5 +135,7 @@ function commandsFrom(line: string): SlashCommand[] | null {
       builtin,
     });
   }
+  // Godmode's own (runner.ts turns it into the request for chat_handoff).
+  out.set("handoff", { name: "handoff", description: "Continue in a fresh chat with a clean brief", argumentHint: "[what the new chat is for]", aliases: [], builtin: true });
   return [...out.values()];
 }

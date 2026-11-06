@@ -94,6 +94,7 @@
     "needsLoginFor": "Braucht einen Login für {{service}}",
     "needsLoginForSite": "Braucht einen Login für eine Website",
     "handedTask": "Eine Aufgabe an einen anderen Agenten übergeben",
+    "continuedInNewChat": "In einem neuen Chat weitergeführt",
     "sentNotification": "Dir eine Mitteilung geschickt",
     "askedYou": "Hat dich gefragt",
     "askedForOk": "Um deine Freigabe gebeten",

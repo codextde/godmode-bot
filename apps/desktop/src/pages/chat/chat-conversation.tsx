@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import type { Agent, AndroidDevice, BrowserProfile, ComputerTarget, ConversationWithMessages, Message, SendMessageInput, SshServer, Vm } from "@godmode/shared";
-import { characterGreeting, computerTargetLabel } from "@godmode/shared";
+import { characterGreeting, computerTargetLabel, handoffCommand } from "@godmode/shared";
 import { Archive, ArchiveRestore, ArrowUpRight, Brain, ClipboardCheck, MessageSquareDashed, MessageSquarePlus, Moon, Power, PowerOff, Sparkles, Wand2 } from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -62,6 +62,7 @@ import { speak, useVoiceSession } from "@/lib/voice";
 import { EASE_OUT } from "@/lib/motion";
 import { useConversationLiveRun, type LiveRun } from "@/stores/live";
 import { useUi } from "@/stores/ui";
+import { askHandoff } from "@/stores/handoff";
 import { currentLanguage } from "@/i18n";
 
 const FilePanel = lazy(() => import("@/components/side-panel/file-panel"));
@@ -254,6 +255,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
     mutationFn: (input: SendMessageInput) => api.conversations.send(conversationId, input),
     onMutate: async (input) => {
       await qc.cancelQueries({ queryKey: key });
+      if (handoffCommand(input.content) !== null) askHandoff(conversationId);
       const id = input.queueId!;
       const tempId = `pending-${id}`;
       const attachments = (input.attachments ?? []).map((a) => ({ name: a.name, mime: a.mime, path: "", size: Math.round((a.data.length * 3) / 4) }));
@@ -314,6 +316,9 @@ function ConversationView({ conversationId }: { conversationId: string }) {
   const [compressHiddenAt, setCompressHiddenAt] = useState<number | null>(null);
   const compress = () => send.mutate({ content: "/compress", queueId: newQueueId() });
   const compressQueued = queue.some((m) => /^\/(compress|compact)\b/.test(m.content.trim()));
+  // Go on in a fresh chat: the agent writes the brief, and the new chat opens once it exists.
+  const handoff = conv && conv.origin === "chat" && !conv.private && !conv.runnerId ? () => send.mutate({ content: "/handoff", queueId: newQueueId() }) : undefined;
+  const handoffQueued = queue.some((m) => handoffCommand(m.content) !== null);
 
   const choose = useMutation({
     mutationFn: (patch: Partial<ModelChoice>) => api.conversations.update(conversationId, patch),
@@ -606,6 +611,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                 onLoadOlder={loadOlder}
                 agent={agent}
                 delegatedFrom={conv.delegatedFrom}
+                continuedFrom={conv.continuedFrom}
                 inflight={inflight}
                 after={lastTurn && <TurnEnd key={lastTurn.id} conversation={conv} message={lastTurn} agent={agent} />}
                 empty={
@@ -705,6 +711,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                   gauge.compressible &&
                   !compressing &&
                   !compressQueued &&
+                  !handoffQueued &&
                   !runnerAway &&
                   (compressHiddenAt === null || gauge.tokens > compressHiddenAt * 1.2) && (
                     <motion.div
@@ -715,7 +722,14 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                       transition={{ duration: 0.2, ease: EASE_OUT }}
                       className="overflow-hidden"
                     >
-                      <CompressBar gauge={gauge} agentName={agent?.name ?? t("turnEnd.theAgent")} running={!!activeRunId} onCompress={compress} onDismiss={() => setCompressHiddenAt(gauge.tokens)} />
+                      <CompressBar
+                        gauge={gauge}
+                        agentName={agent?.name ?? t("turnEnd.theAgent")}
+                        running={!!activeRunId}
+                        onCompress={compress}
+                        onHandoff={handoff}
+                        onDismiss={() => setCompressHiddenAt(gauge.tokens)}
+                      />
                     </motion.div>
                   )}
               </AnimatePresence>
@@ -844,6 +858,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                       compressing={compressing || compressQueued}
                       disabled={runnerAway || send.isPending}
                       onCompress={compress}
+                      onHandoff={handoff}
                     />
                   )
                 }

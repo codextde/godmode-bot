@@ -26,6 +26,7 @@ const ThreadRow = memo(function ThreadRow({
   flashing,
   agent,
   delegatedFrom,
+  continuedFrom,
 }: {
   message: Message;
   day: string | null;
@@ -33,6 +34,7 @@ const ThreadRow = memo(function ThreadRow({
   flashing: boolean;
   agent?: Agent;
   delegatedFrom?: Conversation["delegatedFrom"];
+  continuedFrom?: Conversation["continuedFrom"];
 }) {
   return (
     <Fragment>
@@ -52,7 +54,7 @@ const ThreadRow = memo(function ThreadRow({
         transition={{ duration: 0.25, ease: EASE_OUT }}
       >
         {m.role === "user" && m.source ? (
-          <StartedMessage message={m} delegatedFrom={delegatedFrom} />
+          <StartedMessage message={m} delegatedFrom={delegatedFrom} continuedFrom={continuedFrom} />
         ) : m.role === "user" ? (
           <UserMessage message={m} pending={m.id.startsWith("pending-")} />
         ) : m.role === "assistant" ? (
@@ -74,6 +76,8 @@ export interface ThreadProps {
   empty?: ReactNode;
   /** A handed-over chat: who asked (names the opening message). */
   delegatedFrom?: Conversation["delegatedFrom"];
+  /** The chat this one continues (names the brief it starts with). */
+  continuedFrom?: Conversation["continuedFrom"];
   /** Under the last message while nothing is in flight (what to do about a turn that ended early). */
   after?: ReactNode;
   focusId?: string | null;
@@ -84,7 +88,7 @@ export interface ThreadProps {
 
 const LOAD_OLDER_PX = 800;
 
-export function Thread({ messages, agent, inflight, empty, delegatedFrom, after, focusId, hasMore, onLoadOlder }: ThreadProps) {
+export function Thread({ messages, agent, inflight, empty, delegatedFrom, continuedFrom, after, focusId, hasMore, onLoadOlder }: ThreadProps) {
   const { t } = useTranslation("chat");
   const reduce = useReduceAnimations();
   const { scrollRef, contentRef, spacerRef, atBottom, scrollToBottom, pinTurn, unstick } = useStickToBottom({ reduceMotion: reduce });
@@ -164,6 +168,7 @@ export function Thread({ messages, agent, inflight, empty, delegatedFrom, after,
               flashing={flash === m.id}
               agent={agent}
               delegatedFrom={delegatedFrom}
+              continuedFrom={continuedFrom}
             />
           ))}
           {!inflight && after}

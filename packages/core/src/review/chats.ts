@@ -9,7 +9,7 @@ import { all, get } from "../db";
 import { badRequest, truncate } from "../util";
 import { getAgent } from "../agents/service";
 import { listActiveRuns } from "../runner/runner";
-import { addMessage, chatGoal, createConversation, deleteConversation, emitConversationUpdated, sendMessage, setConversationState } from "../services/conversations";
+import { addMessage, chatGoal, createContinuation, deleteConversation, emitConversationUpdated, sendMessage, setConversationState } from "../services/conversations";
 import { cancelFollowup, getFollowup, scheduleFollowup, unattendedRuns } from "../services/followups";
 import { pauseOf, setAutoContinue } from "../services/pauses";
 import { recordAction } from "./review";
@@ -209,20 +209,7 @@ export async function restartChat(runId: string, conversationId: string, summary
   if (!RESTART_ORIGINS.has(c.origin)) return `A ${c.origin} chat can't be restarted: report it instead.`;
   const text = summary.trim();
   if (text.length < 80) return "Write a real summary: what the work is, what is done, what is open, decisions and facts needed to go on.";
-  const fresh = createConversation({
-    agentId: c.agent_id,
-    title: c.title,
-    workingDirectory: c.working_directory,
-    vmId: c.vm_id,
-    browserProfileId: c.browser_profile_id,
-    workspaceId: c.workspace_id,
-    projectId: c.project_id,
-    sshServerIds: JSON.parse(c.ssh_server_ids ?? "[]") as string[],
-    androidDeviceIds: JSON.parse(c.android_device_ids ?? "[]") as string[],
-    instructions: c.instructions,
-    fillOnly: c.secret_access === "fill",
-  });
-  if (c.model || c.effort) setConversationState(fresh.id, { model: c.model, effort: (c.effort as never) ?? null });
+  const fresh = createContinuation(conversationId, c.title);
   const marker: MessageBlock[] = [{ type: "notice", level: "info", text: `Continues "${c.title}". Summary: ${truncate(text, 1500)}` }];
   try {
     await sendMessage(fresh.id, { content: `Continues "${c.title}"`, marker, prompt: carryOver(c.title, conversationId, text), trigger: "manual" });

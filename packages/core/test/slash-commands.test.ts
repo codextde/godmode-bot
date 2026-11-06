@@ -199,6 +199,8 @@ describe("slash command catalog", () => {
       { name: "goal", description: "Set a goal — keep working until the condition is met", argumentHint: "", aliases: [], builtin: true },
       { name: "clear", description: "Start a new session with empty context", argumentHint: "[name]", aliases: ["reset", "new"], builtin: true },
       { name: "hello", description: "Say hello to someone", argumentHint: "<name>", aliases: [], builtin: false },
+      // Godmode's own: go on in a fresh chat.
+      { name: "handoff", description: "Continue in a fresh chat with a clean brief", argumentHint: "[what the new chat is for]", aliases: [], builtin: true },
     ]);
     const probe = invocations(env).at(-1)!;
     expect(argValue(probe, "--input-format")).toBe("stream-json");
@@ -218,7 +220,7 @@ describe("slash command catalog", () => {
     Date.now = () => realNow() + 6 * 60_000;
     try {
       const stale = await listSlashCommands(agent);
-      expect(stale.map((c) => c.name)).toEqual(["goal", "clear", "hello"]);
+      expect(stale.map((c) => c.name)).toEqual(["goal", "clear", "hello", "handoff"]);
       // Asked again while that lookup runs: no second one.
       await listSlashCommands(agent);
       await until(() => invocations(env).length > before, 10_000, "the lookup behind the request");
@@ -235,6 +237,6 @@ describe("slash command catalog", () => {
   test("is served over HTTP", async () => {
     const res = await fetch(`${env.baseUrl}/api/agents/${agent.id}/commands`, { headers: { authorization: `Bearer ${getAccessToken()}` } });
     expect(res.status).toBe(200);
-    expect(((await res.json()) as { name: string }[]).map((c) => c.name)).toEqual(["goal", "clear", "hello"]);
+    expect(((await res.json()) as { name: string }[]).map((c) => c.name)).toEqual(["goal", "clear", "hello", "handoff"]);
   });
 });

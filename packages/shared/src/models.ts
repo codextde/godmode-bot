@@ -443,6 +443,8 @@ export interface Conversation {
   paused?: RunPause | null;
   /** A chat another agent handed over: who asked, from which chat (null when that chat was deleted) and which run. */
   delegatedFrom?: { agentId: ID; conversationId: ID | null; runId: ID } | null;
+  /** The chat this one continues with a fresh context (`chat_handoff`); null when there is none or it was deleted. */
+  continuedFrom?: { conversationId: ID; title: string } | null;
   /** How full the chat's Claude session is, as of its last turn; null = not known yet (no turn, or a fresh session). */
   context?: ConversationContext | null;
 }
@@ -725,7 +727,8 @@ export interface QueuedMessage {
 }
 
 /** Who wrote a user message when it wasn't the human: an automation, another agent handing work over, the task board. */
-export type MessageSource = "automation" | "delegation" | "task" | "offer";
+/** `handoff`: the brief the agent wrote for a chat it continued in a fresh one (`chat_handoff`). */
+export type MessageSource = "automation" | "delegation" | "task" | "offer" | "handoff";
 
 export interface Message {
   id: ID;

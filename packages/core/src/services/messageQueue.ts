@@ -8,13 +8,13 @@
  * run is paused the queue belongs to it: the run takes the messages along when it continues.
  */
 import type { Agent, Attachment, Message, QueuedMessage, Run, SendMessageInput, SendMessageOutcome } from "@godmode/shared";
-import { parseSlashCommand } from "@godmode/shared";
+import { handoffCommand, parseSlashCommand } from "@godmode/shared";
 import { all, bool, get, insert, int, run as sql } from "../db";
 import { bus } from "../events/bus";
 import { badRequest, conflict, newId, notFound, now, parseJson } from "../util";
 import { redact } from "../vault/vault";
 import { activeRunForConversation, cancelRun, listActiveRuns, startRun, waitForRun } from "../runner/runner";
-import { addMessage, emitConversationUpdated, messageTarget, promptWithFiles, saveAttachments, sendMessage, setConversationState } from "./conversations";
+import { addMessage, emitConversationUpdated, handoffAllowed, messageTarget, promptWithFiles, saveAttachments, sendMessage, setConversationState } from "./conversations";
 import { continueConversation, pauseOf } from "./pauses";
 
 interface QueueRow {
@@ -111,6 +111,9 @@ function enqueue(conversationId: string, input: SendMessageInput): QueuedMessage
  * is paused. With `steer`, the agent stops what it is doing and starts on the queue right away.
  */
 export async function submitMessage(conversationId: string, input: SendMessageInput): Promise<SendMessageOutcome> {
+  if (handoffCommand(input.content ?? "") !== null && !handoffAllowed(conversationId)) {
+    throw badRequest("Private chats and chats of tasks, apps or other agents can't go on in a new chat.");
+  }
   const busy = activeRunForConversation(conversationId) !== null;
   const paused = pauseOf(conversationId);
   if (!busy && !paused && !hasQueued(conversationId)) return sendMessage(conversationId, { ...input, trigger: "chat" });

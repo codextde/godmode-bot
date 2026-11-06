@@ -1,7 +1,7 @@
 import { Link } from "react-router";
 import { motion } from "motion/react";
 import { useTranslation } from "react-i18next";
-import { ArrowRight, FoldVertical, Loader2, X } from "lucide-react";
+import { ArrowRight, FoldVertical, Loader2, MessageSquareShare, X } from "lucide-react";
 import type { CompactInfo, ContextGauge, ConversationContext } from "@godmode/shared";
 import { contextGauge, tokensLabel } from "@godmode/shared";
 import { Button } from "@/components/ui/button";
@@ -47,13 +47,14 @@ function Ring({ share, tone, busy }: { share: number; tone: ContextGauge["tone"]
   );
 }
 
-/** The composer's context ring: how full the chat's session is, with Compress one click away. */
+/** The composer's context ring: how full the chat's session is, with Compress and New chat one click away. */
 export function ContextMeter({
   gauge,
   agentName,
   running,
   compressing,
   onCompress,
+  onHandoff,
   disabled,
 }: {
   gauge: ContextGauge;
@@ -61,6 +62,8 @@ export function ContextMeter({
   running: boolean;
   compressing: boolean;
   onCompress: () => void;
+  /** Go on in a fresh chat; unset where the chat can't. */
+  onHandoff?: () => void;
   disabled?: boolean;
 }) {
   const reduce = useReduceAnimations();
@@ -86,7 +89,12 @@ export function ContextMeter({
       </Tooltip>
       <PopoverContent side="top" align="end" className="w-[19rem] p-0">
         <div className="px-4 pt-3.5 pb-3">
-          <div className="eyebrow pb-2">{t("meter.title")}</div>
+          <div className="flex items-center justify-between gap-3 pb-2">
+            <span className="eyebrow">{t("meter.title")}</span>
+            <Link to="/settings/ai#auto-compact" className="text-[11.5px] text-muted-foreground transition hover:text-foreground">
+              {gauge.autoAt === null ? t("meter.autoOff") : t("meter.autoAt", { pct: Math.round(gauge.autoAt * 100) })}
+            </Link>
+          </div>
           <div className="flex items-baseline justify-between gap-3">
             <div className="flex items-baseline gap-1.5">
               <span className="text-2xl font-semibold tracking-tight tabular-nums">{tokensLabel(gauge.tokens)}</span>
@@ -108,16 +116,19 @@ export function ContextMeter({
             </div>
           )}
           <p className="mt-3 text-[12.5px] leading-relaxed text-muted-foreground">
-            {t("meter.explain", { name: agentName })}
+            {onHandoff ? t("meter.explainBoth", { name: agentName }) : t("meter.explain", { name: agentName })}
           </p>
         </div>
-        <div className="flex items-center justify-between gap-2 border-t bg-muted/40 px-3 py-2.5">
-          <Link to="/settings/ai#auto-compact" className="text-[12px] text-muted-foreground transition hover:text-foreground">
-            {gauge.autoAt === null ? t("meter.autoOff") : t("meter.autoAt", { pct: Math.round(gauge.autoAt * 100) })}
-          </Link>
-          <Button size="sm" variant={gauge.tone === "calm" ? "outline" : "default"} disabled={disabled || compressing || !gauge.compressible} onClick={onCompress} className="h-7 gap-1.5 text-[12.5px]">
+        <div className={cn("grid gap-2 border-t bg-muted/40 px-3 py-2.5", onHandoff ? "grid-cols-2" : "grid-cols-1")}>
+          {onHandoff && (
+            <Button size="sm" variant="outline" disabled={disabled} onClick={onHandoff} className="h-7 gap-1.5 text-[12.5px]">
+              <MessageSquareShare className="size-3.5" />
+              {t("meter.newChat")}
+            </Button>
+          )}
+          <Button size="sm" variant={gauge.tone === "calm" ? "outline" : "default"} disabled={disabled || compressing || !gauge.compressible} onClick={onCompress} className="h-7 min-w-0 gap-1.5 text-[12.5px]">
             {compressing ? <Loader2 className="size-3.5 animate-spin" /> : <FoldVertical className="size-3.5" />}
-            {compressing ? t("meter.compressing") : !gauge.compressible ? t("meter.nothing") : running ? t("meter.afterStep") : t("meter.now")}
+            <span className="truncate">{compressing ? t("meter.compressing") : !gauge.compressible ? t("meter.nothing") : running ? t("meter.afterStep") : onHandoff ? t("meter.compress") : t("meter.now")}</span>
           </Button>
         </div>
       </PopoverContent>
@@ -126,7 +137,21 @@ export function ContextMeter({
 }
 
 /** Above the composer once the chat gets long. */
-export function CompressBar({ gauge, agentName, running, onCompress, onDismiss }: { gauge: ContextGauge; agentName: string; running: boolean; onCompress: () => void; onDismiss: () => void }) {
+export function CompressBar({
+  gauge,
+  agentName,
+  running,
+  onCompress,
+  onHandoff,
+  onDismiss,
+}: {
+  gauge: ContextGauge;
+  agentName: string;
+  running: boolean;
+  onCompress: () => void;
+  onHandoff?: () => void;
+  onDismiss: () => void;
+}) {
   const { t } = useTranslation("chat");
   const pct = gauge.share === null ? null : Math.round(gauge.share * 100);
   const auto = gauge.autoAt !== null ? Math.round(gauge.autoAt * 100) : null;
@@ -143,8 +168,13 @@ export function CompressBar({ gauge, agentName, running, onCompress, onDismiss }
           {auto !== null ? t("meter.autoBy", { name: agentName, pct: auto }) : t("meter.keepQuick")}
         </span>
       </span>
+      {onHandoff && (
+        <Button size="xs" variant="outline" onClick={onHandoff} className="shrink-0 gap-1">
+          <MessageSquareShare className="size-3" /> {t("meter.newChat")}
+        </Button>
+      )}
       <Button size="xs" onClick={onCompress} className="shrink-0 gap-1">
-        {running ? t("meter.compressNext") : t("meter.now")} <ArrowRight className="size-3" />
+        {running ? t("meter.compressNext") : onHandoff ? t("meter.compress") : t("meter.now")} <ArrowRight className="size-3" />
       </Button>
       <button type="button" aria-label={t("meter.hide")} onClick={onDismiss} className="grid size-6 shrink-0 place-items-center rounded-md text-muted-foreground transition hover:bg-foreground/5 hover:text-foreground">
         <X className="size-3.5" />

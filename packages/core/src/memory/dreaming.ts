@@ -343,6 +343,7 @@ export interface Activity {
 
 function speaker(trigger: RunTrigger, human: string, source: string | null): string {
   if (source === "offer") return `Your own offer, taken up by ${human}`;
+  if (source === "handoff") return "Your brief from the earlier chat";
   if (trigger === "routine") return "Automation";
   if (trigger === "delegation") return "Delegated task (from another agent)";
   if (trigger === "api" || trigger === "manual") return "Request (API)";
