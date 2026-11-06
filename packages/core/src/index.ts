@@ -35,7 +35,7 @@ import { reloadSchedules, startScheduler } from "./scheduler/scheduler";
 import { startSignInRetry, stopSignInRetry } from "./automations/signInRetry";
 import { startDreaming, stopDreaming } from "./memory/dreaming";
 import { startReviews, stopReviews } from "./review/review";
-import { startTeam, stopTeam } from "./review/team";
+import { startTeam, stopTeam } from "./review/teamQuestions";
 import { startFollowups, stopFollowups } from "./services/followups";
 import { startHumanTasks, stopHumanTasks } from "./services/humanTasks";
 import { startPauses, stopPauses } from "./services/pauses";

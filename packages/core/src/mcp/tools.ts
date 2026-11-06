@@ -173,7 +173,7 @@ import { attachArtifactFiles, findMentionedFiles, prepareArtifactFiles, removeAr
 import { NOTE_MAX, cancelFollowup, followupsAllowed, getFollowup, inWords, parseDueAt, scheduleFollowup } from "../services/followups";
 import { autoRetryOf, continueCutOffRun, latestContinuation } from "../services/resume";
 import { answerQuestion, askQuestion, getQuestion, listQuestions } from "../services/questions";
-import { isTeamRun } from "../review/team";
+import { isTeamRun } from "../review/teamQuestions";
 import { callOwnerWhenAsked, callsEnabled, getCall, heardOnCall, listCalls, ownerCallRefusal, placeCall } from "../calls/calls";
 import { MAX_OPEN_PER_CHAT, createAgentHumanTask, duplicateAsk, findHumanTask, listHumanTasks, withdrawHumanTask } from "../services/humanTasks";
 import { createMod, findMod, installMod, listMods, updateMod } from "../mods/service";

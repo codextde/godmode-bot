@@ -9,7 +9,7 @@
  *
  * The human answers: through the API (desktop, dashboard, a paired phone), by writing into the chat, or — from Slack,
  * Telegram or Teams — as the platform account marked as the owner. The main agent may settle another agent's question
- * for them (`via: "agent"`, review/team.ts); no other agent answers.
+ * for them (`via: "agent"`, review/teamQuestions.ts); no other agent answers.
  */
 import type {
   AgentQuestion,
@@ -358,7 +358,7 @@ export function questionNotice(q: AgentQuestion, agentName: string): { title: st
 }
 
 /**
- * Questions the main agent looks at first (review/team.ts): the human isn't told until it hands one on. Held questions
+ * Questions the main agent looks at first (review/teamQuestions.ts): the human isn't told until it hands one on. Held questions
  * stay off the human's lists; a restart hands every one on (`publishUnannounced`).
  */
 const held = new Set<string>();
