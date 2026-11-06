@@ -32,7 +32,7 @@ import { loadDraft, saveDraft, useDraft } from "@/lib/drafts";
 import { errorMessage, isLicenseRequired } from "@/lib/api";
 import { useEasyMode } from "@/lib/mode";
 import { cn } from "@/lib/utils";
-import { EASE_OUT, useReduceAnimations } from "@/lib/motion";
+import { EASE_OUT, useLightAnimations, useReduceAnimations } from "@/lib/motion";
 import { AttachmentTray, formatBytes, readAttachments, totalBytes, type PendingAttachment } from "./attachments";
 import { LevelBars } from "./voice-visuals";
 import { WorkingTicks } from "@/components/aicss/Motion";
@@ -129,6 +129,7 @@ export function Composer({
   ref,
 }: ComposerProps) {
   const reduce = useReduceAnimations();
+  const lite = useLightAnimations();
   const { t } = useTranslation("chat");
   const easy = useEasyMode();
   const textKey = draftKey ? `chat:${draftKey}` : undefined;
@@ -424,7 +425,7 @@ export function Composer({
         className,
       )}
     >
-      {glow && <GlowBeam />}
+      {glow && lite && <GlowBeam />}
       <AnimatePresence>
         {menuOpen && (
           <SlashMenu
@@ -548,7 +549,7 @@ export function Composer({
                 transition={reduce ? { duration: 0.15, ease: "easeOut" } : undefined}
                 className="hidden min-w-0 items-center gap-2 pr-1.5 text-xs text-muted-foreground @xl/composer:flex"
               >
-                <WorkingTicks count={9} still className="text-brand-strong" />
+                <WorkingTicks count={9} still={lite} className="text-brand-strong" />
                 <span className="truncate">{transcribing ? t("composer.transcribing") : t(steerByDefault ? "composer.workingSteer" : "composer.workingQueued")}</span>
               </motion.span>
             )}

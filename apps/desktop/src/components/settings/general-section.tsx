@@ -23,6 +23,8 @@ type Theme = Settings["general"]["theme"];
 
 const loadAutostart = () => import("@tauri-apps/plugin-autostart");
 
+type Animations = "full" | "light" | "reduced";
+
 export function GeneralSection({ settings }: { settings: Settings }) {
   const { t } = useTranslation(["settings", "common"]);
   const { language, setLanguage, timeFormat, setTimeFormat, systemHour12 } = useLanguage();
@@ -31,7 +33,14 @@ export function GeneralSection({ settings }: { settings: Settings }) {
   const g = settings.general;
   const { setMode } = useSetInterfaceMode();
   const reduceAnimations = useUi((s) => s.reduceAnimations);
+  const lightAnimations = useUi((s) => s.lightAnimations);
   const setReduceAnimations = useUi((s) => s.setReduceAnimations);
+  const setLightAnimations = useUi((s) => s.setLightAnimations);
+  const animations: Animations = reduceAnimations ? "reduced" : lightAnimations ? "light" : "full";
+  const setAnimations = (v: Animations) => {
+    setReduceAnimations(v === "reduced");
+    setLightAnimations(v === "light");
+  };
   const holdInBackground = useUi((s) => s.holdInBackground);
   const setHoldInBackground = useUi((s) => s.setHoldInBackground);
   const toolCallView = useUi((s) => s.toolCallView);
@@ -147,12 +156,17 @@ export function GeneralSection({ settings }: { settings: Settings }) {
         <SettingRow label={t("general.appearance.palette")} description={paletteBlurb(palette)} stacked>
           <PalettePicker value={palette} mode={resolved} onChange={setPalette} />
         </SettingRow>
-        <SettingRow
-          label={t("general.appearance.reduceAnimations")}
-          htmlFor="reduce-animations"
-          description={t("general.appearance.reduceAnimationsDescription")}
-        >
-          <Switch id="reduce-animations" checked={reduceAnimations} onCheckedChange={setReduceAnimations} />
+        <SettingRow label={t("general.appearance.animations")} description={t(`general.appearance.animationsDescription.${animations}`)}>
+          <Segmented<Animations>
+            aria-label={t("general.appearance.animations")}
+            value={animations}
+            onChange={setAnimations}
+            options={[
+              { value: "full", label: t("general.appearance.animationsFull") },
+              { value: "light", label: t("general.appearance.animationsLight") },
+              { value: "reduced", label: t("general.appearance.animationsReduced") },
+            ]}
+          />
         </SettingRow>
         <SettingRow
           label={t("general.appearance.holdInBackground")}

@@ -25,11 +25,13 @@ installExternalLinks();
 installDropGuard();
 startMotionRest();
 
-const applyMotion = (reduce: boolean) => {
-  document.documentElement.dataset.motion = reduce ? "reduced" : "full";
+const applyMotion = ({ reduceAnimations, lightAnimations }: { reduceAnimations: boolean; lightAnimations: boolean }) => {
+  const root = document.documentElement;
+  root.dataset.motion = reduceAnimations ? "reduced" : "full";
+  root.toggleAttribute("data-lite", lightAnimations && !reduceAnimations);
 };
-applyMotion(useUi.getState().reduceAnimations);
-useUi.subscribe((s) => applyMotion(s.reduceAnimations));
+applyMotion(useUi.getState());
+useUi.subscribe(applyMotion);
 
 const queryClient = new QueryClient({
   queryCache: new QueryCache({ onError: (err, query) => reportRequestError(err, query.queryKey.slice(0, 2).join(".")) }),

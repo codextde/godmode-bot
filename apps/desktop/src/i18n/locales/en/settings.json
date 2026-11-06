@@ -32,8 +32,15 @@
       "light": "Light",
       "dark": "Dark",
       "palette": "Palette",
-      "reduceAnimations": "Reduce animations",
-      "reduceAnimationsDescription": "Fewer and shorter animations: messages appear instantly, menus only fade, no glowing borders while agents work.",
+      "animations": "Animations",
+      "animationsFull": "Full",
+      "animationsLight": "Light",
+      "animationsReduced": "Reduced",
+      "animationsDescription": {
+        "full": "Every animation, including the beam around working cards and moving characters.",
+        "light": "Uses less energy: working cards pulse softly instead of a moving beam, one live indicator per place.",
+        "reduced": "Fewer and shorter animations: messages appear instantly, menus only fade, no glowing borders while agents work."
+      },
       "holdInBackground": "Save energy in the background",
       "holdInBackgroundDescription": "While you work in other apps, streaming replies and live views wait and catch up the moment you come back."
     },

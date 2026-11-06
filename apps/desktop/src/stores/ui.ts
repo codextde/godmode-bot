@@ -65,6 +65,8 @@ interface UiState {
   sidebarWidth: number | null;
   artifactPanelWidth: number | null;
   reduceAnimations: boolean;
+  /** Cheaper "agent is working" motion: fewer loops, all on the compositor. */
+  lightAnimations: boolean;
   holdInBackground: boolean;
   toolCallView: ToolCallView;
   followUpMode: FollowUpMode;
@@ -110,6 +112,7 @@ interface UiState {
   setSidebarWidth: (width: number | null) => void;
   setArtifactPanelWidth: (width: number | null) => void;
   setReduceAnimations: (v: boolean) => void;
+  setLightAnimations: (v: boolean) => void;
   setHoldInBackground: (v: boolean) => void;
   setToolCallView: (v: ToolCallView) => void;
   setFollowUpMode: (v: FollowUpMode) => void;
@@ -152,6 +155,7 @@ export const useUi = create<UiState>()(
       sidebarWidth: null,
       artifactPanelWidth: null,
       reduceAnimations: false,
+      lightAnimations: false,
       holdInBackground: true,
       toolCallView: "cards",
       followUpMode: "queue",
@@ -201,6 +205,7 @@ export const useUi = create<UiState>()(
       setSidebarWidth: (sidebarWidth) => set({ sidebarWidth }),
       setArtifactPanelWidth: (artifactPanelWidth) => set({ artifactPanelWidth }),
       setReduceAnimations: (reduceAnimations) => set({ reduceAnimations }),
+      setLightAnimations: (lightAnimations) => set({ lightAnimations }),
       setHoldInBackground: (holdInBackground) => set({ holdInBackground }),
       setToolCallView: (toolCallView) => set({ toolCallView }),
       setFollowUpMode: (followUpMode) => set({ followUpMode }),
@@ -240,6 +245,7 @@ export const useUi = create<UiState>()(
         sidebarWidth: s.sidebarWidth,
         artifactPanelWidth: s.artifactPanelWidth,
         reduceAnimations: s.reduceAnimations,
+        lightAnimations: s.lightAnimations,
         holdInBackground: s.holdInBackground,
         toolCallView: s.toolCallView,
         followUpMode: s.followUpMode,

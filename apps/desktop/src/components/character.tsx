@@ -132,7 +132,8 @@ const blinking = new Map<SVGSVGElement, number>();
 let blinkTimer: ReturnType<typeof setInterval> | null = null;
 
 function blinkTick() {
-  if (document.hidden || isMotionResting() || document.documentElement.dataset.motion === "reduced") return;
+  const root = document.documentElement;
+  if (document.hidden || isMotionResting() || !root.hasAttribute("data-lite") || root.dataset.motion === "reduced") return;
   const now = Date.now();
   for (const [svg, offset] of blinking) {
     if ((now + offset) % BLINK_EVERY_MS >= 250) continue;
