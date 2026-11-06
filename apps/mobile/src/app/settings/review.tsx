@@ -80,7 +80,18 @@ export default function AutoReview() {
         )
       ) : (
         <>
-          <Group title={t("schedule")} footer={[r.enabled && overview.data?.nextReviewAt ? t("next", { when: whenText(overview.data.nextReviewAt) }) : null, r.autoFix ? null : t("reportOnly")].filter(Boolean).join(" ") || undefined}>
+          <Group
+            title={t("schedule")}
+            footer={
+              [
+                r.enabled && overview.data?.nextReviewAt ? t("next", { when: whenText(overview.data.nextReviewAt) }) : null,
+                r.autoFix ? null : t("reportOnly"),
+                r.autoFix && r.team ? null : t("onComputer"),
+              ]
+                .filter(Boolean)
+                .join(" ") || undefined
+            }
+          >
             <SwitchRow icon="review" title={t("enabled")} value={r.enabled} onChange={(enabled) => void patchSettings({ review: { enabled } })} />
             {r.enabled ? (
               <PickerRow
@@ -91,8 +102,9 @@ export default function AutoReview() {
                 onChange={(next) => void patchSettings({ review: { cron: next } })}
               />
             ) : null}
-            <SwitchRow icon="wrench" title={t("autoFix")} value={r.autoFix} onChange={(autoFix) => void patchSettings({ review: { autoFix } })} />
-            <SwitchRow icon="subagent" title={t("team")} detail={t("teamDetail")} value={r.team} onChange={(team) => void patchSettings({ review: { team } })} />
+            {/* Off from here; back on at the computer, like the features that widen what agents do. */}
+            <SwitchRow icon="wrench" title={t("autoFix")} value={r.autoFix} disabled={!r.autoFix} onChange={(autoFix) => void patchSettings({ review: { autoFix } })} />
+            <SwitchRow icon="subagent" title={t("team")} detail={t("teamDetail")} value={r.team} disabled={!r.team} onChange={(team) => void patchSettings({ review: { team } })} />
             <PickerRow icon="sparkles" title={t("model.title")} value={reviewModel} options={modelOptions} onChange={(model) => void patchSettings({ review: { model } })} />
           </Group>
 

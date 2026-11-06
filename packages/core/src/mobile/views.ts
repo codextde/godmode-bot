@@ -29,6 +29,13 @@ export function isSecretFileName(name: string): boolean {
   return SECRET_FILE.test(name.normalize("NFKC"));
 }
 
+/** Top-level folders of an agent's repository that Godmode writes for itself: raw run logs, transcripts and its state. */
+const MACHINE_FOLDERS = new Set(["runs", "conversations", "state"]);
+
+export function isMachineFolder(name: string): boolean {
+  return MACHINE_FOLDERS.has(name.normalize("NFKC").toLowerCase());
+}
+
 /**
  * Why a phone may not open this path of an agent's folder (null = it may). The core resolves paths inside the folder
  * anyway (agents/repo.ts); this refuses everything that even tries to leave it, before any file is touched.
@@ -39,7 +46,7 @@ export function phoneFilePathRefusal(rel: string): string | null {
   if (rel !== rel.trim() || rel.length > 1024 || /[\u0000-\u001f\u007f\\:]/.test(rel) || rel.startsWith("/") || rel.startsWith("~") || /^[a-zA-Z]:/.test(rel)) return outside;
   const parts = rel.split("/");
   if (parts.some((p) => p.trim() === ".." || p.normalize("NFKC").toLowerCase() === ".git" || /~\d/.test(p))) return outside;
-  if (parts.some(isSecretFileName)) return "Open this file in Godmode on your computer.";
+  if (parts.some(isSecretFileName) || isMachineFolder(parts.find((p) => p && p !== ".") ?? "")) return "Open this file in Godmode on your computer.";
   return null;
 }
 
@@ -70,7 +77,10 @@ const list =
   (body: unknown): unknown =>
     Array.isArray(body) ? (body as T[]).map(view) : body;
 
-const visibleFile = (path: string) => !path.split("/").some((p) => isSecretFileName(p) || p.toLowerCase() === ".git");
+const visibleFile = (path: string) => {
+  const parts = path.split("/");
+  return !isMachineFolder(parts[0] ?? "") && !parts.some((p) => isSecretFileName(p) || p.toLowerCase() === ".git");
+};
 
 export const phoneCredential = (c: Credential): Credential => ({ ...c, url: pageOf(c.url), password: undefined, notes: undefined });
 

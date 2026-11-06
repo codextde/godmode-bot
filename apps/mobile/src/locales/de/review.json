@@ -6,6 +6,7 @@
   "next": "Nächstes Review {{when}}.",
   "autoFix": "Gefundenes selbst beheben",
   "reportOnly": "Es meldet nur, was es findet.",
+  "onComputer": "Selbst beheben und die Fragen des Teams schaltest du auf deinem Computer wieder ein.",
   "team": "Fragen des Teams zuerst",
   "model": {
     "title": "Modell",

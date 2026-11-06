@@ -888,7 +888,7 @@
   "features": {
     "title": "Features",
     "loadFailed": "Couldn't load the features",
-    "footer": "Integrations, plugins, messaging, cards, VMs, SSH and Android phones are switched on at your computer.",
+    "footer": "Integrations, plugins, messaging, phone calls, cards, VMs, SSH and Android phones are switched on at your computer.",
     "activity": {
       "title": "Activity",
       "detail": "Every run of every agent"

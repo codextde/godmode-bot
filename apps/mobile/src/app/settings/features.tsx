@@ -19,7 +19,7 @@ const FEATURES: { id: Feature; icon: IconName; phone: boolean }[] = [
   { id: "integrations", icon: "plug", phone: false },
   { id: "plugins", icon: "puzzle", phone: false },
   { id: "messaging", icon: "chats", phone: false },
-  { id: "phone", icon: "call", phone: true },
+  { id: "phone", icon: "call", phone: false },
   { id: "cards", icon: "creditCard", phone: false },
   { id: "vm", icon: "vm", phone: false },
   { id: "ssh", icon: "server", phone: false },

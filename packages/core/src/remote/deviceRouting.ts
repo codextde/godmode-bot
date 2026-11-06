@@ -17,7 +17,7 @@ import { auditSettings } from "../services/agentSettings";
 import { getSettings, updateSettings } from "../services/settings";
 import { applyRuntimeSettings } from "../services/runtime";
 import { checkSettingsPatch } from "../services/settingsPatch";
-import { requestDevice, requestVia } from "../server/auth";
+import { isPhoneRequest, requestVia } from "../server/auth";
 import { adoptGrant, requireGrant } from "../server/grants";
 import { HttpError, badRequest } from "../util";
 import { forwarding, isSecondary, primaryRunnerId } from "./group";
@@ -116,8 +116,8 @@ async function forward(c: Context, body?: Uint8Array | string): Promise<Response
   if (type) headers["content-type"] = type;
   const grant = c.req.header("x-godmode-grant");
   if (grant) headers["x-godmode-grant"] = grant;
-  // The primary applies the phones' rules that depend on its own files (an agent's folder).
-  if (requestDevice(c)) headers["x-godmode-phone"] = "1";
+  // The primary applies the phones' rules again, with its own settings and files.
+  if (isPhoneRequest(c)) headers["x-godmode-phone"] = "1";
   const res = await primary().request(c.req.method, pathAndQuery(c), { body: body ?? (await bodyBytes(c)), headers, timeoutMs: 180_000 });
   const out = new Headers();
   for (const [k, v] of Object.entries(res.headers)) out.set(k, v);

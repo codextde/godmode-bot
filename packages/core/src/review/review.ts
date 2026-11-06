@@ -17,7 +17,7 @@ import type { Agent, Review, ReviewAction, ReviewActionKind, ReviewFinding, Revi
 import { all, get, getMeta, insert, run as exec, setMeta } from "../db";
 import { bus } from "../events/bus";
 import { logger } from "../log";
-import { badRequest, conflict, newId, notFound, now, parseJson, truncate } from "../util";
+import { HttpError, badRequest, conflict, newId, notFound, now, parseJson, truncate } from "../util";
 import { ensureAgentRepo, getAgent, getDefaultAgentId, listAgents, updateAgent } from "../agents/service";
 import { getRoutine, updateRoutine } from "../services/routines";
 import { createConversation, emitConversationUpdated, sendMessage, setConversationState } from "../services/conversations";
@@ -311,14 +311,22 @@ function laterOf(iso: string): Date {
   return Number.isNaN(at.getTime()) || at < soon ? soon : at;
 }
 
-/** Put one change of a review back. */
-export async function undoReviewAction(reviewId: string, index: number, actor = "user"): Promise<Review> {
+/** Lifting fill-only lets an automation's runs read raw secrets again. */
+function liftsFillOnly(undo: Undo): boolean {
+  return undo.type === "routine" && undo.before.fillOnly === false && getRoutine(undo.routineId).fillOnly;
+}
+
+/** Put one change of a review back. `keepFillOnly`: never by lifting an automation's fill-only (asked from a phone). */
+export async function undoReviewAction(reviewId: string, index: number, actor = "user", opts: { keepFillOnly?: boolean } = {}): Promise<Review> {
   const row = reviewRow(reviewId);
   const actions = actionsOf(row);
   const action = actions[index];
   if (!action) throw notFound("Change");
   if (action.undoneAt) throw conflict("This change was undone already");
   if (!undoable(action.undo)) throw conflict("This change can't be undone anymore: it was changed again since");
+  if (opts.keepFillOnly && liftsFillOnly(action.undo!)) {
+    throw new HttpError(403, "Undoing this lets the automation's runs read raw secrets again. Undo it in Godmode on your computer.", "device_forbidden");
+  }
   await applyUndo(action.undo!);
   // Read again: the review may have recorded more meanwhile, or another undo finished.
   const fresh = actionsOf(reviewRow(reviewId));

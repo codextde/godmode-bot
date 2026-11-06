@@ -98,6 +98,7 @@ import {
   pullRequestState,
   pushBranch,
   removeCheckout,
+  removeCheckoutUnless,
   removeSecrets,
   type TaskRepo,
 } from "./git";
@@ -954,7 +955,8 @@ async function stopWork(task: TaskRow, byHuman = false, runIds = openRuns(task.c
   await stopRuns(runIds, "Stopped from the task board", byHuman);
 }
 
-export async function deleteTask(id: string): Promise<void> {
+/** `keep`: why the worktree has to stay (asked again in its repository's lock, after the runs stopped); it then stays for the cleanup. */
+export async function deleteTask(id: string, opts: { keep?: (dir: string) => Promise<string | null> } = {}): Promise<void> {
   const task = requireRow(id);
   cancelRetry(id);
   const waiting = all<{ task_id: string }>("SELECT task_id FROM task_dependencies WHERE waits_for_id = ?", id);
@@ -980,7 +982,17 @@ export async function deleteTask(id: string): Promise<void> {
   activity.delete(id);
   bus.emit({ type: "task.deleted", id });
   await stopRuns(openRuns(task.conversation_id), "The task was deleted");
-  await removeCheckout(checkoutDir(id)).catch((err) => log.warn(`could not remove the worktree of task ${id}`, err));
+  const dir = checkoutDir(id);
+  const keep = opts.keep;
+  try {
+    if (!keep) await removeCheckout(dir);
+    else {
+      const reason = await removeCheckoutUnless(dir, () => keep(dir));
+      if (reason) log.info(`kept the worktree of deleted task ${id}: ${reason}`);
+    }
+  } catch (err) {
+    log.warn(`could not remove the worktree of task ${id}`, err);
+  }
   removeTaskAttachments(id);
 }
 

@@ -888,7 +888,7 @@
   "features": {
     "title": "Funktionen",
     "loadFailed": "Funktionen konnten nicht geladen werden",
-    "footer": "Integrationen, Plugins, Messaging, Karten, VMs, SSH und Android-Handys schaltest du auf deinem Computer ein.",
+    "footer": "Integrationen, Plugins, Messaging, Anrufe, Karten, VMs, SSH und Android-Handys schaltest du auf deinem Computer ein.",
     "activity": {
       "title": "Aktivität",
       "detail": "Jeder Lauf jedes Agenten"

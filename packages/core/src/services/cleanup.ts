@@ -375,7 +375,7 @@ async function gitLines(args: string[], cwd: string): Promise<string[] | null> {
 }
 
 /** Why a checkout can't go without losing work; null = everything in it is safe in its repository. */
-async function unsavedWork(dir: string): Promise<string | null> {
+export async function unsavedWork(dir: string): Promise<string | null> {
   const gitPath = await lstat(join(dir, ".git")).catch(() => null);
   if (!gitPath) return "Not a git checkout — have a look at it before removing it.";
   // Said outright: the human's git settings may hide new files (status.showUntrackedFiles) or submodule changes.

@@ -165,13 +165,11 @@ describe("a phone reads without secrets", () => {
     expect((await phone(`${files}/file?path=workspace/report.md&path=workspace/.env`)).status).toBe(403);
     for (const path of ["%20workspace/.env", "workspace/.env%20", "workspace/.ENV", "workspace/id_r%C5%BFa"]) expect((await phone(`${files}/file?path=${path}`)).status).toBe(403);
     expect((await phone(`${files}/file?path=workspace/.env`, { method: "HEAD" })).status).toBe(403);
-    // What a secondary forwards from its phones: the folder rule runs here, on this computer's files.
-    const forwarded = { headers: { "x-godmode-phone": "1" } };
-    expect((await desktop(`${files}/file?path=workspace/settings.md`, forwarded)).status).toBe(403);
-    expect((await desktop(`${files}/file?path=workspace/.env`, forwarded)).status).toBe(403);
-    expect((await desktop(`${files}/files/raw?path=workspace/elsewhere/secret.png`, forwarded)).status).toBe(403);
-    expect((await desktop(`${files}/file?path=workspace/report.md`, forwarded)).status).toBe(200);
-    expect((await desktop(`${files}/file?path=workspace/settings.md`)).status).toBe(200);
+    // What another computer of the group forwards from its phones: see mobile-group.test.ts. The header alone, without
+    // the link, makes no request a phone's.
+    expect((await desktop(`${files}/file?path=workspace/.env`, { headers: { "x-godmode-phone": "1" } })).status).toBe(200);
+    // The core opens no link as the file itself either.
+    expect((await desktop(`${files}/file?path=workspace/settings.md`)).status).toBe(403);
     const hits = (await (await phone(`${files}/files/search?q=secret`)).json()) as { path: string }[];
     expect(hits.map((h) => h.path).some((p) => p.includes(".env") || p.endsWith(".pem"))).toBe(false);
     expect((await phone(`${files}/files/delete`, send("POST", { paths: ["workspace/report.md"] }))).status).toBe(403);

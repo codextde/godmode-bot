@@ -13,7 +13,7 @@ import { all, get } from "../db";
 import { getSettings } from "../services/settings";
 import { NULLABLE_SETTINGS, sameSettingShape, settingInRange } from "../services/settingShape";
 import { parseJson } from "../util";
-import { isSecretFileName, phoneFilePathRefusal } from "./views";
+import { isMachineFolder, isSecretFileName, phoneFilePathRefusal } from "./views";
 
 const ID = "[^/]+";
 
@@ -286,9 +286,12 @@ const SETTINGS: Record<string, string[]> = {
 /**
  * Optional features a phone may switch off but only the computer switches on: each widens what agents reach — app
  * connections and keys, outside people messaging them, code that runs in every turn, payment cards, servers, ~/.ssh,
- * Android phones and VMs. Activity, artifacts and calls (set up on the computer) may also go back on from the phone.
+ * Android phones, VMs and phone calls. Activity and artifacts may also go back on from the phone.
  */
-const ENABLED_ON_COMPUTER = new Set(["integrations", "messaging", "plugins", "cards", "ssh", "sshKeys", "android", "vm"]);
+const ENABLED_ON_COMPUTER = new Set(["integrations", "messaging", "plugins", "cards", "ssh", "sshKeys", "android", "vm", "phone"]);
+
+/** Switches of a section a phone may turn off but not on: auto review fixing things itself and settling the team's questions. */
+const ON_AT_COMPUTER: Record<string, string[]> = { review: ["autoFix", "team"] };
 
 /** What a phone may clean up: what Godmode removes by itself too. Trash, VM images and downloads go on the computer. */
 export const PHONE_CLEANUP = [
@@ -400,17 +403,26 @@ export function deviceQueryRefusal(method: string, path: string, query: URLSearc
   if (method === "DELETE" && path.startsWith("/api/workspaces/") && query.has("force")) {
     return "Delete a workspace with agents, chats or tasks in it on your computer.";
   }
-  if (method === "GET" && path === "/api/search" && query.get("notes") !== "0") return "Search agents' notes in Godmode on your computer.";
   // HEAD runs the GET route too: its status alone would tell whether a file is there.
-  const files = method === "GET" || method === "HEAD" ? AGENT_FOLDER.exec(path) : null;
+  const reading = method === "GET" || method === "HEAD";
+  if (reading && path === "/api/search" && query.get("notes") !== "0") return "Search agents' notes in Godmode on your computer.";
+  const files = reading ? AGENT_FOLDER.exec(path) : null;
   // One path: the check and the route must read the same one.
   if (files) return query.getAll("path").length > 1 ? "Only files in the agent's folder open on the phone." : deviceFolderRefusal(files[1]!, query.get("path") ?? "");
   // Searching the full address or the holder would spell out what the list leaves out, one letter at a time.
-  if ((method === "GET" || method === "HEAD") && (path === "/api/credentials" || path === "/api/cards") && query.has("search")) return "Search on the phone filters the list it has.";
+  if (reading && (path === "/api/credentials" || path === "/api/cards") && query.has("search")) return "Search on the phone filters the list it has.";
   return null;
 }
 
 const AGENT_FOLDER = new RegExp(`^/api/agents/(${ID})/(file|files|files/raw)$`);
+
+const NO_AGENT = "There is no such agent.";
+
+/** The agent's folder, found as the routes find the agent: by id, else by slug. */
+function agentRepo(idOrSlug: string): string | null {
+  const row = get<{ repo_path: string }>("SELECT repo_path FROM agents WHERE id = ?", idOrSlug) ?? get<{ repo_path: string }>("SELECT repo_path FROM agents WHERE slug = ?", idOrSlug);
+  return row?.repo_path ?? null;
+}
 
 /**
  * A phone reads inside the agent's folder only: nothing that tries to leave it, no .git, no file that usually holds keys
@@ -421,8 +433,8 @@ const AGENT_FOLDER = new RegExp(`^/api/agents/(${ID})/(file|files|files/raw)$`);
 export function deviceFolderRefusal(agentId: string, value: string): string | null {
   const refusal = phoneFilePathRefusal(value);
   if (refusal) return refusal;
-  const repo = get<{ repo_path: string }>("SELECT repo_path FROM agents WHERE id = ?", agentId)?.repo_path;
-  if (!repo) return null;
+  const repo = agentRepo(agentId);
+  if (!repo) return NO_AGENT;
   const parts = value.split("/").filter((p) => p && p !== ".");
   const kept = "Open this file in Godmode on your computer.";
   for (let i = 1; i <= parts.length; i++) {
@@ -435,8 +447,8 @@ export function deviceFolderRefusal(agentId: string, value: string): string | nu
     if (info.isSymbolicLink()) return kept;
   }
   try {
-    const real = relative(realpathSync.native(repo), realpathSync.native(join(repo, ...parts)));
-    if (real.split(sep).some((p) => p.toLowerCase() === ".git" || isSecretFileName(p))) return kept;
+    const real = relative(realpathSync.native(repo), realpathSync.native(join(repo, ...parts))).split(sep);
+    if (isMachineFolder(real[0] ?? "") || real.some((p) => p.toLowerCase() === ".git" || isSecretFileName(p))) return kept;
   } catch {
     return null;
   }
@@ -456,8 +468,8 @@ function notesPathRefusal(agentId: string, value: unknown): string | null {
   if (cleaned.startsWith("/") || /^[a-zA-Z]:/.test(cleaned)) return NOTES_ONLY;
   const parts = cleaned.split("/").filter((p) => p && p !== ".");
   if (parts[0] !== "memory" || parts.includes("..")) return NOTES_ONLY;
-  const repo = get<{ repo_path: string }>("SELECT repo_path FROM agents WHERE id = ?", agentId)?.repo_path;
-  if (!repo) return null;
+  const repo = agentRepo(agentId);
+  if (!repo) return NO_AGENT;
   for (let i = 1; i <= parts.length; i++) {
     let info: Stats;
     try {
@@ -522,6 +534,7 @@ function settingsRefusal(body: Record<string, unknown>): string | null {
       if (!SETTINGS[section]?.includes(key)) return "Change this setting in Godmode on your computer.";
       if (!sameSettingShape(value, current[section]?.[key], NULLABLE_SETTINGS.has(`${section}.${key}`)) || !settingInRange(`${section}.${key}`, value)) return `Invalid value for ${section}.${key}.`;
       if (key === "enabled" && value === true && ENABLED_ON_COMPUTER.has(section) && current[section]?.enabled !== true) return "Turn this on in Godmode on your computer.";
+      if (value === true && ON_AT_COMPUTER[section]?.includes(key) && current[section]?.[key] !== true) return "Turn this on in Godmode on your computer.";
       // Hex is a program and a model download: it is set up on the computer.
       if (section === "voice" && key === "sttProvider" && value === "hex" && current.voice?.sttProvider !== "hex") return "Set up Hex in Godmode on your computer.";
     }

@@ -253,6 +253,23 @@ describe("files page", () => {
     expect((await call("PUT", `/api/agents/${agent.id}/file`, { path: "workspace/plans/brand-new.md", content: "# New\n", create: true })).status).toBe(200);
   });
 
+  test("a link as the file itself is never read or written through, also one that points nowhere yet", async () => {
+    const outside = mkdtempSync(join(tmpdir(), "godmode-outside-"));
+    mkdirSync(at("memory"), { recursive: true });
+    symlinkSync(join(outside, "planted.md"), at("memory/dangling.md"));
+    expect((await call("PUT", `/api/agents/${agent.id}/file`, { path: "memory/dangling.md", content: "x" })).status).toBe(403);
+    expect((await call("PUT", `/api/agents/${agent.id}/file`, { path: "memory/dangling.md", content: "x", create: true })).status).toBe(409);
+    expect(existsSync(join(outside, "planted.md"))).toBe(false);
+    put("workspace/real.md", "inside");
+    symlinkSync("real.md", at("workspace/alias.md"));
+    expect((await call("GET", `/api/agents/${agent.id}/file?path=workspace/alias.md`)).status).toBe(403);
+    expect((await call("PUT", `/api/agents/${agent.id}/file`, { path: "workspace/alias.md", content: "changed" })).status).toBe(403);
+    expect(readFileSync(at("workspace/real.md"), "utf8")).toBe("inside");
+    rmSync(at("memory/dangling.md"));
+    rmSync(at("workspace/alias.md"));
+    rmSync(outside, { recursive: true, force: true });
+  });
+
   test("search and notes don't follow a linked MEMORY.md or memory/ out of the repository", async () => {
     const outside = mkdtempSync(join(tmpdir(), "godmode-outside-"));
     writeFileSync(join(outside, "secret.txt"), "TOPSECRET line here\n");

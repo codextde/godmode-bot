@@ -130,6 +130,11 @@ describe("tailscale status", () => {
 });
 
 describe("device scope", () => {
+  let known = "";
+  beforeAll(async () => {
+    known = (await ensureDefaultAgent()).id;
+  });
+
   test("opens what the app uses and nothing else", () => {
     expect(deviceMayCall("GET", "/api/conversations")).toBe(true);
     expect(deviceMayCall("POST", "/api/conversations/conv_1/messages")).toBe(true);
@@ -211,6 +216,10 @@ describe("device scope", () => {
     expect(deviceMayCall("GET", "/api/search")).toBe(true);
     expect(deviceMayCall("POST", "/api/search")).toBe(false);
     expect(deviceMayCall("GET", "/api/search/notes")).toBe(false);
+    for (const method of ["GET", "HEAD"]) {
+      expect(deviceQueryRefusal(method, "/api/search", new URLSearchParams({ q: "invoice" }))).toMatch(/notes/);
+      expect(deviceQueryRefusal(method, "/api/search", new URLSearchParams({ q: "invoice", notes: "0" }))).toBeNull();
+    }
     expect(deviceMayCall("POST", "/api/voice/transcribe")).toBe(true);
     expect(deviceMayCall("POST", "/api/voice/speak")).toBe(false);
     expect(deviceMayCall("GET", "/api/voice/hex")).toBe(false);
@@ -245,16 +254,19 @@ describe("device scope", () => {
     expect(deviceBodyKeys("POST", "/api/agents/a1/run")).toEqual(["prompt", "workspaceId"]);
     expect(deviceBodyKeys("POST", "/api/agents/a1/duplicate")).toEqual([]);
     expect(deviceBodyKeys("PUT", "/api/agents/a1/file")).toEqual(["path", "content", "create"]);
-    const query = (path: string) => deviceQueryRefusal("GET", "/api/agents/agt_missing/file", new URLSearchParams({ path }));
+    const query = (path: string) => deviceQueryRefusal("GET", `/api/agents/${known}/file`, new URLSearchParams({ path }));
     // Reading covers the agent's whole folder (track V); writing stays under memory/.
     for (const path of ["memory", "memory/people.md", "./memory/a/b.md", "memory//x.md", "", ".", "MEMORY.md", "CLAUDE.md", "memoryx/a.md"]) expect(query(path)).toBeNull();
     for (const path of ["memory/../CLAUDE.md", "memory/..", "/etc/passwd", "memory\\..\\CLAUDE.md", "C:/x", ".git/config"]) {
       expect(query(path)).toMatch(/agent's folder/);
     }
-    expect(deviceQueryRefusal("GET", "/api/agents/agt_missing/files", new URLSearchParams())).toBeNull();
-    expect(deviceBodyRefusal("PUT", "/api/agents/agt_missing/file", { path: "memory/x.md", content: "" })).toBeNull();
-    expect(deviceBodyRefusal("PUT", "/api/agents/agt_missing/file", { path: "CLAUDE.md", content: "" })).toMatch(/memory\//);
-    expect(deviceBodyRefusal("PUT", "/api/agents/agt_missing/file", { content: "" })).toMatch(/memory\//);
+    expect(deviceQueryRefusal("GET", `/api/agents/${known}/files`, new URLSearchParams())).toBeNull();
+    expect(deviceBodyRefusal("PUT", `/api/agents/${known}/file`, { path: "memory/x.md", content: "" })).toBeNull();
+    expect(deviceBodyRefusal("PUT", `/api/agents/${known}/file`, { path: "CLAUDE.md", content: "" })).toMatch(/memory\//);
+    expect(deviceBodyRefusal("PUT", `/api/agents/${known}/file`, { content: "" })).toMatch(/memory\//);
+    // An agent the check can't find is one whose folder it can't check.
+    expect(deviceQueryRefusal("GET", "/api/agents/agt_missing/files", new URLSearchParams())).toMatch(/no such agent/);
+    expect(deviceBodyRefusal("PUT", "/api/agents/agt_missing/file", { path: "memory/x.md", content: "" })).toMatch(/no such agent/);
   });
 
   test("reads passwords, files, integrations, plugins, messaging and servers without their secrets", () => {
@@ -350,7 +362,7 @@ describe("device scope", () => {
     for (const path of ["/api/files/image", "/api/files/text", "/api/files/markdown"]) expect(deviceMayCall("GET", path)).toBe(false);
     expect(deviceMayCall("POST", "/api/files/reveal")).toBe(false);
 
-    const read = (route: string, path: string) => deviceQueryRefusal("GET", `/api/agents/agt_missing/${route}`, new URLSearchParams({ path }));
+    const read = (route: string, path: string) => deviceQueryRefusal("GET", `/api/agents/${known}/${route}`, new URLSearchParams({ path }));
     for (const path of ["", "workspace", "workspace/report.md", "workspace/shot.png", "memory/people.md", "MEMORY.md", "CLAUDE.md", "workspace/env-notes.md", "workspace/id_rsa.pub"]) {
       for (const route of ["files", "file", "files/raw"]) expect(read(route, path)).toBeNull();
     }
@@ -365,6 +377,11 @@ describe("device scope", () => {
     // Spelled so the check and the disk disagree: spaces the core trims, control characters, macOS' Unicode folding, Windows names.
     for (const path of [" .env", ".env ", "\t.npmrc", "workspace/id_rsa ", "a\u0001b", "workspace/x:y", "workspace/CREDEN~1.JSO"]) expect(read("file", path)).toMatch(/agent's folder/);
     for (const path of ["workspace/id_r\u017fa", "workspace/server.\u212aey", "workspace/.ENV"]) expect(read("file", path)).toMatch(/computer/);
+    // Godmode's own records of the agent: raw run logs, transcripts and its state.
+    for (const path of ["runs", "runs/2026-11-06.log", "conversations/c.md", "state/settings.json", "./runs/x", "RUNS/x", "\uff52uns/x"]) {
+      for (const route of ["files", "file", "files/raw"]) expect(read(route, path)).toMatch(/computer/);
+    }
+    for (const path of ["workspace/runs/x.md", "memory/state.md", "runsheet.md"]) expect(read("file", path)).toBeNull();
     expect(deviceQueryRefusal("HEAD", "/api/agents/a1/file", new URLSearchParams({ path: "workspace/.env" }))).toMatch(/computer/);
     expect(deviceQueryRefusal("GET", "/api/agents/a1/file", new URLSearchParams("path=ok.md&path=.env"))).toMatch(/agent's folder/);
     // Searching what a list leaves out would spell it out; the phone filters its own list.
@@ -407,9 +424,9 @@ describe("device scope", () => {
     const keys = view("GET", "/api/ssh/key-manager", { dir: "/Users/me/.ssh", agent: { available: true, loaded: 1 }, keys: [{ name: "id_ed25519", path: "/Users/me/.ssh/id_ed25519", fingerprint: "SHA256:x", publicKey: "ssh-ed25519 AAA" }] });
     expect(keys).toMatchObject({ dir: "", keys: [{ name: "id_ed25519", path: null, fingerprint: "SHA256:x", publicKey: "ssh-ed25519 AAA" }] });
 
-    const entries = view("GET", "/api/agents/a1/files", ["workspace/report.md", "workspace/.env", "workspace/deploy.pem", "workspace/id_rsa.pub", "workspace/id_rsa"].map((path) => ({ path, type: "file", size: 1, modifiedAt: now })));
-    expect((entries as { path: string }[]).map((e) => e.path)).toEqual(["workspace/report.md", "workspace/id_rsa.pub"]);
-    const hits = view("GET", "/api/agents/a1/files/search", [{ path: "workspace/.env.production", type: "file", line: 1, snippet: "KEY=x" }, { path: "workspace/notes.md", type: "file", line: 3, snippet: "key" }]);
+    const entries = view("GET", "/api/agents/a1/files", ["workspace/report.md", "workspace/.env", "workspace/deploy.pem", "workspace/id_rsa.pub", "workspace/id_rsa", "runs", "conversations", "state", "workspace/runs"].map((path) => ({ path, type: "file", size: 1, modifiedAt: now })));
+    expect((entries as { path: string }[]).map((e) => e.path)).toEqual(["workspace/report.md", "workspace/id_rsa.pub", "workspace/runs"]);
+    const hits = view("GET", "/api/agents/a1/files/search", [{ path: "workspace/.env.production", type: "file", line: 1, snippet: "KEY=x" }, { path: "workspace/notes.md", type: "file", line: 3, snippet: "key" }, { path: "runs/r.log", type: "file", line: 2, snippet: "key" }, { path: "state/x.json", type: "file", line: 1, snippet: "key" }]);
     expect((hits as { path: string }[]).map((e) => e.path)).toEqual(["workspace/notes.md"]);
     expect(deviceView("GET", "/api/totp")).toBeNull();
   });
@@ -1081,6 +1098,15 @@ describe("phone access", () => {
     expect((await put({ computer: { screenshotMaxSize: 5000 } })).status).toBe(403);
     expect((await put({ browser: { captchaSolver: "2captcha" } })).status).toBe(403);
     expect((await put({ review: { enabled: true, cron: "0 2 * * *", autoFix: false, team: true } })).status).toBe(200);
+    // Fixing by itself and settling the team's questions go off from the phone, back on at the computer.
+    expect((await put({ review: { team: false } })).status).toBe(200);
+    for (const key of ["autoFix", "team"]) {
+      const refused = await put({ review: { [key]: true } });
+      expect(refused.status).toBe(403);
+      expect(((await refused.json()) as { error: string }).error).toMatch(/on your computer/);
+    }
+    updateSettings({ review: { autoFix: true, team: true } });
+    expect((await put({ review: { autoFix: true, team: true } })).status).toBe(200);
     expect((await put({ review: { cron: "every day" } })).status).toBe(400);
     expect((await put({ voice: { ttsProvider: "openai", rate: 1.25, language: "de" } })).status).toBe(200);
     expect((await put({ voice: { ttsProvider: "somewhere" } })).status).toBe(403);
@@ -1089,7 +1115,15 @@ describe("phone access", () => {
     expect((await put({ voice: { hexPath: "/tmp/evil" } })).status).toBe(403);
     expect((await put({ voice: { hexModel: "cohere_transcribe" } })).status).toBe(403);
     expect((await put({ phone: { callerName: "Sam", language: "de", maxMinutes: 15, quietFrom: "22:00", quietTo: "07:00" } })).status).toBe(200);
+    for (const [key, max] of [["callerName", 60], ["inboundGreeting", 500], ["quietFrom", 5], ["quietTo", 5], ["language", 3]] as const) {
+      expect((await put({ phone: { [key]: "x".repeat(max + 1) } })).status).toBe(403);
+    }
+    // Calls go off from the phone; only the computer switches them back on.
+    updateSettings({ phone: { enabled: false } });
+    expect((await put({ phone: { enabled: true } })).status).toBe(403);
+    updateSettings({ phone: { enabled: true } });
     expect((await put({ phone: { enabled: true } })).status).toBe(200);
+    expect((await put({ phone: { enabled: false } })).status).toBe(200);
     for (const key of ["ownerNumber", "numberId", "answerInbound", "inboundInstructions", "inboundAgentId", "callOwner", "voiceId"]) {
       expect((await put({ phone: { [key]: key === "answerInbound" || key === "callOwner" ? true : "+4915112345678" } })).status).toBe(403);
     }

@@ -3,7 +3,7 @@ import { body, z } from "../validate";
 import { MAX_AUDIO_BYTES, speak, transcribe, transcriptionReady } from "../../voice/voice";
 import { hexLanguage, hexStatus, prepareHex } from "../../voice/hex";
 import { badRequest, HttpError } from "../../util";
-import { requestDevice } from "../auth";
+import { isPhoneRequest } from "../auth";
 
 const speakSchema = z.object({ text: z.string() });
 const prepareSchema = z.object({ language: z.string().max(20).optional() });
@@ -13,7 +13,7 @@ export function registerVoiceRoutes(app: Hono): void {
     const length = Number(c.req.header("content-length") ?? 0);
     if (length > MAX_AUDIO_BYTES + 1024 * 1024) throw new HttpError(413, "Recordings are limited to 25 MB", "too_large");
     // A phone dictates with what the computer has set up; setting it up happens there.
-    if (requestDevice(c) && !(await transcriptionReady())) throw new HttpError(400, "Set up dictation in Godmode on your computer: Settings → Voice.", "voice_not_set_up");
+    if (isPhoneRequest(c) && !(await transcriptionReady())) throw new HttpError(400, "Set up dictation in Godmode on your computer: Settings → Voice.", "voice_not_set_up");
     let form: FormData;
     try {
       form = await c.req.raw.formData();

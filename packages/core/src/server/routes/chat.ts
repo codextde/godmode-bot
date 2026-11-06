@@ -31,7 +31,8 @@ import { getAgent } from "../../agents/service";
 import { listAttention } from "../../services/attention";
 import { awaySummary } from "../../services/away";
 import { retryRun } from "../../services/retries";
-import { requestDevice } from "../auth";
+import { isPhoneRequest, requestDevice, requestVia } from "../auth";
+import { audit } from "../../services/audit";
 import { autoRetryOf } from "../../services/resume";
 import { body, computerTargetSchema, z } from "../validate";
 import { shareComputer } from "../../computer/share";
@@ -312,12 +313,19 @@ export function registerChatRoutes(app: Hono): void {
     if (input.private && input.runnerId && input.runnerId !== selfDeviceId()) throw badRequest("A private chat stays on this computer");
     // A secondary names itself by its id in the primary's list: a chat for it starts here.
     if (input.runnerId && input.runnerId === selfDeviceId()) input.runnerId = null;
-    const onServer = await sshPlacement(input);
-    if (onServer) return c.json(await startRemoteChat(onServer.runnerId, { ...input, ...onServer }), 201);
-    if (input.runnerId) return c.json(await startRemoteChat(input.runnerId, input), 201);
-    // Check the shared window/screen/tab before the chat exists, so a stale pick doesn't leave an empty chat.
-    const computerTarget = input.computerTarget ? await validateTarget(input.computerTarget) : null;
-    return c.json(await startChat({ ...input, computerTarget, origin: "chat" }), 201);
+    const started = await (async () => {
+      const onServer = await sshPlacement(input);
+      if (onServer) return startRemoteChat(onServer.runnerId, { ...input, ...onServer });
+      if (input.runnerId) return startRemoteChat(input.runnerId, input);
+      // Check the shared window/screen/tab before the chat exists, so a stale pick doesn't leave an empty chat.
+      const computerTarget = input.computerTarget ? await validateTarget(input.computerTarget) : null;
+      return startChat({ ...input, computerTarget, origin: "chat" });
+    })();
+    // A private chat leaves nothing behind once it ends; that a phone started one stays on record (never what was said).
+    if (input.private && isPhoneRequest(c)) {
+      audit("user", "chat.private", started.conversation.id, { ...requestVia(c), deviceId: requestDevice(c)?.id ?? null, agentId: started.conversation.agentId });
+    }
+    return c.json(started, 201);
   });
 
   app.get("/api/runs", (c) =>
@@ -336,7 +344,7 @@ export function registerChatRoutes(app: Hono): void {
     const run = getRun(c.req.param("id"));
     const retry = autoRetryOf(run.id);
     // A phone reads the log through /log; where it lies on this computer stays here.
-    return c.json({ ...run, logPath: requestDevice(c) ? null : findRunLog(run), retryAt: retry?.at ?? null, retryCause: retry?.cause ?? null });
+    return c.json({ ...run, logPath: isPhoneRequest(c) ? null : findRunLog(run), retryAt: retry?.at ?? null, retryCause: retry?.cause ?? null });
   });
 
   app.post("/api/runs/:id/cancel", async (c) => {

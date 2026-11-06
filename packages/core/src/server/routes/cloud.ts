@@ -5,27 +5,27 @@ import { changeCloudSubscription, getCloudBilling } from "../../cloud/api";
 import { cancelLinking, cloudStatus, startLinking, unlink, updateCloudSettings } from "../../cloud/link";
 import { usageSummary } from "../../cloud/usage";
 import { HttpError, badRequest } from "../../util";
-import { isCloudChannel, requestCloudUser, requestDevice } from "../auth";
+import { isCloudChannel, isPhoneRequest, requestCloudUser } from "../auth";
 import { body, z } from "../validate";
 
 const MANAGED_HERE = "Linking and access switches are managed on the computer itself.";
 
 /** Linking and the access switches are only changed on the computer itself, never by a phone or through the cloud. */
 function onlyComputer(c: Context) {
-  if (requestDevice(c)) throw new HttpError(403, "The phone app can't do this. Use Godmode on your computer.", "device_forbidden");
+  if (isPhoneRequest(c)) throw new HttpError(403, "The phone app can't do this. Use Godmode on your computer.", "device_forbidden");
   if (isCloudChannel(c)) throw new HttpError(403, MANAGED_HERE, "cloud_forbidden");
 }
 
 /** Reads the computer and, through the cloud, its owner may make. */
 function computerOrOwner(c: Context) {
-  if (requestDevice(c)) throw new HttpError(403, "The phone app can't do this. Use Godmode on your computer.", "device_forbidden");
+  if (isPhoneRequest(c)) throw new HttpError(403, "The phone app can't do this. Use Godmode on your computer.", "device_forbidden");
   if (isCloudChannel(c) && requestCloudUser(c)?.role !== "owner") throw new HttpError(403, "Only the owner of this computer can see this.", "cloud_forbidden");
 }
 
 export function registerCloudRoutes(app: Hono) {
   // A phone reads the state, not a pending link's code (whoever enters it links this computer to their account).
   app.get("/api/cloud", (c) => {
-    if (requestDevice(c)) return c.json({ ...cloudStatus(), pending: null });
+    if (isPhoneRequest(c)) return c.json({ ...cloudStatus(), pending: null });
     computerOrOwner(c);
     return c.json(cloudStatus());
   });
@@ -62,7 +62,7 @@ export function registerCloudRoutes(app: Hono) {
 
   // Invoice pages open without a sign-in: a phone gets the plan and the amounts without their links.
   app.get("/api/cloud/billing", async (c) => {
-    if (requestDevice(c)) {
+    if (isPhoneRequest(c)) {
       const billing = await getCloudBilling();
       return c.json({ ...billing, invoices: billing.invoices.map((i) => ({ ...i, url: null, pdf: null })) });
     }

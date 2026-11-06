@@ -6,6 +6,7 @@
   "next": "Next review {{when}}.",
   "autoFix": "Fix what it finds",
   "reportOnly": "It only reports what it finds.",
+  "onComputer": "Fixing and the team's questions go back on at your computer.",
   "team": "Team's questions first",
   "model": {
     "title": "Model",

@@ -6,7 +6,7 @@ import { createProject, deleteProject, getProject, listProjects, updateProject }
 import { SCOPE_ITEMS, VAULT_ITEMS, moveProject, moveWorkspace } from "../../services/scopeMoves";
 import { get } from "../../db";
 import { conflict } from "../../util";
-import { requestDevice } from "../auth";
+import { isPhoneRequest } from "../auth";
 import { requireGrant } from "../grants";
 import { isInitialized } from "../../vault/vault";
 import { body, z } from "../validate";
@@ -115,7 +115,7 @@ export function registerWorkspaceRoutes(app: Hono): void {
   app.delete("/api/workspaces/:id", async (c) => {
     const force = ["1", "true"].includes(c.req.query("force") ?? "");
     // Goals go with an otherwise empty workspace; from the phone that is only done on the computer.
-    if (requestDevice(c) && get<{ c: number }>("SELECT COUNT(*) AS c FROM goals WHERE workspace_id = ?", c.req.param("id"))?.c) {
+    if (isPhoneRequest(c) && get<{ c: number }>("SELECT COUNT(*) AS c FROM goals WHERE workspace_id = ?", c.req.param("id"))?.c) {
       throw conflict("This workspace has goals. Delete it on your computer.");
     }
     await deleteWorkspace(c.req.param("id"), force);
