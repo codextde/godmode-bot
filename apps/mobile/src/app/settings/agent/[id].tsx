@@ -1,5 +1,5 @@
 import { router, Stack, useLocalSearchParams } from "expo-router";
-import { ActivityIndicator, ScrollView, StyleSheet, TextInput, View } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import {
   HEARTBEAT_INTERVALS,
@@ -14,7 +14,8 @@ import {
 import { CharacterAvatar } from "@/components/character";
 import { CloseButton } from "@/components/close-button";
 import { Group, LinkRow, PickerRow, SegmentRow, SwitchRow, TextEditor } from "@/components/form";
-import { Badge, EmptyState, Row, SectionTitle } from "@/components/ui";
+import { Icon } from "@/components/icon";
+import { Badge, EmptyState, Row, SectionTitle, tap } from "@/components/ui";
 import { useEffectiveModel, NO_CHOICE } from "@/lib/composer";
 import { useAgents } from "@/lib/hooks";
 import { EFFORT_SHORT, patchAgent, useEditable } from "@/lib/setup";
@@ -34,7 +35,7 @@ const HOURS = [
 
 export default function AgentSettings() {
   const c = useColors();
-  const { t } = useTranslation(["settings", "common"]);
+  const { t } = useTranslation(["settings", "common", "agents"]);
   const { id } = useLocalSearchParams<{ id: string }>();
   const { byId, isPending } = useAgents();
   const { workspaces } = useWorkspace();
@@ -82,7 +83,20 @@ export default function AgentSettings() {
       <CloseButton />
 
       <View style={styles.hero}>
-        <CharacterAvatar agent={agent} size={72} />
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t("agents:actions.look")}
+          onPress={() => {
+            tap();
+            router.push({ pathname: "/settings/look/[id]", params: { id: agent.id } });
+          }}
+          style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}
+        >
+          <CharacterAvatar agent={agent} size={72} />
+          <View style={[styles.edit, { backgroundColor: c.surface, borderColor: c.border }]}>
+            <Icon name="palette" size={12} color={c.text} />
+          </View>
+        </Pressable>
         <View style={{ flex: 1, minWidth: 0 }}>
           <TextInput
             accessibilityLabel={t("common:words.name")}
@@ -268,5 +282,16 @@ const styles = StyleSheet.create({
   role: {
     fontSize: 15,
     paddingVertical: 2,
+  },
+  edit: {
+    position: "absolute",
+    right: -2,
+    bottom: -2,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: "center",
+    justifyContent: "center",
   },
 });

@@ -1,7 +1,9 @@
+import { existsSync } from "node:fs";
 import type { Context, Hono } from "hono";
-import { requestDevice } from "../auth";
+import { isPhoneRequest } from "../auth";
 import { MAX_GOAL_TITLE_LENGTH, MAX_GOAL_WHY_LENGTH, MAX_TASK_ATTACHMENT_BYTES, MAX_TASK_DESCRIPTION_LENGTH, MAX_TASK_TITLE_LENGTH, TASK_PRIORITIES, TASK_STATUSES, TASK_TYPES } from "@godmode/shared";
-import { approveTask, archiveTasks, createTask, deleteTask, getTask, listTaskEvents, listTasks, pushTaskBranch, sendTaskMessage, updateTask } from "../../tasks/service";
+import { approveTask, archiveTasks, checkoutDir, createTask, deleteTask, getTask, listTaskEvents, listTasks, pushTaskBranch, sendTaskMessage, updateTask } from "../../tasks/service";
+import { unsavedWork } from "../../services/cleanup";
 import { readTaskAttachment, saveTaskAttachment } from "../../tasks/attachments";
 import { HttpError, badRequest } from "../../util";
 import { body, z } from "../validate";
@@ -145,7 +147,13 @@ export function registerTaskRoutes(app: Hono): void {
   });
 
   app.delete("/api/tasks/:id", async (c) => {
-    await deleteTask(c.req.param("id"));
+    const id = c.req.param("id");
+    // A phone deletes a ticket only while nothing in its worktree would go with it; its removal is guarded like the cleanup's.
+    if (isPhoneRequest(c)) {
+      const dir = checkoutDir(getTask(id).id);
+      if (existsSync(dir) && (await unsavedWork(dir))) throw new HttpError(403, "Delete it on your computer: its worktree has unsaved changes.", "device_forbidden");
+    }
+    await deleteTask(id, isPhoneRequest(c) ? { keep: unsavedWork } : {});
     return c.json({ ok: true as const });
   });
 
@@ -155,7 +163,7 @@ export function registerTaskRoutes(app: Hono): void {
       z.object({ content: z.string().max(100_000).default(""), attachments: z.array(attachmentSchema).optional() }),
     );
     // From a phone the answer to a question counts as given from the phone.
-    return c.json(await sendTaskMessage(c.req.param("id"), content, attachments, { actor: "user", via: requestDevice(c) ? "phone" : "task" }));
+    return c.json(await sendTaskMessage(c.req.param("id"), content, attachments, { actor: "user", via: isPhoneRequest(c) ? "phone" : "task" }));
   });
 
   app.post("/api/tasks/:id/approve", async (c) => {

@@ -91,6 +91,15 @@
     "workingNow": "Working now",
     "doneToday": "Done today",
     "failedToday": "Failed today",
+    "search": "Search prompts & results",
+    "agent": "Agent",
+    "allAgents": "All agents",
+    "trigger": "Trigger",
+    "anyTrigger": "Any trigger",
+    "count_one": "{{count}} run",
+    "count_other": "{{count}} runs",
+    "countWithSuccess_one": "{{count}} run · {{rate}}% success",
+    "countWithSuccess_other": "{{count}} runs · {{rate}}% success",
     "filters": {
       "all": "All",
       "running": "Running",
@@ -186,5 +195,82 @@
       "stopped": "Stopped before it was done",
       "failed": "Didn't get through"
     }
+  },
+  "conv": {
+    "switchedOff": "{{name}} is switched off",
+    "switchOn": "Switch on",
+    "switchOnFailed": "Couldn't switch it on",
+    "switchedOffDraft": "{{name}} is switched off — your message waits here as a draft",
+    "continuedFrom": "Continues “{{title}}”",
+    "handedOverBy": "Handed over by {{name}}",
+    "handedOver": "Handed over by another agent",
+    "openSource": "Open the chat this one comes from",
+    "newChat": "New chat",
+    "handoff": "Continue in a new chat",
+    "handoffFailed": "Couldn't start a new chat",
+    "handoffA11y": "Continue in a new chat with a brief from {{name}}",
+    "settings": "Chat settings",
+    "private": "Private",
+    "privateHint": "Nothing is saved. It's gone when you leave.",
+    "privateStart": "Private chat",
+    "privateOff": "Back to a normal chat",
+    "options": "Browser profile and instructions",
+    "updateDesktop": "Update Godmode on your computer to do this from your phone."
+  },
+  "pause": {
+    "auto": "Auto",
+    "autoLabel": "Continue by itself when the limit resets",
+    "autoFailed": "Couldn't change this",
+    "resetsIn": "Resets {{when}}",
+    "resetsAnyMoment": "Resets any moment"
+  },
+  "options": {
+    "title": "Chat settings",
+    "loadFailed": "Couldn't load the chat",
+    "changeFailed": "Couldn't change the chat",
+    "project": "Project",
+    "agentProject": "{{name}}'s project",
+    "noProject": "No project",
+    "browser": "Browser profile",
+    "defaultProfile": "Default",
+    "defaultNamed": "Default · {{name}}",
+    "instructions": "Instructions",
+    "instructionsPlaceholder": "Only for this chat, e.g. always answer in German"
+  },
+  "search": {
+    "title": "Search",
+    "placeholder": "Chats, messages, tasks, agents",
+    "everywhere": "Search everything for “{{query}}”",
+    "chats": "Chats",
+    "tasks": "Tasks",
+    "agents": "Agents",
+    "archived": "Archived",
+    "emptyTitle": "Search everything",
+    "emptyBody": "Chats, messages, tasks and agents.",
+    "noResultsTitle": "No results",
+    "noResultsBody": "Nothing matches “{{query}}”.",
+    "showingFor": "Showing results for “{{query}}”",
+    "failed": "Couldn't search",
+    "unavailableTitle": "Search isn't available yet",
+    "unavailableBody": "Update Godmode on your computer to search from your phone."
+  },
+  "voice": {
+    "dictate": "Dictate",
+    "stop": "Stop and write it down",
+    "discard": "Discard recording",
+    "transcribing": "Writing it down",
+    "failed": "Couldn't write it down",
+    "notSetUpTitle": "Dictation isn't set up",
+    "notSetUp": "Set it up on your computer: Godmode → Settings → Voice.",
+    "micDeniedTitle": "No microphone access",
+    "micDenied": "Allow the microphone for Godmode in the Settings app to dictate.",
+    "recordFailed": "Couldn't record",
+    "nothingHeard": "Nothing was heard."
+  },
+  "archive": {
+    "search": "Search archived chats",
+    "allAgents": "All agents",
+    "noMatchTitle": "No archived chats match",
+    "noMatchBody": "Try other words or another agent."
   }
 }

@@ -25,10 +25,11 @@ import { getModelCatalog } from "../../runner/models";
 import { getDefaultAgentId } from "../../agents/service";
 import { applyRuntimeSettings } from "../../services/runtime";
 import { powerStatus, setLidClosedAwake } from "../../services/power";
-import { hasDashboardPassword, requestVia } from "../auth";
+import { hasDashboardPassword, isPhoneRequest, requestVia } from "../auth";
 import { requireGrant } from "../grants";
 import { body, z } from "../validate";
 import { pendingRequestCount } from "../../messaging/service";
+import { HttpError } from "../../util";
 
 function count(sql: string): number {
   return get<{ c: number }>(sql)?.c ?? 0;
@@ -160,6 +161,10 @@ export function registerSystemRoutes(app: Hono) {
   app.get("/api/power", async (c) => c.json(await powerStatus()));
   app.post("/api/power/lid", async (c) => {
     const { enabled } = await body(c, z.object({ enabled: z.boolean() }));
+    // Nobody is at the computer to enter the password a phone's switch would ask for there.
+    if (isPhoneRequest(c) && !(await powerStatus()).permission) {
+      throw new HttpError(409, "Switch lid-closed mode once in Godmode on your computer: macOS asks for the password there.", "power_needs_computer");
+    }
     // The first switch waits for the human at macOS's password dialog.
     disableIdleTimeout(c);
     const status = await setLidClosedAwake(enabled);

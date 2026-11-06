@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from "expo-router";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import {
@@ -33,10 +33,9 @@ export default function NewTask() {
   const { t } = useTranslation(["chat", "common"]);
   const { agentId } = useLocalSearchParams<{ agentId?: string }>();
   const { id: workspaceId, workspace, projectId: scopeProject } = useWorkspace();
-  const [projectPick, setProjectPick] = useState<string | null | undefined>(undefined);
   // A workspace switched in the sheet takes its own projects: a pick from the old one doesn't carry over.
-  useEffect(() => setProjectPick(undefined), [workspaceId]);
-  const chosen = projectPick !== undefined ? projectPick : scopeProject;
+  const [projectPick, setProjectPick] = useState<{ workspaceId: string | null; projectId: string | null } | null>(null);
+  const chosen = projectPick && projectPick.workspaceId === workspaceId ? projectPick.projectId : scopeProject;
   const projectId = chosen && workspace?.projects?.some((p) => p.id === chosen) ? chosen : null;
   const { data: allAgents, isLoading: agentsLoading } = useAgents();
   const agents = agentsFor(allAgents ?? [], workspaceId).filter((a) => a.enabled);
@@ -157,7 +156,7 @@ export default function NewTask() {
         bleed={space.xl}
         projects={workspace?.projects ?? []}
         value={projectId}
-        onChange={setProjectPick}
+        onChange={(picked) => setProjectPick({ workspaceId, projectId: picked })}
         hint={projectId ? t("newTask.projectHint") : t("newTask.workspaceHint")}
       />
 

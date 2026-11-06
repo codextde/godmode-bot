@@ -20,7 +20,8 @@
     "newAutomation": "Neue Automation",
     "noAutomations": "Noch keine Automationen. Lass {{name}} selbstständig loslegen — auch wenn du nicht da bist.",
     "recentChats": "Letzte Chats",
-    "noChats": "Noch keine Chats mit {{name}}."
+    "noChats": "Noch keine Chats mit {{name}}.",
+    "allChats": "Alle Chats"
   },
   "plate": {
     "title": "Auf dem Tisch",
@@ -52,12 +53,226 @@
     "size": "{{chars}} von {{target}} Zeichen",
     "sizeUpdated": "{{chars}} von {{target}} Zeichen · aktualisiert {{ago}}",
     "dreaming": "Träumt — räumt sein Gedächtnis auf",
-    "remembers": "Was er sich merkt"
+    "remembers": "Was er sich merkt",
+    "notes": "Notizen",
+    "notesDetail": "Was er in memory/ aufbewahrt",
+    "history": "Verlauf",
+    "historyDetail": "Jede Änderung an seinen Dateien"
   },
   "routine": {
     "changeFailed": "Automation konnte nicht geändert werden",
     "runFailed": "Konnte nicht gestartet werden",
     "lastRunFailed": " · letzter Lauf fehlgeschlagen",
     "runNow": "{{name}} jetzt ausführen"
+  },
+  "actions": {
+    "runNow": "Jetzt eine Aufgabe starten",
+    "pauseAll": "Seine ganze Arbeit pausieren",
+    "continueAll": "Seine Arbeit fortsetzen",
+    "look": "Aussehen ändern",
+    "duplicate": "Duplizieren",
+    "delete": "Agent löschen",
+    "deleteTitle": "{{name}} löschen?",
+    "deleteBody": "Damit werden der Agent, seine Automationen und Chats entfernt. Sein Gedächtnis ebenfalls. Das lässt sich nicht rückgängig machen.",
+    "deleteConfirm": "Löschen",
+    "pauseFailed": "Pausieren fehlgeschlagen",
+    "continueFailed": "Fortsetzen fehlgeschlagen",
+    "duplicateFailed": "{{name}} konnte nicht dupliziert werden",
+    "deleteFailed": "Agent konnte nicht gelöscht werden"
+  },
+  "run": {
+    "title": "Aufgabe mit {{name}} starten",
+    "label": "Aufgabe",
+    "placeholder": "Beschreib, was er tun soll…",
+    "placeholderExample": "z. B. {{description}}",
+    "hint": "Lass es leer, dann arbeitet {{name}} nach seinen Anweisungen.",
+    "submit": "Aufgabe starten",
+    "failed": "Aufgabe konnte nicht gestartet werden"
+  },
+  "chats": {
+    "title": "Chats",
+    "search": "Chats durchsuchen",
+    "showLabel": "Welche Chats",
+    "active": "Aktiv",
+    "archived": "Archiviert",
+    "loadFailed": "Chats konnten nicht geladen werden",
+    "noMatch": "Kein Chat erwähnt „{{query}}“",
+    "noArchived": "Keine archivierten Chats",
+    "empty": "Noch keine Chats mit {{name}}"
+  },
+  "history": {
+    "title": "Verlauf",
+    "unknownDate": "Unbekanntes Datum",
+    "dayFormat": "EEEE, d. MMMM yyyy",
+    "loadFailed": "Verlauf konnte nicht geladen werden",
+    "emptyTitle": "Noch kein Verlauf",
+    "emptyBody": "Jeder Lauf, jede Gedächtnisänderung und jede neue Einstellung von {{name}} erscheint hier.",
+    "noMessage": "(keine Nachricht)"
+  },
+  "notes": {
+    "title": "Notizen",
+    "new": "Neue Notiz",
+    "note": "Notiz",
+    "folder": "Ordner",
+    "loadFailed": "Notizen konnten nicht geladen werden",
+    "emptyTitle": "Noch keine Notizen",
+    "emptyBody": "{{name}} legt hier längere Notizen ab, neben MEMORY.md.",
+    "openFailed": "Notiz konnte nicht geöffnet werden",
+    "onlyNotes": "Das Handy öffnet nur Notizen in memory/.",
+    "saveFailed": "Notiz konnte nicht gespeichert werden",
+    "discardTitle": "Änderungen verwerfen?",
+    "keepEditing": "Weiter bearbeiten",
+    "discard": "Verwerfen",
+    "discardChanges": "Änderungen verwerfen",
+    "stopEditing": "Bearbeiten beenden",
+    "editorLabel": "Text von {{name}}",
+    "emptyNote": "Diese Notiz ist leer.",
+    "name": "Name",
+    "namePlaceholder": "Name, z. B. kunden",
+    "textPlaceholder": "Was soll er sich merken?"
+  },
+  "org": {
+    "title": "Organigramm",
+    "global": "Global",
+    "reportsTo": "Berichtet an {{name}}",
+    "teamOf": "Team von {{name}}",
+    "others": "Weitere Agenten",
+    "loadFailed": "Das Team konnte nicht geladen werden",
+    "emptyTitle": "Hier gibt es noch keine Agenten",
+    "hireFirst": "Stell deinen ersten Agenten ein",
+    "hireFirstBody": "Er berichtet an {{name}}, bis du ihm am Computer eine andere Leitung gibst.",
+    "newAgent": "Neuer Agent",
+    "builtIn": "Integriert",
+    "leadsDirectly_one": "Leitet {{count}} Agenten direkt",
+    "leadsDirectly_other": "Leitet {{count}} Agenten direkt"
+  },
+  "team": {
+    "title": "Team",
+    "hireTeam": "Oder ein ganzes Team einstellen",
+    "teams": "Teams",
+    "companies": "Unternehmen",
+    "company": "Unternehmen",
+    "team": "Team",
+    "loadFailed": "Das Team konnte nicht geladen werden",
+    "notFound": "Dieses Team gibt es nicht",
+    "installFailed": "{{name}} konnte nicht eingerichtet werden",
+    "agentCount_one": "{{count}} Agent",
+    "agentCount_other": "{{count}} Agenten",
+    "keptOf_one": "{{kept}} von {{count}} Agent",
+    "keptOf_other": "{{kept}} von {{count}} Agenten",
+    "everyone": "Alle",
+    "leadsOnly": "Nur Leitungen",
+    "clear": "Leeren",
+    "where": "Wo sie arbeiten",
+    "workspace": "Workspace",
+    "newWorkspace": "Neuer Workspace",
+    "global": "Global (alle Workspaces)",
+    "workspaceName": "Name des neuen Workspace",
+    "schedules_one": "Auch seinen Zeitplan einrichten",
+    "schedules_other": "Auch ihre {{count}} Zeitpläne einrichten",
+    "scheduleList": "{{names}}. Ändern oder pausieren kannst du sie unter Automationen.",
+    "scheduleListMore_one": "{{names}} und {{count}} weitere. Ändern oder pausieren kannst du sie unter Automationen.",
+    "scheduleListMore_other": "{{names}} und {{count}} weitere. Ändern oder pausieren kannst du sie unter Automationen.",
+    "hire_one": "{{count}} Agenten einstellen",
+    "hire_other": "{{count}} Agenten einstellen",
+    "reportsToGodmode": "Berichtet an Godmode",
+    "setupHint": "Sie starten ohne Logins und Tools. Die gibst du ihnen am Computer."
+  },
+  "look": {
+    "title": "Aussehen",
+    "surprise": "Überrasch mich",
+    "color": "Farbe",
+    "emoji": "Emoji",
+    "discardTitle": "Neues Aussehen verwerfen?",
+    "keepEditing": "Weiter bearbeiten",
+    "discard": "Verwerfen",
+    "colors": {
+      "violet": "Violett",
+      "indigo": "Indigo",
+      "sky": "Himmelblau",
+      "cyan": "Cyan",
+      "emerald": "Smaragd",
+      "lime": "Limette",
+      "amber": "Bernstein",
+      "orange": "Orange",
+      "rose": "Rosé",
+      "fuchsia": "Fuchsia"
+    },
+    "parts": {
+      "body": "Körper",
+      "eyes": "Augen",
+      "mouth": "Mund",
+      "top": "Hut",
+      "face": "Gesicht",
+      "neck": "Hals"
+    },
+    "options": {
+      "body": {
+        "blob": "Mochi",
+        "gumdrop": "Gummi",
+        "squircle": "Würfel",
+        "cloud": "Wolke",
+        "ghost": "Geist",
+        "pebble": "Kiesel",
+        "drop": "Tropfen",
+        "kitty": "Kätzchen"
+      },
+      "eyes": {
+        "dots": "Punkte",
+        "wide": "Funkelnd",
+        "happy": "Fröhlich",
+        "sleepy": "Zufrieden",
+        "wink": "Zwinkern",
+        "lines": "Entspannt"
+      },
+      "mouth": {
+        "smile": "Lächeln",
+        "grin": "Grinsen",
+        "cat": "Katze",
+        "o": "Oh",
+        "flat": "Neutral",
+        "none": "Keiner"
+      },
+      "top": {
+        "none": "Keiner",
+        "bolt": "Blitz",
+        "antenna": "Antenne",
+        "sprout": "Spross",
+        "beret": "Baskenmütze",
+        "cap": "Kappe",
+        "crown": "Krone",
+        "bow": "Schleife",
+        "party": "Partyhut",
+        "headphones": "Kopfhörer"
+      },
+      "face": {
+        "none": "Nichts",
+        "glasses": "Brille",
+        "shades": "Sonnenbrille",
+        "blush": "Rote Wangen"
+      },
+      "neck": {
+        "none": "Nichts",
+        "bowtie": "Fliege",
+        "scarf": "Schal"
+      }
+    }
+  },
+  "describe": {
+    "title": "Beschreib es",
+    "label": "Beschreib deinen Agenten",
+    "placeholder": "Ein Agent, der am 3. jedes Monats meine Handy- und Stromrechnungen herunterlädt und mir die Beträge nennt…",
+    "submit": "Mit Godmode erstellen",
+    "failed": "Chat konnte nicht gestartet werden",
+    "prompt": "Erstelle einen neuen Agenten für mich: {{description}}. Richte sinnvolle Anweisungen ein und eine Automation, falls er selbstständig arbeiten soll (nach Zeitplan oder wenn etwas passiert)."
+  },
+  "newAgent": {
+    "alsoRoutine": "Auch seine Automation einrichten",
+    "routineFailed": "Der Agent ist bereit, seine Automation nicht"
+  },
+  "dreamStop": {
+    "stop": "Träumen beenden",
+    "stopping": "Wird beendet…",
+    "failed": "Der Traum konnte nicht beendet werden"
   }
 }

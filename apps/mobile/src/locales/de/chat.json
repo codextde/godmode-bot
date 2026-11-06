@@ -91,6 +91,15 @@
     "workingNow": "Arbeiten gerade",
     "doneToday": "Heute erledigt",
     "failedToday": "Heute fehlgeschlagen",
+    "search": "Prompts & Ergebnisse durchsuchen",
+    "agent": "Agent",
+    "allAgents": "Alle Agenten",
+    "trigger": "Auslöser",
+    "anyTrigger": "Jeder Auslöser",
+    "count_one": "{{count}} Lauf",
+    "count_other": "{{count}} Läufe",
+    "countWithSuccess_one": "{{count}} Lauf · {{rate}} % erfolgreich",
+    "countWithSuccess_other": "{{count}} Läufe · {{rate}} % erfolgreich",
     "filters": {
       "all": "Alle",
       "running": "Läuft",
@@ -186,5 +195,82 @@
       "stopped": "Gestoppt, bevor es fertig war",
       "failed": "Hat nicht geklappt"
     }
+  },
+  "conv": {
+    "switchedOff": "{{name}} ist ausgeschaltet",
+    "switchOn": "Einschalten",
+    "switchOnFailed": "Konnte nicht eingeschaltet werden",
+    "switchedOffDraft": "{{name}} ist ausgeschaltet — deine Nachricht wartet hier als Entwurf",
+    "continuedFrom": "Geht weiter mit „{{title}}“",
+    "handedOverBy": "Übergeben von {{name}}",
+    "handedOver": "Von einem anderen Agenten übergeben",
+    "openSource": "Den Chat öffnen, aus dem dieser kommt",
+    "newChat": "Neuer Chat",
+    "handoff": "In einem neuen Chat weitermachen",
+    "handoffFailed": "Neuer Chat konnte nicht gestartet werden",
+    "handoffA11y": "In einem neuen Chat weitermachen, mit einer Übergabe von {{name}}",
+    "settings": "Chat-Einstellungen",
+    "private": "Privat",
+    "privateHint": "Nichts wird gespeichert. Alles ist weg, sobald du gehst.",
+    "privateStart": "Privater Chat",
+    "privateOff": "Zurück zu einem normalen Chat",
+    "options": "Browserprofil und Anweisungen",
+    "updateDesktop": "Aktualisiere Godmode auf deinem Computer, um das vom Handy aus zu tun."
+  },
+  "pause": {
+    "auto": "Auto",
+    "autoLabel": "Von selbst weitermachen, wenn das Limit zurückgesetzt wird",
+    "autoFailed": "Konnte nicht geändert werden",
+    "resetsIn": "Reset {{when}}",
+    "resetsAnyMoment": "Reset jeden Moment"
+  },
+  "options": {
+    "title": "Chat-Einstellungen",
+    "loadFailed": "Chat konnte nicht geladen werden",
+    "changeFailed": "Chat konnte nicht geändert werden",
+    "project": "Projekt",
+    "agentProject": "Projekt von {{name}}",
+    "noProject": "Kein Projekt",
+    "browser": "Browserprofil",
+    "defaultProfile": "Standard",
+    "defaultNamed": "Standard · {{name}}",
+    "instructions": "Anweisungen",
+    "instructionsPlaceholder": "Nur für diesen Chat, z. B. antworte immer auf Deutsch"
+  },
+  "search": {
+    "title": "Suche",
+    "placeholder": "Chats, Nachrichten, Aufgaben, Agenten",
+    "everywhere": "Überall nach „{{query}}“ suchen",
+    "chats": "Chats",
+    "tasks": "Aufgaben",
+    "agents": "Agenten",
+    "archived": "Archiviert",
+    "emptyTitle": "Alles durchsuchen",
+    "emptyBody": "Chats, Nachrichten, Aufgaben und Agenten.",
+    "noResultsTitle": "Keine Treffer",
+    "noResultsBody": "Nichts passt zu „{{query}}“.",
+    "showingFor": "Ergebnisse für „{{query}}“",
+    "failed": "Suche fehlgeschlagen",
+    "unavailableTitle": "Suche ist noch nicht verfügbar",
+    "unavailableBody": "Aktualisiere Godmode auf deinem Computer, um vom Handy aus zu suchen."
+  },
+  "voice": {
+    "dictate": "Diktieren",
+    "stop": "Stoppen und aufschreiben",
+    "discard": "Aufnahme verwerfen",
+    "transcribing": "Wird aufgeschrieben",
+    "failed": "Konnte nicht aufgeschrieben werden",
+    "notSetUpTitle": "Diktieren ist nicht eingerichtet",
+    "notSetUp": "Richte es auf deinem Computer ein: Godmode → Einstellungen → Stimme.",
+    "micDeniedTitle": "Kein Zugriff aufs Mikrofon",
+    "micDenied": "Erlaube Godmode das Mikrofon in der Einstellungen-App, um zu diktieren.",
+    "recordFailed": "Aufnahme fehlgeschlagen",
+    "nothingHeard": "Es war nichts zu hören."
+  },
+  "archive": {
+    "search": "Archivierte Chats durchsuchen",
+    "allAgents": "Alle Agenten",
+    "noMatchTitle": "Keine archivierten Chats gefunden",
+    "noMatchBody": "Versuch andere Wörter oder einen anderen Agenten."
   }
 }

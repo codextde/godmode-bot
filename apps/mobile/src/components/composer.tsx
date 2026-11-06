@@ -10,6 +10,7 @@ import { AttachmentTray } from "./attachments";
 import { Glass } from "./glass";
 import { Icon } from "./icon";
 import { T, tap } from "./ui";
+import { VoiceButton } from "./voice-button";
 import { errorText } from "@/lib/api";
 import { addFiles, canScanDocuments, chooseCameraMode, fromPasted, MAX_FILES, pickFrom, type FileSource, type PendingFile } from "@/lib/attachments";
 import { findCommand, rankCommands, useDraft, useDrafts, useSlashCommands } from "@/lib/composer";
@@ -39,6 +40,8 @@ export function Composer({
   attachments: allowFiles,
   trailing,
   sendLabel,
+  voice,
+  blocked,
   ref,
 }: {
   onSend: (text: string, files: PendingFile[]) => Promise<unknown> | void;
@@ -57,6 +60,10 @@ export function Composer({
   trailing?: ReactNode;
   /** What sending does right now, e.g. "Queue message". */
   sendLabel?: string | null;
+  /** A mic that dictates into the field (the computer writes it down). */
+  voice?: boolean;
+  /** Write, but don't send (e.g. while the agent is switched off): the text waits as a draft. */
+  blocked?: boolean;
   ref?: Ref<ComposerHandle>;
 }) {
   const c = useColors();
@@ -70,6 +77,7 @@ export function Composer({
   const [focused, setFocused] = useState(false);
   const [menuDismissed, setMenuDismissed] = useState<string | null>(null);
   const [menuForced, setMenuForced] = useState(false);
+  const [dictating, setDictating] = useState(false);
   const commands = useSlashCommands(agentId);
 
   useImperativeHandle(ref, () => ({
@@ -85,7 +93,7 @@ export function Composer({
     },
   }));
 
-  const canSend = (text.trim().length > 0 || files.length > 0) && !sending && !disabled;
+  const canSend = (text.trim().length > 0 || files.length > 0) && !sending && !disabled && !blocked;
   const showStop = !!running && !!onStop && !canSend && !sending;
 
   const slashToken = /^\/([\w:.-]*)$/.exec(text)?.[1] ?? null;
@@ -160,6 +168,11 @@ export function Composer({
   };
 
   const active = showStop || canSend;
+  // What was said goes where the cursor would: after what is written so far.
+  const insertDictated = (said: string) => {
+    const cur = useDrafts.getState().drafts[draftKey]?.text ?? "";
+    setDraft(draftKey, { text: cur.trim() ? `${cur.trimEnd()} ${said}` : said });
+  };
   const label = showStop ? tr("common:actions.stop") : (sendLabel ?? tr("common:actions.send"));
 
   return (
@@ -187,11 +200,11 @@ export function Composer({
           accessibilityLabel={tr("composer.message")}
         />
         <View style={styles.toolbar}>
-          {allowFiles ? (
+          {allowFiles && !dictating ? (
             // A new native menu when the strip above it opens or closes: SwiftUI hosts keep their old place otherwise.
             <AttachButton key={files.length > 0 ? "below-files" : "alone"} onPick={(s) => void attach(s)} disabled={disabled || sending || files.length >= MAX_FILES} />
           ) : null}
-          {agentId ? (
+          {agentId && !dictating ? (
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={tr("composer.slashCommands")}
@@ -204,29 +217,32 @@ export function Composer({
               <T style={[styles.slash, { color: menuOpen ? c.text : c.textMuted }]}>/</T>
             </Pressable>
           ) : null}
-          <View style={{ flex: 1 }} />
-          {trailing}
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={label}
-            disabled={!active}
-            onPress={() => {
-              if (showStop) {
-                tap();
-                onStop?.();
-              } else void submit();
-            }}
-            style={({ pressed }) => [
-              styles.send,
-              { backgroundColor: active ? c.primary : c.sunken, opacity: pressed ? 0.75 : 1, transform: [{ scale: pressed ? 0.94 : 1 }] },
-            ]}
-          >
-            {sending ? (
-              <ActivityIndicator size="small" color={c.textMuted} />
-            ) : (
-              <Icon name={showStop ? "stop" : "send"} size={showStop ? 12 : 15} weight="bold" color={active ? c.onPrimary : c.textFaint} />
-            )}
-          </Pressable>
+          {dictating ? null : <View style={{ flex: 1 }} />}
+          {dictating ? null : trailing}
+          {voice ? <VoiceButton onText={insertDictated} onActive={setDictating} disabled={disabled || sending} /> : null}
+          {dictating ? null : (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={label}
+              disabled={!active}
+              onPress={() => {
+                if (showStop) {
+                  tap();
+                  onStop?.();
+                } else void submit();
+              }}
+              style={({ pressed }) => [
+                styles.send,
+                { backgroundColor: active ? c.primary : c.sunken, opacity: pressed ? 0.75 : 1, transform: [{ scale: pressed ? 0.94 : 1 }] },
+              ]}
+            >
+              {sending ? (
+                <ActivityIndicator size="small" color={c.textMuted} />
+              ) : (
+                <Icon name={showStop ? "stop" : "send"} size={showStop ? 12 : 15} weight="bold" color={active ? c.onPrimary : c.textFaint} />
+              )}
+            </Pressable>
+          )}
         </View>
       </Glass>
     </View>

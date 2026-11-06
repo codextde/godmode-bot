@@ -149,13 +149,13 @@ describe("automations tell the human what they're set to", () => {
 });
 
 describe("the list", () => {
-  test("tickets to review and blocked ones are listed until they move; the phone can't read the list", async () => {
+  test("tickets to review and blocked ones are listed until they move; phones read the list", async () => {
     const t = createTask({ title: "Write the summary" });
     sql("UPDATE tasks SET status = 'in_review' WHERE id = ?", t.id);
     expect(listAttention().find((i) => i.id === `review:${t.id}`)).toMatchObject({ kind: "review", action: "Review", link: `/tasks?task=${t.id}` });
     updateTask(t.id, { status: "done" });
     expect(listAttention().some((i) => i.id === `review:${t.id}`)).toBe(false);
-    expect(deviceMayCall("GET", "/api/attention")).toBe(false);
+    expect(deviceMayCall("GET", "/api/attention")).toBe(true);
     const res = await fetch(`${env.baseUrl}/api/bootstrap`, { headers: { Authorization: `Bearer ${getAccessToken()}` } });
     expect(res.status).toBe(200);
     const boot = (await res.json()) as { counts: { attention: { total: number } } };

@@ -2,9 +2,10 @@ import type { Hono } from "hono";
 import { body, z } from "../validate";
 import { callSetup, getCall, importNumber, listCalls, ownerCallRefusal, placeCall } from "../../calls/calls";
 import { callAudio } from "../../calls/elevenlabs";
-import { ownerPinStatus, removeOwnerPin, setOwnerPin } from "../../calls/pin";
+import { ownerPinStatus, pinRequired, removeOwnerPin, setOwnerPin } from "../../calls/pin";
 import { bus } from "../../events/bus";
 import { HttpError } from "../../util";
+import { isPhoneRequest } from "../auth";
 
 const placeSchema = z.object({
   to: z.string().min(5).max(40),
@@ -74,6 +75,10 @@ export function registerCallRoutes(app: Hono): void {
   app.get("/api/calls/:id/audio", async (c) => {
     const call = getCall(c.req.param("id"));
     if (!call.providerCallId || !call.hasAudio) throw new HttpError(404, "This call has no recording", "not_found");
+    // Callers say the owner's PIN on incoming calls: their recordings play on the computer only.
+    if (isPhoneRequest(c) && call.direction === "inbound" && (pinRequired() || call.ownerVerified || call.pinWrong)) {
+      throw new HttpError(403, "Listen to incoming calls on your computer.", "device_forbidden");
+    }
     const res = await callAudio(call.providerCallId);
     return new Response(res.body, { headers: { "content-type": res.headers.get("content-type") ?? "audio/mpeg", "cache-control": "private, max-age=3600" } });
   });

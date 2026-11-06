@@ -5,6 +5,34 @@
   "attentionCount": "Braucht dich · {{count}}",
   "allClear": "Alles erledigt",
   "allClearBody": "Wenn ein Agent eine Entscheidung, deine Freigabe oder einen Login braucht, landet es hier.",
+  "search": "Suchen",
+  "filters": {
+    "all": "Alle",
+    "question": "Fragen",
+    "todo": "To-dos",
+    "review": "Zu prüfen",
+    "blocked": "Blockiert",
+    "paused": "Pausiert",
+    "problems": "Fehlgeschlagen",
+    "login": "Logins",
+    "access": "Zugang"
+  },
+  "noMatch": {
+    "title": "Nichts gefunden",
+    "body": "Versuch ein anderes Wort oder setz den Filter zurück.",
+    "clear": "Filter zurücksetzen"
+  },
+  "stop": {
+    "label": "Lauf stoppen",
+    "title": "Lauf stoppen?",
+    "body": "{{agent}} hört auf und die Frage wird zurückgezogen.",
+    "keep": "Weiter warten",
+    "confirm": "Stoppen",
+    "failed": "Lauf konnte nicht gestoppt werden"
+  },
+  "continue": "Fortsetzen",
+  "continueFailed": "Konnte nicht fortgesetzt werden",
+  "onComputer": "Entscheide auf deinem Computer",
   "login": {
     "kind": {
       "missingCredential": "Login fehlt",
@@ -29,6 +57,12 @@
     "markReadFailed": "Konnte nicht als gelesen markiert werden",
     "loadFailed": "Mitteilungen konnten nicht geladen werden",
     "empty": "Keine Mitteilungen. Agenten posten hier Updates, wenn sie fertig sind, etwas brauchen oder auf ein Problem stoßen.",
-    "showMore": "{{count}} weitere anzeigen"
+    "showMore": "{{count}} weitere anzeigen",
+    "clear": "Mitteilungen löschen",
+    "clearTitle": "Alle Mitteilungen löschen?",
+    "clearBody_one": "Das entfernt {{count}} Mitteilung. Agentenläufe und ihre Ergebnisse bleiben erhalten.",
+    "clearBody_other": "Das entfernt {{count}} Mitteilungen. Agentenläufe und ihre Ergebnisse bleiben erhalten.",
+    "clearAll": "Alle löschen",
+    "clearFailed": "Mitteilungen konnten nicht gelöscht werden"
   }
 }

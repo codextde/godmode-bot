@@ -333,7 +333,8 @@ describe("last run failed", () => {
     const res = await api("DELETE", `/api/agents/${agent.id}/failed-run`);
     expect(res.status).toBe(200);
     expect(deviceMayCall("DELETE", `/api/agents/${agent.id}/failed-run`)).toBe(true);
-    expect(deviceMayCall("POST", `/api/agents/${agent.id}/duplicate`)).toBe(false);
+    // A phone copies an agent too, unless it reads secrets in plain text (mobile.test.ts).
+    expect(deviceMayCall("POST", `/api/agents/${agent.id}/duplicate`)).toBe(true);
 
     // Deleting the chat of the failed run forgets the failure (there would be nothing to open).
     setAgentFailedRun(agent.id, failed.run.id);

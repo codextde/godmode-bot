@@ -21,7 +21,7 @@ import { requestKeyframe, setViewers } from "../../android/stream";
 import { disableIdleTimeout } from "../../mcp/http";
 import { setAndroidViewHandlers } from "../ws";
 import { HttpError, badRequest, conflict } from "../../util";
-import { requestDevice } from "../auth";
+import { isPhoneRequest } from "../auth";
 import { body, z } from "../validate";
 
 const point = { x: z.number(), y: z.number() };
@@ -124,7 +124,7 @@ export function registerAndroidRoutes(app: Hono): void {
     const size = Number(c.req.query("size") ?? 480);
     if (!Number.isFinite(size) || size < 64 || size > 1568) throw badRequest("size must be between 64 and 1568");
     // A paired phone only sees the phones agents work with, not any phone that happens to be plugged in.
-    if (requestDevice(c)) {
+    if (isPhoneRequest(c)) {
       const device = getDevice(c.req.param("id"));
       if (!device.busy && !device.assignments.length) {
         throw new HttpError(403, "The phone app shows an Android phone once an agent or a chat uses it.", "device_forbidden");

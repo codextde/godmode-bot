@@ -1,11 +1,14 @@
-import { Stack } from "expo-router";
-import { ActivityIndicator, ScrollView, StyleSheet, View } from "react-native";
+import { useMutation } from "@tanstack/react-query";
+import { router, Stack } from "expo-router";
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { findModel } from "@godmode/shared";
 import { CloseButton } from "@/components/close-button";
-import { Group, PickerRow, StepperRow, SwitchRow } from "@/components/form";
+import { Group, LinkRow, PickerRow, StepperRow, SwitchRow } from "@/components/form";
+import { ApiError, errorText, updateDesktopMessage } from "@/lib/api";
 import { useModelCatalog } from "@/lib/composer";
 import { intlLocale } from "@/lib/i18n";
+import { settingsApi } from "@/lib/settings-api";
 import { patchSettings, useSettings } from "@/lib/setup";
 import { space } from "@/lib/theme";
 
@@ -31,6 +34,15 @@ export default function Memory() {
     ...(dreamModel && !models.some((m) => m.id === dreamModel) ? [{ value: dreamModel, label: dreamModel }] : []),
     ...models.map((m) => ({ value: m.id, label: m.label, detail: m.description })),
   ];
+  const dreamAll = useMutation({
+    mutationFn: settingsApi.memory.dreamAll,
+    onSuccess: (r) =>
+      Alert.alert(
+        r.started.length ? t("memory.dreamAll.started", { count: r.started.length }) : t("memory.dreamAll.none"),
+        r.started.length ? r.started.map((a) => a.name).join(", ") : t("memory.dreamAll.noneBody"),
+      ),
+    onError: (err) => Alert.alert(t("memory.dreamAll.failed"), err instanceof ApiError && err.code === "device_forbidden" ? updateDesktopMessage() : errorText(err)),
+  });
   const presets = SCHEDULES.map((o) => ({ value: o.value as string, label: t(o.labelKey) }));
   const schedules = SCHEDULES.some((o) => o.value === cron) ? presets : [{ value: cron, label: t("memory.schedule.custom", { cron }) }, ...presets];
 
@@ -103,6 +115,11 @@ export default function Memory() {
               format={(n) => (n === 0 ? t("common:words.never") : n === 1 ? t("memory.dreaming.daily") : t("memory.dreaming.days", { count: n }))}
               onChange={(refreshDays) => void patchSettings({ memory: { dreaming: { refreshDays } } })}
             />
+          </Group>
+
+          <Group>
+            <LinkRow icon="moon" title={t("memory.dreamAll.title")} value={dreamAll.isPending ? t("memory.dreamAll.starting") : undefined} chevron={false} onPress={() => !dreamAll.isPending && dreamAll.mutate()} />
+            <LinkRow icon="inbox" title={t("memory.import.link")} onPress={() => router.push("/memory-import")} />
           </Group>
 
           <Group title={t("memory.upkeep.title")} footer={t("memory.upkeep.footer")}>

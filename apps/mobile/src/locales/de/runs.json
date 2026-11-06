@@ -42,6 +42,8 @@
   "starting": "Startet…",
   "handedOverByGone": "Übergeben von einem Agenten, den es nicht mehr gibt",
   "handedOverBy": "Übergeben von",
+  "handedOn": "Weitergegeben",
+  "handedOnFailed": "Weitergegebene Läufe konnten nicht geladen werden: {{error}}",
   "anotherAgent": "einem anderen Agenten",
   "dismissFailed": "Konnte nicht verworfen werden",
   "failureNotice": "Deshalb zeigt {{name}} „Letzter Lauf fehlgeschlagen“.",

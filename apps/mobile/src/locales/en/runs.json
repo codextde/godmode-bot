@@ -42,6 +42,8 @@
   "starting": "Starting…",
   "handedOverByGone": "Handed over by an agent that no longer exists",
   "handedOverBy": "Handed over by",
+  "handedOn": "Handed on",
+  "handedOnFailed": "Couldn't load what it handed on: {{error}}",
   "anotherAgent": "another agent",
   "dismissFailed": "Couldn't dismiss it",
   "failureNotice": "This is why {{name}} shows “Last run failed”.",

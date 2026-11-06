@@ -9,6 +9,7 @@ import { get, getMeta, insert, run, setMeta } from "../db";
 import { getSettings } from "../services/settings";
 import { authenticateDevice } from "../mobile/devices";
 import { deviceBodyKeys, deviceBodyRefusal, deviceMayCall, deviceMayUseView, deviceQueryRefusal } from "../mobile/scope";
+import { applyDeviceView } from "../mobile/views";
 import { cloudPathRefusal, cloudRefusal } from "../cloud/scope";
 import { hashPassword, safeEqual, sha256, verifyPassword } from "../vault/crypto";
 import { HttpError, newId, now, randomToken } from "../util";
@@ -183,8 +184,21 @@ export function requestDevice(c: Context): MobileDevice | null {
   return (c.get("device" as never) as MobileDevice | undefined) ?? null;
 }
 
+/**
+ * Another computer of the device group forwarded a request one of its phones made (remote/deviceRouting.ts). Only a
+ * linked controller sets the header, and it only ever narrows what the request may do.
+ */
+function forwardedFromPhone(c: Context): boolean {
+  return (c.env as { channel?: string } | undefined)?.channel === "runner-link" && c.req.header("x-godmode-phone") === "1";
+}
+
+/** A paired phone made this request: here, or on another computer of the device group that forwarded it. */
+export function isPhoneRequest(c: Context): boolean {
+  return !!requestDevice(c) || forwardedFromPhone(c);
+}
+
 /** Where a person's request came from, for the audit: a paired phone, the cloud, another computer of the group, or this computer's app. */
-export function requestVia(c: Context): { via: "phone" | "cloud" | "computer" | "app"; name?: string; userId?: string } {
+export function requestVia(c: Context): { via: "phone" | "cloud" | "computer" | "app"; name?: string; userId?: string; through?: string } {
   const device = requestDevice(c);
   if (device) return { via: "phone", name: device.name };
   if (isCloudChannel(c)) {
@@ -193,8 +207,8 @@ export function requestVia(c: Context): { via: "phone" | "cloud" | "computer" | 
   }
   const link = c.env as { channel?: string; controllerId?: string } | undefined;
   if (link?.channel !== "runner-link") return { via: "app" };
-  const name = link.controllerId ? get<{ name: string }>("SELECT name FROM link_controllers WHERE id = ?", link.controllerId)?.name : undefined;
-  return { via: "computer", name: name ?? "unknown" };
+  const name = (link.controllerId ? get<{ name: string }>("SELECT name FROM link_controllers WHERE id = ?", link.controllerId)?.name : undefined) ?? "unknown";
+  return forwardedFromPhone(c) ? { via: "phone", through: name } : { via: "computer", name };
 }
 
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]", "::1", "tauri.localhost"]);
@@ -257,7 +271,10 @@ export const requireAuth: MiddlewareHandler = async (c, next) => {
   const auth = authenticateRequest(c);
   const kind = auth?.kind;
   if (!kind || (isMobileChannel(c) && kind !== "device")) return c.json({ error: "Unauthorized", code: "unauthorized" }, 401);
-  if (kind === "device") {
+  // A phone's request another computer of the group forwarded meets the phones' rules here too, against this computer's
+  // settings and files.
+  const phone = kind === "device" || forwardedFromPhone(c);
+  if (phone) {
     const refusal = await deviceRefusal(c);
     if (refusal) return c.json({ error: refusal, code: "device_forbidden" }, 403);
   }
@@ -285,6 +302,7 @@ export const requireAuth: MiddlewareHandler = async (c, next) => {
   if (auth?.device) c.set("device" as never, auth.device as never);
   if (auth?.user) c.set("cloudUser" as never, auth.user as never);
   await next();
+  if (phone) await applyDeviceView(c);
 };
 
 /** The cloud user behind a relayed dashboard request (null for everything else). */

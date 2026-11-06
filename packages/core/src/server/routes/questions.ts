@@ -1,7 +1,7 @@
 import type { Context, Hono } from "hono";
 import { answerQuestion, getQuestion, listQuestions, type Answerer, type QuestionFilter } from "../../services/questions";
 import { badRequest } from "../../util";
-import { requestCloudUser, requestDevice } from "../auth";
+import { isPhoneRequest, requestCloudUser } from "../auth";
 import { body, z } from "../validate";
 
 const FILTERS: readonly QuestionFilter[] = ["open", "answered", "approved", "declined", "withdrawn", "resolved", "all"];
@@ -27,7 +27,7 @@ const answerSchema = z
 /** The human answering: from a paired phone, or from the desktop app / dashboard. */
 export function answererOf(c: Context): Answerer {
   const cloud = requestCloudUser(c);
-  return { actor: "user", via: requestDevice(c) ? "phone" : "app", ...(cloud && cloud.role !== "owner" ? { notOwner: true } : {}) };
+  return { actor: "user", via: isPhoneRequest(c) ? "phone" : "app", ...(cloud && cloud.role !== "owner" ? { notOwner: true } : {}) };
 }
 
 export function registerQuestionRoutes(app: Hono): void {

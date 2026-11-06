@@ -22,6 +22,7 @@ import {
   listAgentFiles,
   listAgents,
   readAgentFile,
+  withRepo,
   updateAgent,
   writeAgentFile,
 } from "../../agents/service";
@@ -38,7 +39,7 @@ import { beatNow, heartbeatState } from "../../services/heartbeats";
 import { dreamOverview, getDream, isDreaming, revertDream, dreamAll, startDream } from "../../memory/dreaming";
 import { isMemoryPath } from "../../memory/files";
 import { MAX_MEMORY_EDIT_BYTES, readAgentMemory, writeAgentMemory } from "../../memory/editor";
-import { resolveRepoPath } from "../../agents/repo";
+import { readRepoViewable, resolveRepoPath } from "../../agents/repo";
 import {
   createFolder,
   deleteFiles,
@@ -54,8 +55,8 @@ import {
   searchAgentFiles,
 } from "../../agents/files";
 import { getSettings } from "../../services/settings";
-import { conflict } from "../../util";
-import { requestDevice } from "../auth";
+import { HttpError, conflict } from "../../util";
+import { isPhoneRequest } from "../auth";
 import { requireGrant } from "../grants";
 import { body, computerTargetSchema, z } from "../validate";
 
@@ -218,7 +219,8 @@ export function registerAgentRoutes(app: Hono): void {
         skip: z.array(z.string().max(40)).max(100).optional(),
       }),
     );
-    return c.json(await installTeam(c.req.param("id"), input), 201);
+    // From a phone its agents and automations start like ones made there: no logins or inherited tools, fill-only secrets.
+    return c.json(await installTeam(c.req.param("id"), input, "user", { phone: isPhoneRequest(c) }), 201);
   });
 
   app.get("/api/agents/:id", (c) => c.json(getAgent(c.req.param("id"))));
@@ -226,7 +228,7 @@ export function registerAgentRoutes(app: Hono): void {
   app.post("/api/agents", async (c) => {
     const input = await body(c, agentSchema);
     // An agent set up from the phone starts with no logins, no inherited tools and fill-only secrets; it's widened on the computer.
-    if (requestDevice(c)) Object.assign(input, { permissions: { credentialIds: [], totpIds: [], secretAccess: "fill" }, inheritMcp: false });
+    if (isPhoneRequest(c)) Object.assign(input, { permissions: { credentialIds: [], totpIds: [], secretAccess: "fill" }, inheritMcp: false });
     // Letting an agent read secrets in plain text needs a fresh passphrase confirmation (unless it's already the default).
     if (input.permissions?.secretAccess === "reveal" && getSettings().security.defaultSecretAccess !== "reveal") requireGrant(c);
     return c.json(await createAgent(input));
@@ -256,6 +258,9 @@ export function registerAgentRoutes(app: Hono): void {
   // Same setup, fresh memory, no chats or automations. A copy that reads secrets needs the passphrase like a new one.
   app.post("/api/agents/:id/duplicate", async (c) => {
     const source = getAgent(c.req.param("id"));
+    if (source.permissions.secretAccess === "reveal" && isPhoneRequest(c)) {
+      throw new HttpError(403, `${source.name} reads secrets in plain text: copy it in Godmode on your computer.`, "device_forbidden");
+    }
     if (source.permissions.secretAccess === "reveal" && getSettings().security.defaultSecretAccess !== "reveal") requireGrant(c);
     return c.json(await duplicateAgent(source.id));
   });
@@ -292,9 +297,24 @@ export function registerAgentRoutes(app: Hono): void {
 
   /* Repository browser ------------------------------------------------ */
 
-  app.get("/api/agents/:id/files", async (c) => c.json(await listAgentFiles(c.req.param("id"), c.req.query("path") ?? "")));
+  app.get("/api/agents/:id/files", async (c) => {
+    return c.json(await listAgentFiles(c.req.param("id"), c.req.query("path") ?? ""));
+  });
 
-  app.get("/api/agents/:id/file", async (c) => c.json(await readAgentFile(c.req.param("id"), c.req.query("path") ?? "")));
+  app.get("/api/agents/:id/file", async (c) => {
+    return c.json(await readAgentFile(c.req.param("id"), c.req.query("path") ?? ""));
+  });
+
+  /** A picture or PDF of the repository as it is (the phone's viewer; the desktop shows pictures through /api/files/image). */
+  app.get("/api/agents/:id/files/raw", async (c) => {
+    const file = await readRepoViewable((await withRepo(c.req.param("id"))).repoPath, c.req.query("path") ?? "");
+    return c.body(new Uint8Array(file.data), 200, {
+      "Content-Type": file.mime,
+      "Content-Security-Policy": "sandbox; default-src 'none'",
+      "X-Content-Type-Options": "nosniff",
+      "Cache-Control": "private, no-store",
+    });
+  });
 
   app.put("/api/agents/:id/file", async (c) => {
     const { path, content, create } = await body(c, z.object({ path: z.string().trim().min(1).max(1024), content: z.string(), create: z.boolean().optional() }));
@@ -380,7 +400,7 @@ export function registerAgentRoutes(app: Hono): void {
   app.get("/api/dreams/:id", (c) => {
     const dream = getDream(c.req.param("id"));
     // A phone reads MEMORY.md, as in its memory editor; the agent's other files stay on the computer.
-    return c.json(requestDevice(c) ? { ...dream, fileChanges: dream.fileChanges.filter((f) => f.path === "MEMORY.md") } : dream);
+    return c.json(isPhoneRequest(c) ? { ...dream, fileChanges: dream.fileChanges.filter((f) => f.path === "MEMORY.md") } : dream);
   });
 
   app.post("/api/dreams/:id/revert", async (c) => c.json(await revertDream(c.req.param("id"))));
@@ -388,7 +408,7 @@ export function registerAgentRoutes(app: Hono): void {
   /* Routines ---------------------------------------------------------- */
 
   // A phone never gets a webhook's secret URL: webhooks are set up on the computer.
-  const forCaller = (c: Context, r: Routine): Routine => (requestDevice(c) ? { ...r, webhookPath: null } : r);
+  const forCaller = (c: Context, r: Routine): Routine => (isPhoneRequest(c) ? { ...r, webhookPath: null } : r);
 
   app.get("/api/routines", (c) => c.json(listRoutines({ agentId: c.req.query("agentId") || undefined }).map((r) => forCaller(c, r))));
 
@@ -396,7 +416,7 @@ export function registerAgentRoutes(app: Hono): void {
     const input = await body(c, routineSchema);
     const trigger = await resolveAppTrigger(input.trigger as RoutineTrigger | undefined, input.agentId);
     // Set up from a phone, its runs fill logins but read no raw secrets, like an agent made there.
-    return c.json(forCaller(c, createRoutine({ ...input, trigger, ...(requestDevice(c) ? { fillOnly: true } : {}) })));
+    return c.json(forCaller(c, createRoutine({ ...input, trigger, ...(isPhoneRequest(c) ? { fillOnly: true } : {}) })));
   });
 
   app.patch("/api/routines/:id", async (c) => {
@@ -408,7 +428,7 @@ export function registerAgentRoutes(app: Hono): void {
       ? await resolveAppTrigger(patch.trigger as RoutineTrigger, patch.agentId ?? getRoutine(routineId).agentId)
       : undefined;
     // What a phone writes runs without raw secrets from then on; switching it on or off changes nothing it does.
-    const fromPhone = requestDevice(c) && Object.keys(patch).some((k) => k !== "enabled");
+    const fromPhone = isPhoneRequest(c) && Object.keys(patch).some((k) => k !== "enabled");
     return c.json(forCaller(c, updateRoutine(routineId, { ...patch, trigger, ...(fromPhone ? { fillOnly: true } : {}) })));
   });
 

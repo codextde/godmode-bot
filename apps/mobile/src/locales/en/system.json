@@ -64,7 +64,18 @@
     "needsLogin": "{{agent}} needs a login for {{service}}",
     "readyForReview": "#{{number}} {{title}} is ready for review",
     "isBlocked": "#{{number}} {{title}} is blocked",
-    "delivered": "{{agent}} delivered it"
+    "delivered": "{{agent}} delivered it",
+    "isPaused": "{{agent}} is paused",
+    "waitsAfterLimit": "{{agent}} waits for you after Claude's {{limit}}",
+    "usageLimit": "usage limit",
+    "ranIntoProblem": "{{agent}} ran into a problem",
+    "automationFailing": "“{{name}}” isn't working",
+    "lastRunFailed": "Its last run failed",
+    "triggerProblem": "Its trigger has a problem",
+    "asksAccess": "{{name}} asks to talk to your agents",
+    "someone": "Someone",
+    "onConnection": "On {{name}}",
+    "approveOnComputer": "Decide on your computer"
   },
   "tools": {
     "openedHost": "Opened {{host}}",

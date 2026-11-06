@@ -2,13 +2,14 @@ import { FlashList, type FlashListRef, type ListRenderItem } from "@shopify/flas
 import { useQuery } from "@tanstack/react-query";
 import { router, Stack, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, Switch, TextInput, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { KeyboardAvoidingView, useKeyboardState } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   characterGreeting,
   type Agent,
+  type Conversation,
   type ConversationFollowup,
   type ConversationWithMessages,
   type HumanTask,
@@ -16,6 +17,7 @@ import {
   type MessageBlock,
   type QueuedMessage,
   type RetryMode,
+  type RunPause,
   retryHelps,
   retryModeOf,
   runEndOf,
@@ -32,14 +34,16 @@ import { ChatScope, type ChatScopeValue } from "@/components/question-card";
 import { QueueTray } from "@/components/queue-tray";
 import { Button, ErrorState, Skeleton, T, tap } from "@/components/ui";
 import { openHumanTask } from "@/components/human-task-row";
-import { ApiError, api, errorText } from "@/lib/api";
+import { ApiError, api, errorText, updateDesktopMessage } from "@/lib/api";
+import { useArchive } from "@/lib/archive";
 import { encodeFiles, type PendingFile } from "@/lib/attachments";
 import { fetchConversation, loadEarlier } from "@/lib/chat-cache";
 import { isCompressCommand, useContextGauge } from "@/lib/chat-memory";
 import { setQueue } from "@/lib/composer";
+import { askHandoff, canHandoff, handoffChatIn, isHandoffCommand, takeHandoff } from "@/lib/handoff";
 import { whenText } from "@/lib/format";
 import { newQueueId, pendingQueued, withPending } from "@/lib/pending-queue";
-import { useAgents } from "@/lib/hooks";
+import { useAgents, useNow } from "@/lib/hooks";
 import { useChatRun, useLive, useRunActivity } from "@/lib/live";
 import { qk, queryClient } from "@/lib/query";
 import { subscribeConversation, viewConversation } from "@/lib/realtime";
@@ -54,7 +58,9 @@ type Item =
   | { key: string; role: "user"; message: Message }
   | { key: string; role: "assistant"; blocks: MessageBlock[]; content: string; streaming: boolean }
   | { key: string; role: "live" }
-  | { key: string; role: "note"; content: string };
+  | { key: string; role: "note"; content: string }
+  | { key: string; role: "origin" }
+  | { key: string; role: "private" };
 
 const NO_BLOCKS: MessageBlock[] = [];
 /** What marks a place in the chat where it went on without the human writing. */
@@ -112,6 +118,11 @@ export default function Chat() {
   const screens = useChatScreens(conversation.data, agent);
   const composer = useRef<ComposerHandle>(null);
   const [renaming, setRenaming] = useState(false);
+  const isPrivate = !!conversation.data?.private;
+  usePrivateChatLifetime(id, isPrivate);
+  const continuedFrom = conversation.data?.continuedFrom ?? null;
+  const delegatedFrom = conversation.data?.delegatedFrom ?? null;
+  const hasOrigin = !!continuedFrom || !!delegatedFrom?.conversationId;
 
   useEffect(() => subscribeConversation(id), [id]);
   // Read while it is the screen in front (not while another screen covers it).
@@ -128,6 +139,8 @@ export default function Chat() {
   const running = run?.status === "running";
   const items = useMemo<Item[]>(() => {
     const out: Item[] = [hasMore ? { key: "earlier", role: "earlier" } : { key: "intro", role: "intro" }];
+    if (isPrivate) out.push({ key: "private", role: "private" });
+    if (hasOrigin) out.push({ key: "origin", role: "origin" });
     let answered = false;
     for (const m of messages ?? []) {
       if (m.id === liveMessageId) continue;
@@ -140,7 +153,15 @@ export default function Chat() {
     }
     if (liveMessageId || (running && !answered)) out.push({ key: liveMessageId ?? `pending-${runId}`, role: "live" });
     return out;
-  }, [messages, hasMore, liveMessageId, runId, running]);
+  }, [messages, hasMore, liveMessageId, runId, running, isPrivate, hasOrigin]);
+
+  // Asked to go on in a new chat: it opens as soon as the agent made it.
+  const liveHandoff = useLive((s) => handoffChatIn(s.drafts[id]?.blocks));
+  const doneHandoff = useMemo(() => handoffAfterAsk(messages), [messages]);
+  const handoffTarget = liveHandoff ?? doneHandoff;
+  useEffect(() => {
+    if (handoffTarget && takeHandoff(id)) router.push({ pathname: "/chat/[id]", params: { id: handoffTarget } });
+  }, [handoffTarget, id]);
 
   // The chat's run stands still (paused on the computer, or waiting for Claude's usage limit).
   const pause = conversation.data?.paused;
@@ -155,8 +176,12 @@ export default function Chat() {
   const gauge = useContextGauge(conversation.data?.context);
   const compressing = (!!run && (activity ?? "").startsWith("Compressing")) || queue.some((m) => isCompressCommand(m.content));
   const [compressHiddenAt, setCompressHiddenAt] = useState<number | null>(null);
+  const handoffQueued = queue.some((m) => isHandoffCommand(m.content));
+  // A switched-off agent answers nothing: the composer keeps a draft and the strip offers the way back.
+  const off = !!agent && (!agent.enabled || agent.archived) && conversation.data?.origin !== "dream";
+  const handoffOk = canHandoff(conversation.data) && !off;
   const longChat =
-    !!gauge && gauge.tone !== "calm" && gauge.compressible && !compressing && (compressHiddenAt === null || gauge.tokens > compressHiddenAt * 1.2) ? gauge : null;
+    !!gauge && gauge.tone !== "calm" && gauge.compressible && !compressing && !handoffQueued && (compressHiddenAt === null || gauge.tokens > compressHiddenAt * 1.2) ? gauge : null;
 
   const scope = useMemo<ChatScopeValue>(
     () => ({ conversationId: id, agentName: agent?.name ?? t("thread.theAgent"), openQuestionId: (pause?.reason === "question" && pause.question?.id) || null }),
@@ -164,6 +189,7 @@ export default function Chat() {
   );
 
   const send = async (content: string, files: PendingFile[]) => {
+    if (isHandoffCommand(content)) askHandoff(id);
     const key = qk.conversation(id);
     const queueId = newQueueId();
     const tempId = `pending-${queueId}`;
@@ -225,6 +251,12 @@ export default function Chat() {
   };
 
   const onLost = useCallback((text: string) => composer.current?.insert(text), []);
+
+  // Go on in a fresh chat: the agent writes the brief, and the new chat opens once it exists.
+  const handoff = () => {
+    tap();
+    void send("/handoff", []).catch(() => undefined);
+  };
 
   const stop = () => {
     if (run) void api.runs.cancel(run.id).catch((err) => Alert.alert(t("thread.stopFailed"), errorText(err)));
@@ -305,11 +337,17 @@ export default function Chat() {
         ...(running && !paused
           ? [{ icon: "pause" as const, title: t("thread.menu.pause"), onPress: () => void api.conversations.pause(id).catch((err) => Alert.alert(t("thread.pauseFailed"), errorText(err))) }]
           : []),
+        ...(handoffOk && !handoffQueued ? [{ icon: "handoff" as const, title: t("conv.handoff"), onPress: handoff }] : []),
+        { icon: "slider", title: t("conv.settings"), onPress: () => router.push({ pathname: "/chat-options", params: { conversationId: id } }) },
         { icon: "pencil", title: t("common:actions.rename"), onPress: rename },
-        { icon: "pin", title: data.pinned ? t("thread.menu.unpin") : t("thread.menu.pin"), onPress: () => void change({ pinned: !data.pinned }) },
-        data.archived
-          ? { icon: "unarchive", title: t("thread.menu.unarchive"), onPress: () => void change({ archived: false }) }
-          : { icon: "archive", title: t("thread.menu.archive"), onPress: () => void change({ archived: true }).then((done) => done && router.back()) },
+        ...(data.private
+          ? []
+          : [
+              { icon: "pin" as const, title: data.pinned ? t("thread.menu.unpin") : t("thread.menu.pin"), onPress: () => void change({ pinned: !data.pinned }) },
+              data.archived
+                ? { icon: "unarchive" as const, title: t("thread.menu.unarchive"), onPress: () => void change({ archived: false }) }
+                : { icon: "archive" as const, title: t("thread.menu.archive"), onPress: () => void change({ archived: true }).then((done) => done && router.back()) },
+            ]),
         { icon: "trash", title: t("common:actions.delete"), destructive: true, onPress: remove },
       ]
     : [];
@@ -327,18 +365,25 @@ export default function Chat() {
           return <LiveMessage conversationId={id} runId={runId} agent={agent} />;
         case "note":
           return <SystemNote content={item.content} />;
+        case "origin":
+          return <OriginLine continuedFrom={continuedFrom} delegatedFrom={delegatedFrom} />;
+        case "private":
+          return <PrivateNote />;
         default:
           return <AssistantMessage blocks={item.blocks} content={item.content} streaming={item.streaming} agent={agent} />;
       }
     },
-    [agent, id, runId],
+    [agent, id, runId, continuedFrom, delegatedFrom],
   );
 
   return (
     <>
       <Stack.Title>{title}</Stack.Title>
       <HeaderActions
-        actions={primary ? [{ icon: "eye", label: t("thread.watchScreen"), onPress: () => router.push(screenHref(primary)) }] : []}
+        actions={[
+          ...(isPrivate ? [{ icon: "incognito" as const, label: t("conv.private"), onPress: () => Alert.alert(t("conv.privateStart"), t("conv.privateHint")) }] : []),
+          ...(primary ? [{ icon: "eye" as const, label: t("thread.watchScreen"), onPress: () => router.push(screenHref(primary)) }] : []),
+        ]}
         menu={menu}
       />
       <KeyboardAvoidingView behavior="translate-with-padding" style={{ flex: 1 }}>
@@ -368,22 +413,25 @@ export default function Chat() {
             />
           </ChatScope.Provider>
         )}
+        {off && agent ? <SwitchedOffStrip agent={agent} /> : null}
         {forYou.data?.some((task) => !task.questionId) ? <ForYouStrip tasks={forYou.data.filter((task) => !task.questionId)} /> : null}
         {run && primary ? <ChatLiveStrip screen={primary} runId={run.id} /> : null}
         {paused?.reason === "question" ? (
           <AskingStrip agentName={agent?.name ?? t("thread.theAgent")} approval={paused.question?.kind === "approval"} />
         ) : paused ? (
-          <PausedStrip
-            limit={paused.reason === "limit" ? (paused.limit ?? t("thread.usageLimit")) : null}
-            auto={paused.auto}
-            onContinue={resume}
-          />
+          <PausedStrip conversationId={id} pause={paused} onContinue={resume} />
         ) : ended ? (
           <EndedStrip mode={ended.mode} onRetry={retry} busy={retrying} />
         ) : followup ? (
           <FollowupStrip conversationId={id} followup={followup} agentName={agent?.name ?? t("thread.theAgent")} />
         ) : longChat ? (
-          <LongChatStrip pct={longChat.share === null ? null : Math.round(longChat.share * 100)} full={longChat.tone === "full"} onCompress={() => void send("/compress", [])} onHide={() => setCompressHiddenAt(longChat.tokens)} />
+          <LongChatStrip
+            pct={longChat.share === null ? null : Math.round(longChat.share * 100)}
+            full={longChat.tone === "full"}
+            onCompress={() => void send("/compress", [])}
+            onHandoff={handoffOk ? handoff : undefined}
+            onHide={() => setCompressHiddenAt(longChat.tokens)}
+          />
         ) : null}
         <QueueTray
           conversationId={id}
@@ -406,7 +454,9 @@ export default function Chat() {
             placeholder={
               !agent
                 ? t("thread.placeholder.message")
-                : waiting
+                : !agent.enabled || agent.archived
+                  ? t("conv.switchedOffDraft", { name: agent.name })
+                  : waiting
                   ? t("thread.placeholder.answer", { name: agent.name })
                   : paused?.reason === "user"
                     ? t("thread.placeholder.howToGoOn", { name: agent.name })
@@ -418,7 +468,8 @@ export default function Chat() {
                           ? t("thread.placeholder.queue", { name: agent.name })
                           : t("thread.placeholder.default", { name: agent.name })
             }
-            disabled={agent ? !agent.enabled : false}
+            blocked={!!agent && (!agent.enabled || agent.archived)}
+            voice
             trailing={
               conversation.data ? (
                 <>
@@ -481,9 +532,12 @@ function RenameDialog({ open, title, onClose, onSave }: { open: boolean; title: 
   const c = useColors();
   const { t } = useTranslation(["chat", "common"]);
   const [text, setText] = useState(title);
-  useEffect(() => {
+  // Opening it starts from the current title.
+  const [wasOpen, setWasOpen] = useState(open);
+  if (open !== wasOpen) {
+    setWasOpen(open);
     if (open) setText(title);
-  }, [open, title]);
+  }
   const save = () => {
     if (text.trim()) onSave(text.trim());
     onClose();
@@ -527,10 +581,12 @@ function FollowupStrip({ conversationId, followup, agentName }: { conversationId
   const failed = (title: string) => (err: unknown) =>
     Alert.alert(title, err instanceof ApiError && err.code === "device_forbidden" ? t("thread.followup.updateDesktop") : errorText(err));
   const move = (dueAt: Date) => void api.conversations.followup.move(conversationId, dueAt.toISOString()).then(refresh).catch(failed(t("thread.followup.moveFailed")));
-  const inAnHour = new Date(Date.now() + 3600_000);
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  tomorrow.setHours(9, 0, 0, 0);
+  const tomorrowAt9 = () => {
+    const at = new Date();
+    at.setDate(at.getDate() + 1);
+    at.setHours(9, 0, 0, 0);
+    return at;
+  };
   const items: HeaderMenuItem[] = [
     {
       icon: "play",
@@ -544,8 +600,8 @@ function FollowupStrip({ conversationId, followup, agentName }: { conversationId
           })
           .catch(failed(t("thread.followup.continueNowFailed"))),
     },
-    { icon: "clock", title: t("thread.followup.inAnHour"), onPress: () => move(inAnHour) },
-    { icon: "clock", title: t("thread.followup.tomorrow"), onPress: () => move(tomorrow) },
+    { icon: "clock", title: t("thread.followup.inAnHour"), onPress: () => move(new Date(Date.now() + 3600_000)) },
+    { icon: "clock", title: t("thread.followup.tomorrow"), onPress: () => move(tomorrowAt9()) },
     {
       icon: "close",
       title: t("thread.followup.cancel"),
@@ -650,16 +706,54 @@ function AskingStrip({ agentName, approval }: { agentName: string; approval: boo
   );
 }
 
-/** Above the composer while the chat's run stands still. */
-function PausedStrip({ limit, auto, onContinue }: { limit: string | null; auto: boolean; onContinue: () => void }) {
+/** Above the composer while the chat's run stands still; a usage limit says when it resets and may go on by itself. */
+function PausedStrip({ conversationId, pause, onContinue }: { conversationId: string; pause: RunPause; onContinue: () => void }) {
   const c = useColors();
   const { t } = useTranslation(["chat", "common"]);
+  const now = useNow(30_000);
+  const limit = pause.reason === "limit";
+  const reset = limit && pause.resumeAt ? (new Date(pause.resumeAt).getTime() <= now ? t("pause.resetsAnyMoment") : t("pause.resetsIn", { when: whenText(pause.resumeAt) })) : null;
+  const setAuto = (on: boolean) => {
+    const key = qk.conversation(conversationId);
+    queryClient.setQueryData<ConversationWithMessages>(key, (old) => (old?.paused ? { ...old, paused: { ...old.paused, auto: on } } : old));
+    api.conversations
+      .autoContinue(conversationId, on)
+      .then((next) => queryClient.setQueryData<ConversationWithMessages>(key, (old) => (old?.paused ? { ...old, paused: next } : old)))
+      .catch((err) => {
+        void queryClient.invalidateQueries({ queryKey: key });
+        Alert.alert(t("pause.autoFailed"), err instanceof ApiError && err.code === "device_forbidden" ? updateDesktopMessage() : errorText(err));
+      });
+  };
   return (
     <View style={[styles.paused, { backgroundColor: c.surface, borderColor: c.border }]}>
       <Icon name={limit ? "clock" : "pause"} size={15} color={limit ? c.warning : c.textMuted} />
-      <T variant="footnote" muted style={{ flex: 1 }} numberOfLines={2}>
-        {limit ? (auto ? t("thread.paused.limitAuto", { limit }) : t("thread.paused.limit", { limit })) : t("thread.paused.user")}
-      </T>
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <T variant="footnote" muted numberOfLines={2}>
+          {limit ? t("thread.paused.limit", { limit: pause.limit ?? t("thread.usageLimit") }) : t("thread.paused.user")}
+        </T>
+        {reset ? (
+          <T variant="caption" muted numberOfLines={1}>
+            {reset}
+          </T>
+        ) : null}
+      </View>
+      {limit && pause.resumeAt ? (
+        <View style={styles.auto}>
+          <T variant="caption" muted>
+            {t("pause.auto")}
+          </T>
+          <Switch
+            value={pause.auto}
+            onValueChange={(on) => {
+              tap();
+              setAuto(on);
+            }}
+            accessibilityLabel={t("pause.autoLabel")}
+            trackColor={{ true: c.brand, false: c.sunken }}
+            style={styles.autoSwitch}
+          />
+        </View>
+      ) : null}
       <Pressable onPress={onContinue} hitSlop={10} accessibilityRole="button" accessibilityLabel={t("common:actions.continue")}>
         <T variant="footnote" color={c.primary} style={{ fontWeight: "600" }}>
           {limit ? t("thread.paused.tryNow") : t("common:actions.continue")}
@@ -667,6 +761,156 @@ function PausedStrip({ limit, auto, onContinue }: { limit: string | null; auto: 
       </Pressable>
     </View>
   );
+}
+
+/** Above the composer while the agent is switched off or archived: it answers nothing until it's back. */
+function SwitchedOffStrip({ agent }: { agent: Agent }) {
+  const c = useColors();
+  const { t } = useTranslation(["chat", "common", "archive"]);
+  const [busy, setBusy] = useState(false);
+  const { restore, pending } = useArchive();
+  if (agent.archived) {
+    const restoring = pending === agent.id;
+    return (
+      <View style={[styles.paused, { backgroundColor: c.surface, borderColor: c.border }]} accessibilityRole="summary">
+        <Icon name="archive" size={15} color={c.textMuted} />
+        <T variant="footnote" muted style={{ flex: 1 }} numberOfLines={2}>
+          {t("archive:banner.agent", { name: agent.name })}
+        </T>
+        {agent.archivedAt ? (
+          <Pressable
+            onPress={() => restore({ kind: "agent", id: agent.id, name: agent.name })}
+            disabled={restoring}
+            hitSlop={10}
+            accessibilityRole="button"
+            accessibilityState={{ busy: restoring, disabled: restoring }}
+            style={{ opacity: restoring ? 0.5 : 1 }}
+          >
+            {restoring ? (
+              <ActivityIndicator size="small" color={c.textMuted} />
+            ) : (
+              <T variant="footnote" color={c.primary} style={{ fontWeight: "600" }}>
+                {t("archive:restore")}
+              </T>
+            )}
+          </Pressable>
+        ) : null}
+      </View>
+    );
+  }
+  const switchOn = () => {
+    tap();
+    setBusy(true);
+    api.agents
+      .update(agent.id, { enabled: true })
+      .then((next) => {
+        queryClient.setQueryData<Agent[]>(qk.agents, (list) => list?.map((a) => (a.id === next.id ? next : a)));
+        void queryClient.invalidateQueries({ queryKey: qk.agents });
+      })
+      .catch((err) => Alert.alert(t("conv.switchOnFailed"), err instanceof ApiError && err.code === "device_forbidden" ? updateDesktopMessage() : errorText(err)))
+      .finally(() => setBusy(false));
+  };
+  return (
+    <View style={[styles.paused, { backgroundColor: c.surface, borderColor: c.border }]} accessibilityRole="summary">
+      <Icon name="power" size={15} color={c.textMuted} />
+      <T variant="footnote" muted style={{ flex: 1 }} numberOfLines={2}>
+        {t("conv.switchedOff", { name: agent.name })}
+      </T>
+      <Pressable onPress={switchOn} disabled={busy} hitSlop={10} accessibilityRole="button" accessibilityState={{ busy, disabled: busy }} style={{ opacity: busy ? 0.5 : 1 }}>
+        {busy ? (
+          <ActivityIndicator size="small" color={c.textMuted} />
+        ) : (
+          <T variant="footnote" color={c.primary} style={{ fontWeight: "600" }}>
+            {t("conv.switchOn")}
+          </T>
+        )}
+      </Pressable>
+    </View>
+  );
+}
+
+/** At the top of a chat that goes on from another one: a fresh start (handoff) or work another agent handed over. */
+function OriginLine({ continuedFrom, delegatedFrom }: { continuedFrom: Conversation["continuedFrom"]; delegatedFrom: Conversation["delegatedFrom"] }) {
+  const c = useColors();
+  const { t } = useTranslation("chat");
+  const { byId } = useAgents();
+  const source = continuedFrom?.conversationId ?? delegatedFrom?.conversationId ?? null;
+  if (!source) return null;
+  const from = !continuedFrom && delegatedFrom ? byId.get(delegatedFrom.agentId) : undefined;
+  const text = continuedFrom ? t("conv.continuedFrom", { title: continuedFrom.title }) : from ? t("conv.handedOverBy", { name: from.name }) : t("conv.handedOver");
+  return (
+    <View style={{ alignItems: "center" }}>
+      <Pressable
+        accessibilityRole="link"
+        accessibilityHint={t("conv.openSource")}
+        onPress={() => {
+          tap();
+          router.push({ pathname: "/chat/[id]", params: { id: source } });
+        }}
+        style={({ pressed }) => [styles.pill, { backgroundColor: c.surface, borderColor: c.border, opacity: pressed ? 0.7 : 1 }]}
+      >
+        {from ? <CharacterAvatar agent={from} size={18} /> : <Icon name={continuedFrom ? "handoff" : "subagent"} size={13} color={c.textMuted} />}
+        <T variant="footnote" numberOfLines={1} style={{ flexShrink: 1 }}>
+          {text}
+        </T>
+        <Icon name="chevron" size={10} weight="semibold" color={c.textFaint} />
+      </Pressable>
+    </View>
+  );
+}
+
+/** At the top of a private chat: what it keeps (nothing). */
+function PrivateNote() {
+  const c = useColors();
+  const { t } = useTranslation("chat");
+  return (
+    <View style={{ alignItems: "center", gap: 6 }}>
+      <View style={[styles.pill, { borderColor: c.borderStrong, borderStyle: "dashed" }]}>
+        <Icon name="incognito" size={13} color={c.text} />
+        <T variant="footnote" style={{ fontWeight: "600" }}>
+          {t("conv.private")}
+        </T>
+      </View>
+      <T variant="caption" muted style={{ textAlign: "center", maxWidth: 260 }}>
+        {t("conv.privateHint")}
+      </T>
+    </View>
+  );
+}
+
+const discarding = new Map<string, ReturnType<typeof setTimeout>>();
+
+/** A private chat lives while it is open: leaving it wipes it on the computer. Coming right back (a remount) keeps it. */
+function usePrivateChatLifetime(id: string, isPrivate: boolean) {
+  useEffect(() => {
+    if (!isPrivate) return;
+    clearTimeout(discarding.get(id));
+    discarding.delete(id);
+    return () => {
+      discarding.set(
+        id,
+        setTimeout(() => {
+          discarding.delete(id);
+          // What the computer can't wipe now goes when Godmode starts again.
+          void api.conversations.delete(id).catch(() => undefined);
+          queryClient.removeQueries({ queryKey: qk.conversation(id) });
+          void queryClient.invalidateQueries({ queryKey: qk.conversations });
+        }, 400),
+      );
+    };
+  }, [id, isPrivate]);
+}
+
+/** The chat the /handoff the human sent last opened, once the agent made it. */
+function handoffAfterAsk(messages: Message[] | undefined): string | null {
+  if (!messages) return null;
+  let target: string | null = null;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i]!;
+    if (m.role === "user") return isHandoffCommand(m.content) ? target : null;
+    if (m.role === "assistant") target ??= handoffChatIn(m.blocks);
+  }
+  return null;
 }
 
 /**
@@ -683,8 +927,8 @@ function endedTurn(conv: ConversationWithMessages): { runId: string; mode: Retry
   return { runId: last.runId, mode: retryModeOf(last.blocks) === "continue" && conv.claudeSessionId ? "continue" : "again" };
 }
 
-/** Above the composer once the chat gets long. */
-function LongChatStrip({ pct, full, onCompress, onHide }: { pct: number | null; full: boolean; onCompress: () => void; onHide: () => void }) {
+/** Above the composer once the chat gets long: compress it, or go on in a fresh chat. */
+function LongChatStrip({ pct, full, onCompress, onHandoff, onHide }: { pct: number | null; full: boolean; onCompress: () => void; onHandoff?: () => void; onHide: () => void }) {
   const c = useColors();
   const { t } = useTranslation(["chat", "common"]);
   return (
@@ -693,6 +937,13 @@ function LongChatStrip({ pct, full, onCompress, onHide }: { pct: number | null; 
       <T variant="footnote" style={{ flex: 1 }} numberOfLines={2}>
         {pct !== null ? t("thread.longChat.titlePct", { pct }) : t("thread.longChat.title")}
       </T>
+      {onHandoff ? (
+        <Pressable onPress={onHandoff} hitSlop={10} accessibilityRole="button" accessibilityLabel={t("conv.handoff")}>
+          <T variant="footnote" color={c.primary} style={{ fontWeight: "600" }}>
+            {t("conv.newChat")}
+          </T>
+        </Pressable>
+      ) : null}
       <Pressable onPress={() => { tap(); onCompress(); }} hitSlop={10} accessibilityRole="button" accessibilityLabel={t("thread.longChat.compressA11y")}>
         <T variant="footnote" color={c.primary} style={{ fontWeight: "600" }}>
           {t("thread.longChat.compress")}
@@ -783,6 +1034,26 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     borderCurve: "continuous",
     borderWidth: StyleSheet.hairlineWidth,
+  },
+  pill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    maxWidth: "88%",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: radius.pill,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  auto: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+  },
+  autoSwitch: {
+    marginVertical: -6,
+    marginHorizontal: -4,
+    transform: [{ scale: 0.72 }],
   },
   earlier: {
     flexDirection: "row",

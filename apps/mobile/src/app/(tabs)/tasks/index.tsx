@@ -4,8 +4,8 @@ import { Link, router, Stack } from "expo-router";
 import { memo, useCallback, useMemo, useState } from "react";
 import { Alert, RefreshControl, View } from "react-native";
 import { useTranslation } from "react-i18next";
-import { TASK_STATUSES, type Agent, type Task, type TaskStatus } from "@godmode/shared";
-import { HeaderActions } from "@/components/header-actions";
+import { isOverdue, localDay, TASK_PRIORITIES, TASK_STATUSES, type Agent, type Task, type TaskStatus } from "@godmode/shared";
+import { FilterToolbar } from "@/components/filter-toolbar";
 import { HumanTaskRow } from "@/components/human-task-row";
 import { FilterChips } from "@/components/filter-chips";
 import { GoalsStrip } from "@/components/goals-strip";
@@ -13,6 +13,7 @@ import { STATUS_META, TaskRow } from "@/components/task-row";
 import { Button, Card, EmptyState, ErrorState, Hairline, SectionTitle, SkeletonRows } from "@/components/ui";
 import { WorkspaceChip } from "@/components/workspace-chip";
 import { api, errorText } from "@/lib/api";
+import { PRIORITY_LABEL } from "@/lib/desktop-parity";
 import { useAgents, useOpenHumanTasks } from "@/lib/hooks";
 import { t } from "@/lib/i18n";
 import { qk, queryClient } from "@/lib/query";
@@ -25,9 +26,30 @@ type Shown = "active" | "all" | TaskStatus;
 
 const ACTIVE: readonly TaskStatus[] = ["todo", "in_progress", "in_review", "blocked"];
 
+const ALL = "all";
+const UNASSIGNED = "unassigned";
+type Due = typeof ALL | "overdue" | "week" | "none";
+
+/** The desktop board's filters: agent, priority, due day, label and words. */
+function matcher(q: { search: string; agent: string; priority: string; due: Due; label: string }, agentName: (id: string | null) => string) {
+  const text = q.search.trim().toLowerCase();
+  const today = localDay();
+  const week = localDay(new Date(Date.now() + 7 * 86_400_000));
+  return (t: Task) => {
+    if (q.agent === UNASSIGNED ? t.agentId : q.agent !== ALL && t.agentId !== q.agent) return false;
+    if (q.priority !== ALL && t.priority !== q.priority) return false;
+    if (q.due === "overdue" && !isOverdue(t, today)) return false;
+    if (q.due === "week" && !(t.dueDate && t.dueDate >= today && t.dueDate <= week)) return false;
+    if (q.due === "none" && t.dueDate) return false;
+    if (q.label !== ALL && !(t.labels ?? []).includes(q.label)) return false;
+    if (!text) return true;
+    return `#${t.number} ${t.title} ${t.summary ?? ""} ${(t.labels ?? []).join(" ")} ${agentName(t.agentId)}`.toLowerCase().includes(text);
+  };
+}
+
 /** The task board of the picked workspace (or project) as a list, in the desktop's columns: the active ones first. */
 export default function Tasks() {
-  const { t } = useTranslation(["tabs", "common"]);
+  const { t } = useTranslation(["tabs", "common", "tasks"]);
   const { id: workspaceId, projectId, workspaces } = useWorkspace();
   const projects = useProjectIndex();
   const mine = useOpenHumanTasks();
@@ -36,9 +58,35 @@ export default function Tasks() {
   const names = useMemo(() => new Map(workspaces.map((w) => [w.id, w.name])), [workspaces]);
   const pull = usePullRefresh(() => Promise.all([tasks.refetch(), mine.refetch(), queryClient.invalidateQueries({ queryKey: qk.goals(workspaceId) })]));
   const [view, setView] = useState<Shown>("active");
+  const [search, setSearch] = useState("");
+  const [agent, setAgent] = useState(ALL);
+  const [priority, setPriority] = useState(ALL);
+  const [due, setDue] = useState<Due>(ALL);
+  const [label, setLabel] = useState(ALL);
   const newTask = () => router.push("/new-task");
 
-  const board = useMemo(() => tasksInProject(tasks.data ?? [], projectId), [tasks.data, projectId]);
+  const onBoard = useMemo(() => tasksInProject(tasks.data ?? [], projectId), [tasks.data, projectId]);
+  const narrowed = !!search.trim() || agent !== ALL || priority !== ALL || due !== ALL || label !== ALL;
+  const board = useMemo(
+    () => (narrowed ? onBoard.filter(matcher({ search, agent, priority, due, label }, (id) => (id ? (agents.get(id)?.name ?? "") : ""))) : onBoard),
+    [onBoard, narrowed, search, agent, priority, due, label, agents],
+  );
+  const clearFilters = () => {
+    setSearch("");
+    setAgent(ALL);
+    setPriority(ALL);
+    setDue(ALL);
+    setLabel(ALL);
+  };
+  const filterOptions = useMemo(() => {
+    const ids = [...new Set(onBoard.map((t) => t.agentId).filter((id): id is string => !!id))];
+    const named = ids.map((id) => ({ value: id, label: agents.get(id)?.name ?? t("tasks:task.anAgent") })).sort((a, b) => a.label.localeCompare(b.label));
+    const labels = [...new Set(onBoard.flatMap((t) => t.labels ?? []))].sort((a, b) => a.localeCompare(b));
+    return {
+      agents: [{ value: ALL, label: t("tasks:list.allAgents") }, ...named, ...(onBoard.some((t) => !t.agentId) ? [{ value: UNASSIGNED, label: t("tasks:list.unassigned") }] : [])],
+      labels: [{ value: ALL, label: t("tasks:list.allLabels") }, ...labels.map((l) => ({ value: l, label: l }))],
+    };
+  }, [onBoard, agents, t]);
   const counts = useMemo(() => {
     const n = new Map<TaskStatus, number>();
     for (const t of board) n.set(t.status, (n.get(t.status) ?? 0) + 1);
@@ -78,10 +126,31 @@ export default function Tasks() {
   return (
     <>
       <Stack.Title large>{t("tasks.title")}</Stack.Title>
-      <HeaderActions
+      <Stack.SearchBar placeholder={t("tasks:list.search")} hideWhenScrolling onChangeText={(e) => setSearch(e.nativeEvent.text)} onCancelButtonPress={() => setSearch("")} />
+      <FilterToolbar
         actions={[
           { icon: "person", label: t("tasks.myTasks"), onPress: () => router.push("/my-tasks") },
           { icon: "plus", label: t("home.newTask"), onPress: newTask },
+        ]}
+        filters={[
+          { id: "agent", title: t("tasks:list.agent"), icon: "agents", value: agent, options: filterOptions.agents, onChange: setAgent },
+          {
+            id: "priority",
+            title: t("tasks:list.priority"),
+            icon: "flag",
+            value: priority,
+            options: [{ value: ALL, label: t("tasks:list.anyPriority") }, ...TASK_PRIORITIES.map((p) => ({ value: p, label: PRIORITY_LABEL[p] }))],
+            onChange: setPriority,
+          },
+          {
+            id: "due",
+            title: t("tasks:list.due"),
+            icon: "calendar",
+            value: due,
+            options: (["all", "overdue", "week", "none"] as const).map((d) => ({ value: d, label: d === ALL ? t("tasks:list.anyDue") : t(`tasks:list.${d}`) })),
+            onChange: (v) => setDue(v as Due),
+          },
+          { id: "label", title: t("tasks:list.label"), icon: "tag", value: label, options: filterOptions.labels, onChange: setLabel },
         ]}
         menu={[{ icon: "archive", title: t("tasks.archived"), onPress: () => router.push("/archived-tasks") }]}
       />
@@ -110,7 +179,7 @@ export default function Tasks() {
               </View>
             )}
             <GoalsStrip workspaceId={workspaceId} bleed={space.lg} />
-            {board.length > 0 && (
+            {onBoard.length > 0 && (
               <FilterChips
                 bleed={space.lg}
                 value={view}
@@ -131,6 +200,8 @@ export default function Tasks() {
             </View>
           ) : tasks.isError ? (
             <ErrorState title={t("tasks.loadError")} error={errorText(tasks.error)} onRetry={() => void tasks.refetch()} />
+          ) : narrowed && onBoard.length ? (
+            <EmptyState icon="search" title={t("tasks:list.noMatch")} action={<Button title={t("tasks:list.clearFilters")} variant="secondary" onPress={clearFilters} />} />
           ) : board.length ? (
             <EmptyState
               icon="tasks"

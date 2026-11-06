@@ -64,7 +64,18 @@
     "needsLogin": "{{agent}} braucht einen Login für {{service}}",
     "readyForReview": "#{{number}} {{title}} ist bereit zur Prüfung",
     "isBlocked": "#{{number}} {{title}} ist blockiert",
-    "delivered": "{{agent}} hat geliefert"
+    "delivered": "{{agent}} hat geliefert",
+    "isPaused": "{{agent}} ist pausiert",
+    "waitsAfterLimit": "{{agent}} wartet nach Claudes {{limit}} auf dich",
+    "usageLimit": "Nutzungslimit",
+    "ranIntoProblem": "{{agent}} ist auf ein Problem gestoßen",
+    "automationFailing": "„{{name}}“ funktioniert nicht",
+    "lastRunFailed": "Der letzte Lauf ist fehlgeschlagen",
+    "triggerProblem": "Der Auslöser hat ein Problem",
+    "asksAccess": "{{name}} möchte mit deinen Agenten sprechen",
+    "someone": "Jemand",
+    "onConnection": "Über {{name}}",
+    "approveOnComputer": "Entscheide auf deinem Computer"
   },
   "tools": {
     "openedHost": "{{host}} geöffnet",

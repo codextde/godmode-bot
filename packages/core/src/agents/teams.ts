@@ -355,7 +355,7 @@ function freeName(name: string, team: string, taken: Set<string>): string {
   return free;
 }
 
-function agentInput(t: AgentTemplate, name: string, workspaceId: string | null, reportsTo: string | null, lead: boolean) {
+function agentInput(t: AgentTemplate, name: string, workspaceId: string | null, reportsTo: string | null, lead: boolean, phone: boolean) {
   return {
     name,
     role: t.role,
@@ -369,6 +369,8 @@ function agentInput(t: AgentTemplate, name: string, workspaceId: string | null, 
     reportsTo,
     // A lead hands work to its reports.
     ...(lead ? { permissions: { allowDelegation: true } } : {}),
+    // Like an agent set up on the phone: no logins, no inherited tools and fill-only secrets until widened on the computer.
+    ...(phone ? { permissions: { ...(lead ? { allowDelegation: true } : {}), credentialIds: [], totpIds: [], secretAccess: "fill" as const }, inheritMcp: false } : {}),
   };
 }
 
@@ -378,7 +380,7 @@ function agentInput(t: AgentTemplate, name: string, workspaceId: string | null, 
  * All or nothing: a failure removes what was made, so the next try doesn't duplicate half a company. An agent installing
  * one (`actor` "agent:<id>") gets what agent_create gives it: no secret access or management rights for the new agents.
  */
-export async function installTeam(id: string, opts: TeamInstallInput = {}, actor = "user"): Promise<TeamInstallResult> {
+export async function installTeam(id: string, opts: TeamInstallInput = {}, actor = "user", { phone = false }: { phone?: boolean } = {}): Promise<TeamInstallResult> {
   const team = TEAM_TEMPLATES.find((t) => t.id === id);
   if (!team) throw notFound("Team");
   const seats = seatsOf(team.root);
@@ -414,14 +416,21 @@ export async function installTeam(id: string, opts: TeamInstallInput = {}, actor
       const t = templateById.get(s.node.template)!;
       const lead = s.parent ? created.get(leadOf(s.parent)!)! : null;
       const agent = await createAgent(
-        agentInput(t, freeName(t.name, team.name, taken), workspaceId, lead?.id ?? null, leads.has(s.path)) as Parameters<typeof createAgent>[0],
+        agentInput(t, freeName(t.name, team.name, taken), workspaceId, lead?.id ?? null, leads.has(s.path), phone) as Parameters<typeof createAgent>[0],
         actor,
       );
       created.set(s.path, agent);
       agents.push(agent);
       if (opts.automations && t.routine) {
         routineIds.push(
-          createRoutine({ agentId: agent.id, name: t.routine.name, cron: t.routine.cron, prompt: t.routine.prompt, ...(opts.timezone ? { timezone: opts.timezone } : {}) }).id,
+          createRoutine({
+            agentId: agent.id,
+            name: t.routine.name,
+            cron: t.routine.cron,
+            prompt: t.routine.prompt,
+            ...(opts.timezone ? { timezone: opts.timezone } : {}),
+            ...(phone ? { fillOnly: true } : {}),
+          }).id,
         );
       }
     }

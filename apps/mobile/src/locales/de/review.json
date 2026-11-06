@@ -1,0 +1,71 @@
+{
+  "title": "Auto-Review",
+  "schedule": "Zeitplan",
+  "enabled": "Auto-Review",
+  "when": "Wann",
+  "next": "Nächstes Review {{when}}.",
+  "autoFix": "Gefundenes selbst beheben",
+  "reportOnly": "Es meldet nur, was es findet.",
+  "onComputer": "Selbst beheben und die Fragen des Teams schaltest du auf deinem Computer wieder ein.",
+  "team": "Fragen des Teams zuerst",
+  "model": {
+    "title": "Modell",
+    "mainAgent": "Modell des Hauptagenten"
+  },
+  "now": "Jetzt prüfen",
+  "starting": "Startet…",
+  "stop": "Stoppen",
+  "running": "Prüft dein Setup…",
+  "history": "Reviews",
+  "empty": "Noch keine Reviews.",
+  "loadFailed": "Auto-Review konnte nicht geladen werden",
+  "startFailed": "Review konnte nicht starten",
+  "stopFailed": "Review konnte nicht gestoppt werden",
+  "changes_one": "{{count}} Änderung",
+  "changes_other": "{{count}} Änderungen",
+  "forYou_one": "{{count}} für dich",
+  "forYou_other": "{{count}} für dich",
+  "undo": "Rückgängig",
+  "undoneLabel": "Rückgängig gemacht",
+  "openRun": "Chat des Reviews öffnen",
+  "blocks": {
+    "forYou": "Für dich",
+    "changes": "Änderungen",
+    "found": "Gefunden",
+    "agents": "Agenten",
+    "numbers": "Beim Start"
+  },
+  "status": {
+    "queued": "Wartet auf den Start",
+    "running": "Prüft",
+    "succeeded": "Fertig",
+    "failed": "Fehlgeschlagen",
+    "cancelled": "Gestoppt"
+  },
+  "schedules": {
+    "morning": "Jeden Morgen um 5:00",
+    "night": "Jede Nacht um 2:00",
+    "weekdays": "Werktags um 7:00",
+    "sunday": "Sonntags um 5:00"
+  },
+  "detail": {
+    "title": "Review",
+    "manual": "Von dir gestartet",
+    "openFailed": "Review konnte nicht geöffnet werden",
+    "undoTitle": "Diese Änderung rückgängig machen?",
+    "undoFailed": "Änderung konnte nicht rückgängig gemacht werden",
+    "undoFooter": "Rückgängig stellt eine Änderung wieder her, wie sie war."
+  },
+  "metrics": {
+    "runs": "Läufe",
+    "failed": "Fehlgeschlagen",
+    "cancelled": "Gestoppt",
+    "continuing": "Laufen weiter",
+    "bigChats": "Volle Chats",
+    "openQuestions": "Fragen",
+    "missingLogins": "Fehlende Logins",
+    "logErrors": "Log-Fehler",
+    "memoryOver": "Gedächtnis zu lang"
+  },
+  "teamDetail": "Der Hauptagent klärt, was er kann; den Rest bekommst du."
+}

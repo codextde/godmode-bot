@@ -55,9 +55,13 @@ const SUPERSEDED = ['{"type":"browser.frame"', '{"type":"computer.frame"', '{"ty
 /** A `run.delta` patch names `"patch"` within its ids: it is never superseded, a missing one costs a resync. */
 const PATCH_KEY_WITHIN = 512;
 const ALLOWED_METHODS = new Set(["GET", "POST", "PUT", "PATCH", "DELETE"]);
-/** Headers a controller may set on a forwarded request; the rest (auth, cookies, host, origin, forwarding) are ours. */
-const FORWARD_HEADERS = new Set(["content-type", "accept", "x-godmode-grant"]);
-const RESPONSE_HEADERS = ["content-type", "content-disposition", "cache-control"];
+/**
+ * Headers a controller may set on a forwarded request; the rest (auth, cookies, host, origin, forwarding) are ours.
+ * `x-godmode-phone` says one of its phones asked: the phones' rules apply here too (server/auth.ts).
+ */
+const FORWARD_HEADERS = new Set(["content-type", "accept", "x-godmode-grant", "x-godmode-phone"]);
+/** The sandbox policy of a file answer travels with it. */
+const RESPONSE_HEADERS = ["content-type", "content-disposition", "cache-control", "content-security-policy", "x-content-type-options"];
 
 interface Handler {
   app: Hono;

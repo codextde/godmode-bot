@@ -6,6 +6,7 @@ import { ScrollView, StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { isCallActive, type CallPurpose, type PhoneCall } from "@godmode/shared";
 import { CallStatusBadge, callListQuery, callName, callQuery, formatCallTime } from "@/components/call-parts";
+import { CallRecording } from "@/components/call-recording";
 import { CharacterAvatar } from "@/components/character";
 import { Icon } from "@/components/icon";
 import { Badge, Button, EmptyState, ErrorState, LiveDot, LoadingState, Row, T } from "@/components/ui";
@@ -148,14 +149,7 @@ function CallDetail({ call: c }: { call: PhoneCall }) {
         </View>
       ) : null}
 
-      {c.hasAudio ? (
-        <View style={styles.hint}>
-          <Icon name="display" size={13} color={colors.textMuted} />
-          <T variant="footnote" muted style={{ flex: 1 }}>
-            {t("detail.recording")}
-          </T>
-        </View>
-      ) : null}
+      {c.hasAudio && !active ? <CallRecording callId={c.id} duration={c.durationSecs} /> : null}
 
       {c.transcript.length > 0 ? <Transcript call={c} /> : null}
     </ScrollView>
@@ -294,12 +288,6 @@ const styles = StyleSheet.create({
     borderCurve: "continuous",
     borderWidth: StyleSheet.hairlineWidth,
     borderStyle: "dashed",
-  },
-  hint: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space.sm,
-    paddingHorizontal: 4,
   },
   turnRow: {
     flexDirection: "row",

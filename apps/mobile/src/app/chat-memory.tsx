@@ -10,6 +10,7 @@ import { Button, Card, T, tap } from "@/components/ui";
 import { errorText } from "@/lib/api";
 import { fetchConversation } from "@/lib/chat-cache";
 import { compressChat, isCompressCommand, useContextGauge } from "@/lib/chat-memory";
+import { canHandoff, handoffChat, isHandoffCommand } from "@/lib/handoff";
 import { useAgents } from "@/lib/hooks";
 import { useChatRun } from "@/lib/live";
 import { qk } from "@/lib/query";
@@ -18,15 +19,30 @@ import { radius, space, useColors } from "@/lib/theme";
 /** How full a chat's memory is, and Compress: Claude Code turns the conversation so far into a summary. */
 export default function ChatMemorySheet() {
   const c = useColors();
-  const { t } = useTranslation("memory");
+  const { t } = useTranslation(["memory", "chat"]);
   const { conversationId = "" } = useLocalSearchParams<{ conversationId: string }>();
   const conversation = useQuery({ queryKey: qk.conversation(conversationId), queryFn: () => fetchConversation(conversationId), enabled: !!conversationId });
   const { byId } = useAgents();
-  const agentName = byId.get(conversation.data?.agentId ?? "")?.name ?? t("chatMemory.theAgent");
+  const agent = byId.get(conversation.data?.agentId ?? "");
+  const agentName = agent?.name ?? t("chatMemory.theAgent");
   const run = useChatRun(conversationId);
   const gauge = useContextGauge(conversation.data?.context);
   const [busy, setBusy] = useState(false);
   const queued = conversation.data?.queue.some((m) => isCompressCommand(m.content)) ?? false;
+  // Going on in a fresh chat, with a brief from the agent: only a plain chat on this computer can.
+  const handoffOk = canHandoff(conversation.data) && agent?.enabled !== false && !conversation.data?.queue.some((m) => isHandoffCommand(m.content));
+  const [handingOff, setHandingOff] = useState(false);
+  const handoff = async () => {
+    setHandingOff(true);
+    try {
+      await handoffChat(conversationId);
+      router.back();
+    } catch (err) {
+      Alert.alert(t("chat:conv.handoffFailed"), errorText(err));
+    } finally {
+      setHandingOff(false);
+    }
+  };
 
   const compress = async () => {
     setBusy(true);
@@ -98,6 +114,15 @@ export default function ChatMemorySheet() {
         disabled={!gauge?.compressible || queued}
         onPress={() => void compress()}
       />
+      {handoffOk ? (
+        <Button
+          title={t("chat:conv.handoff")}
+          icon="handoff"
+          variant="secondary"
+          loading={handingOff}
+          onPress={() => void handoff()}
+        />
+      ) : null}
 
       <Pressable
         accessibilityRole="link"

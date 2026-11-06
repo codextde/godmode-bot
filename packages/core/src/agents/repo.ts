@@ -8,7 +8,7 @@
  */
 import git, { type PromiseFsClient } from "isomorphic-git";
 import fs from "node:fs";
-import { lstat, mkdir, readdir, readFile, realpath, rename, stat, writeFile } from "node:fs/promises";
+import { lstat, mkdir, open, readdir, readFile, realpath, rename, stat } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { AgentFileEntry, GitCommit } from "@godmode/shared";
 import { config } from "../config";
@@ -337,6 +337,11 @@ async function assertRealInside(root: string, abs: string): Promise<void> {
   }
 }
 
+/** The file itself is never a link: one that points nowhere passes assertRealInside and would be written where it points. */
+async function assertNotLink(abs: string): Promise<void> {
+  if ((await lstat(abs).catch(() => null))?.isSymbolicLink()) throw forbidden("Links aren't opened or written here");
+}
+
 function ensureRepoExists(root: string) {
   if (!fs.existsSync(root)) throw notFound("Agent repository");
 }
@@ -400,6 +405,7 @@ export async function readRepoFile(dir: string, relPath: string): Promise<{ path
   const { abs, rel } = resolveRepoPath(dir, relPath);
   if (!rel) throw badRequest("A file path is required");
   await assertRealInside(dir, abs);
+  await assertNotLink(abs);
   let info: fs.Stats;
   try {
     info = await stat(abs);
@@ -412,6 +418,40 @@ export async function readRepoFile(dir: string, relPath: string): Promise<{ path
   const content = decodeText(await readFile(abs));
   if (content === null) throw new HttpError(415, "Binary files cannot be opened as text", "binary_file");
   return { path: rel, content };
+}
+
+/** Pictures and PDFs a viewer shows as they are; anything else is read as text or not at all. */
+const VIEWABLE: Record<string, string> = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  gif: "image/gif",
+  webp: "image/webp",
+  heic: "image/heic",
+  heif: "image/heif",
+  bmp: "image/bmp",
+  pdf: "application/pdf",
+};
+export const MAX_VIEW_BYTES = 25 * 1024 * 1024;
+
+/** A picture or PDF from the repository, for a viewer (max 25 MB). */
+export async function readRepoViewable(dir: string, relPath: string): Promise<{ path: string; mime: string; data: Buffer }> {
+  ensureRepoExists(dir);
+  const { abs, rel } = resolveRepoPath(dir, relPath);
+  if (!rel) throw badRequest("A file path is required");
+  const mime = VIEWABLE[rel.slice(rel.lastIndexOf(".") + 1).toLowerCase()];
+  if (!mime) throw new HttpError(415, "Only pictures and PDFs open here", "not_viewable");
+  await assertRealInside(dir, abs);
+  await assertNotLink(abs);
+  let info: fs.Stats;
+  try {
+    info = await stat(abs);
+  } catch {
+    throw notFound("File");
+  }
+  if (!info.isFile()) throw badRequest("Not a regular file");
+  if (info.size > MAX_VIEW_BYTES) throw new HttpError(413, "File is too large to open (max 25 MB)", "too_large");
+  return { path: rel, mime, data: await readFile(abs) };
 }
 
 /**
@@ -430,11 +470,20 @@ export async function writeRepoFile(dir: string, relPath: string, content: strin
     const existing = await stat(abs).catch(() => null);
     if (existing?.isDirectory()) throw badRequest("Path is a directory");
     if (opts.create && (existing || (await lstat(abs).catch(() => null)))) throw new HttpError(409, "A file with this name is already there", "exists");
+    await assertNotLink(abs);
     await mkdir(dirname(abs), { recursive: true });
-    await writeFile(abs, content, { encoding: "utf8", flag: opts.create ? "wx" : "w" }).catch((err) => {
-      if ((err as NodeJS.ErrnoException).code === "EEXIST") throw new HttpError(409, "A file with this name is already there", "exists");
+    const { O_WRONLY, O_CREAT, O_TRUNC, O_EXCL, O_NOFOLLOW = 0 } = fs.constants;
+    const file = await open(abs, O_WRONLY | O_CREAT | O_NOFOLLOW | (opts.create ? O_EXCL : O_TRUNC), 0o666).catch((err) => {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code === "EEXIST") throw new HttpError(409, "A file with this name is already there", "exists");
+      if (code === "ELOOP") throw forbidden("Links aren't opened or written here");
       throw err;
     });
+    try {
+      await file.writeFile(content, "utf8");
+    } finally {
+      await file.close();
+    }
     return rel;
   });
 }

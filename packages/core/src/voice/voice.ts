@@ -8,7 +8,7 @@ import { apiToolKey, apiToolsForAgent, markApiToolUsed } from "../integrations/a
 import { getSettings } from "../services/settings";
 import * as vault from "../vault/vault";
 import { badRequest, HttpError } from "../util";
-import { transcribeWithHex } from "./hex";
+import { hexStatus, transcribeWithHex } from "./hex";
 
 export const OPENAI_API_KEY_SECRET = "openai_api_key";
 export const ELEVENLABS_API_KEY_SECRET = "elevenlabs_api_key";
@@ -158,6 +158,15 @@ export async function transcribe(audio: Blob, opts: { language?: string | null; 
       filename: opts.filename,
     }),
   };
+}
+
+/**
+ * Whether a recording can be transcribed as things are set up: Hex installed with its model, else an OpenAI key. A
+ * phone's dictation never installs Hex, downloads a model or asks for a key.
+ */
+export async function transcriptionReady(): Promise<boolean> {
+  if (getSettings().voice.sttProvider === "hex") return (await hexStatus()).installed;
+  return vault.hasAppSecret(OPENAI_API_KEY_SECRET);
 }
 
 async function openaiTranscript(

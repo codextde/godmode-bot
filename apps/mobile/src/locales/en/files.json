@@ -1,0 +1,29 @@
+{
+  "index": {
+    "title": "Files",
+    "emptyTitle": "No agents yet",
+    "loadFailed": "Couldn't load the agents",
+    "notes_one": "{{count}} note",
+    "notes_other": "{{count}} notes"
+  },
+  "folder": {
+    "title": "Folder",
+    "search": "Search this agent's files",
+    "emptyTitle": "Nothing in here",
+    "loadFailed": "Couldn't open the folder"
+  },
+  "preview": {
+    "share": "Share",
+    "shareFailed": "Couldn't share the file",
+    "loadFailed": "Couldn't open the file",
+    "empty": "This file is empty",
+    "clipped": "Showing the beginning. The whole file is on your computer.",
+    "binaryTitle": "Can't be shown here",
+    "binaryBody": "Open it in Godmode on your computer.",
+    "tooLargeTitle": "Too large for the phone",
+    "tooLargeBody": "Open it in Godmode on your computer.",
+    "refusedTitle": "Stays on your computer",
+    "imageFailed": "Couldn't load the picture",
+    "imageFailedBody": "Your computer didn't send it. Check that Godmode runs there."
+  }
+}

@@ -80,7 +80,8 @@ describe("ready-made teams", () => {
     expect(sales.members.map((m) => m.name)).toContain("Research Analyst");
 
     expect((await call("/api/team-templates/nope/install", { method: "POST", body: "{}" })).status).toBe(404);
-    expect(deviceMayCall("POST", "/api/team-templates/back-office/install")).toBe(false);
+    // Phones install them too, as agents made there (mobile.test.ts checks the limits).
+    expect(deviceMayCall("POST", "/api/team-templates/back-office/install")).toBe(true);
   });
 
   test("a company installs as a tree, into a new workspace, with left-out seats' reports moved up", async () => {

@@ -1,0 +1,24 @@
+{
+  "title": "Archive",
+  "empty": "Nothing archived",
+  "loadError": "Couldn't load the archive",
+  "unavailable": "Update Godmode on your computer to archive from the phone.",
+  "sections": {
+    "workspaces": "Workspaces",
+    "projects": "Projects",
+    "agents": "Agents",
+    "routines": "Automations"
+  },
+  "archive": "Archive",
+  "restore": "Restore",
+  "archivedAt": "Archived {{date}}",
+  "confirm": {
+    "title": "Archive {{name}}?",
+    "body": "It keeps its setup and history and doesn't run until you restore it."
+  },
+  "archiveError": "Couldn't archive {{name}}",
+  "restoreError": "Couldn't restore {{name}}",
+  "banner": {
+    "agent": "{{name}} is archived"
+  }
+}

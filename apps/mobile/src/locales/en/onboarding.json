@@ -55,9 +55,11 @@
     "archivedChats": "Archived chats",
     "archivedTasks": "Archived tasks",
     "automations": "Automations",
+    "automationEvents": "Recent events",
     "activity": "Activity",
     "inbox": "Inbox",
     "calls": "Calls",
-    "dream": "Dream"
+    "dream": "Dream",
+    "artifacts": "Artifacts"
   }
 }

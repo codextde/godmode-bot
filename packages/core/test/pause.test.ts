@@ -373,11 +373,11 @@ describe("pausing a run", () => {
     expect(await (await call(`/agents/${agent.id}/continue`)).json()).toEqual({ continued: 1 });
     expect((await waitForRun(busy.run.id, 20_000)).status).toBe("succeeded");
 
-    // Phones may pause and continue chats, not whole agents.
+    // Phones may pause and continue chats and whole agents, and say whether a limit pause goes on by itself.
     expect(deviceMayCall("POST", `/api/conversations/${conversationId}/pause`)).toBe(true);
     expect(deviceMayCall("POST", `/api/conversations/${conversationId}/continue`)).toBe(true);
-    expect(deviceMayCall("PATCH", `/api/conversations/${conversationId}/pause`)).toBe(false);
-    expect(deviceMayCall("POST", `/api/agents/${agent.id}/pause`)).toBe(false);
+    expect(deviceMayCall("PATCH", `/api/conversations/${conversationId}/pause`)).toBe(true);
+    expect(deviceMayCall("POST", `/api/agents/${agent.id}/pause`)).toBe(true);
   });
 });
 

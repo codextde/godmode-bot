@@ -6,13 +6,13 @@ import { mobileStatus, mobileUrls, refreshMobileAccess } from "../../mobile/acce
 import { cancelPairingOffer, claimPairing, createPairingOffer, instanceInfo, renameDevice, revokeDevice } from "../../mobile/devices";
 import { getSettings, updateSettings } from "../../services/settings";
 import { HttpError, conflict } from "../../util";
-import { clientIp, rateLimitLogin, requestDevice, resetLoginAttempts } from "../auth";
+import { clientIp, isPhoneRequest, rateLimitLogin, requestDevice, resetLoginAttempts } from "../auth";
 import { body, z } from "../validate";
 
 const port = z.number().int().min(1024).max(65535);
 
 function onlyComputer(c: Context) {
-  if (requestDevice(c)) throw new HttpError(403, "The phone app can't do this. Use Godmode on your computer.", "device_forbidden");
+  if (isPhoneRequest(c)) throw new HttpError(403, "The phone app can't do this. Use Godmode on your computer.", "device_forbidden");
 }
 
 export function registerMobileRoutes(app: Hono) {

@@ -6,10 +6,11 @@ import { memo, useCallback, useMemo, useState, type ReactNode } from "react";
 import { RefreshControl, StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { useShallow } from "zustand/react/shallow";
-import type { Run, RunStatus } from "@godmode/shared";
+import type { Run, RunStatus, RunTrigger } from "@godmode/shared";
 import { FilterChips } from "@/components/filter-chips";
+import { FilterToolbar } from "@/components/filter-toolbar";
 import { Icon } from "@/components/icon";
-import { isLiveRun, RunRow } from "@/components/run-row";
+import { isLiveRun, RunRow, TRIGGER_LABEL } from "@/components/run-row";
 import { Button, Card, EmptyState, ErrorState, Hairline, LiveDot, Row, SectionTitle, SkeletonRows, T } from "@/components/ui";
 import { api, errorText } from "@/lib/api";
 import { runDayLabel } from "@/lib/desktop-parity";
@@ -27,6 +28,8 @@ type Filter = "all" | RunStatus;
 type Item = { kind: "header"; key: string; title: string } | { kind: "run"; key: string; run: Run; divided: boolean };
 
 const FILTERS: Filter[] = ["all", "running", "paused", "succeeded", "failed", "cancelled", "queued"];
+const TRIGGERS: RunTrigger[] = ["chat", "routine", "check", "dream", "review", "delegation", "task", "followup", "heartbeat", "call", "manual", "api"];
+const ALL = "all";
 
 interface Stats {
   working: number;
@@ -42,10 +45,18 @@ const startOf = (run: Run) => run.startedAt ?? run.createdAt;
 export default function Activity() {
   const { t } = useTranslation("chat");
   const [filter, setFilter] = useState<Filter>("all");
+  const [agent, setAgent] = useState(ALL);
+  const [trigger, setTrigger] = useState(ALL);
+  const [search, setSearch] = useState("");
   const { id: workspaceId, projectId } = useWorkspace();
   const all = useQuery({ queryKey: [...qk.recentRuns, "all"], queryFn: () => api.runs.list({ limit: LIMIT }) });
-  const filtered = useQuery({ queryKey: [...qk.recentRuns, filter], queryFn: () => api.runs.list({ limit: LIMIT, status: filter }), enabled: filter !== "all" });
-  const list = filter === "all" ? all : filtered;
+  const narrowedServer = filter !== "all" || agent !== ALL;
+  const filtered = useQuery({
+    queryKey: [...qk.recentRuns, filter, agent],
+    queryFn: () => api.runs.list({ limit: LIMIT, ...(filter !== "all" ? { status: filter } : {}), ...(agent !== ALL ? { agentId: agent } : {}) }),
+    enabled: narrowedServer,
+  });
+  const list = narrowedServer ? filtered : all;
   const agents = useAgents();
   const { byId } = agents;
   // The runs themselves, not what they are doing: an activity label of one run doesn't re-render the list.
@@ -70,11 +81,41 @@ export default function Activity() {
     // A live run is fresher than the fetched one, unless the list already knows how it ended.
     for (const run of liveRuns) {
       if (filter !== "all" && run.status !== filter) continue;
+      if (agent !== ALL && run.agentId !== agent) continue;
       const fetched = merged.get(run.id);
       if (!fetched || !ended(fetched)) merged.set(run.id, run);
     }
-    return scope([...merged.values()]).sort((a, b) => startOf(b).localeCompare(startOf(a)));
-  }, [list.data, liveRuns, filter, scope]);
+    const q = search.trim().toLowerCase();
+    return scope([...merged.values()])
+      .filter((run) => (agent === ALL || run.agentId === agent) && (trigger === ALL || run.trigger === trigger))
+      .filter((run) => !q || `${run.prompt} ${run.result ?? ""} ${run.error ?? ""}`.toLowerCase().includes(q))
+      .sort((a, b) => startOf(b).localeCompare(startOf(a)));
+  }, [list.data, liveRuns, filter, agent, trigger, search, scope]);
+
+  // Like the desktop's count: of the runs shown that ended, how many went well.
+  const successRate = useMemo(() => {
+    const finished = runs.filter((r) => r.status === "succeeded" || r.status === "failed");
+    return finished.length ? Math.round((finished.filter((r) => r.status === "succeeded").length / finished.length) * 100) : null;
+  }, [runs]);
+  const narrowed = narrowedServer || trigger !== ALL || !!search.trim();
+  const clearFilters = () => {
+    setFilter("all");
+    setAgent(ALL);
+    setTrigger(ALL);
+    setSearch("");
+  };
+  const agentOptions = useMemo(
+    () => [
+      { value: ALL, label: t("activity.allAgents") },
+      ...scope(all.data ?? [])
+        .map((r) => r.agentId)
+        .filter((id, i, ids) => ids.indexOf(id) === i)
+        .map((id) => ({ value: id, label: byId.get(id)?.name ?? id }))
+        .sort((a, b) => a.label.localeCompare(b.label)),
+      ...(agent !== ALL && !all.data?.some((r) => r.agentId === agent) ? [{ value: agent, label: byId.get(agent)?.name ?? agent }] : []),
+    ],
+    [all.data, scope, byId, agent, t],
+  );
 
   const stats = useMemo<Stats>(() => {
     const today = scope(all.data ?? []);
@@ -113,6 +154,20 @@ export default function Activity() {
   return (
     <>
       <Stack.Title>{t("activity.title")}</Stack.Title>
+      <Stack.SearchBar placeholder={t("activity.search")} hideWhenScrolling onChangeText={(e) => setSearch(e.nativeEvent.text)} onCancelButtonPress={() => setSearch("")} />
+      <FilterToolbar
+        filters={[
+          { id: "agent", title: t("activity.agent"), icon: "agents", value: agent, options: agentOptions, onChange: setAgent },
+          {
+            id: "trigger",
+            title: t("activity.trigger"),
+            icon: "bolt",
+            value: trigger,
+            options: [{ value: ALL, label: t("activity.anyTrigger") }, ...TRIGGERS.map((id) => ({ value: id, label: TRIGGER_LABEL[id] }))],
+            onChange: setTrigger,
+          },
+        ]}
+      />
       <FlashList
         data={loading ? [] : items}
         keyExtractor={(item) => item.key}
@@ -121,7 +176,7 @@ export default function Activity() {
         contentInsetAdjustmentBehavior="automatic"
         contentContainerStyle={{ paddingHorizontal: space.sm, paddingBottom: 80 }}
         refreshControl={<RefreshControl {...pull} />}
-        ListHeaderComponent={<ActivityHeader stats={stats} filter={filter} onFilter={setFilter} />}
+        ListHeaderComponent={<ActivityHeader stats={stats} filter={filter} onFilter={setFilter} count={loading ? null : runs.length} successRate={successRate} />}
         ListEmptyComponent={
           loading ? (
             <View style={{ paddingTop: space.md }}>
@@ -129,8 +184,8 @@ export default function Activity() {
             </View>
           ) : list.isError ? (
             <ErrorState title={t("activity.loadFailed")} error={errorText(list.error)} onRetry={() => void list.refetch()} />
-          ) : filter !== "all" ? (
-            <EmptyState icon="pulse" title={t("activity.noMatch")} action={<Button title={t("activity.clearFilters")} variant="secondary" onPress={() => setFilter("all")} />} />
+          ) : narrowed ? (
+            <EmptyState icon="pulse" title={t("activity.noMatch")} action={<Button title={t("activity.clearFilters")} variant="secondary" onPress={clearFilters} />} />
           ) : (
             <EmptyState icon="pulse" title={t("activity.emptyTitle")} body={t("activity.emptyBody")} />
           )
@@ -149,7 +204,19 @@ function DayTitle({ title }: { title: string }) {
 }
 
 /** Three numbers of the fetched runs, then what to show of them. */
-const ActivityHeader = memo(function ActivityHeader({ stats, filter, onFilter }: { stats: Stats; filter: Filter; onFilter: (filter: Filter) => void }) {
+const ActivityHeader = memo(function ActivityHeader({
+  stats,
+  filter,
+  onFilter,
+  count,
+  successRate,
+}: {
+  stats: Stats;
+  filter: Filter;
+  onFilter: (filter: Filter) => void;
+  count: number | null;
+  successRate: number | null;
+}) {
   const c = useColors();
   const { t } = useTranslation("chat");
   const filters = FILTERS.map((id) => ({ id, label: t(`activity.filters.${id}`) }));
@@ -162,6 +229,11 @@ const ActivityHeader = memo(function ActivityHeader({ stats, filter, onFilter }:
         <Stat label={t("activity.failedToday")} value={stats.failed} mark={<Icon name="warning" size={11} color={stats.failed > 0 ? c.danger : c.textFaint} />} />
       </Row>
       <FilterChips filters={filters} value={filter} onChange={onFilter} bleed={space.lg} />
+      {count ? (
+        <T variant="footnote" muted style={{ paddingHorizontal: 4 }}>
+          {successRate != null ? t("activity.countWithSuccess", { count, rate: successRate }) : t("activity.count", { count })}
+        </T>
+      ) : null}
     </View>
   );
 });

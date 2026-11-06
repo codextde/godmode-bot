@@ -1,0 +1,29 @@
+{
+  "index": {
+    "title": "Dateien",
+    "emptyTitle": "Noch keine Agenten",
+    "loadFailed": "Agenten konnten nicht geladen werden",
+    "notes_one": "{{count}} Notiz",
+    "notes_other": "{{count}} Notizen"
+  },
+  "folder": {
+    "title": "Ordner",
+    "search": "Dateien dieses Agenten suchen",
+    "emptyTitle": "Hier ist nichts",
+    "loadFailed": "Ordner konnte nicht geöffnet werden"
+  },
+  "preview": {
+    "share": "Teilen",
+    "shareFailed": "Datei konnte nicht geteilt werden",
+    "loadFailed": "Datei konnte nicht geöffnet werden",
+    "empty": "Diese Datei ist leer",
+    "clipped": "Hier steht der Anfang. Die ganze Datei liegt auf deinem Computer.",
+    "binaryTitle": "Kann hier nicht angezeigt werden",
+    "binaryBody": "Öffne sie in Godmode auf deinem Computer.",
+    "tooLargeTitle": "Zu groß für das Handy",
+    "tooLargeBody": "Öffne sie in Godmode auf deinem Computer.",
+    "refusedTitle": "Bleibt auf deinem Computer",
+    "imageFailed": "Bild konnte nicht geladen werden",
+    "imageFailedBody": "Dein Computer hat es nicht geschickt. Prüfe, ob Godmode dort läuft."
+  }
+}

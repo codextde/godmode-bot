@@ -4,7 +4,8 @@ import { router, Stack, useFocusEffect, useLocalSearchParams } from "expo-router
 import { useCallback, useRef, useState } from "react";
 import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
-import type { AutomationEvent, AutomationEventSource, AutomationEventStatus, Routine, RoutineNotify } from "@godmode/shared";
+import type { AutomationEvent, Routine, RoutineNotify } from "@godmode/shared";
+import { EventRow } from "@/components/automation-event";
 import { CharacterAvatar } from "@/components/character";
 import { Group, SwitchRow } from "@/components/form";
 import { HeaderActions, type HeaderMenuItem } from "@/components/header-actions";
@@ -12,8 +13,9 @@ import { Icon, type IconName } from "@/components/icon";
 import { appName, runLabel, runRoutine, setRoutineEnabled, triggerText, TRIGGER_TITLES } from "@/components/routine-row";
 import { openChat } from "@/components/rows";
 import { runStatusLabel } from "@/components/run-row";
-import { Badge, Button, Card, EmptyState, ErrorState, Hairline, LoadingState, Row, SectionTitle, SkeletonRows, T, tap, type Tone } from "@/components/ui";
+import { Badge, Button, Card, EmptyState, ErrorState, Hairline, LoadingState, Row, SectionTitle, SkeletonRows, T, tap } from "@/components/ui";
 import { api, errorText } from "@/lib/api";
+import { useArchive } from "@/lib/archive";
 import { isFailingRoutine } from "@/lib/desktop-parity";
 import { whenText } from "@/lib/format";
 import { dateLocale } from "@/lib/i18n";
@@ -23,22 +25,6 @@ import { qk, queryClient } from "@/lib/query";
 import { radius, space, useColors } from "@/lib/theme";
 
 const EVENT_LIMIT = 50;
-
-const EVENT_SOURCES = {
-  schedule: { label: "automation.source.schedule", icon: "clock" },
-  app: { label: "automation.source.app", icon: "layers" },
-  webhook: { label: "automation.source.webhook", icon: "link" },
-  condition: { label: "automation.source.condition", icon: "eye" },
-  manual: { label: "automation.source.manual", icon: "hand" },
-} as const satisfies Record<AutomationEventSource, { label: string; icon: IconName }>;
-
-const EVENT_STATUS = {
-  pending: { label: "automation.eventStatus.pending", tone: "warning" },
-  running: { label: "automation.eventStatus.running", tone: "brand" },
-  done: { label: "automation.eventStatus.done", tone: "success" },
-  failed: { label: "automation.eventStatus.failed", tone: "danger" },
-  skipped: { label: "automation.eventStatus.skipped", tone: "neutral" },
-} as const satisfies Record<AutomationEventStatus, { label: string; tone: Tone }>;
 
 const NOTIFY_LABELS = {
   failures: "notify.failures",
@@ -76,7 +62,7 @@ export default function AutomationScreen() {
 
 function AutomationView({ routine, refetchList }: { routine: Routine; refetchList: () => Promise<unknown> }) {
   const c = useColors();
-  const { t } = useTranslation(["automations", "common"]);
+  const { t } = useTranslation(["automations", "common", "archive"]);
   const id = routine.id;
   const { byId } = useAgents();
   const agent = byId.get(routine.agentId);
@@ -123,6 +109,7 @@ function AutomationView({ routine, refetchList }: { routine: Routine; refetchLis
     void runRoutine(routine).finally(() => setStarting(false));
   };
 
+  const { archive } = useArchive(() => router.back());
   const remove = () =>
     Alert.alert(
       t("automation.deleteTitle", { name: routine.name }),
@@ -160,6 +147,7 @@ function AutomationView({ routine, refetchList }: { routine: Routine; refetchLis
 
   const menu: HeaderMenuItem[] = [
     ...(routine.conversationId ? [{ icon: "chats" as IconName, title: t("automation.openChat"), onPress: () => openChat(routine.conversationId!) }] : []),
+    { icon: "archive", title: t("archive:archive"), onPress: () => archive({ kind: "routine", id: routine.id, name: routine.name }) },
     { icon: "trash", title: t("common:actions.delete"), destructive: true, onPress: remove },
   ];
 
@@ -325,43 +313,6 @@ function Info({ label, value, tone }: { label: string; value: string; tone?: "da
   );
 }
 
-function EventRow({ event, onPress }: { event: AutomationEvent; onPress?: () => void }) {
-  const c = useColors();
-  const { t } = useTranslation("automations");
-  const source = EVENT_SOURCES[event.source] ?? EVENT_SOURCES.manual;
-  const status = EVENT_STATUS[event.status] ?? EVENT_STATUS.pending;
-  return (
-    <Pressable
-      disabled={!onPress}
-      accessibilityRole={onPress ? "button" : undefined}
-      accessibilityHint={onPress ? t("automation.openRunChat") : undefined}
-      onPress={onPress}
-      style={({ pressed }) => [styles.event, pressed && { backgroundColor: c.sunken }]}
-    >
-      <View style={[styles.eventIcon, { backgroundColor: c.sunken }]}>
-        <Icon name={source.icon} size={13} color={c.textMuted} />
-      </View>
-      <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
-        <T variant="subhead" style={{ fontWeight: "500" }} numberOfLines={2}>
-          {event.title || t(source.label)}
-        </T>
-        <Row style={{ gap: space.sm, flexWrap: "wrap" }}>
-          <Badge label={t(status.label)} tone={status.tone} live={event.status === "running"} />
-          <T variant="caption" muted>
-            {t(source.label)} · {ago(event.createdAt)}
-          </T>
-        </Row>
-        {event.note ? (
-          <T variant="footnote" color={event.status === "failed" ? c.danger : c.textMuted}>
-            {event.note}
-          </T>
-        ) : null}
-      </View>
-      {onPress ? <Icon name="chevron" size={11} color={c.textFaint} style={{ marginTop: 4 }} /> : null}
-    </Pressable>
-  );
-}
-
 function EmptyEvents({ routine }: { routine: Routine }) {
   const { t } = useTranslation("automations");
   const trigger = routine.trigger;
@@ -404,20 +355,5 @@ const styles = StyleSheet.create({
   },
   text: {
     padding: space.lg,
-  },
-  event: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: space.md,
-    paddingHorizontal: space.lg,
-    paddingVertical: space.md,
-  },
-  eventIcon: {
-    width: 28,
-    height: 28,
-    borderRadius: radius.sm,
-    borderCurve: "continuous",
-    alignItems: "center",
-    justifyContent: "center",
   },
 });

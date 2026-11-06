@@ -28,6 +28,7 @@ import {
 } from "@godmode/shared";
 import { LiveDot } from "./ui";
 import { api } from "@/lib/api";
+import { useLightAnimations } from "@/lib/chat-prefs";
 import { t } from "@/lib/i18n";
 import { qk } from "@/lib/query";
 import { fonts, useColors, useIsDark } from "@/lib/theme";
@@ -167,7 +168,9 @@ export const Character = memo(function Character({
 }) {
   const reduceMotion = useReducedMotion();
   const focused = useIsFocused();
-  const still = reduceMotion || !focused;
+  // Light animations (Settings → General) keep the characters still to save energy.
+  const light = useLightAnimations();
+  const still = reduceMotion || !focused || light;
   const lively = size >= LIVELY_SIZE;
   const outline = useIsDark() ? OUTLINE.dark : OUTLINE.light;
   const faceScale = scaleOverride ?? (size <= 28 ? 1.25 : size <= 44 ? 1.1 : 1);

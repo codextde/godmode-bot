@@ -5,6 +5,34 @@
   "attentionCount": "Needs your attention · {{count}}",
   "allClear": "All clear",
   "allClearBody": "When an agent needs a decision, your OK or a login, it lands here.",
+  "search": "Search",
+  "filters": {
+    "all": "All",
+    "question": "Questions",
+    "todo": "To-dos",
+    "review": "To review",
+    "blocked": "Blocked",
+    "paused": "Paused",
+    "problems": "Went wrong",
+    "login": "Logins",
+    "access": "Access"
+  },
+  "noMatch": {
+    "title": "Nothing matches",
+    "body": "Try another word or clear the filter.",
+    "clear": "Clear filter"
+  },
+  "stop": {
+    "label": "Stop the run",
+    "title": "Stop the run?",
+    "body": "{{agent}} stops and the question is withdrawn.",
+    "keep": "Keep waiting",
+    "confirm": "Stop",
+    "failed": "Couldn't stop the run"
+  },
+  "continue": "Continue",
+  "continueFailed": "Couldn't continue",
+  "onComputer": "Decide on your computer",
   "login": {
     "kind": {
       "missingCredential": "Missing login",
@@ -29,6 +57,12 @@
     "markReadFailed": "Couldn't mark it read",
     "loadFailed": "Couldn't load notifications",
     "empty": "No notifications. Agents post updates here when they finish work, need something or hit a problem.",
-    "showMore": "Show {{count}} more"
+    "showMore": "Show {{count}} more",
+    "clear": "Clear notifications",
+    "clearTitle": "Clear all notifications?",
+    "clearBody_one": "This removes {{count}} notification. Agent runs and their results are not affected.",
+    "clearBody_other": "This removes {{count}} notifications. Agent runs and their results are not affected.",
+    "clearAll": "Clear all",
+    "clearFailed": "Couldn't clear the notifications"
   }
 }

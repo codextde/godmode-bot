@@ -20,7 +20,8 @@
     "newAutomation": "New automation",
     "noAutomations": "No automations yet. Let {{name}} get to work on its own — even while you're away.",
     "recentChats": "Recent chats",
-    "noChats": "No chats with {{name}} yet."
+    "noChats": "No chats with {{name}} yet.",
+    "allChats": "All chats"
   },
   "plate": {
     "title": "On its plate",
@@ -52,12 +53,226 @@
     "size": "{{chars}} of {{target}} characters",
     "sizeUpdated": "{{chars}} of {{target}} characters · updated {{ago}}",
     "dreaming": "Dreaming — tidying up its memory",
-    "remembers": "What it remembers"
+    "remembers": "What it remembers",
+    "notes": "Notes",
+    "notesDetail": "What it keeps in memory/",
+    "history": "History",
+    "historyDetail": "Every change to its files"
   },
   "routine": {
     "changeFailed": "Couldn't change the automation",
     "runFailed": "Couldn't run it",
     "lastRunFailed": " · last run failed",
     "runNow": "Run {{name}} now"
+  },
+  "actions": {
+    "runNow": "Run a task now",
+    "pauseAll": "Pause all its work",
+    "continueAll": "Continue its work",
+    "look": "Change look",
+    "duplicate": "Duplicate",
+    "delete": "Delete agent",
+    "deleteTitle": "Delete {{name}}?",
+    "deleteBody": "This removes the agent, its automations and chats. Its memory goes too. This can't be undone.",
+    "deleteConfirm": "Delete",
+    "pauseFailed": "Couldn't pause",
+    "continueFailed": "Couldn't continue",
+    "duplicateFailed": "Couldn't duplicate {{name}}",
+    "deleteFailed": "Couldn't delete the agent"
+  },
+  "run": {
+    "title": "Run a task with {{name}}",
+    "label": "Task",
+    "placeholder": "Describe what it should do…",
+    "placeholderExample": "e.g. {{description}}",
+    "hint": "Leave it empty and {{name}} works from its instructions.",
+    "submit": "Run task",
+    "failed": "Couldn't start the task"
+  },
+  "chats": {
+    "title": "Chats",
+    "search": "Search chats",
+    "showLabel": "Which chats",
+    "active": "Active",
+    "archived": "Archived",
+    "loadFailed": "Couldn't load the chats",
+    "noMatch": "No chat mentions “{{query}}”",
+    "noArchived": "No archived chats",
+    "empty": "No chats with {{name}} yet"
+  },
+  "history": {
+    "title": "History",
+    "unknownDate": "Unknown date",
+    "dayFormat": "EEEE, MMM d, yyyy",
+    "loadFailed": "Couldn't load the history",
+    "emptyTitle": "No history yet",
+    "emptyBody": "Every run, memory update and settings change of {{name}} shows up here.",
+    "noMessage": "(no message)"
+  },
+  "notes": {
+    "title": "Notes",
+    "new": "New note",
+    "note": "Note",
+    "folder": "Folder",
+    "loadFailed": "Couldn't load the notes",
+    "emptyTitle": "No notes yet",
+    "emptyBody": "{{name}} keeps longer notes here, next to MEMORY.md.",
+    "openFailed": "Couldn't open the note",
+    "onlyNotes": "The phone opens notes in memory/ only.",
+    "saveFailed": "Couldn't save the note",
+    "discardTitle": "Discard your changes?",
+    "keepEditing": "Keep editing",
+    "discard": "Discard",
+    "discardChanges": "Discard changes",
+    "stopEditing": "Stop editing",
+    "editorLabel": "Text of {{name}}",
+    "emptyNote": "This note is empty.",
+    "name": "Name",
+    "namePlaceholder": "Name, like customers",
+    "textPlaceholder": "What should it remember?"
+  },
+  "org": {
+    "title": "Org chart",
+    "global": "Global",
+    "reportsTo": "Reports to {{name}}",
+    "teamOf": "{{name}}’s team",
+    "others": "Other agents",
+    "loadFailed": "Couldn't load the team",
+    "emptyTitle": "No agents here yet",
+    "hireFirst": "Hire your first agent",
+    "hireFirstBody": "It reports to {{name}} until you give it another lead on your computer.",
+    "newAgent": "New agent",
+    "builtIn": "Built-in",
+    "leadsDirectly_one": "Leads {{count}} agent directly",
+    "leadsDirectly_other": "Leads {{count}} agents directly"
+  },
+  "team": {
+    "title": "Team",
+    "hireTeam": "Or hire a whole team",
+    "teams": "Teams",
+    "companies": "Companies",
+    "company": "Company",
+    "team": "Team",
+    "loadFailed": "Couldn't load the team",
+    "notFound": "This team isn't available",
+    "installFailed": "Couldn't set up {{name}}",
+    "agentCount_one": "{{count}} agent",
+    "agentCount_other": "{{count}} agents",
+    "keptOf_one": "{{kept}} of {{count}} agent",
+    "keptOf_other": "{{kept}} of {{count}} agents",
+    "everyone": "Everyone",
+    "leadsOnly": "Leads only",
+    "clear": "Clear",
+    "where": "Where they work",
+    "workspace": "Workspace",
+    "newWorkspace": "A new workspace",
+    "global": "Global (every workspace)",
+    "workspaceName": "Name of the new workspace",
+    "schedules_one": "Set up its schedule too",
+    "schedules_other": "Set up their {{count}} schedules too",
+    "scheduleList": "{{names}}. Change or pause them under Automations.",
+    "scheduleListMore_one": "{{names}} and {{count}} more. Change or pause them under Automations.",
+    "scheduleListMore_other": "{{names}} and {{count}} more. Change or pause them under Automations.",
+    "hire_one": "Hire {{count}} agent",
+    "hire_other": "Hire {{count}} agents",
+    "reportsToGodmode": "Reports to Godmode",
+    "setupHint": "They start without logins or tools. Add those on your computer."
+  },
+  "look": {
+    "title": "Look",
+    "surprise": "Surprise me",
+    "color": "Colour",
+    "emoji": "Emoji",
+    "discardTitle": "Discard the new look?",
+    "keepEditing": "Keep editing",
+    "discard": "Discard",
+    "colors": {
+      "violet": "Violet",
+      "indigo": "Indigo",
+      "sky": "Sky",
+      "cyan": "Cyan",
+      "emerald": "Emerald",
+      "lime": "Lime",
+      "amber": "Amber",
+      "orange": "Orange",
+      "rose": "Rose",
+      "fuchsia": "Fuchsia"
+    },
+    "parts": {
+      "body": "Body",
+      "eyes": "Eyes",
+      "mouth": "Mouth",
+      "top": "Hat",
+      "face": "Face",
+      "neck": "Neck"
+    },
+    "options": {
+      "body": {
+        "blob": "Mochi",
+        "gumdrop": "Gumdrop",
+        "squircle": "Cube",
+        "cloud": "Cloud",
+        "ghost": "Ghost",
+        "pebble": "Pebble",
+        "drop": "Drop",
+        "kitty": "Kitty"
+      },
+      "eyes": {
+        "dots": "Dots",
+        "wide": "Sparkly",
+        "happy": "Happy",
+        "sleepy": "Content",
+        "wink": "Wink",
+        "lines": "Chill"
+      },
+      "mouth": {
+        "smile": "Smile",
+        "grin": "Grin",
+        "cat": "Cat",
+        "o": "Ooh",
+        "flat": "Neutral",
+        "none": "None"
+      },
+      "top": {
+        "none": "None",
+        "bolt": "Bolt",
+        "antenna": "Antenna",
+        "sprout": "Sprout",
+        "beret": "Beret",
+        "cap": "Cap",
+        "crown": "Crown",
+        "bow": "Bow",
+        "party": "Party hat",
+        "headphones": "Headphones"
+      },
+      "face": {
+        "none": "None",
+        "glasses": "Glasses",
+        "shades": "Shades",
+        "blush": "Blush"
+      },
+      "neck": {
+        "none": "None",
+        "bowtie": "Bow tie",
+        "scarf": "Scarf"
+      }
+    }
+  },
+  "describe": {
+    "title": "Describe it",
+    "label": "Describe your agent",
+    "placeholder": "An agent that downloads my phone and power bills on the 3rd of each month and tells me the totals…",
+    "submit": "Create with Godmode",
+    "failed": "Couldn't start the chat",
+    "prompt": "Create a new agent for me: {{description}}. Configure sensible instructions and an automation if it should work on its own (on a schedule or when something happens)."
+  },
+  "newAgent": {
+    "alsoRoutine": "Also add its automation",
+    "routineFailed": "The agent is ready, its automation isn't"
+  },
+  "dreamStop": {
+    "stop": "Stop dreaming",
+    "stopping": "Stopping…",
+    "failed": "Couldn't stop the dream"
   }
 }
