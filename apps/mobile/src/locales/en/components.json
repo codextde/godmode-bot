@@ -207,6 +207,10 @@
   "headerActions": {
     "more": "More"
   },
+  "filterToolbar": {
+    "filter": "Filter",
+    "clear": "Clear filters"
+  },
   "taskRow": {
     "status": {
       "backlog": "Backlog",
@@ -446,7 +450,31 @@
   },
   "markdown": {
     "done": "Done",
-    "notDone": "Not done"
+    "notDone": "Not done",
+    "copyCode": "Copy code",
+    "allLines_one": "Show {{count}} line",
+    "allLines_other": "Show all {{count}} lines",
+    "onComputer": "This opens in Godmode on your computer.",
+    "table": {
+      "copy": "Copy table",
+      "copyMarkdown": "Copy as Markdown",
+      "copyCsv": "Copy as CSV",
+      "fullScreen": "Full screen",
+      "title": "Table"
+    },
+    "payment": {
+      "transfer": "Bank transfer",
+      "amount": "Amount",
+      "recipient": "Recipient",
+      "reference": "Reference",
+      "invalid": {
+        "name": "Payment not shown: the recipient name is missing or longer than 70 characters.",
+        "iban": "Payment not shown: the IBAN is not valid.",
+        "bic": "Payment not shown: the BIC is not valid.",
+        "amount": "Payment not shown: the amount is not valid.",
+        "purpose": "Payment not shown: the reference is too long (max. 140 characters)."
+      }
+    }
   },
   "setup": {
     "changePicture": "Change the picture",
@@ -911,7 +939,10 @@
       "stopped": "Stopped",
       "done": "Done",
       "report": "Report",
-      "result": "Result"
+      "result": "Result",
+      "transcript": "Full transcript",
+      "allSteps_one": "All {{count}} step",
+      "allSteps_other": "All {{count}} steps"
     },
     "subagents": {
       "helpers_one": "{{count}} helper",
@@ -938,6 +969,65 @@
     "thinkingStep": "Thinking",
     "thinking": "Thinking…",
     "compressedAuto": "Compressed automatically",
-    "compressed": "Chat compressed"
+    "compressed": "Chat compressed",
+    "quote": "Quote",
+    "quoted": "Quoted",
+    "quoteReply": "Quote reply in your message"
+  },
+  "chatCards": {
+    "handoff": {
+      "newChat": "New chat",
+      "starting": "Starting a new chat…",
+      "continued": "Continued in a new chat",
+      "failed": "Couldn't start a new chat"
+    },
+    "delegate": {
+      "handedTo": "Handed to",
+      "anotherAgent": "another agent",
+      "openChat": "Opens its chat",
+      "refused": "Couldn't hand over",
+      "working": "Working on it…",
+      "queued": "Queued",
+      "paused": "Paused, open its chat to see why",
+      "done": "Done",
+      "failed": "Failed",
+      "stopped": "Stopped",
+      "handingOver": "Handing over…",
+      "handedOver": "Handed over",
+      "stopFailed": "Couldn't stop it",
+      "stopPart": "Stop {{name}}'s part",
+      "whatWentWrong": "What went wrong",
+      "resultOf": "{{name}}'s result",
+      "result": "Result"
+    },
+    "workflow": {
+      "workflow": "Workflow",
+      "running": "Running…",
+      "completed": "Completed",
+      "stopped": "Stopped",
+      "starting": "Starting…",
+      "failed": "Failed",
+      "noResult": "No result",
+      "agents": "{{done}}/{{total}} agents",
+      "notFinished": "Not finished",
+      "agent": {
+        "queued": "Queued",
+        "running": "Running",
+        "done": "Done",
+        "failed": "Failed"
+      }
+    },
+    "missingLogin": {
+      "needLoginFor": "I need a login for {{service}}",
+      "needLogin": "I need a login for a website",
+      "openInbox": "Opens the inbox"
+    }
+  },
+  "subagentSheet": {
+    "loadFailed": "Couldn't load the chat",
+    "gone": "This helper's work isn't in the chat anymore"
+  },
+  "attachmentPictures": {
+    "enlarge": "Show {{name}} larger"
   }
 }

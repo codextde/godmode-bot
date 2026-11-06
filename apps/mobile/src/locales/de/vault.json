@@ -1,0 +1,100 @@
+{
+  "list": {
+    "outdatedTitle": "Auf diesem Computer noch nicht da",
+    "outdatedBody": "Aktualisiere Godmode auf deinem Computer, um das hier auf dem Handy zu sehen.",
+    "noMatch": "Nichts passt zu „{{query}}“"
+  },
+  "index": {
+    "title": "Passwörter",
+    "loadFailed": "Tresor konnte nicht geladen werden",
+    "notSetUp": "Tresor nicht eingerichtet",
+    "notSetUpDetail": "Richte ihn in Godmode auf deinem Computer ein.",
+    "unlocked": "Tresor entsperrt",
+    "unlockedDetail": "Agenten können sich mit dem Gespeicherten anmelden.",
+    "locked": "Tresor gesperrt",
+    "lockedDetail": "Entsperre ihn in Godmode auf deinem Computer.",
+    "lockNow": "Jetzt sperren",
+    "lockTitle": "Tresor sperren?",
+    "lockBody": "Agenten können sich nicht anmelden oder bezahlen, bis du ihn auf deinem Computer entsperrst.",
+    "lockFailed": "Tresor konnte nicht gesperrt werden",
+    "logins": "Logins",
+    "codes": "2FA-Codes",
+    "passkeys": "Passkeys",
+    "cards": "Karten",
+    "macPassword": "Mac-Passwort",
+    "saved": "Gespeichert",
+    "notSaved": "Nicht gespeichert",
+    "sshKeys": "SSH-Schlüssel"
+  },
+  "logins": {
+    "title": "Logins",
+    "search": "Logins suchen",
+    "emptyTitle": "Noch keine Logins",
+    "loadFailed": "Logins konnten nicht geladen werden",
+    "noUsername": "Kein Benutzername",
+    "twoFactor": "2FA"
+  },
+  "totp": {
+    "title": "2FA-Codes",
+    "search": "Dienste oder Konten suchen",
+    "emptyTitle": "Noch keine 2FA-Codes",
+    "loadFailed": "2FA-Codes konnten nicht geladen werden",
+    "unnamed": "Ohne Namen",
+    "linkedTo": "Für {{name}}",
+    "notLinked": "Kein Login"
+  },
+  "passkeys": {
+    "title": "Passkeys",
+    "search": "Websites oder Konten suchen",
+    "emptyTitle": "Noch keine Passkeys",
+    "loadFailed": "Passkeys konnten nicht geladen werden"
+  },
+  "sshKeys": {
+    "title": "SSH-Schlüssel",
+    "emptyTitle": "Keine SSH-Schlüssel",
+    "loadFailed": "SSH-Schlüssel konnten nicht geladen werden",
+    "copied": "Öffentlicher Schlüssel kopiert",
+    "copyPublic": "Öffentlichen Schlüssel von {{name}} kopieren",
+    "bits": "{{bits}} Bit",
+    "parked": "Geparkt",
+    "loaded": "Geladen"
+  },
+  "cards": {
+    "title": "Karten",
+    "loadFailed": "Karten konnten nicht geladen werden",
+    "emptyTitle": "Noch keine Karten",
+    "gone": "Diese Karte gibt es nicht mehr",
+    "frozen": "Eingefroren",
+    "spentOf": "{{spent}} von {{limit}} diesen Monat",
+    "spentNoLimit": "{{spent}} diesen Monat · kein Monatslimit",
+    "limits": "Limits",
+    "perPurchase": "Pro Kauf",
+    "monthly": "Pro Monat",
+    "askAbove": "Fragt dich ab",
+    "noLimit": "Kein Limit",
+    "never": "Nie",
+    "always": "Bei jedem Kauf",
+    "agents": "Agenten",
+    "allAgents": "Alle Agenten",
+    "noAgents": "Keine",
+    "sites": "Websites",
+    "anySite": "Jede Website"
+  },
+  "purchases": {
+    "title": "Käufe",
+    "none": "Noch keine Käufe",
+    "recurrence": {
+      "monthly": "Monatlich",
+      "yearly": "Jährlich"
+    },
+    "status": {
+      "pending": "Wartet auf dein OK",
+      "approved": "Freigegeben",
+      "declined": "Abgelehnt",
+      "paid": "Bezahlt",
+      "failed": "Fehlgeschlagen",
+      "expired": "Abgelaufen",
+      "cancelled": "Abgebrochen"
+    }
+  }
+}

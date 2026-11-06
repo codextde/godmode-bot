@@ -414,6 +414,39 @@ export async function readRepoFile(dir: string, relPath: string): Promise<{ path
   return { path: rel, content };
 }
 
+/** Pictures and PDFs a viewer shows as they are; anything else is read as text or not at all. */
+const VIEWABLE: Record<string, string> = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  gif: "image/gif",
+  webp: "image/webp",
+  heic: "image/heic",
+  heif: "image/heif",
+  bmp: "image/bmp",
+  pdf: "application/pdf",
+};
+export const MAX_VIEW_BYTES = 25 * 1024 * 1024;
+
+/** A picture or PDF from the repository, for a viewer (max 25 MB). */
+export async function readRepoViewable(dir: string, relPath: string): Promise<{ path: string; mime: string; data: Buffer }> {
+  ensureRepoExists(dir);
+  const { abs, rel } = resolveRepoPath(dir, relPath);
+  if (!rel) throw badRequest("A file path is required");
+  const mime = VIEWABLE[rel.slice(rel.lastIndexOf(".") + 1).toLowerCase()];
+  if (!mime) throw new HttpError(415, "Only pictures and PDFs open here", "not_viewable");
+  await assertRealInside(dir, abs);
+  let info: fs.Stats;
+  try {
+    info = await stat(abs);
+  } catch {
+    throw notFound("File");
+  }
+  if (!info.isFile()) throw badRequest("Not a regular file");
+  if (info.size > MAX_VIEW_BYTES) throw new HttpError(413, "File is too large to open (max 25 MB)", "too_large");
+  return { path: rel, mime, data: await readFile(abs) };
+}
+
 /**
  * Write a UTF-8 text file inside the repository (creates parent directories). Returns the relative path. `create`: only
  * a new file — 409 when one is there already.

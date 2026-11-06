@@ -23,7 +23,7 @@ export default function TabsLayout() {
   const forYou = useOpenHumanTasks().data?.filter(isHumanTaskWaiting).length ?? 0;
   const attention = boot?.counts.attention;
   const needsYou = attention
-    ? attention.question + attention.todo + attention.login + attention.review + attention.blocked
+    ? attention.question + attention.todo + attention.login + attention.review + attention.blocked + (attention.paused ?? 0) + (attention.failed ?? 0) + (attention.automation ?? 0) + (attention.access ?? 0)
     : (boot?.counts.openMissingLogins ?? 0) + (boot?.counts.openQuestions ?? 0) + forYou;
   const tasks = (attention?.review ?? 0) + (attention?.blocked ?? 0);
 

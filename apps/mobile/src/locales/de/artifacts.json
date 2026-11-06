@@ -1,0 +1,108 @@
+{
+  "theAgent": "der Agent",
+  "theAgentStart": "Der Agent",
+  "card": {
+    "artifact": "Artefakt",
+    "built": "Erstellt",
+    "changedCode": "Code geändert",
+    "updatedData": "Daten aktualisiert",
+    "updated": "Aktualisiert",
+    "failed": "Hat nicht geklappt",
+    "building": "Wird erstellt…",
+    "updating": "Wird geändert…",
+    "addedFiles_one": "{{count}} Datei hinzugefügt",
+    "addedFiles_other": "{{count}} Dateien hinzugefügt"
+  },
+  "frame": {
+    "stuckTitle": "Dieses Artefakt lädt nicht",
+    "stuckBody": "Godmode antwortet nicht. Vielleicht startet es gerade neu.",
+    "retry": "Nochmal versuchen"
+  },
+  "list": {
+    "title": "Artefakte",
+    "emptyTitle": "Noch nichts gebaut",
+    "emptyBody": "Beschreib ein Dashboard oder ein Tool, oder frag in einem beliebigen Chat danach.",
+    "loadFailed": "Artefakte konnten nicht geladen werden",
+    "unavailableTitle": "Aktualisiere Godmode auf deinem Computer",
+    "unavailableBody": "Dieses Godmode zeigt Artefakte noch nicht auf Handys.",
+    "offTitle": "Artefakte sind aus",
+    "switchOn": "Einschalten",
+    "search": "Suchen",
+    "noMatch": "Nichts passt zu „{{query}}“.",
+    "updated": "Aktualisiert {{time}}"
+  },
+  "new": {
+    "title": "Neues Artefakt",
+    "placeholder": "Beschreib ein Dashboard oder eine App",
+    "build": "Bauen",
+    "startError": "Konnte nicht gestartet werden"
+  },
+  "starters": {
+    "sales": "Sales-Dashboard",
+    "kpi": "KPI-Tracker",
+    "pipeline": "Deal-Pipeline",
+    "budget": "Budgetplaner",
+    "content": "Content-Kalender",
+    "calculator": "Preisrechner"
+  },
+  "view": {
+    "placeholder": "Bitte {{agent}}, etwas zu ändern…",
+    "busyPlaceholder": "{{agent}} ist dran. Noch etwas ergänzen…",
+    "onIt": "{{agent}} ist dran",
+    "queued": "{{agent}} kümmert sich direkt nach dem aktuellen Schritt darum",
+    "sendError": "Konnte nicht gesendet werden",
+    "refresh": "Daten aktualisieren",
+    "askFresh": "Frische Daten anfragen",
+    "refreshing": "{{agent}} holt frische Daten",
+    "refreshError": "Konnte nicht aktualisiert werden",
+    "alreadyWorking": "{{agent}} arbeitet schon daran",
+    "openChat": "Zugehörigen Chat öffnen",
+    "pin": "Oben anheften",
+    "unpin": "Lösen",
+    "versions": "Versionen",
+    "rename": "Umbenennen",
+    "howItRefreshes": "So wird aktualisiert",
+    "delete": "Löschen",
+    "deleteTitle": "{{title}} löschen?",
+    "deleteBody": "Code, alle Versionen und die gespeicherten Daten sind endgültig weg. Der Chat bleibt.",
+    "keep": "Behalten",
+    "deleteError": "Konnte nicht gelöscht werden",
+    "goneTitle": "Dieses Artefakt gibt es nicht mehr",
+    "goneBody": "Es wurde gelöscht oder liegt auf einem anderen Computer.",
+    "loadErrorTitle": "Konnte nicht geladen werden",
+    "working": "{{agent}} arbeitet daran",
+    "appAsksRefresh": "Die App bittet {{agent}} um frische Daten.",
+    "appWantsToSend": "Die App möchte {{agent}} senden: „{{text}}“",
+    "notNow": "Nicht jetzt",
+    "send": "Senden",
+    "somethingBroke": "Etwas ist kaputtgegangen: {{failure}}",
+    "askToFix": "Reparieren lassen",
+    "fixPrompt": "Die App zeigt einen Fehler: {{failure}}. Bitte behebe ihn.",
+    "dismiss": "Ausblenden",
+    "saveError": "Konnte nicht gespeichert werden",
+    "reviewSent": "An {{agent}} gesendet",
+    "saveFailed": "Konnte nicht gespeichert werden",
+    "renameError": "Konnte nicht umbenannt werden"
+  },
+  "versions": {
+    "title": "Versionen",
+    "version": "Version {{version}}",
+    "latest": "Neueste",
+    "first": "Erste Version",
+    "viewing": "Version {{version}}",
+    "backToLatest": "Zur neuesten",
+    "restore": "Wiederherstellen",
+    "restored": "Als Version {{version}} wiederhergestellt",
+    "sameVersion": "Version {{version}} ist identisch mit der aktuellen",
+    "restoreError": "Konnte nicht wiederhergestellt werden"
+  },
+  "refreshSheet": {
+    "title": "So wird aktualisiert",
+    "placeholder": "z. B. Lies die Bestellungen der letzten 60 Tage aus dem Shop und aktualisiere Umsatz, Bestellungen und Top-Produkte.",
+    "save": "Speichern"
+  },
+  "renameSheet": {
+    "title": "Umbenennen",
+    "save": "Speichern"
+  }
+}

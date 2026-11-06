@@ -1,0 +1,100 @@
+{
+  "list": {
+    "outdatedTitle": "Not on this computer yet",
+    "outdatedBody": "Update Godmode on your computer to see this on your phone.",
+    "noMatch": "Nothing matches “{{query}}”"
+  },
+  "index": {
+    "title": "Passwords",
+    "loadFailed": "Couldn't load the vault",
+    "notSetUp": "Vault not set up",
+    "notSetUpDetail": "Set it up in Godmode on your computer.",
+    "unlocked": "Vault unlocked",
+    "unlockedDetail": "Agents can sign in with what's saved.",
+    "locked": "Vault locked",
+    "lockedDetail": "Unlock it in Godmode on your computer.",
+    "lockNow": "Lock now",
+    "lockTitle": "Lock the vault?",
+    "lockBody": "Agents can't sign in or pay until you unlock it on your computer.",
+    "lockFailed": "Couldn't lock the vault",
+    "logins": "Logins",
+    "codes": "2FA codes",
+    "passkeys": "Passkeys",
+    "cards": "Cards",
+    "macPassword": "Mac password",
+    "saved": "Saved",
+    "notSaved": "Not saved",
+    "sshKeys": "SSH keys"
+  },
+  "logins": {
+    "title": "Logins",
+    "search": "Search logins",
+    "emptyTitle": "No logins yet",
+    "loadFailed": "Couldn't load logins",
+    "noUsername": "No username",
+    "twoFactor": "2FA"
+  },
+  "totp": {
+    "title": "2FA codes",
+    "search": "Search services or accounts",
+    "emptyTitle": "No 2FA codes yet",
+    "loadFailed": "Couldn't load 2FA codes",
+    "unnamed": "Unnamed",
+    "linkedTo": "For {{name}}",
+    "notLinked": "No login"
+  },
+  "passkeys": {
+    "title": "Passkeys",
+    "search": "Search sites or accounts",
+    "emptyTitle": "No passkeys yet",
+    "loadFailed": "Couldn't load passkeys"
+  },
+  "sshKeys": {
+    "title": "SSH keys",
+    "emptyTitle": "No SSH keys",
+    "loadFailed": "Couldn't load SSH keys",
+    "copied": "Public key copied",
+    "copyPublic": "Copy the public key of {{name}}",
+    "bits": "{{bits}} bit",
+    "parked": "Parked",
+    "loaded": "Loaded"
+  },
+  "cards": {
+    "title": "Cards",
+    "loadFailed": "Couldn't load cards",
+    "emptyTitle": "No cards yet",
+    "gone": "This card is gone",
+    "frozen": "Frozen",
+    "spentOf": "{{spent}} of {{limit}} this month",
+    "spentNoLimit": "{{spent}} this month · no monthly limit",
+    "limits": "Limits",
+    "perPurchase": "Per purchase",
+    "monthly": "Per month",
+    "askAbove": "Asks you above",
+    "noLimit": "No limit",
+    "never": "Never",
+    "always": "Every purchase",
+    "agents": "Agents",
+    "allAgents": "All agents",
+    "noAgents": "None",
+    "sites": "Sites",
+    "anySite": "Any site"
+  },
+  "purchases": {
+    "title": "Purchases",
+    "none": "No purchases yet",
+    "recurrence": {
+      "monthly": "Monthly",
+      "yearly": "Yearly"
+    },
+    "status": {
+      "pending": "Waiting for your OK",
+      "approved": "Approved",
+      "declined": "Declined",
+      "paid": "Paid",
+      "failed": "Failed",
+      "expired": "Expired",
+      "cancelled": "Cancelled"
+    }
+  }
+}

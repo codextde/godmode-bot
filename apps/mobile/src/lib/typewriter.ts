@@ -1,11 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { useReducedMotion } from "react-native-reanimated";
+import { useLightAnimations } from "./chat-prefs";
 
 const SPREAD_MS = 520;
 const MAX_STEP_MS = 28;
 
 export function useTypewriter(text: string): string {
-  const reduceMotion = useReducedMotion();
+  const reduced = useReducedMotion();
+  const light = useLightAnimations();
+  const reduceMotion = reduced || light;
   const [shown, setShown] = useState(text);
   const from = useRef(text);
 

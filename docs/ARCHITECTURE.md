@@ -1565,18 +1565,19 @@ views. `mobile/` in the core pairs phones and serves them; the desktop's Setting
   (`gmd_` + 32 random bytes); the row in `mobile_devices` keeps its SHA-256, name, model, last address and last use.
   Pairing is audited (`mobile.pair`), notifies the human and emits `mobile.paired`.
 * **Scope.** Device tokens only authenticate on the phones' listener while phone access is on, and open a fixed
-  allowlist of routes (`mobile/scope.ts`): bootstrap, workspaces, agents and their slash commands, the model catalog,
-  conversations (pause, continue, their follow-up), messages (with files) and the message queue (edit, remove, send
-  now), questions (list, answer without files), tasks (approve, their timeline) and their attachments (upload and read),
-  runs (list, cancel), routines (run, enable), browser profiles (launch,
-  input), computer input, VMs (list, screenshot, start/stop, input), Android phones (the list, and a screenshot of the ones an agent or a chat uses),
-  notifications, missing logins and
-  `GET/DELETE /api/mobile/me`; everything else answers 403 `device_forbidden`. Bodies are restricted too: a phone may
-  pick a chat's model, effort and Ultracode but can't set its folder, VM, browser, shared screen or instructions, or
-  change an automation beyond switching it on or off, and it only watches and controls screens that are shared in a chat
-  (`computer.subscribe` and `/api/computer/input`); Godmode's VMs it may always take over (`POST /api/vms/:id/input`,
-  the computer input events on a picture of the whole screen, sent over the VM's Screen Sharing and never booting
-  it). The listener checks the decoded path, so `/api/%61uth/…` is refused
+  allowlist of routes (`mobile/scope.ts`); everything else answers 403 `device_forbidden`. The phone reaches chats,
+  tasks, runs, automations (schedules and conditions, forced fill-only), artifacts, agents (team install, run, pause,
+  duplicate and delete, never the main agent, never one that reads raw secrets), the screens shared in a chat and
+  Godmode's VMs, auto review, cleanup, and the settings sections listed in `SETTINGS`. Bodies are allowlisted per route
+  (`BODIES`), and a few checks go further: a phone switches risky features (cards, SSH, SSH keys, plugins,
+  integrations, messaging, Android, VMs) off but never on, only switches a plugin off, cleans up only `PHONE_CLEANUP`,
+  writes an agent's files only under `memory/`, and reads its folder without `..`, `.git`, symlinks or secret-looking
+  files (`mobile/views.ts`). Lists of passwords, 2FA entries, passkeys, cards, SSH keys, integrations, plugins,
+  messaging and servers are read-only and pass through `applyDeviceView` (end of `requireAuth`), which strips every secret
+  field, also on answers a secondary forwards from its primary (`x-godmode-phone`). Revealing, unlocking, keys,
+  backups, pairing, the cloud link, security, program paths, installs and commands stay on the computer. A phone only
+  watches and controls screens shared in a chat (`computer.subscribe` and `/api/computer/input`); Godmode's VMs it may
+  always take over (`POST /api/vms/:id/input`). The listener checks the decoded path, so `/api/%61uth/…` is refused
   like `/api/auth/…`.
 * **Key hygiene.** The app only sends its key over plain HTTP to a Tailscale address (100.64.0.0/10 or `*.ts.net`;
   https anywhere, which is how the Godmode Cloud gateway is reached — `isPhoneUrlAllowed`), and first asks the address's `/api/health`, which on

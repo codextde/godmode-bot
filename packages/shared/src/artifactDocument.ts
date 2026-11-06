@@ -104,3 +104,17 @@ export function standaloneDocument(html: string, data: unknown, theme: "light" |
   const from = origin ? ` ${origin}` : "";
   return artifactDocument(html, standaloneCsp(from) + bridgeScript("standalone", data, theme, true, files));
 }
+
+/**
+ * For a native WebView (the phone app): the page has no parent, so the bridge posts to its own window and this relay
+ * hands what it says to the app (`window.ReactNativeWebView`); the app answers with `window.postMessage`. Like a
+ * standalone download it keeps to its CDN libraries and its files, never the network the phone is on.
+ */
+export function webViewDocument(html: string, token: string, data: unknown, theme: "light" | "dark", files?: ArtifactDocumentFiles): string {
+  const origin = files?.base ? /^https?:\/\/[^/]+/.exec(files.base)?.[0] : null;
+  const from = origin ? ` ${origin}` : "";
+  const relay = `<script>(function(){var T=${JSON.stringify(token)},A={data:1,theme:1,reply:1};window.addEventListener("message",function(e){var m=e.data;if(e.source!==window||!m||m.__gm!==T||A[m.type]||!window.ReactNativeWebView)return;try{window.ReactNativeWebView.postMessage(JSON.stringify(m));}catch(x){}});})();</script>`;
+  // A phone-wide viewport first: a page's own viewport tag comes later and wins.
+  const viewport = `<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">`;
+  return artifactDocument(html, viewport + standaloneCsp(from) + relay + bridgeScript(token, data, theme, false, files));
+}

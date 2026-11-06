@@ -8,6 +8,37 @@
     "emptyTitle": "Noch keine Automationen",
     "emptyBody": "Richte selbst eine ein — eine Posteingangs-Zusammenfassung am Morgen, ein Antwortentwurf für jede Kundenmail, ein Blick auf die Preise der Konkurrenz."
   },
+  "describe": {
+    "title": "Beschreib, was automatisiert werden soll",
+    "placeholder": "Wenn eine neue E-Mail mit Rechnung kommt, speichere die PDF in Drive und trag sie in meine Tabelle ein",
+    "submit": "Einrichten",
+    "unreachable": "Godmode ist nicht erreichbar",
+    "prompt": "Richte eine Automation ein: {{text}}",
+    "examples": {
+      "weeklyReport": "Jeden Montag um 9:00 die Zahlen der letzten Woche sammeln und einen Bericht schreiben",
+      "inbox": "Werktags irgendwann zwischen 8:00 und 9:30 starten und mein Postfach abarbeiten",
+      "customerEmail": "Wenn ich eine E-Mail von einem Kunden bekomme, eine Antwort entwerfen",
+      "competitorPricing": "Wenn sich die Preise der Konkurrenz ändern, mit unseren vergleichen und die Battlecard aktualisieren"
+    }
+  },
+  "filters": {
+    "search": "Automationen suchen",
+    "agent": "Agent",
+    "allAgents": "Alle Agenten",
+    "trigger": "Auslöser",
+    "allTriggers": "Alle Auslöser"
+  },
+  "events": {
+    "menu": "Letzte Ereignisse",
+    "loadFailed": "Ereignisse konnten nicht geladen werden",
+    "emptyTitle": "Noch keine Ereignisse",
+    "emptyBody": "Wenn eine Automation startet, übersprungen wird oder fehlschlägt, erscheint es hier.",
+    "unavailableTitle": "Ereignisse sind noch nicht verfügbar",
+    "unavailableBody": "Aktualisiere Godmode auf deinem Computer, um hier die Ereignisse aller Automationen zu sehen.",
+    "openFailed": "Chat konnte nicht geöffnet werden",
+    "latest_one": "Zeigt das neueste Ereignis.",
+    "latest_other": "Zeigt die neuesten {{count}} Ereignisse."
+  },
   "status": {
     "active": "Aktiv",
     "paused": "Pausiert",

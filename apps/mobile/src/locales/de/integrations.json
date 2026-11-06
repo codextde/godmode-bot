@@ -1,0 +1,79 @@
+{
+  "title": "Integrationen",
+  "outdatedTitle": "Auf diesem Computer noch nicht da",
+  "outdatedBody": "Aktualisiere Godmode auf deinem Computer, um das hier auf dem Handy zu sehen.",
+  "loadFailed": "Integrationen konnten nicht geladen werden",
+  "emptyTitle": "Noch keine Integrationen",
+  "emptyBody": "Füge MCP-Server, API-Schlüssel und Apps in Godmode auf deinem Computer hinzu.",
+  "on": "An",
+  "off": "Aus",
+  "links": {
+    "group": "Werkzeuge und Zugänge"
+  },
+  "mcp": {
+    "title": "MCP-Server",
+    "local": "Programm auf deinem Computer",
+    "composio": "Composio"
+  },
+  "apiTools": {
+    "title": "API-Schlüssel",
+    "noAddress": "Nur Schlüssel",
+    "noKey": "Kein Schlüssel gespeichert"
+  },
+  "composio": {
+    "title": "Composio-Apps",
+    "account": "Composio-Konto",
+    "connected": "Verbunden",
+    "invalid": "Schlüssel ungültig",
+    "notSetUp": "Nicht eingerichtet",
+    "active": "Verbunden",
+    "waiting": "Wartet",
+    "attention": "Braucht Aufmerksamkeit"
+  },
+  "plugins": {
+    "title": "Plugins",
+    "emptyTitle": "Noch keine Plugins",
+    "emptyBody": "Installiere Plugins in Godmode auf deinem Computer.",
+    "loadFailed": "Plugins konnten nicht geladen werden",
+    "switchOff": "{{name}} ausschalten",
+    "switchFailed": "Plugin konnte nicht ausgeschaltet werden",
+    "allOff": "Plugins sind auf deinem Computer ausgeschaltet.",
+    "draft": "Entwurf"
+  },
+  "messaging": {
+    "title": "Messaging",
+    "emptyTitle": "Noch keine Bots",
+    "emptyBody": "Verbinde Telegram, Slack oder Teams in Godmode auf deinem Computer.",
+    "loadFailed": "Messaging konnte nicht geladen werden",
+    "waiting_one": "{{count}} Person wartet auf Zugang",
+    "waiting_other": "{{count}} Personen warten auf Zugang",
+    "state": {
+      "connected": "Verbunden",
+      "connecting": "Verbindet",
+      "error": "Braucht Aufmerksamkeit",
+      "off": "Aus",
+      "waitingForVault": "Wartet auf den Tresor"
+    }
+  },
+  "ssh": {
+    "title": "SSH-Server",
+    "emptyTitle": "Noch keine Server",
+    "emptyBody": "Füge Server in Godmode auf deinem Computer hinzu.",
+    "loadFailed": "Server konnten nicht geladen werden",
+    "test": "Testen",
+    "testA11y": "Anmeldung bei {{name}} testen",
+    "ok": "Angemeldet",
+    "okMs": "{{ms}} ms",
+    "failedTitle": "Anmeldung bei {{name}} fehlgeschlagen",
+    "failedBody": "Der Server hat Godmode nicht hereingelassen."
+  },
+  "vm": {
+    "menu": "VM ein- und ausschalten",
+    "start": "Starten",
+    "suspend": "Pausieren",
+    "restart": "Neu starten",
+    "stop": "Stoppen",
+    "interrupts": "Neu starten oder Stoppen unterbricht Agenten, die darin arbeiten.",
+    "failed": "VM konnte nicht geändert werden"
+  }
+}

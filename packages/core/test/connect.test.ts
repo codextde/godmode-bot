@@ -272,13 +272,13 @@ describe("api", () => {
     expect((await api("POST", "/api/connectors", { name: "", client: "other", access: "manage" })).status).toBe(400);
   });
 
-  test("phones and Godmode Cloud can't make or remove keys", async () => {
-    for (const [method, path] of [
-      ["GET", "/api/connectors"],
-      ["POST", "/api/connectors"],
-      ["DELETE", "/api/connectors/con_1"],
+  test("phones see and revoke keys but never make one; Godmode Cloud does neither", async () => {
+    for (const [method, path, phone] of [
+      ["GET", "/api/connectors", true],
+      ["POST", "/api/connectors", false],
+      ["DELETE", "/api/connectors/con_1", true],
     ] as const) {
-      expect(deviceMayCall(method, path)).toBe(false);
+      expect(deviceMayCall(method, path)).toBe(phone);
       expect(await cloudRefusal(method, path, "owner", async () => null)).not.toBeNull();
     }
   });

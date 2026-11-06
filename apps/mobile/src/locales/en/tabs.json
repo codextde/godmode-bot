@@ -12,6 +12,7 @@
     "newTask": "New task",
     "inbox": "Inbox",
     "calls": "Calls",
+    "artifacts": "Artifacts",
     "status": {
       "connectedThrough": "Connected through {{computer}} — {{away}} is away",
       "connected": "{{computer}} · connected",
@@ -45,6 +46,21 @@
     "queued_one": "{{count}} queued",
     "queued_other": "{{count}} queued",
     "liveScreens": "Live screens",
+    "offers": {
+      "titleOwner": "{{name}} can take these off your plate",
+      "title": "Work your agent can take off your plate",
+      "startsWith": "Starts with:",
+      "offered": "Offered {{time}}",
+      "decline": "No thanks",
+      "accept": "Do it",
+      "startError": "Couldn't start it",
+      "declineError": "Couldn't decline it"
+    },
+    "attention": {
+      "continue": "Continue",
+      "continueError": "Couldn't continue",
+      "onComputer": "Decide on your computer"
+    },
     "recent": {
       "title": "Pick up where you left off",
       "yourAgents": "Your agents",
@@ -159,6 +175,14 @@
     "activity": "Activity",
     "newAgent": "New agent",
     "loadError": "Couldn't load agents",
+    "search": "Search agents",
+    "orgChart": "Org chart",
+    "global": "Global",
+    "workspace": "Workspace",
+    "noResults": {
+      "title": "No agents found",
+      "body": "No agent matches “{{query}}”."
+    },
     "filter": {
       "running": "Working",
       "needs": "Needs you",

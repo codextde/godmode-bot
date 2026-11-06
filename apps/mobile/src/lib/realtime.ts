@@ -34,19 +34,34 @@ const counts = new Map<string, number>();
 
 const ENTITY_KEYS: Partial<Record<EntityName, readonly (readonly unknown[])[]>> = {
   agents: [qk.agents],
-  routines: [qk.routines],
+  routines: [qk.routines, qk.attention],
   "browser-profiles": [qk.browserProfiles],
   "missing-logins": [qk.missingLogins, qk.bootstrap],
   questions: [qk.questions, qk.bootstrap],
   notifications: [qk.notifications, qk.bootstrap],
-  runs: [qk.runs],
+  runs: [qk.runs, qk.attention],
   vms: [qk.vms],
   android: [qk.androidDevices],
   settings: [qk.bootstrap, qk.settings],
   workspaces: [qk.workspaces, qk.agents],
-  tasks: [qk.tasks],
+  tasks: [qk.tasks, qk.attention],
   "human-tasks": [qk.humanTasks, qk.bootstrap],
   calls: [["calls"]],
+  offers: [qk.offers],
+  // Access requests from people on a bot show in Needs you.
+  messaging: [qk.attention, ["messaging"]],
+  artifacts: [qk.artifacts],
+  // Passwords, integrations, plugins and servers (read on the phone).
+  credentials: [["vault"]],
+  totp: [["vault"]],
+  passkeys: [["vault"]],
+  "payment-cards": [["vault"]],
+  "ssh-keys": [["vault"]],
+  "mcp-servers": [["integrations"]],
+  "api-tools": [["integrations"]],
+  composio: [["integrations"]],
+  mods: [["plugins"]],
+  "ssh-servers": [["ssh-servers"]],
 };
 
 function sendEvent(event: ClientEvent) {
@@ -373,6 +388,7 @@ function handle(event: ServerEvent) {
       break;
     case "vault.status":
       refreshSoon({ queryKey: qk.bootstrap });
+      refreshSoon({ queryKey: ["vault"] });
       break;
     case "entity.changed":
       for (const key of ENTITY_KEYS[event.entity] ?? []) refreshSoon({ queryKey: key });

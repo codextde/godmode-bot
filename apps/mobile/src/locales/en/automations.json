@@ -8,6 +8,37 @@
     "emptyTitle": "No automations yet",
     "emptyBody": "Set one up yourself — a morning inbox summary, a reply draft for every customer email, a watch on competitor pricing."
   },
+  "describe": {
+    "title": "Describe what to automate",
+    "placeholder": "When a new email with an invoice arrives, save the PDF to Drive and log it in my sheet",
+    "submit": "Set it up",
+    "unreachable": "Couldn't reach Godmode",
+    "prompt": "Set up an automation: {{text}}",
+    "examples": {
+      "weeklyReport": "Every Monday at 9:00, collect last week's numbers and write a report",
+      "inbox": "Every weekday, start sometime between 8:00 and 9:30 and work through my inbox",
+      "customerEmail": "When I get an email from a customer, draft a reply",
+      "competitorPricing": "When competitor pricing changes, compare it with ours and update the battlecard"
+    }
+  },
+  "filters": {
+    "search": "Search automations",
+    "agent": "Agent",
+    "allAgents": "All agents",
+    "trigger": "Trigger",
+    "allTriggers": "All triggers"
+  },
+  "events": {
+    "menu": "Recent events",
+    "loadFailed": "Couldn't load events",
+    "emptyTitle": "No events yet",
+    "emptyBody": "When an automation starts, is skipped or fails, it shows up here.",
+    "unavailableTitle": "Events aren't available yet",
+    "unavailableBody": "Update Godmode on your computer to see every automation's events here.",
+    "openFailed": "Couldn't open the chat",
+    "latest_one": "Showing the latest event.",
+    "latest_other": "Showing the latest {{count}} events."
+  },
   "status": {
     "active": "Active",
     "paused": "Paused",

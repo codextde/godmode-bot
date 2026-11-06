@@ -8,6 +8,7 @@ import { CloseButton } from "@/components/close-button";
 import { Group, LinkRow, PickerRow, SwitchRow, TextEditor } from "@/components/form";
 import { Identity, Sources } from "@/components/setup";
 import { EmptyState, SectionTitle } from "@/components/ui";
+import { WorkspaceColors } from "@/components/workspace-color";
 import { api, ApiError, errorText } from "@/lib/api";
 import { useAgents } from "@/lib/hooks";
 import { qk, queryClient } from "@/lib/query";
@@ -68,6 +69,7 @@ export default function WorkspaceScreen() {
       <CloseButton />
 
       <Identity icon={w.icon} name={w.name} description={w.description} fallbackIcon="🗂️" onChange={(patch) => void patchWorkspace(w.id, patch)} />
+      <WorkspaceColors value={w.color} onChange={(color) => void patchWorkspace(w.id, { color })} />
 
       <View>
         <SectionTitle title={t("workspace.context")} />

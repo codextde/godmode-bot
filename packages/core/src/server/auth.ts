@@ -9,6 +9,7 @@ import { get, getMeta, insert, run, setMeta } from "../db";
 import { getSettings } from "../services/settings";
 import { authenticateDevice } from "../mobile/devices";
 import { deviceBodyKeys, deviceBodyRefusal, deviceMayCall, deviceMayUseView, deviceQueryRefusal } from "../mobile/scope";
+import { applyDeviceView } from "../mobile/views";
 import { cloudPathRefusal, cloudRefusal } from "../cloud/scope";
 import { hashPassword, safeEqual, sha256, verifyPassword } from "../vault/crypto";
 import { HttpError, newId, now, randomToken } from "../util";
@@ -285,6 +286,7 @@ export const requireAuth: MiddlewareHandler = async (c, next) => {
   if (auth?.device) c.set("device" as never, auth.device as never);
   if (auth?.user) c.set("cloudUser" as never, auth.user as never);
   await next();
+  if (kind === "device") await applyDeviceView(c);
 };
 
 /** The cloud user behind a relayed dashboard request (null for everything else). */

@@ -10,7 +10,7 @@ import { Icon, type IconName } from "@/components/icon";
 import { Markdown } from "@/components/markdown";
 import { openChat } from "@/components/rows";
 import { CopyButton, RunLog } from "@/components/run-log";
-import { formatDuration, formatElapsed, formatTokens, openRun, RunStatusBadge, TRIGGER_LABEL } from "@/components/run-row";
+import { formatDuration, formatElapsed, formatTokens, openRun, RunRow, RunStatusBadge, TRIGGER_LABEL } from "@/components/run-row";
 import { Badge, Button, Card, EmptyState, ErrorState, Hairline, LiveDot, LoadingState, Row, Skeleton, T, tap } from "@/components/ui";
 import { ApiError, api, errorText } from "@/lib/api";
 import { useModelCatalog } from "@/lib/composer";
@@ -197,6 +197,8 @@ function RunDetail({ run }: { run: Run }) {
           ) : null}
         </Row>
       ) : null}
+
+      <HandedOn runId={run.id} />
 
       <Section title={t("prompt")} action={run.prompt ? <CopyButton text={run.prompt} label={t("copyPrompt")} /> : undefined}>
         <Card style={styles.block}>
@@ -388,6 +390,40 @@ function Chip({ icon, onPress, children }: { icon: IconName; onPress?: () => voi
       {children}
       {onPress ? <Icon name="chevron" size={10} color={c.textFaint} /> : null}
     </Pressable>
+  );
+}
+
+/** The runs this one handed over to teammates, oldest first. */
+function HandedOn({ runId }: { runId: string }) {
+  const { t } = useTranslation("runs");
+  const { byId } = useAgents();
+  const children = useQuery({
+    queryKey: qk.runChildren(runId),
+    queryFn: () => api.runs.list({ parentRunId: runId, limit: 100 }),
+    // A computer that doesn't filter by the parent answers with every run: only this one's are kept.
+    select: (list) => list.filter((r) => r.parentRunId === runId).reverse(),
+  });
+  if (children.isLoading) return <Skeleton height={56} radius={radius.lg} />;
+  if (children.isError) {
+    return (
+      <T variant="footnote" muted style={{ paddingHorizontal: 4 }}>
+        {t("handedOnFailed", { error: errorText(children.error) })}
+      </T>
+    );
+  }
+  const list = children.data ?? [];
+  if (!list.length) return null;
+  return (
+    <Section title={t("handedOn")}>
+      <Card style={{ overflow: "hidden" }}>
+        {list.map((r, i) => (
+          <View key={r.id}>
+            {i > 0 && <Hairline inset={72} />}
+            <RunRow run={r} agent={byId.get(r.agentId)} />
+          </View>
+        ))}
+      </Card>
+    </Section>
   );
 }
 

@@ -1,12 +1,13 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { router, Stack } from "expo-router";
 import { memo, useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
+import { ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import type { AgentQuestion } from "@godmode/shared";
 import Animated, { FadeIn, LinearTransition } from "react-native-reanimated";
 import { AwaySummaryCard } from "@/components/away-summary";
+import { OffersCard } from "@/components/offers-card";
 import { Glass } from "@/components/glass";
 import { HeaderActions } from "@/components/header-actions";
 import { openHumanTask } from "@/components/human-task-row";
@@ -20,8 +21,9 @@ import { WorkspaceChip } from "@/components/workspace-chip";
 import { api, errorText } from "@/lib/api";
 import { dateLocale } from "@/lib/i18n";
 import { trackAway } from "@/lib/away";
-import { greeting, needsYou, pickAgent, SUGGESTIONS, type Need } from "@/lib/desktop-parity";
-import { chatListQuery, useAgents, useOpenHumanTasks } from "@/lib/hooks";
+import { greeting, pickAgent, SUGGESTIONS, type Need } from "@/lib/desktop-parity";
+import { chatListQuery, useAgents } from "@/lib/hooks";
+import { useNeeds } from "@/lib/needs";
 import { useLinkComputer, useLive, useRunningChats } from "@/lib/live";
 import { qk, queryClient } from "@/lib/query";
 import { reconnectNow } from "@/lib/realtime";
@@ -34,7 +36,17 @@ import { radius, space, useColors } from "@/lib/theme";
 const NEEDS_SHOWN = 5;
 const RECENT_SHOWN = 6;
 
-const NEED_ICON: Record<Need["kind"], IconName> = { question: "warning", todo: "person", login: "key", review: "check", blocked: "warning" };
+const NEED_ICON: Record<Need["kind"], IconName> = {
+  question: "warning",
+  todo: "person",
+  login: "key",
+  review: "check",
+  blocked: "warning",
+  paused: "pause",
+  failed: "warning",
+  automation: "workflow",
+  access: "personCircle",
+};
 
 export default function Home() {
   const c = useColors();
@@ -73,8 +85,10 @@ export default function Home() {
           { icon: "settings", label: t("common:words.settings"), onPress: () => router.push("/settings") },
         ]}
         menu={[
+          { icon: "search", title: t("common:actions.search"), onPress: () => router.push("/search") },
           { icon: "inbox", title: t("home.inbox"), onPress: () => router.push("/inbox") },
           { icon: "call", title: t("home.calls"), onPress: () => router.push("/calls") },
+          { icon: "artifact", title: t("home.artifacts"), onPress: () => router.push("/artifacts") },
         ]}
       />
 
@@ -168,6 +182,7 @@ export default function Home() {
       )}
 
       <AwaySummaryCard />
+      <OffersCard />
       <NeedsYou vaultLocked={vaultLocked} />
       <WorkingNow />
       <LiveScreens />
@@ -182,19 +197,10 @@ function NeedsYou({ vaultLocked }: { vaultLocked: boolean }) {
   const { t } = useTranslation("tabs");
   const { byId: agents } = useAgents();
   const { id: workspaceId, projectId } = useWorkspace();
-  const humanTasks = useOpenHumanTasks();
-  const questions = useQuery({ queryKey: qk.questions, queryFn: api.questions.open });
-  const missing = useQuery({ queryKey: qk.missingLogins, queryFn: api.missingLogins.open });
-  const tasks = useQuery({ queryKey: qk.taskList(null), queryFn: () => api.tasks.list({}) });
+  const needs = useNeeds();
 
   const { items, elsewhere } = useMemo(() => {
-    const all = needsYou({
-      questions: questions.data ?? [],
-      humanTasks: humanTasks.data ?? [],
-      missing: missing.data ?? [],
-      tasks: tasks.data ?? [],
-      nameOf: (id) => (id ? (agents.get(id)?.name ?? t("home.needs.anAgent")) : t("home.needs.anAgent")),
-    });
+    const all = needs.items;
     // The picked workspace's (and the global ones); in a project, what its tickets and agents wait for.
     const scoped = all.filter((n) => {
       if (workspaceId && n.workspaceId && n.workspaceId !== workspaceId) return false;
@@ -202,7 +208,7 @@ function NeedsYou({ vaultLocked }: { vaultLocked: boolean }) {
       return n.task ? n.task.projectId === projectId : !n.agentId || agents.get(n.agentId)?.projectId === projectId;
     });
     return { items: scoped, elsewhere: all.length - scoped.length };
-  }, [questions.data, humanTasks.data, missing.data, tasks.data, agents, workspaceId, projectId, t]);
+  }, [needs.items, agents, workspaceId, projectId]);
 
   const total = items.length + (vaultLocked ? 1 : 0);
   if (!total && !elsewhere) return null;
@@ -237,13 +243,16 @@ function NeedsYou({ vaultLocked }: { vaultLocked: boolean }) {
         {shown.map((n) =>
           n.question ? (
             <QuestionRow key={n.id} need={n} question={n.question} />
+          ) : n.kind === "paused" && n.conversationId ? (
+            <PausedRow key={n.id} need={n} conversationId={n.conversationId} />
           ) : (
             <NeedsRow
               key={n.id}
               icon={NEED_ICON[n.kind]}
               title={n.title}
-              body={n.detail}
-              onPress={n.humanTask ? () => openHumanTask(n.humanTask!.id) : n.task ? () => openTask(n.task!.id) : undefined}
+              body={n.kind === "access" ? [n.detail, t("home.attention.onComputer")].filter(Boolean).join(" · ") : n.detail}
+              tone={n.kind === "failed" || n.kind === "automation" ? "danger" : undefined}
+              onPress={needAction(n)}
             />
           ),
         )}
@@ -433,13 +442,58 @@ function QuestionRow({ need, question: q }: { need: Need; question: AgentQuestio
   );
 }
 
-function NeedsRow({ icon, title, body, onPress }: { icon: IconName; title: string; body: string; onPress?: () => void }) {
+/** Where a row leads: the ticket, the human's task, the chat that stands still or failed, the automation. */
+function needAction(n: Need): (() => void) | undefined {
+  if (n.humanTask) return () => openHumanTask(n.humanTask!.id);
+  if (n.task) return () => openTask(n.task!.id);
+  if (n.kind === "automation" && n.routineId) return () => router.push({ pathname: "/automation/[id]", params: { id: n.routineId! } });
+  if (n.conversationId) return () => router.push({ pathname: "/chat/[id]", params: { id: n.conversationId! } });
+  return undefined;
+}
+
+/** A run that stands still until the human lets it go on. */
+function PausedRow({ need, conversationId }: { need: Need; conversationId: string }) {
+  const c = useColors();
+  const { t } = useTranslation("tabs");
+  const resume = useMutation({
+    mutationFn: () => api.conversations.continue(conversationId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: qk.bootstrap });
+      void queryClient.invalidateQueries({ queryKey: qk.conversations });
+    },
+    onError: (err) => Alert.alert(t("home.attention.continueError"), errorText(err)),
+  });
+  return (
+    <View>
+      <NeedsRow icon={NEED_ICON.paused} title={need.title} body={need.detail} onPress={needAction(need)} />
+      <Row style={styles.decide}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={{ busy: resume.isPending, disabled: resume.isPending }}
+          disabled={resume.isPending}
+          onPress={() => {
+            tap();
+            resume.mutate();
+          }}
+          style={({ pressed }) => [styles.decision, { backgroundColor: c.primary, borderColor: c.primary, opacity: pressed ? 0.7 : 1 }]}
+        >
+          {resume.isPending ? <ActivityIndicator size="small" color={c.onPrimary} /> : <Icon name="play" size={11} color={c.onPrimary} />}
+          <T variant="footnote" color={c.onPrimary} style={{ fontWeight: "600" }}>
+            {t("home.attention.continue")}
+          </T>
+        </Pressable>
+      </Row>
+    </View>
+  );
+}
+
+function NeedsRow({ icon, title, body, tone, onPress }: { icon: IconName; title: string; body: string; tone?: "danger"; onPress?: () => void }) {
   const c = useColors();
   return (
     <Pressable onPress={onPress} disabled={!onPress} accessibilityRole={onPress ? "button" : undefined}>
       <Row style={{ gap: space.md, padding: space.lg, alignItems: "flex-start" }}>
-        <View style={[styles.needsIcon, { backgroundColor: c.warningSoft }]}>
-          <Icon name={icon} size={14} color={c.warning} />
+        <View style={[styles.needsIcon, { backgroundColor: tone === "danger" ? c.dangerSoft : c.warningSoft }]}>
+          <Icon name={icon} size={14} color={tone === "danger" ? c.danger : c.warning} />
         </View>
         <View style={{ flex: 1, gap: 2 }}>
           <T variant="subhead" style={{ fontWeight: "600" }}>

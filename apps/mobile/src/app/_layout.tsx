@@ -11,6 +11,7 @@ import { useTranslation } from "react-i18next";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { AppLock } from "@/components/app-lock";
+import { forgetLocalCopies } from "@/lib/agent-files";
 import { api } from "@/lib/api";
 import { loadAppearance, useAppearance } from "@/lib/appearance";
 import { loadLanguage, loadTimeFormat, useLanguage, useTimeFormat } from "@/lib/i18n";
@@ -64,6 +65,8 @@ export default function RootLayout() {
 
   useEffect(() => {
     if (!restored) return;
+    // Agents' files a viewer fetched and didn't get to remove (the app was closed on it).
+    forgetLocalCopies();
     if (!deviceId) {
       queryClient.clear();
       forgetQueries();
@@ -99,21 +102,35 @@ export default function RootLayout() {
                 <Stack.Screen name="task/[id]" options={{ headerTransparent: process.env.EXPO_OS === "ios", title: "" }} />
                 <Stack.Screen name="my-tasks" options={{ headerTransparent: process.env.EXPO_OS === "ios", title: t("layout.myTasks") }} />
                 <Stack.Screen name="archived" options={{ headerTransparent: process.env.EXPO_OS === "ios", title: t("layout.archivedChats") }} />
+                <Stack.Screen name="search" options={{ headerTransparent: process.env.EXPO_OS === "ios", title: "" }} />
                 <Stack.Screen name="archived-tasks" options={{ headerTransparent: process.env.EXPO_OS === "ios", title: t("layout.archivedTasks") }} />
                 <Stack.Screen name="automations" options={{ headerTransparent: process.env.EXPO_OS === "ios", title: t("layout.automations") }} />
+                <Stack.Screen name="automation-events" options={{ headerTransparent: process.env.EXPO_OS === "ios", title: t("layout.automationEvents") }} />
                 <Stack.Screen name="activity" options={{ headerTransparent: process.env.EXPO_OS === "ios", title: t("layout.activity") }} />
                 <Stack.Screen name="inbox" options={{ headerTransparent: process.env.EXPO_OS === "ios", title: t("layout.inbox") }} />
                 <Stack.Screen name="calls" options={{ headerTransparent: process.env.EXPO_OS === "ios", title: t("layout.calls") }} />
+                <Stack.Screen name="artifacts" options={{ headerTransparent: process.env.EXPO_OS === "ios", title: t("layout.artifacts") }} />
+                <Stack.Screen name="artifact/[id]" options={{ title: "" }} />
+                <Stack.Screen name="artifact-new" options={{ presentation: "formSheet", sheetAllowedDetents: [0.62, 1], sheetGrabberVisible: true, headerShown: false }} />
                 <Stack.Screen name="call/[id]" options={{ headerTransparent: process.env.EXPO_OS === "ios", title: "" }} />
                 <Stack.Screen name="human-task/[id]" options={{ presentation: "formSheet", sheetAllowedDetents: [0.75, 1], sheetGrabberVisible: true, headerShown: false }} />
                 <Stack.Screen name="new-task" options={{ presentation: "formSheet", sheetAllowedDetents: [0.8, 1], sheetGrabberVisible: true, headerShown: false }} />
+                <Stack.Screen name="task-edit" options={{ presentation: "formSheet", sheetAllowedDetents: [1], sheetGrabberVisible: true, headerShown: false }} />
                 <Stack.Screen name="model" options={{ presentation: "formSheet", sheetAllowedDetents: [0.8, 1], sheetGrabberVisible: true, headerShown: false }} />
                 <Stack.Screen name="chat-memory" options={{ presentation: "formSheet", sheetAllowedDetents: [0.62, 1], sheetGrabberVisible: true, headerShown: false }} />
+                <Stack.Screen name="memory-import" options={{ presentation: "formSheet", sheetAllowedDetents: [1], sheetGrabberVisible: true, headerShown: false }} />
+                <Stack.Screen name="chat-options" options={{ presentation: "formSheet", sheetAllowedDetents: [0.62, 1], sheetGrabberVisible: true, headerShown: false }} />
+                <Stack.Screen name="subagent" options={{ presentation: "formSheet", sheetAllowedDetents: [0.75, 1], sheetGrabberVisible: true, headerShown: false }} />
                 <Stack.Screen name="workspaces" options={{ presentation: "formSheet", sheetAllowedDetents: [0.5, 1], sheetGrabberVisible: true, headerShown: false }} />
                 <Stack.Screen name="automation/[id]" options={{ headerTransparent: process.env.EXPO_OS === "ios", title: "" }} />
                 <Stack.Screen name="automation-edit" options={{ presentation: "formSheet", sheetAllowedDetents: [1], sheetGrabberVisible: true, headerShown: false }} />
                 <Stack.Screen name="run/[id]" options={{ headerTransparent: process.env.EXPO_OS === "ios", title: "" }} />
                 <Stack.Screen name="dream/[id]" options={{ headerTransparent: process.env.EXPO_OS === "ios", title: t("layout.dream") }} />
+                <Stack.Screen name="agent-chats/[id]" options={{ headerTransparent: process.env.EXPO_OS === "ios", title: "" }} />
+                <Stack.Screen name="agent-history/[id]" options={{ headerTransparent: process.env.EXPO_OS === "ios", title: "" }} />
+                <Stack.Screen name="notes/[id]" options={{ headerTransparent: process.env.EXPO_OS === "ios", title: "" }} />
+                <Stack.Screen name="note" options={{ headerTransparent: process.env.EXPO_OS === "ios", title: "" }} />
+                <Stack.Screen name="agent-run" options={{ presentation: "formSheet", sheetAllowedDetents: [0.62, 1], sheetGrabberVisible: true, headerShown: false }} />
                 <Stack.Screen name="goal" options={{ presentation: "formSheet", sheetAllowedDetents: [0.62, 1], sheetGrabberVisible: true, headerShown: false }} />
                 <Stack.Screen name="settings" options={{ presentation: "modal", headerShown: false, contentStyle: { backgroundColor: c.background } }} />
                 <Stack.Screen name="live" options={{ presentation: "fullScreenModal", headerShown: false, contentStyle: { backgroundColor: "#000" } }} />

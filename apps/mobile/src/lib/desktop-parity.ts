@@ -1,5 +1,5 @@
 import { differenceInCalendarDays, format, isToday, isYesterday } from "date-fns";
-import type { Agent, AgentQuestion, Conversation, HumanTask, MissingLogin, Routine, Task, TaskBlockedKind, TaskPriority } from "@godmode/shared";
+import type { Agent, AgentQuestion, AttentionItem, Conversation, HumanTask, MissingLogin, Routine, RunPause, Task, TaskBlockedKind, TaskPriority } from "@godmode/shared";
 import type { IconName } from "@/components/icon";
 import { dateLocale, t } from "@/lib/i18n";
 
@@ -155,7 +155,10 @@ export function isWorking(task: Task): boolean {
 
 export const isFailingRoutine = (r: Routine) => r.lastStatus === "failed" || r.triggerStatus.state === "error";
 
-export type NeedKind = "question" | "todo" | "login" | "review" | "blocked";
+export type NeedKind = "question" | "todo" | "login" | "review" | "blocked" | "paused" | "failed" | "automation" | "access";
+
+/** Kinds only the computer's attention list knows: the phone reads them from GET /api/attention. */
+export const ATTENTION_ONLY: readonly NeedKind[] = ["paused", "failed", "automation", "access"];
 
 export interface Need {
   id: string;
@@ -168,9 +171,14 @@ export interface Need {
   question?: AgentQuestion;
   humanTask?: HumanTask;
   task?: Task;
+  pause?: RunPause;
+  /** The chat it is about (paused, failed, an automation's chat). */
+  conversationId?: string | null;
+  /** The automation that isn't working. */
+  routineId?: string;
 }
 
-const RANK: Record<NeedKind, number> = { question: 0, todo: 0, login: 0, review: 1, blocked: 2 };
+const RANK: Record<NeedKind, number> = { question: 0, todo: 0, login: 0, paused: 0, review: 1, blocked: 2, failed: 3, automation: 3, access: 4 };
 const shorten = (s: string, max = 140) => (s.length > max ? `${s.slice(0, max - 1)}…` : s);
 
 /**
@@ -184,9 +192,17 @@ export function needsYou(input: {
   missing: MissingLogin[];
   tasks: Task[];
   nameOf: (agentId: string | null) => string;
+  /** The computer's attention list: its paused runs, failed chats, failing automations and access requests join in. */
+  attention?: AttentionItem[];
+  routineName?: (routineId: string) => string | undefined;
+  workspaceOf?: (agentId: string | null) => string | null;
 }): Need[] {
   const { nameOf } = input;
   const items: Need[] = [];
+  for (const a of input.attention ?? []) {
+    if (!ATTENTION_ONLY.includes(a.kind)) continue;
+    items.push(attentionNeed(a, nameOf, input.routineName, input.workspaceOf));
+  }
   for (const q of input.questions) {
     items.push({
       id: `question:${q.id}`,
@@ -251,4 +267,42 @@ export function needsYou(input: {
     });
   }
   return items.sort((a, b) => RANK[a.kind] - RANK[b.kind] || b.since.localeCompare(a.since));
+}
+
+/** One of the kinds only the computer computes, in the phone's language (the core words it in English). */
+function attentionNeed(
+  a: AttentionItem,
+  nameOf: (agentId: string | null) => string,
+  routineName?: (routineId: string) => string | undefined,
+  workspaceOf?: (agentId: string | null) => string | null,
+): Need {
+  const base = { id: a.id, kind: a.kind as NeedKind, agentId: a.agentId, since: a.since, workspaceId: workspaceOf?.(a.agentId) ?? null, conversationId: a.conversationId ?? null };
+  const agent = nameOf(a.agentId);
+  switch (a.kind) {
+    case "paused":
+      return {
+        ...base,
+        title: a.pause?.reason === "limit" ? t("system:needs.waitsAfterLimit", { agent, limit: a.pause.limit ?? t("system:needs.usageLimit") }) : t("system:needs.isPaused", { agent }),
+        detail: a.detail,
+        pause: a.pause,
+      };
+    case "failed":
+      return { ...base, title: t("system:needs.ranIntoProblem", { agent }), detail: a.detail };
+    case "automation": {
+      const routineId = a.id.slice("automation:".length);
+      const name = routineName?.(routineId) ?? /^“(.*)” isn't working$/.exec(a.title)?.[1];
+      const detail = a.detail === "Its last run failed" ? t("system:needs.lastRunFailed") : a.detail === "Its trigger has a problem" ? t("system:needs.triggerProblem") : a.detail;
+      return { ...base, routineId, title: name ? t("system:needs.automationFailing", { name }) : a.title, detail };
+    }
+    default: {
+      const name = /^(.*) asks to talk to your agents$/.exec(a.title)?.[1];
+      const where = /^On (.*)$/.exec(a.detail)?.[1];
+      return {
+        ...base,
+        workspaceId: null,
+        title: name ? t("system:needs.asksAccess", { name: name === "Someone" ? t("system:needs.someone") : name }) : a.title,
+        detail: where ? t("system:needs.onConnection", { name: where }) : a.detail,
+      };
+    }
+  }
 }

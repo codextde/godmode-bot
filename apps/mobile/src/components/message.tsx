@@ -2,21 +2,28 @@ import * as Clipboard from "expo-clipboard";
 import { Image } from "expo-image";
 import { useRecyclingState } from "@shopify/flash-list";
 import { format } from "date-fns";
-import { memo, useEffect, useMemo } from "react";
+import { router } from "expo-router";
+import { memo, useContext, useEffect, useMemo } from "react";
 import { LayoutAnimation, Pressable, StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import Animated, { FadeIn, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming } from "react-native-reanimated";
 import type { Agent, Attachment, CharacterMood, CompactInfo, Message, MessageBlock } from "@godmode/shared";
 import { BABY_FACE_SCALE, babyCharacter, defaultCharacter, isPlaceholderReply, readableModelId, reportPreview, shortenPaths, tokensLabel, toolActivity } from "@godmode/shared";
+import { ArtifactCard } from "./artifact-card";
+import { AttachmentPictures, isChatPicture } from "./attachment-pictures";
 import { Character } from "./character";
+import { DelegateCard, HandoffCard, MissingLoginCard, WorkflowCard } from "./chat-cards";
 import { FileChip } from "./attachments";
 import { CALL_STATUS, callName, openCall } from "./call-parts";
 import { Icon, type IconName } from "./icon";
 import { Markdown } from "./markdown";
-import { QuestionCard } from "./question-card";
+import { ChatScope, QuestionCard } from "./question-card";
 import { RemoteImage } from "./remote-image";
 import { Row, T, tap } from "./ui";
+import { cardKindOf, quoteOf, type CardKind } from "@/lib/chat-blocks";
+import { useDrafts } from "@/lib/composer";
 import { toolLabel } from "@/lib/format";
+import { useChatPrefs, useLightAnimations } from "@/lib/chat-prefs";
 import { useNow } from "@/lib/hooks";
 import { dateLocale, t as translate } from "@/lib/i18n";
 import { radius, space, useColors } from "@/lib/theme";
@@ -24,8 +31,13 @@ import { radius, space, useColors } from "@/lib/theme";
 type Step = Extract<MessageBlock, { type: "tool_use" | "thinking" }>;
 type ToolUse = Extract<MessageBlock, { type: "tool_use" }>;
 type SubagentEntry = { block: ToolUse; children: MessageBlock[] };
-type Part = { kind: "block"; block: MessageBlock } | { kind: "steps"; steps: Step[] } | ({ kind: "subagent" } & SubagentEntry) | { kind: "subagents"; entries: SubagentEntry[] };
-type ParentAgent = Pick<Agent, "id" | "color" | "character">;
+type Part =
+  | { kind: "block"; block: MessageBlock }
+  | { kind: "steps"; steps: Step[] }
+  | { kind: "card"; card: CardKind; block: ToolUse }
+  | ({ kind: "subagent" } & SubagentEntry)
+  | { kind: "subagents"; entries: SubagentEntry[] };
+export type ParentAgent = Pick<Agent, "id" | "color" | "character">;
 
 const isSubagent = (block: MessageBlock) => block.type === "tool_use" && (block.name === "Task" || block.name === "Agent");
 
@@ -33,7 +45,10 @@ const isSubagent = (block: MessageBlock) => block.type === "tool_use" && (block.
 const ASK_TOOLS = new Set(["ask_human", "request_approval"]);
 const isAsk = (block: MessageBlock) => block.type === "tool_use" && !block.isError && ASK_TOOLS.has(block.name.slice(block.name.lastIndexOf("__") + 2));
 
-/** Consecutive tool calls and thinking collapse into one "steps" row; a subagent gets its own card with its work inside. */
+/**
+ * Consecutive tool calls and thinking collapse into one "steps" row; a subagent gets its own card with its work inside,
+ * and so do artifacts, handoffs, delegations, workflows and missing logins.
+ */
 function group(blocks: MessageBlock[]): Part[] {
   const parts: Part[] = [];
   const children = new Map<string, MessageBlock[]>();
@@ -51,7 +66,7 @@ function group(blocks: MessageBlock[]): Part[] {
       if (last?.kind === "subagents") last.entries.push(entry);
       else if (last?.kind === "subagent") parts[parts.length - 1] = { kind: "subagents", entries: [{ block: last.block, children: last.children }, entry] };
       else parts.push({ kind: "subagent", ...entry });
-    }
+    } else if (block.type === "tool_use" && cardKindOf(block.name)) parts.push({ kind: "card", card: cardKindOf(block.name)!, block });
     else if (block.type === "tool_use" || block.type === "thinking") {
       const last = parts[parts.length - 1];
       if (last?.kind === "steps") last.steps.push(block);
@@ -65,7 +80,7 @@ function group(blocks: MessageBlock[]): Part[] {
  * Where a subagent stands. One in the background returns its tool call at once: its task says when it works and when it
  * is done, and its report comes with the task's end. Still running on a turn that ended means it was cut off.
  */
-function subagentState(block: ToolUse, streaming: boolean) {
+export function subagentState(block: ToolUse, streaming: boolean) {
   const task = block.task;
   const background = task?.background ?? block.result?.startsWith("Async agent launched") ?? false;
   const status = task ? (task.status === "running" && !streaming ? "stopped" : task.status) : null;
@@ -101,17 +116,44 @@ export const UserMessage = memo(function UserMessage({ message }: { message: Mes
           {caption}
         </T>
       ) : null}
-      <View style={[styles.user, { backgroundColor: caption ? c.sunken : c.primary }]}>
-        <Files attachments={message.attachments} spaced={!!message.content} color={fg} />
-        {message.content ? (
-          <T variant="body" color={fg} selectable>
-            {message.content}
-          </T>
-        ) : null}
-      </View>
+      <UserBubble attachments={message.attachments} text={message.content} conversationId={message.conversationId} background={caption ? c.sunken : c.primary} color={fg} />
     </View>
   );
 });
+
+/** What the human sent: pictures as thumbnails above the bubble, other files and the text in it. */
+function UserBubble({ attachments, text, conversationId, background, color }: { attachments: Attachment[]; text: string; conversationId?: string; background: string; color: string }) {
+  const c = useColors();
+  const pictures = conversationId ? attachments.filter(isChatPicture) : [];
+  const files = pictures.length ? attachments.filter((a) => !pictures.includes(a)) : attachments;
+  return (
+    <>
+      {pictures.length && conversationId ? (
+        <View style={{ marginBottom: files.length || text ? 6 : 0 }}>
+          <AttachmentPictures
+            files={pictures}
+            conversationId={conversationId}
+            fallback={(f) => (
+              <View key={f.path} style={[styles.pictureChip, { backgroundColor: c.sunken }]}>
+                <FileChip name={f.name} mime={f.mime} size={f.size} color={c.text} />
+              </View>
+            )}
+          />
+        </View>
+      ) : null}
+      {files.length || text ? (
+        <View style={[styles.user, { backgroundColor: background }]}>
+          <Files attachments={files} spaced={!!text} color={color} />
+          {text ? (
+            <T variant="body" color={color} selectable>
+              {text}
+            </T>
+          ) : null}
+        </View>
+      ) : null}
+    </>
+  );
+}
 
 export const AssistantMessage = memo(function AssistantMessage({ blocks, streaming, content, agent }: { blocks: MessageBlock[]; streaming?: boolean; content?: string; agent?: ParentAgent }) {
   // A reply stored without blocks is its text.
@@ -123,6 +165,8 @@ export const AssistantMessage = memo(function AssistantMessage({ blocks, streami
       {parts.map((p, i) =>
         p.kind === "steps" ? (
           <Steps key={i} steps={p.steps} live={streaming && p === last} />
+        ) : p.kind === "card" ? (
+          <ToolCard key={p.block.id} kind={p.card} block={p.block} streaming={!!streaming} />
         ) : p.kind === "subagent" ? (
           <SubagentCard key={p.block.id} block={p.block} childBlocks={p.children} streaming={!!streaming} agent={agent} />
         ) : p.kind === "subagents" ? (
@@ -133,21 +177,54 @@ export const AssistantMessage = memo(function AssistantMessage({ blocks, streami
       )}
       {streaming ? <BackgroundAgents parts={parts} agent={agent} /> : null}
       {streaming && last?.kind === "block" && last.block.type === "text" ? <Caret /> : null}
-      {!streaming && content?.trim() && parts.some((p) => p.kind !== "block" || p.block.type === "text") ? <CopyReply text={content} /> : null}
+      {!streaming && content?.trim() && parts.some((p) => p.kind !== "block" || p.block.type === "text") ? <ReplyActions text={content} /> : null}
     </View>
   );
 });
 
-/** Long-press selects text, so the whole reply is copied from here, like the desktop's "Copy reply". */
+function ToolCard({ kind, block, streaming }: { kind: CardKind; block: ToolUse; streaming: boolean }) {
+  switch (kind) {
+    case "artifact":
+      return <ArtifactCard block={block} streaming={streaming} />;
+    case "handoff":
+      return <HandoffCard block={block} streaming={streaming} />;
+    case "delegate":
+      return <DelegateCard block={block} streaming={streaming} />;
+    case "workflow":
+      return <WorkflowCard block={block} streaming={streaming} />;
+    case "missing-login":
+      return <MissingLoginCard block={block} />;
+  }
+}
+
+/**
+ * Long-press selects text, so the whole reply is copied from here, like the desktop's "Copy reply"; in a chat it is also
+ * quoted into the message being written.
+ */
+function ReplyActions({ text }: { text: string }) {
+  const scope = useContext(ChatScope);
+  return (
+    <View style={styles.actions}>
+      <CopyReply text={text} />
+      {scope ? <QuoteReply text={text} conversationId={scope.conversationId} /> : null}
+    </View>
+  );
+}
+
+function useFlash(key: string): [boolean, () => void] {
+  const [on, setOn] = useRecyclingState(false, [key]);
+  useEffect(() => {
+    if (!on) return;
+    const timer = setTimeout(() => setOn(false), 1400);
+    return () => clearTimeout(timer);
+  }, [on, setOn]);
+  return [on, () => setOn(true)];
+}
+
 function CopyReply({ text }: { text: string }) {
   const c = useColors();
   const { t } = useTranslation(["components", "common"]);
-  const [copied, setCopied] = useRecyclingState(false, [text]);
-  useEffect(() => {
-    if (!copied) return;
-    const timer = setTimeout(() => setCopied(false), 1400);
-    return () => clearTimeout(timer);
-  }, [copied, setCopied]);
+  const [copied, flash] = useFlash(text);
   return (
     <Pressable
       accessibilityRole="button"
@@ -156,13 +233,41 @@ function CopyReply({ text }: { text: string }) {
       onPress={() => {
         void Clipboard.setStringAsync(text);
         tap();
-        setCopied(true);
+        flash();
       }}
       style={({ pressed }) => [styles.copy, pressed && { backgroundColor: c.sunken }]}
     >
       <Icon name={copied ? "check" : "copy"} size={13} color={copied ? c.success : c.textFaint} />
       <T variant="caption" color={copied ? c.success : c.textFaint}>
         {copied ? t("common:actions.copied") : t("common:actions.copy")}
+      </T>
+    </Pressable>
+  );
+}
+
+/** "> the reply" below whatever is being written in this chat's composer. */
+function QuoteReply({ text, conversationId }: { text: string; conversationId: string }) {
+  const c = useColors();
+  const { t } = useTranslation("components");
+  const [quoted, flash] = useFlash(text);
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={quoted ? t("message.quoted") : t("message.quoteReply")}
+      hitSlop={10}
+      onPress={() => {
+        const drafts = useDrafts.getState();
+        const current = drafts.drafts[conversationId]?.text ?? "";
+        const quote = quoteOf(text);
+        drafts.set(conversationId, { text: current.trim() ? `${current.trimEnd()}\n\n${quote}` : quote });
+        tap();
+        flash();
+      }}
+      style={({ pressed }) => [styles.copy, pressed && { backgroundColor: c.sunken }]}
+    >
+      <Icon name={quoted ? "check" : "quote"} size={13} color={quoted ? c.success : c.textFaint} />
+      <T variant="caption" color={quoted ? c.success : c.textFaint}>
+        {quoted ? t("message.quoted") : t("message.quote")}
       </T>
     </Pressable>
   );
@@ -184,6 +289,7 @@ const RETRY_CAUSES = ["restart", "offline", "error", "background"] as const;
 const Block = memo(function Block({ block, streaming }: { block: MessageBlock; streaming: boolean }) {
   const c = useColors();
   const { t } = useTranslation("components");
+  const scope = useContext(ChatScope);
   switch (block.type) {
     case "text":
       return block.text.trim() ? <Markdown text={block.text} /> : null;
@@ -275,14 +381,7 @@ const Block = memo(function Block({ block, streaming }: { block: MessageBlock; s
     case "user_message":
       return (
         <View style={styles.userWrap}>
-          <View style={[styles.user, { backgroundColor: c.primary }]}>
-            <Files attachments={block.attachments} spaced={!!block.text} color={c.onPrimary} />
-            {block.text ? (
-              <T variant="body" color={c.onPrimary} selectable>
-                {block.text}
-              </T>
-            ) : null}
-          </View>
+          <UserBubble attachments={block.attachments} text={block.text} conversationId={scope?.conversationId} background={c.primary} color={c.onPrimary} />
           <T variant="caption" muted style={{ marginTop: 4, marginRight: 4 }}>
             {Number.isNaN(new Date(block.sentAt).getTime())
               ? t("message.pickedUpMidTask")
@@ -337,6 +436,7 @@ const Block = memo(function Block({ block, streaming }: { block: MessageBlock; s
 function Marker({ icon, text, detail, at, onPress }: { icon: IconName; text: string; detail?: string; at: string; onPress?: () => void }) {
   const c = useColors();
   const { t } = useTranslation("components");
+  const now = useNow(30_000);
   return (
     <Pressable accessibilityRole={onPress ? "button" : undefined} disabled={!onPress} onPress={onPress} style={({ pressed }) => [styles.marker, pressed && { opacity: 0.6 }]}>
       <View style={[styles.markerLine, { backgroundColor: c.border }]} />
@@ -344,7 +444,7 @@ function Marker({ icon, text, detail, at, onPress }: { icon: IconName; text: str
         <Row style={{ gap: 6 }}>
           <Icon name={icon} size={11} color={c.textFaint} />
           <T variant="caption" muted style={{ fontWeight: "600" }}>
-            {text} · {Date.now() - new Date(at).getTime() < 60_000 ? t("message.justNow") : format(new Date(at), t("message.markerDateFormat"), { locale: dateLocale() })}
+            {text} · {now - new Date(at).getTime() < 60_000 ? t("message.justNow") : format(new Date(at), t("message.markerDateFormat"), { locale: dateLocale() })}
           </T>
           {onPress ? <Icon name="chevron" size={9} color={c.textFaint} weight="semibold" /> : null}
         </Row>
@@ -359,13 +459,13 @@ function Marker({ icon, text, detail, at, onPress }: { icon: IconName; text: str
   );
 }
 
-function SubagentAvatar({ agent, phase, size, seed }: { agent?: ParentAgent; phase: Phase; size: number; seed: string }) {
+export function SubagentAvatar({ agent, phase, size, seed }: { agent?: ParentAgent; phase: Phase; size: number; seed: string }) {
   const base = agent?.id ?? "agent";
   const character = useMemo(() => babyCharacter(agent?.character ?? defaultCharacter(base)), [agent?.character, base]);
   return <Character character={character} color={agent?.color ?? "violet"} mood={PHASE_MOOD[phase]} size={size} seed={seed} faceScale={BABY_FACE_SCALE} />;
 }
 
-function useSubagentView(block: ToolUse, childBlocks: MessageBlock[], streaming: boolean) {
+export function useSubagentView(block: ToolUse, childBlocks: MessageBlock[], streaming: boolean) {
   const { t } = useTranslation("components");
   const state = subagentState(block, streaming);
   const { task, phase, result } = state;
@@ -390,15 +490,35 @@ function useSubagentView(block: ToolUse, childBlocks: MessageBlock[], streaming:
   return { ...state, title, type, tools, status, stats };
 }
 
-function SubagentDetail({ tools, result, background, running }: { tools: ToolUse[]; result?: string; background: boolean; running: boolean }) {
+/** A subagent's whole work, step by step, on a sheet of its own. */
+export function openSubagent(conversationId: string, id: string) {
+  tap();
+  router.push({ pathname: "/subagent", params: { conversationId, id } });
+}
+
+function SubagentDetail({ id, tools, result, background, running }: { id: string; tools: ToolUse[]; result?: string; background: boolean; running: boolean }) {
   const c = useColors();
   const { t } = useTranslation("components");
+  const scope = useContext(ChatScope);
   return (
     <Animated.View entering={FadeIn.duration(160)} style={{ gap: 10, paddingTop: 4, paddingBottom: 12, paddingHorizontal: space.md }}>
+      {scope && (tools.length || result) ? (
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => openSubagent(scope.conversationId, id)}
+          style={({ pressed }) => [styles.transcript, { backgroundColor: c.sunken }, pressed && { opacity: 0.6 }]}
+        >
+          <Icon name="text" size={12} color={c.textMuted} />
+          <T variant="caption" style={{ flex: 1, fontWeight: "500" }}>
+            {tools.length > 12 ? t("message.helper.allSteps", { count: tools.length }) : t("message.helper.transcript")}
+          </T>
+          <Icon name="chevron" size={9} color={c.textFaint} weight="semibold" />
+        </Pressable>
+      ) : null}
       {tools.slice(-12).map((step, i) => (
         <ToolStep key={step.id ?? i} step={step} />
       ))}
-      {tools.length > 12 ? (
+      {tools.length > 12 && !scope ? (
         <T variant="caption" muted>
           {t("message.earlierSteps", { count: tools.length - 12 })}
         </T>
@@ -451,7 +571,7 @@ const SubagentCard = memo(function SubagentCard({ block, childBlocks, streaming,
         {running && task?.startedAt ? <Elapsed since={task.startedAt} /> : null}
         <Icon name="down" size={11} color={c.textFaint} style={{ transform: [{ rotate: expanded ? "180deg" : "0deg" }] }} />
       </Pressable>
-      {expanded && <SubagentDetail tools={view.tools} result={view.result} background={background} running={running} />}
+      {expanded && <SubagentDetail id={block.id} tools={view.tools} result={view.result} background={background} running={running} />}
     </View>
   );
 });
@@ -490,7 +610,7 @@ function SubagentRow({ entry, streaming, agent }: { entry: SubagentEntry; stream
         {running && task?.startedAt ? <Elapsed since={task.startedAt} /> : null}
         <Icon name="down" size={10} color={c.textFaint} style={{ transform: [{ rotate: open ? "180deg" : "0deg" }] }} />
       </Pressable>
-      {open && <SubagentDetail tools={view.tools} result={view.result} background={background} running={running} />}
+      {open && <SubagentDetail id={block.id} tools={view.tools} result={view.result} background={background} running={running} />}
     </View>
   );
 }
@@ -569,7 +689,7 @@ function BackgroundAgents({ parts, agent }: { parts: Part[]; agent?: ParentAgent
   );
 }
 
-function Elapsed({ since }: { since: number }) {
+export function Elapsed({ since }: { since: number }) {
   const now = useNow(1000);
   return (
     <T variant="caption" muted style={{ fontVariant: ["tabular-nums"] }}>
@@ -578,7 +698,7 @@ function Elapsed({ since }: { since: number }) {
   );
 }
 
-function duration(ms: number): string {
+export function duration(ms: number): string {
   const s = Math.max(0, Math.round(ms / 1000));
   if (s < 60) return `${s}s`;
   const m = Math.floor(s / 60);
@@ -596,20 +716,27 @@ const Steps = memo(function Steps({ steps, live }: { steps: Step[]; live?: boole
   const pending = live && latest && latest.result === undefined;
   const summary = pending ? toolActivity(latest.name, latest.input).replace(/…$/, "") : label ? label.title : t("message.thoughtItThrough");
   const count = tools.length;
+  // Settings → General → Tool calls: Compact folds the group into one muted line.
+  const compact = useChatPrefs((s) => s.toolCalls === "compact");
+  const light = useLightAnimations();
 
   return (
-    <View style={[styles.steps, { borderColor: c.border }]}>
+    <View style={compact ? undefined : [styles.steps, { borderColor: c.border }]}>
       <Pressable
         onPress={() => {
-          LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+          if (!light) LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
           setOpen((o) => !o);
         }}
-        style={styles.stepsHeader}
+        style={compact ? styles.stepsCompact : styles.stepsHeader}
       >
-        <View style={[styles.stepIcon, { backgroundColor: c.sunken }]}>
-          <Icon name={label?.icon ?? "sparkles"} size={13} color={failed ? c.warning : c.textMuted} />
-        </View>
-        <T variant="subhead" numberOfLines={1} style={{ flex: 1, fontWeight: "500" }}>
+        {compact ? (
+          <Icon name={label?.icon ?? "sparkles"} size={12} color={failed ? c.warning : c.textFaint} />
+        ) : (
+          <View style={[styles.stepIcon, { backgroundColor: c.sunken }]}>
+            <Icon name={label?.icon ?? "sparkles"} size={13} color={failed ? c.warning : c.textMuted} />
+          </View>
+        )}
+        <T variant={compact ? "footnote" : "subhead"} muted={compact} numberOfLines={1} style={compact ? { flexShrink: 1 } : { flex: 1, fontWeight: "500" }}>
           {summary}
         </T>
         {count > 1 && (
@@ -620,7 +747,10 @@ const Steps = memo(function Steps({ steps, live }: { steps: Step[]; live?: boole
         {live ? <Spinner /> : <Icon name="down" size={11} color={c.textFaint} style={{ transform: [{ rotate: open ? "180deg" : "0deg" }] }} />}
       </Pressable>
       {open && (
-        <Animated.View entering={FadeIn.duration(160)} style={{ gap: 10, paddingTop: 4, paddingBottom: 10, paddingHorizontal: space.md }}>
+        <Animated.View
+          entering={light ? undefined : FadeIn.duration(160)}
+          style={compact ? styles.stepsCompactList : { gap: 10, paddingTop: 4, paddingBottom: 10, paddingHorizontal: space.md }}
+        >
           {steps.map((s, i) => (s.type === "thinking" ? <ThinkingStep key={i} text={s.text} /> : <ToolStep key={s.id ?? i} step={s} />))}
         </Animated.View>
       )}
@@ -628,7 +758,7 @@ const Steps = memo(function Steps({ steps, live }: { steps: Step[]; live?: boole
   );
 });
 
-const ToolStep = memo(function ToolStep({ step }: { step: ToolUse }) {
+export const ToolStep = memo(function ToolStep({ step }: { step: ToolUse }) {
   const c = useColors();
   const { t } = useTranslation("components");
   const label = toolLabel(step);
@@ -742,7 +872,7 @@ function fileEdit(step: ToolUse): { lines: DiffLine[] } | null {
   return { lines: more > 0 ? [...lines.slice(0, DIFF_LINES), { kind: "fold", text: `⋯ ${translate("components:message.moreLines", { count: more })}` }] : lines };
 }
 
-function ThinkingStep({ text }: { text: string }) {
+export function ThinkingStep({ text }: { text: string }) {
   const c = useColors();
   const { t } = useTranslation("components");
   return (
@@ -755,7 +885,7 @@ function ThinkingStep({ text }: { text: string }) {
   );
 }
 
-function Thinking() {
+export function Thinking() {
   const { t } = useTranslation("components");
   return (
     <Row style={{ gap: 8 }}>
@@ -769,10 +899,11 @@ function Thinking() {
 
 function Spinner() {
   const c = useColors();
+  const light = useLightAnimations();
   const v = useSharedValue(0.3);
   useEffect(() => {
-    v.value = withRepeat(withSequence(withTiming(1, { duration: 600 }), withTiming(0.3, { duration: 600 })), -1);
-  }, [v]);
+    v.value = light ? 1 : withRepeat(withSequence(withTiming(1, { duration: 600 }), withTiming(0.3, { duration: 600 })), -1);
+  }, [v, light]);
   const style = useAnimatedStyle(() => ({ opacity: v.value }));
   return (
     <Animated.View style={[{ flexDirection: "row", gap: 3 }, style]}>
@@ -785,10 +916,11 @@ function Spinner() {
 
 function Caret() {
   const c = useColors();
+  const light = useLightAnimations();
   const v = useSharedValue(1);
   useEffect(() => {
-    v.value = withRepeat(withSequence(withTiming(0, { duration: 450 }), withTiming(1, { duration: 450 })), -1);
-  }, [v]);
+    v.value = light ? 1 : withRepeat(withSequence(withTiming(0, { duration: 450 }), withTiming(1, { duration: 450 })), -1);
+  }, [v, light]);
   const style = useAnimatedStyle(() => ({ opacity: v.value }));
   return <Animated.View style={[{ width: 9, height: 18, borderRadius: 2, backgroundColor: c.brand, marginTop: -4 }, style]} />;
 }
@@ -805,6 +937,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 15,
     paddingVertical: 10,
   },
+  pictureChip: {
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: radius.xl,
+    borderCurve: "continuous",
+  },
   files: {
     gap: 6,
     marginHorizontal: -7,
@@ -814,13 +952,18 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingRight: 8,
   },
-  copy: {
+  actions: {
     flexDirection: "row",
     alignItems: "center",
     alignSelf: "flex-start",
-    gap: 5,
+    gap: 2,
     marginTop: -4,
     marginLeft: -8,
+  },
+  copy: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: radius.sm,
@@ -861,6 +1004,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.md,
     paddingVertical: 10,
   },
+  stepsCompact: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    paddingVertical: 2,
+  },
+  stepsCompactList: {
+    gap: 10,
+    paddingTop: 8,
+    paddingBottom: 4,
+    paddingLeft: 19,
+  },
   stepIcon: {
     width: 24,
     height: 24,
@@ -884,6 +1039,15 @@ const styles = StyleSheet.create({
   progressFill: {
     height: "100%",
     borderRadius: 1,
+  },
+  transcript: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: radius.sm,
+    borderCurve: "continuous",
   },
   report: {
     gap: 6,

@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import type { Workspace } from "@godmode/shared";
 import { Icon } from "@/components/icon";
 import { Card, Hairline, Skeleton, T, tap } from "@/components/ui";
+import { workspaceTint } from "@/components/workspace-color";
 import { useWorkspace } from "@/lib/workspace";
 import { radius, space, useColors } from "@/lib/theme";
 
@@ -115,6 +116,7 @@ function WorkspaceChoice({
         selected={selected}
         onPress={() => onPick(null)}
         icon={<T style={{ fontSize: 19 }}>{workspace.icon || "🗂️"}</T>}
+        tint={workspaceTint(workspace.color)}
         title={workspace.name}
         body={workspace.description || (count ? t("overview.team.projects", { count }) : undefined)}
         trailing={
@@ -143,6 +145,7 @@ function WorkspaceChoice({
             selected={selectedProject === p.id}
             onPress={() => onPick(p.id)}
             icon={p.icon ? <T style={{ fontSize: 15 }}>{p.icon}</T> : <Icon name="folder" size={14} color={c.textMuted} />}
+            tint={p.color ? workspaceTint(p.color) : undefined}
             title={p.name}
             body={p.description}
           />
@@ -159,10 +162,13 @@ function Choice({
   body,
   trailing,
   nested,
+  tint,
 }: {
   selected: boolean;
   onPress: () => void;
   icon: ReactNode;
+  /** The tile in the workspace's (or project's) color. */
+  tint?: string;
   title: string;
   body?: string;
   trailing?: ReactNode;
@@ -178,7 +184,7 @@ function Choice({
         style={({ pressed }) => [styles.choice, nested && styles.nested, { flex: 1 }, pressed && { backgroundColor: c.sunken }]}
       >
         {nested && <View style={[styles.guide, { backgroundColor: c.border }]} />}
-        <View style={[styles.tile, nested && styles.tileSmall, { backgroundColor: c.sunken }]}>{icon}</View>
+        <View style={[styles.tile, nested && styles.tileSmall, { backgroundColor: tint ?? c.sunken }]}>{icon}</View>
         <View style={{ flex: 1, minWidth: 0, gap: 1 }}>
           <T variant="headline" numberOfLines={1} style={{ fontSize: nested ? 15 : 16 }}>
             {title}

@@ -23,7 +23,9 @@ function computerOrOwner(c: Context) {
 }
 
 export function registerCloudRoutes(app: Hono) {
+  // A phone reads the state, not a pending link's code (whoever enters it links this computer to their account).
   app.get("/api/cloud", (c) => {
+    if (requestDevice(c)) return c.json({ ...cloudStatus(), pending: null });
     computerOrOwner(c);
     return c.json(cloudStatus());
   });
@@ -58,7 +60,12 @@ export function registerCloudRoutes(app: Hono) {
     return c.json(unlink());
   });
 
+  // Invoice pages open without a sign-in: a phone gets the plan and the amounts without their links.
   app.get("/api/cloud/billing", async (c) => {
+    if (requestDevice(c)) {
+      const billing = await getCloudBilling();
+      return c.json({ ...billing, invoices: billing.invoices.map((i) => ({ ...i, url: null, pdf: null })) });
+    }
     computerOrOwner(c);
     return c.json(await getCloudBilling());
   });

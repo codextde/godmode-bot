@@ -1,5 +1,5 @@
 import { FlashList } from "@shopify/flash-list";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { useMemo, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
@@ -12,13 +12,19 @@ import {
   MAX_INSTRUCTIONS_LENGTH,
   type AgentTemplate,
   type AgentTemplateCategory,
+  type TeamTemplate,
 } from "@godmode/shared";
+import { failureText, useLeaveSettings } from "@/components/agent-actions";
 import { Character } from "@/components/character";
 import { CloseButton } from "@/components/close-button";
-import { EmojiGrid } from "@/components/form";
+import { EmojiGrid, Group, Segmented, SwitchRow } from "@/components/form";
+import { phoneTimezone } from "@/components/routine-row";
+import { TeamCard, seatTree } from "@/components/team-parts";
 import { Icon } from "@/components/icon";
-import { Badge, Button, Hairline, SkeletonRows, T, tap } from "@/components/ui";
+import { Badge, Button, Hairline, Skeleton, SkeletonRows, T, tap } from "@/components/ui";
 import { api, errorText } from "@/lib/api";
+import { useAgents } from "@/lib/hooks";
+import { useLive } from "@/lib/live";
 import { qk, queryClient } from "@/lib/query";
 import { radius, space, useColors } from "@/lib/theme";
 import { useWorkspace } from "@/lib/workspace";
@@ -33,7 +39,7 @@ const GLOBAL = "";
 
 export default function New() {
   const c = useColors();
-  const { t } = useTranslation(["settings", "common"]);
+  const { t } = useTranslation(["settings", "common", "agents"]);
   const params = useLocalSearchParams<{ kind?: string; workspaceId?: string }>();
   const kind: Kind = params.kind === "project" || params.kind === "agent" ? params.kind : "workspace";
   const copy = { title: t(`new.${kind}.title`), name: t(`new.${kind}.name`), context: t(`new.${kind}.context`), placeholder: t(`new.${kind}.placeholder`) };
@@ -48,6 +54,7 @@ export default function New() {
   // A new agent starts from a role (or from scratch); workspaces and projects go straight to the form.
   const [picked, setPicked] = useState(kind !== "agent");
   const [template, setTemplate] = useState<AgentTemplate | null>(null);
+  const [withRoutine, setWithRoutine] = useState(true);
   const parent = workspaces.find((w) => w.id === workspaceId);
 
   const start = (picked: AgentTemplate | null) => {
@@ -78,6 +85,22 @@ export default function New() {
           : {};
         const a = await api.agents.create({ ...look, name: name.trim(), role: role.trim() || undefined, instructions: text, workspaceId: workspaceId || null });
         await queryClient.invalidateQueries({ queryKey: qk.agents });
+        // Its automation from the template, like the desktop; made on the phone, its runs fill logins but read no raw secrets.
+        if (template?.routine && withRoutine) {
+          try {
+            await api.routines.create({
+              agentId: a.id,
+              name: templateText(template).routine!.name,
+              cron: template.routine.cron,
+              prompt: template.routine.prompt,
+              timezone: phoneTimezone() ?? undefined,
+              enabled: true,
+            });
+            void queryClient.invalidateQueries({ queryKey: qk.routines });
+          } catch (err) {
+            Alert.alert(t("agents:newAgent.routineFailed"), failureText(err));
+          }
+        }
         router.replace({ pathname: "/settings/agent/[id]", params: { id: a.id } });
       }
     } catch (err) {
@@ -87,7 +110,7 @@ export default function New() {
     }
   };
 
-  if (!picked) return <TemplatePicker onPick={start} />;
+  if (!picked) return <TemplatePicker onPick={start} workspaceId={workspaceId || null} />;
 
   return (
     <ScrollView
@@ -201,17 +224,22 @@ export default function New() {
         </View>
       ) : null}
 
+      {kind === "agent" && template?.routine ? (
+        <Group>
+          <SwitchRow
+            icon="clock"
+            title={t("agents:newAgent.alsoRoutine")}
+            detail={`${templateText(template).routine!.name} · ${cronToHuman(template.routine.cron, currentLanguage(), uses12Hour())}`}
+            value={withRoutine}
+            onChange={setWithRoutine}
+          />
+        </Group>
+      ) : null}
+
       <Button title={t(`new.${kind}.create`)} icon="plus" size="lg" loading={saving} disabled={!name.trim() || (kind === "project" && !parent)} onPress={() => void create()} />
       {kind === "agent" ? (
         <View style={{ gap: space.sm }}>
-          {template?.routine ? (
-            <View style={styles.hint}>
-              <Icon name="clock" size={13} color={c.textMuted} />
-              <T variant="footnote" muted style={{ flex: 1 }}>
-                {t("new.routineHint", { name: templateText(template).routine!.name, schedule: cronToHuman(template.routine.cron, currentLanguage(), uses12Hour()) })}
-              </T>
-            </View>
-          ) : null}
+
           <View style={styles.hint}>
             <Icon name="lock" size={13} color={c.textMuted} />
             <T variant="footnote" muted style={{ flex: 1 }}>
@@ -246,9 +274,9 @@ const searchText = (t: AgentTemplate) => {
 const inFilter = (t: AgentTemplate, f: Filter) => f === "all" || (f === "all-in-one" ? !!t.covers?.length : t.category === f);
 
 /** Every role a company has, by department, searchable: one agent per job, or one all-in-one agent per department. */
-function TemplatePicker({ onPick }: { onPick: (template: AgentTemplate | null) => void }) {
+function TemplatePicker({ onPick, workspaceId }: { onPick: (template: AgentTemplate | null) => void; workspaceId: string | null }) {
   const c = useColors();
-  const { t, i18n } = useTranslation(["settings", "common"]);
+  const { t, i18n } = useTranslation(["settings", "common", "agents"]);
   const templates = useQuery({ queryKey: ["agent-templates"], queryFn: api.agents.templates, staleTime: 60 * 60_000 });
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
@@ -268,7 +296,9 @@ function TemplatePicker({ onPick }: { onPick: (template: AgentTemplate | null) =
 
   const header = (
     <View style={styles.pickerHeader}>
+      <Describe workspaceId={workspaceId} />
       <Button title={t("new.picker.scratch")} icon="plus" variant="secondary" onPress={() => onPick(null)} />
+      <Teams roles={templates.data} />
       <T variant="headline">{t("new.picker.hire")}</T>
       <T variant="subhead" muted style={{ marginTop: -space.sm }}>
         {t("new.picker.intro")}
@@ -346,6 +376,78 @@ function TemplatePicker({ onPick }: { onPick: (template: AgentTemplate | null) =
         }
       />
     </>
+  );
+}
+
+/** "Describe it and Godmode builds it": a chat with the main agent that sets the agent up, like the desktop's. */
+function Describe({ workspaceId }: { workspaceId: string | null }) {
+  const c = useColors();
+  const { t } = useTranslation("agents");
+  const main = useAgents().data?.find((a) => a.isDefault);
+  const leave = useLeaveSettings();
+  const [text, setText] = useState("");
+  const describe = useMutation({
+    mutationFn: () => api.chat.start({ agentId: main?.id, workspaceId, content: t("describe.prompt", { description: text.trim() }) }),
+    onSuccess: (res) => {
+      useLive.getState().runStarted(res.run);
+      void queryClient.invalidateQueries({ queryKey: qk.conversations });
+      leave(() => router.push({ pathname: "/chat/[id]", params: { id: res.conversation.id } }));
+    },
+    onError: (err) => Alert.alert(t("describe.failed"), failureText(err)),
+  });
+  const ready = text.trim().length > 3;
+  return (
+    <View style={{ gap: space.sm }}>
+      <T variant="headline">{t("describe.title")}</T>
+      <View style={[styles.describe, { backgroundColor: c.surface, borderColor: c.border }]}>
+        <TextInput
+          accessibilityLabel={t("describe.label")}
+          value={text}
+          onChangeText={setText}
+          placeholder={t("describe.placeholder")}
+          placeholderTextColor={c.textFaint}
+          multiline
+          maxLength={4000}
+          style={[styles.describeInput, { color: c.text }]}
+        />
+        <View style={{ alignItems: "flex-end", padding: space.sm, paddingTop: 0 }}>
+          <Button title={t("describe.submit")} icon="sparkles" loading={describe.isPending} disabled={!ready} onPress={() => describe.mutate()} />
+        </View>
+      </View>
+    </View>
+  );
+}
+
+/** Whole teams and companies, wired up in one go; each opens its install sheet. */
+function Teams({ roles }: { roles: AgentTemplate[] | undefined }) {
+  const { t } = useTranslation("agents");
+  const teams = useQuery({ queryKey: qk.teamTemplates, queryFn: api.teams.templates, staleTime: 60 * 60_000, retry: false });
+  const [kind, setKind] = useState<TeamTemplate["kind"]>("team");
+  // Rebuilt on every render: the role names follow the app language.
+  const byId = new Map((roles ?? []).map((r) => [r.id, templateText(r)]));
+  // An older Godmode without team templates: the section stays away.
+  if (teams.isError || (!teams.isLoading && !teams.data?.length)) return null;
+  const shown = (teams.data ?? []).filter((x) => x.kind === kind);
+  return (
+    <View style={{ gap: space.md }}>
+      <T variant="headline">{t("team.hireTeam")}</T>
+      <Segmented
+        options={[
+          { value: "team", label: t("team.teams") },
+          { value: "company", label: t("team.companies") },
+        ]}
+        value={kind}
+        onChange={setKind}
+      />
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -space.lg }} contentContainerStyle={styles.teamRow}>
+        {teams.isLoading || !roles
+          ? [0, 1].map((i) => <Skeleton key={i} width={232} height={168} radius={radius.lg} />)
+          : shown.map((team) => {
+              const root = seatTree(team.root, byId);
+              return root ? <TeamCard key={team.id} team={team} root={root} /> : null;
+            })}
+      </ScrollView>
+    </View>
   );
 }
 
@@ -475,6 +577,25 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: space.md,
     paddingHorizontal: 4,
+  },
+  describe: {
+    borderRadius: radius.lg,
+    borderCurve: "continuous",
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  describeInput: {
+    fontSize: 15,
+    lineHeight: 20,
+    minHeight: 84,
+    maxHeight: 180,
+    paddingHorizontal: space.md,
+    paddingTop: space.md,
+    paddingBottom: space.sm,
+    textAlignVertical: "top",
+  },
+  teamRow: {
+    gap: space.md,
+    paddingHorizontal: space.lg,
   },
   pickerHeader: {
     gap: space.lg,

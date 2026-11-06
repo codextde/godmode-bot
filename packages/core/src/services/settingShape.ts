@@ -14,6 +14,13 @@ const SETTING_LIMITS: Record<string, [min: number, max: number]> = {
   "voice.rate": [0.5, 2],
   "phone.maxMinutes": [1, 60],
   "general.userName": [0, 80],
+  "review.model": [0, 200],
+  "voice.language": [0, 20],
+  "voice.sttModel": [0, 200],
+  "voice.ttsModel": [0, 200],
+  "voice.ttsVoice": [0, 200],
+  "voice.elevenlabsVoiceId": [0, 200],
+  "voice.browserVoice": [0, 200],
 };
 
 /** Numbers that may also be empty: null = Claude Code's own threshold for compressing chats. */
@@ -26,6 +33,8 @@ export const SETTING_CHOICES: Record<string, readonly string[]> = {
   "general.mode": INTERFACE_MODES,
   "general.language": APP_LANGUAGES,
   "general.timeFormat": TIME_FORMATS,
+  "voice.sttProvider": ["browser", "openai", "hex"],
+  "voice.ttsProvider": ["browser", "openai", "elevenlabs"],
 };
 
 export function settingInRange(key: string, value: unknown): boolean {

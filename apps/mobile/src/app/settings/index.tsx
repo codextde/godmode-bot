@@ -4,16 +4,15 @@ import * as LocalAuthentication from "expo-local-authentication";
 import { router, Stack } from "expo-router";
 import { Alert, ScrollView, StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
-import { PALETTES, effortLabel, findModel, type AppLanguage, type InterfaceMode, type Palette, type Theme, type TimeFormat } from "@godmode/shared";
+import { effortLabel, findModel } from "@godmode/shared";
 import { CloseButton } from "@/components/close-button";
-import { ChoiceRow, FieldRow, Group, LinkRow, PickerRow, SegmentRow, SwitchRow } from "@/components/form";
+import { ChoiceRow, Group, LinkRow, SwitchRow } from "@/components/form";
 import { Icon, type IconName } from "@/components/icon";
 import { Logo } from "@/components/logo";
+import { ToolsLinks } from "@/components/tools-links";
 import { Button, Card, LiveDot, Row, T } from "@/components/ui";
 import { api } from "@/lib/api";
-import { useAppearance } from "@/lib/appearance";
-import { useLanguage, useTimeFormat, currentLanguage, deviceHour12 } from "@/lib/i18n";
-import { useSuggestions } from "@/lib/suggestions";
+import { currentLanguage } from "@/lib/i18n";
 import { useModelCatalog } from "@/lib/composer";
 import { hostOf } from "@/lib/format";
 import { useAgents } from "@/lib/hooks";
@@ -22,51 +21,20 @@ import { computersOf, preferredOf, primaryOf } from "@/lib/peers";
 import { qk } from "@/lib/query";
 import { preferComputer } from "@/lib/realtime";
 import { isGatewayUrl, useSession } from "@/lib/session";
-import { firstLine, patchSettings, useSettings } from "@/lib/setup";
+import { firstLine, useSettings } from "@/lib/setup";
 import { space, useColors } from "@/lib/theme";
 import { useWorkspace } from "@/lib/workspace";
 
 const PLATFORM: Record<string, string> = { darwin: "macOS", win32: "Windows", linux: "Linux" };
 
-const THEME_OPTIONS = [
-  { value: "light", labelKey: "settings:overview.theme.light" },
-  { value: "dark", labelKey: "settings:overview.theme.dark" },
-  { value: "system", labelKey: "common:language.system" },
-] as const satisfies readonly { value: Theme; labelKey: string }[];
-
-const LANGUAGE_OPTIONS = [
-  { value: "system", labelKey: "common:language.system" },
-  { value: "en", labelKey: "common:language.en" },
-  { value: "de", labelKey: "common:language.de" },
-] as const satisfies readonly { value: AppLanguage; labelKey: string }[];
-
-const TIME_FORMAT_OPTIONS = [
-  { value: "system", labelKey: "overview.timeFormat.system" },
-  { value: "24h", labelKey: "overview.timeFormat.h24" },
-  { value: "12h", labelKey: "overview.timeFormat.h12" },
-] as const satisfies readonly { value: TimeFormat; labelKey: string }[];
-
-const MODE_OPTIONS = [
-  { value: "easy", labelKey: "settings:overview.mode.easy" },
-  { value: "pro", labelKey: "settings:overview.mode.pro" },
-] as const satisfies readonly { value: InterfaceMode; labelKey: string }[];
-
-const MODE_BLURB = {
-  easy: "settings:overview.mode.easyBlurb",
-  pro: "settings:overview.mode.proBlurb",
-} as const satisfies Record<InterfaceMode, string>;
+/** The optional features (Settings → Features); calls are `phone`, VMs `vm`. */
+const FEATURES = ["activity", "artifacts", "integrations", "plugins", "messaging", "phone", "cards", "vm", "ssh", "sshKeys", "android"] as const;
 
 export default function Settings() {
   const c = useColors();
   const { t } = useTranslation(["settings", "common"]);
   const connection = useSession((s) => s.connection);
   const appLock = useSession((s) => s.appLock);
-  const theme = useAppearance((s) => s.theme);
-  const language = useLanguage((s) => s.language);
-  const timeFormat = useTimeFormat((s) => s.timeFormat);
-  const palette = useAppearance((s) => s.palette);
-  const hideSuggestions = useSuggestions((s) => s.hidden);
-  const setHideSuggestions = useSuggestions((s) => s.setHidden);
   const status = useLive((s) => s.status);
   const linked = useLive((s) => s.computer);
   const preferredAway = useLive((s) => s.preferredAway);
@@ -163,76 +131,30 @@ export default function Settings() {
       ) : null}
 
       <Group title={t("overview.preferences.title")} footer={t("overview.preferences.footer")}>
-        {s ? <FieldRow label={t("overview.preferences.yourName")} value={s.general.userName} placeholder={t("overview.preferences.addName")} maxLength={80} onCommit={(userName) => void patchSettings({ general: { userName } })} /> : null}
-        {s ? (
-          <SegmentRow
-            title={t("overview.theme.title")}
-            detail={t("overview.theme.detail")}
-            options={THEME_OPTIONS.map((o) => ({ value: o.value, label: t(o.labelKey) }))}
-            value={theme}
-            onChange={(next) => {
-              useAppearance.getState().setTheme(next);
-              void patchSettings({ general: { theme: next } });
-            }}
-          />
-        ) : null}
-        {s ? (
-          <PickerRow
-            title={t("overview.palette.title")}
-            detail={t("overview.palette.detail")}
-            options={PALETTES.map((value) => ({ value, label: t(`overview.palette.names.${value}.label`), detail: t(`overview.palette.names.${value}.blurb`) }))}
-            value={palette}
-            onChange={(next: Palette) => useAppearance.getState().setPalette(next)}
-          />
-        ) : null}
-        {s ? (
-          <SegmentRow
-            title={t("overview.language.title")}
-            detail={t("overview.language.detail")}
-            options={LANGUAGE_OPTIONS.map((o) => ({ value: o.value, label: t(o.labelKey) }))}
-            value={language}
-            onChange={(next) => {
-              useLanguage.getState().setLanguage(next);
-              void patchSettings({ general: { language: next } });
-            }}
-          />
-        ) : null}
-        {s ? (
-          <SegmentRow
-            title={t("overview.timeFormat.title")}
-            detail={t("overview.timeFormat.detail", { example: t(deviceHour12() ? "overview.timeFormat.h12" : "overview.timeFormat.h24") })}
-            options={TIME_FORMAT_OPTIONS.map((o) => ({ value: o.value, label: t(o.labelKey) }))}
-            value={timeFormat}
-            onChange={(next) => {
-              useTimeFormat.getState().setTimeFormat(next);
-              void patchSettings({ general: { timeFormat: next } });
-            }}
-          />
-        ) : null}
-        {s ? (
-          <SegmentRow
-            title={t("overview.mode.title")}
-            detail={t("overview.mode.detail", { blurb: t(MODE_BLURB[s.general.mode === "easy" ? "easy" : "pro"]) })}
-            options={MODE_OPTIONS.map((o) => ({ value: o.value, label: t(o.labelKey) }))}
-            value={s.general.mode === "easy" ? "easy" : "pro"}
-            onChange={(mode) => void patchSettings({ general: { mode } })}
-          />
-        ) : null}
+        <LinkRow icon="slider" title={t("overview.links.general")} onPress={() => router.push("/settings/general")} />
         <LinkRow
           icon="sparkles"
           title={t("overview.links.ai")}
           value={s && model ? `${model} · ${effortLabel(s.runner.effort, currentLanguage())}` : undefined}
           onPress={() => router.push("/settings/ai")}
         />
+        <LinkRow icon="personCircle" title={t("overview.links.accounts")} onPress={() => router.push("/settings/accounts")} />
         <LinkRow
           icon="text"
           title={t("overview.links.instructions")}
           detail={s ? (s.runner.appendSystemPrompt.trim() ? firstLine(s.runner.appendSystemPrompt) : t("overview.links.instructionsDetail")) : undefined}
           onPress={() => router.push("/settings/instructions")}
         />
-        <LinkRow icon="globe" title={t("overview.links.browser")} detail={t("overview.links.browserDetail")} onPress={() => router.push("/settings/capabilities")} />
-        <LinkRow icon="display" title={t("overview.links.computer")} detail={t("overview.links.computerDetail")} onPress={() => router.push("/settings/capabilities")} />
-        <LinkRow icon="brain" title={t("overview.links.memory")} detail={t("overview.links.memoryDetail")} onPress={() => router.push("/settings/memory")} />
+        <LinkRow icon="globe" title={t("overview.links.browser")} onPress={() => router.push("/settings/browser")} />
+        <LinkRow icon="display" title={t("overview.links.computer")} onPress={() => router.push("/settings/computer")} />
+        <LinkRow icon="waveform" title={t("overview.links.voice")} onPress={() => router.push("/settings/voice")} />
+        <LinkRow icon="brain" title={t("overview.links.memory")} onPress={() => router.push("/settings/memory")} />
+        <LinkRow
+          icon="review"
+          title={t("overview.links.review")}
+          value={s ? (s.review.enabled ? t("common:status.on") : t("common:status.off")) : undefined}
+          onPress={() => router.push("/settings/review")}
+        />
       </Group>
 
       <Group title={t("overview.team.title")}>
@@ -245,21 +167,39 @@ export default function Settings() {
         <LinkRow icon="agents" title={t("common:words.agents")} value={agents ? String(agents.length) : undefined} onPress={() => router.push("/settings/agents")} />
       </Group>
 
-      <Group title={t("overview.privacy.title")} footer={t("overview.privacy.footer")}>
+      <ToolsLinks />
+
+      <Group title={t("overview.features.title")}>
+        <LinkRow
+          icon="puzzle"
+          title={t("overview.links.features")}
+          value={s ? t("overview.features.on", { count: FEATURES.filter((f) => s[f].enabled).length }) : undefined}
+          onPress={() => router.push("/settings/features")}
+        />
+        {s?.phone.enabled ? (
+          <LinkRow icon="call" title={t("overview.links.calls")} value={s.phone.callerName || undefined} onPress={() => router.push("/settings/calls")} />
+        ) : null}
+      </Group>
+
+      <Group title={t("overview.privacy.title")}>
         {biometrics.data ? (
           <SwitchRow icon="faceid" title={t("overview.privacy.faceId")} detail={t("overview.privacy.faceIdDetail")} value={appLock} onChange={(on) => void toggleLock(on)} />
         ) : null}
         <Info icon="lock" label={t("overview.privacy.security")} value={t("overview.privacy.onComputer")} />
+        <LinkRow icon="broom" title={t("overview.links.cleanup")} onPress={() => router.push("/settings/cleanup")} />
       </Group>
 
-      <Group title={t("overview.app.title")} footer={t("overview.app.footer")}>
-        <SwitchRow
-          icon="sparkles"
-          title={t("overview.suggestions.title")}
-          detail={t("overview.suggestions.detail")}
-          value={!hideSuggestions}
-          onChange={(on) => setHideSuggestions(!on)}
-        />
+      <Group title={t("overview.app.title")}>
+        <LinkRow icon="pulse" title={t("overview.links.health")} onPress={() => router.push("/settings/health")} />
+        <LinkRow icon="key" title={t("overview.links.license")} onPress={() => router.push("/settings/license")} />
+        <LinkRow icon="network" title={t("overview.links.cloud")} onPress={() => router.push("/settings/cloud")} />
+        <LinkRow icon="cpu" title={t("overview.links.devices")} onPress={() => router.push("/settings/devices")} />
+        <LinkRow icon="plug" title={t("overview.links.connected")} onPress={() => router.push("/settings/connected-apps")} />
+        <LinkRow icon="list" title={t("overview.links.logs")} onPress={() => router.push("/settings/logs")} />
+        <LinkRow icon="bolt" title={t("overview.links.about")} onPress={() => router.push("/settings/about")} />
+      </Group>
+
+      <Group footer={t("overview.app.footer")}>
         <Info icon="network" label={isGatewayUrl(connection.activeUrl) ? "Godmode Cloud" : "Tailscale"} value={hostOf(connection.activeUrl)} />
         <Info icon="phone" label={t("overview.app.thisPhone")} value={me.data?.device.name ?? connection.deviceName} />
       </Group>

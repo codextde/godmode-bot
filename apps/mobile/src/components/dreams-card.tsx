@@ -47,7 +47,7 @@ const NODE: Record<DreamStatus, { icon: IconName; color: (c: Colors) => string }
 /** The desktop's dreams panel: whether the agent dreams and when next, "Dream now", and its dream journal. */
 export function DreamsCard({ agent }: { agent: Agent }) {
   const c = useColors();
-  const { t } = useTranslation(["components", "common"]);
+  const { t } = useTranslation(["components", "common", "agents"]);
   const [showAll, setShowAll] = useState(false);
   const q = useQuery({
     queryKey: qk.dreams(agent.id),
@@ -67,6 +67,19 @@ export function DreamsCard({ agent }: { agent: Agent }) {
     },
     onError: (err) => {
       Alert.alert(t("dreamsCard.startFailed"), errorText(err));
+      void queryClient.invalidateQueries({ queryKey: qk.dreams(agent.id) });
+    },
+  });
+
+  const stop = useMutation({
+    mutationFn: (runId: string) => api.runs.cancel(runId),
+    onSuccess: () => {
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      void queryClient.invalidateQueries({ queryKey: qk.dreams(agent.id) });
+      void queryClient.invalidateQueries({ queryKey: qk.agentMemory(agent.id) });
+    },
+    onError: (err) => {
+      Alert.alert(t("agents:dreamStop.failed"), errorText(err));
       void queryClient.invalidateQueries({ queryKey: qk.dreams(agent.id) });
     },
   });
@@ -109,14 +122,24 @@ export function DreamsCard({ agent }: { agent: Agent }) {
               ) : null}
             </View>
           </View>
-          <Button
-            title={t("dreamsCard.dreamNow")}
-            icon="sparkles"
-            variant="secondary"
-            disabled={!o || !!active || !agent.enabled}
-            loading={start.isPending}
-            onPress={() => start.mutate()}
-          />
+          {active?.runId ? (
+            <Button
+              title={stop.isPending || (stop.isSuccess && stop.variables === active.runId) ? t("agents:dreamStop.stopping") : t("agents:dreamStop.stop")}
+              icon="stop"
+              variant="secondary"
+              disabled={stop.isPending || (stop.isSuccess && stop.variables === active.runId)}
+              onPress={() => stop.mutate(active.runId!)}
+            />
+          ) : (
+            <Button
+              title={t("dreamsCard.dreamNow")}
+              icon="sparkles"
+              variant="secondary"
+              disabled={!o || !!active || !agent.enabled}
+              loading={start.isPending}
+              onPress={() => start.mutate()}
+            />
+          )}
         </View>
 
         {o ? (

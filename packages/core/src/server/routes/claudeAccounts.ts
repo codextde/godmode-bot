@@ -1,4 +1,5 @@
-import type { Hono } from "hono";
+import type { Context, Hono } from "hono";
+import type { ClaudeAccountsState } from "@godmode/shared";
 import {
   cancelAccountLogin,
   claudeAccountsState,
@@ -8,14 +9,18 @@ import {
   startAccountLogin,
   submitAccountLoginCode,
 } from "../../services/claudeAccounts";
+import { requestDevice } from "../auth";
 import { body, z } from "../validate";
+
+/** A phone sees the accounts, never a sign-in link: signing in happens on the computer. */
+const forPhone = (c: Context, state: ClaudeAccountsState): ClaudeAccountsState => (requestDevice(c) ? { ...state, login: { ...state.login, url: null } } : state);
 
 /** Claude accounts: the list with usage, signing accounts in, the default, removing. */
 export function registerClaudeAccountRoutes(app: Hono): void {
-  app.get("/api/claude-accounts", (c) => c.json(claudeAccountsState()));
+  app.get("/api/claude-accounts", (c) => c.json(forPhone(c, claudeAccountsState())));
   app.post("/api/claude-accounts/refresh", async (c) => {
     await refreshClaudeUsage();
-    return c.json(claudeAccountsState());
+    return c.json(forPhone(c, claudeAccountsState()));
   });
   app.post("/api/claude-accounts/login", async (c) => {
     const { accountId } = await body(c, z.object({ accountId: z.string().trim().min(1).max(100).nullable().optional() }));

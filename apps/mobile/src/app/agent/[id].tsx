@@ -5,6 +5,7 @@ import { useMemo, type ReactNode } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, Switch, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { findModel, leadOf, presenceLabel, reportsOf, type Agent, type Routine, type TaskStatus } from "@godmode/shared";
+import { useAgentMenu } from "@/components/agent-actions";
 import { AgentHistory, FailedRunBanner } from "@/components/agent-history";
 import { DreamsCard } from "@/components/dreams-card";
 import { HeartbeatCard } from "@/components/heartbeat-card";
@@ -67,6 +68,8 @@ function AgentView({ agent, team }: { agent: Agent; team: Agent[] }) {
   const presence = useAgentPresence(agent, { running: counts?.running, queued: counts?.queued });
   const routines = useQuery({ queryKey: qk.agentRoutines(id), queryFn: () => api.routines.list({ agentId: id }) });
   const chats = useQuery({ queryKey: [...qk.conversations, "agent", id], queryFn: () => api.conversations.list({ agentId: id, limit: 5 }) });
+  const paused = useQuery({ queryKey: [...qk.runs, "paused", id], queryFn: () => api.runs.list({ agentId: id, status: "paused", limit: 50 }) });
+  const menu = useAgentMenu(agent, { working: (counts?.running ?? 0) + (counts?.queued ?? 0) > 0, paused: !!paused.data?.length });
   const toggle = useMutation({
     mutationFn: (enabled: boolean) => api.agents.update(id, { enabled }),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: qk.agents }),
@@ -89,7 +92,10 @@ function AgentView({ agent, team }: { agent: Agent; team: Agent[] }) {
   return (
     <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content}>
       <Stack.Title>{agent.name}</Stack.Title>
-      <HeaderActions actions={[{ icon: "slider", label: t("detail.setUp", { name: agent.name }), onPress: () => router.push({ pathname: "/settings/agent/[id]", params: { id: agent.id } }) }]} />
+      <HeaderActions
+        actions={[{ icon: "slider", label: t("detail.setUp", { name: agent.name }), onPress: () => router.push({ pathname: "/settings/agent/[id]", params: { id: agent.id } }) }]}
+        menu={menu}
+      />
       <View style={styles.hero}>
         <CharacterAvatar agent={agent} size={76} mood={moodOf(presence)} style={{ marginTop: space.md }} />
         <Row style={{ gap: space.sm }}>
@@ -156,7 +162,7 @@ function AgentView({ agent, team }: { agent: Agent; team: Agent[] }) {
       <HeartbeatCard agent={agent} />
 
       <View>
-        <SectionTitle title={t("detail.recentChats")} />
+        <SectionTitle title={t("detail.recentChats")} action={chats.data?.length ? t("detail.allChats") : undefined} onAction={() => router.push({ pathname: "/agent-chats/[id]", params: { id: agent.id } })} />
         <Card style={{ paddingVertical: 4 }}>
           {chats.data?.length ? (
             chats.data.map((conv) => <ConversationRow key={conv.id} conversation={conv} agent={agent} running={!!conv.running} />)
@@ -311,27 +317,43 @@ function Plate({ agent, onRunTask, onSwitchOn, switching }: { agent: Agent; onRu
   );
 }
 
-/** MEMORY.md at a glance; hidden when the computer runs a Godmode without the memory editor. */
+/** MEMORY.md at a glance, the notes under memory/ and the history of its files. */
 function MemoryCard({ agent }: { agent: Agent }) {
   const c = useColors();
   const { t } = useTranslation(["agents", "common"]);
+  // Its row stays away when the computer runs a Godmode without the memory editor.
   const memory = useQuery({ queryKey: qk.agentMemory(agent.id), queryFn: () => api.agents.memory(agent.id), retry: false });
-  if (!memory.data) return null;
-  const { chars, target, updatedAt, dreaming } = memory.data;
-  const detail = !chars
-    ? t("memoryCard.empty")
-    : updatedAt
-      ? t("memoryCard.sizeUpdated", { chars: chars.toLocaleString(intlLocale()), target: target.toLocaleString(intlLocale()), ago: formatDistanceToNowStrict(new Date(updatedAt), { addSuffix: true, locale: dateLocale() }) })
-      : t("memoryCard.size", { chars: chars.toLocaleString(intlLocale()), target: target.toLocaleString(intlLocale()) });
+  const detail = (() => {
+    if (!memory.data) return undefined;
+    const { chars, target, updatedAt } = memory.data;
+    if (!chars) return t("memoryCard.empty");
+    const size = { chars: chars.toLocaleString(intlLocale()), target: target.toLocaleString(intlLocale()) };
+    return updatedAt ? t("memoryCard.sizeUpdated", { ...size, ago: formatDistanceToNowStrict(new Date(updatedAt), { addSuffix: true, locale: dateLocale() }) }) : t("memoryCard.size", size);
+  })();
+  const dreaming = !!memory.data?.dreaming;
   return (
     <View>
       <SectionTitle title={t("memoryCard.title")} />
       <Card style={styles.plate}>
+        {memory.data ? (
+          <PlateRow
+            icon={<Icon name={dreaming ? "moon" : "brain"} size={14} color={dreaming ? c.dream : memory.data.chars > memory.data.target ? c.warning : c.textMuted} />}
+            title={dreaming ? t("memoryCard.dreaming") : t("memoryCard.remembers")}
+            detail={detail}
+            onPress={() => router.push({ pathname: "/memory/[id]", params: { id: agent.id } })}
+          />
+        ) : null}
         <PlateRow
-          icon={<Icon name={dreaming ? "moon" : "brain"} size={14} color={dreaming ? c.dream : chars > target ? c.warning : c.textMuted} />}
-          title={dreaming ? t("memoryCard.dreaming") : t("memoryCard.remembers")}
-          detail={detail}
-          onPress={() => router.push({ pathname: "/memory/[id]", params: { id: agent.id } })}
+          icon={<Icon name="note" size={14} color={c.textMuted} />}
+          title={t("memoryCard.notes")}
+          detail={t("memoryCard.notesDetail")}
+          onPress={() => router.push({ pathname: "/notes/[id]", params: { id: agent.id } })}
+        />
+        <PlateRow
+          icon={<Icon name="history" size={14} color={c.textMuted} />}
+          title={t("memoryCard.history")}
+          detail={t("memoryCard.historyDetail")}
+          onPress={() => router.push({ pathname: "/agent-history/[id]", params: { id: agent.id } })}
         />
       </Card>
     </View>

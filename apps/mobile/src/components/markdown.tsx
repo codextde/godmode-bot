@@ -1,13 +1,21 @@
+import { router } from "expo-router";
 import { marked, type Token, type Tokens } from "marked";
 import { memo, useMemo, type ReactNode } from "react";
 import { UITextView as Text } from "@bsky.app/react-native-uitextview";
-import { Linking, ScrollView, StyleSheet, View } from "react-native";
+import { Alert, Linking, StyleSheet, View } from "react-native";
 import { TASK_ATTACHMENT_PATH } from "@godmode/shared";
+import { CodeBlock, PaymentCard, TableBlock } from "./markdown-parts";
 import { RemoteImage } from "./remote-image";
+import { tap } from "./ui";
+import { appHref } from "@/lib/chat-blocks";
 import { t as translate } from "@/lib/i18n";
-import { alpha, fonts, radius, space, type, useColors, type Colors } from "@/lib/theme";
+import { alpha, fonts, space, type, useColors, type Colors } from "@/lib/theme";
 
-/** Agent answers: Markdown rendered with native text (paragraphs, lists, code, quotes, tables, links, task pictures); every block is selectable by range on iOS. */
+/**
+ * Agent answers: Markdown rendered with native text (paragraphs, lists, code, quotes, tables, links, task pictures); every
+ * block is selectable by range on iOS. Code and tables copy, ```payment blocks show the transfer, links to Godmode's
+ * pages open the phone's screens.
+ */
 export const Markdown = memo(function Markdown({ text, color }: { text: string; color?: string }) {
   const c = useColors();
   const tokens = useMemo(() => marked.lexer(text, { gfm: true }), [text]);
@@ -82,13 +90,9 @@ function block(t: Token, key: number, c: Colors, color: string): ReactNode {
     }
     case "code": {
       const code = t as Tokens.Code;
-      return (
-        <ScrollView key={key} horizontal showsHorizontalScrollIndicator={false} style={[styles.code, { backgroundColor: c.sunken }]}>
-          <Text selectable uiTextView style={[type.mono, { color, lineHeight: 19 }]}>
-            {code.text}
-          </Text>
-        </ScrollView>
-      );
+      const lang = (code.lang ?? "").trim().split(/\s/)[0] ?? "";
+      if (lang === "payment") return <PaymentCard key={key} source={code.text} />;
+      return <CodeBlock key={key} code={code.text} lang={lang} />;
     }
     case "blockquote":
       return (
@@ -100,21 +104,15 @@ function block(t: Token, key: number, c: Colors, color: string): ReactNode {
       return <View key={key} style={{ height: StyleSheet.hairlineWidth, backgroundColor: c.borderStrong, marginVertical: 4 }} />;
     case "table": {
       const table = t as Tokens.Table;
-      return (
-        <ScrollView key={key} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ minWidth: "100%" }}>
-          <View style={[styles.table, { borderColor: c.border, minWidth: "100%" }]}>
-            {[table.header, ...table.rows].map((row, r) => (
-              <View key={r} style={[styles.tableRow, { backgroundColor: r === 0 ? c.sunken : "transparent", borderColor: c.border }]}>
-                {row.map((cell, ci) => (
-                  <Text key={ci} selectable uiTextView style={[type.subhead, styles.cell, { color, fontFamily: r === 0 ? fonts.semibold : fonts.regular }]}>
-                    {inline(cell.tokens, c, color)}
-                  </Text>
-                ))}
-              </View>
-            ))}
-          </View>
-        </ScrollView>
+      const rows = [table.header, ...table.rows];
+      const cells = rows.map((row, r) =>
+        row.map((cell, ci) => (
+          <Text key={ci} selectable uiTextView style={[type.subhead, { color, fontFamily: r === 0 ? fonts.semibold : fonts.regular }]}>
+            {inline(cell.tokens, c, color)}
+          </Text>
+        )),
       );
+      return <TableBlock key={key} cells={cells} plain={rows.map((row) => row.map((cell) => plain(cell.tokens).replace(/\s+/g, " ").trim()))} align={table.align} />;
     }
     default:
       return "text" in t && t.text ? (
@@ -155,7 +153,7 @@ function inline(tokens: Token[] | undefined, c: Colors, color: string): ReactNod
       case "link": {
         const link = t as Tokens.Link;
         return (
-          <Text key={i} style={{ color: c.brandStrong, textDecorationLine: "underline" }} onPress={() => /^(https?|mailto):/i.test(link.href) && void Linking.openURL(link.href)}>
+          <Text key={i} style={{ color: c.brandStrong, textDecorationLine: "underline" }} onPress={() => openLink(link.href)}>
             {inline(link.tokens, c, color)}
           </Text>
         );
@@ -170,6 +168,27 @@ function inline(tokens: Token[] | undefined, c: Colors, color: string): ReactNod
         return "text" in t ? decode(String(t.text)) : "";
     }
   });
+}
+
+/** Pages of Godmode open the phone's screen for them; the web and mail open outside. */
+function openLink(href: string) {
+  if (/^(https?|mailto|tel):/i.test(href)) return void Linking.openURL(href);
+  const to = appHref(href);
+  if (to) {
+    tap();
+    router.push(to);
+  } else if (href.startsWith("/") && !href.startsWith("//")) Alert.alert(translate("components:markdown.onComputer"));
+}
+
+/** A cell's text as the reader sees it, for copying. */
+function plain(tokens: Token[] | undefined): string {
+  return (tokens ?? [])
+    .map((t) => {
+      if (t.type === "br") return " ";
+      if ("tokens" in t && t.tokens?.length) return plain(t.tokens);
+      return "text" in t ? decode(String(t.text)) : "";
+    })
+    .join("");
 }
 
 function isTaskPicture(t: Token): t is Tokens.Image {
@@ -208,31 +227,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1.6,
     transform: [{ rotate: "-45deg" }],
   },
-  code: {
-    borderRadius: radius.sm,
-    borderCurve: "continuous",
-    padding: space.md,
-    flexGrow: 0,
-  },
   quote: {
     borderLeftWidth: 3,
     paddingLeft: space.md,
     gap: 8,
-  },
-  table: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: radius.sm,
-    overflow: "hidden",
-  },
-  tableRow: {
-    flexDirection: "row",
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  cell: {
-    flex: 1,
-    minWidth: 84,
-    maxWidth: 220,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
   },
 });

@@ -22,6 +22,7 @@ import {
   listAgentFiles,
   listAgents,
   readAgentFile,
+  withRepo,
   updateAgent,
   writeAgentFile,
 } from "../../agents/service";
@@ -38,7 +39,7 @@ import { beatNow, heartbeatState } from "../../services/heartbeats";
 import { dreamOverview, getDream, isDreaming, revertDream, dreamAll, startDream } from "../../memory/dreaming";
 import { isMemoryPath } from "../../memory/files";
 import { MAX_MEMORY_EDIT_BYTES, readAgentMemory, writeAgentMemory } from "../../memory/editor";
-import { resolveRepoPath } from "../../agents/repo";
+import { readRepoViewable, resolveRepoPath } from "../../agents/repo";
 import {
   createFolder,
   deleteFiles,
@@ -54,8 +55,9 @@ import {
   searchAgentFiles,
 } from "../../agents/files";
 import { getSettings } from "../../services/settings";
-import { conflict } from "../../util";
+import { HttpError, conflict } from "../../util";
 import { requestDevice } from "../auth";
+import { deviceFolderRefusal } from "../../mobile/scope";
 import { requireGrant } from "../grants";
 import { body, computerTargetSchema, z } from "../validate";
 
@@ -218,7 +220,8 @@ export function registerAgentRoutes(app: Hono): void {
         skip: z.array(z.string().max(40)).max(100).optional(),
       }),
     );
-    return c.json(await installTeam(c.req.param("id"), input), 201);
+    // From a phone its agents and automations start like ones made there: no logins or inherited tools, fill-only secrets.
+    return c.json(await installTeam(c.req.param("id"), input, "user", { phone: !!requestDevice(c) }), 201);
   });
 
   app.get("/api/agents/:id", (c) => c.json(getAgent(c.req.param("id"))));
@@ -256,6 +259,9 @@ export function registerAgentRoutes(app: Hono): void {
   // Same setup, fresh memory, no chats or automations. A copy that reads secrets needs the passphrase like a new one.
   app.post("/api/agents/:id/duplicate", async (c) => {
     const source = getAgent(c.req.param("id"));
+    if (source.permissions.secretAccess === "reveal" && requestDevice(c)) {
+      throw new HttpError(403, `${source.name} reads secrets in plain text: copy it in Godmode on your computer.`, "device_forbidden");
+    }
     if (source.permissions.secretAccess === "reveal" && getSettings().security.defaultSecretAccess !== "reveal") requireGrant(c);
     return c.json(await duplicateAgent(source.id));
   });
@@ -292,9 +298,37 @@ export function registerAgentRoutes(app: Hono): void {
 
   /* Repository browser ------------------------------------------------ */
 
-  app.get("/api/agents/:id/files", async (c) => c.json(await listAgentFiles(c.req.param("id"), c.req.query("path") ?? "")));
+  /**
+   * A secondary of a device group forwards its phones' reads here (`x-godmode-phone`): the phones' folder rule runs on
+   * this computer's files too. The header only ever narrows what a request may read.
+   */
+  const phoneFolder = (c: Context) => {
+    if (c.req.header("x-godmode-phone") !== "1") return;
+    const refusal = (c.req.queries("path")?.length ?? 0) > 1 ? "Only files in the agent's folder open on the phone." : deviceFolderRefusal(c.req.param("id") ?? "", c.req.query("path") ?? "");
+    if (refusal) throw new HttpError(403, refusal, "device_forbidden");
+  };
 
-  app.get("/api/agents/:id/file", async (c) => c.json(await readAgentFile(c.req.param("id"), c.req.query("path") ?? "")));
+  app.get("/api/agents/:id/files", async (c) => {
+    phoneFolder(c);
+    return c.json(await listAgentFiles(c.req.param("id"), c.req.query("path") ?? ""));
+  });
+
+  app.get("/api/agents/:id/file", async (c) => {
+    phoneFolder(c);
+    return c.json(await readAgentFile(c.req.param("id"), c.req.query("path") ?? ""));
+  });
+
+  /** A picture or PDF of the repository as it is (the phone's viewer; the desktop shows pictures through /api/files/image). */
+  app.get("/api/agents/:id/files/raw", async (c) => {
+    phoneFolder(c);
+    const file = await readRepoViewable((await withRepo(c.req.param("id"))).repoPath, c.req.query("path") ?? "");
+    return c.body(new Uint8Array(file.data), 200, {
+      "Content-Type": file.mime,
+      "Content-Security-Policy": "sandbox; default-src 'none'",
+      "X-Content-Type-Options": "nosniff",
+      "Cache-Control": "private, no-store",
+    });
+  });
 
   app.put("/api/agents/:id/file", async (c) => {
     const { path, content, create } = await body(c, z.object({ path: z.string().trim().min(1).max(1024), content: z.string(), create: z.boolean().optional() }));

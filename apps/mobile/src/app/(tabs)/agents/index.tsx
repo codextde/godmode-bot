@@ -2,13 +2,14 @@ import { FlashList, type ListRenderItem } from "@shopify/flash-list";
 import { router, Stack } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { memo, useCallback, useMemo, useState } from "react";
-import { RefreshControl, View } from "react-native";
+import { Pressable, RefreshControl, StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
-import type { Agent } from "@godmode/shared";
+import type { Agent, Workspace } from "@godmode/shared";
 import { HeaderActions } from "@/components/header-actions";
+import { Icon } from "@/components/icon";
 import { AgentRow } from "@/components/rows";
 import { FilterChips } from "@/components/filter-chips";
-import { Button, EmptyState, ErrorState, Hairline, SkeletonRows, tap } from "@/components/ui";
+import { Button, EmptyState, ErrorState, Hairline, SkeletonRows, T, tap } from "@/components/ui";
 import { api, errorText } from "@/lib/api";
 import { WorkspaceChip } from "@/components/workspace-chip";
 import { useAgents } from "@/lib/hooks";
@@ -17,7 +18,7 @@ import { useRunCounts } from "@/lib/live";
 import { qk } from "@/lib/query";
 import { usePullRefresh } from "@/lib/use-pull-refresh";
 import { agentsFor, useWorkspace } from "@/lib/workspace";
-import { space } from "@/lib/theme";
+import { radius, space, useColors } from "@/lib/theme";
 
 const NONE = { running: 0, queued: 0 };
 
@@ -30,20 +31,24 @@ const AgentItem = memo(function AgentItem({ agent, running, queued }: { agent: A
   return <AgentRow agent={agent} running={running} queued={queued} onPress={() => openAgent(agent.id)} />;
 });
 
-const Separator = () => <Hairline inset={78} />;
-
 type Filter = "all" | "running" | "needs" | "scheduled" | "disabled";
+
+type Item = { kind: "group"; key: string; title: string; icon: string | null; count: number } | { kind: "agent"; key: string; agent: Agent; divided: boolean };
+
+const matches = (a: Agent, query: string) => `${a.name} ${a.role} ${a.description} ${a.instructions}`.toLowerCase().includes(query);
 
 export default function Agents() {
   const { t } = useTranslation(["tabs", "common"]);
   const agents = useAgents();
-  const { id: workspaceId, projectId } = useWorkspace();
+  const { id: workspaceId, projectId, workspaces } = useWorkspace();
   // Working means running; a run waiting its turn is only queued.
   const counts = useRunCounts();
   const routines = useQuery({ queryKey: qk.allRoutines, queryFn: () => api.routines.list() });
   const missing = useQuery({ queryKey: qk.missingLogins, queryFn: api.missingLogins.open });
   const pull = usePullRefresh(agents.refetch);
   const [filter, setFilter] = useState<Filter>("all");
+  const [search, setSearch] = useState("");
+  const query = search.trim().toLowerCase();
 
   const scoped = useMemo(() => agentsFor(agents.data ?? [], workspaceId), [agents.data, workspaceId]);
   const automated = useMemo(() => new Set((routines.data ?? []).map((r) => r.agentId)), [routines.data]);
@@ -60,10 +65,10 @@ export default function Agents() {
     } satisfies Record<Filter, (a: Agent) => boolean>;
   }, [counts, missingFor, automated]);
 
-  const data = useMemo(
+  const visible = useMemo(
     () =>
       scoped
-        .filter(tests[filter])
+        .filter((a) => tests[filter](a) && (!query || matches(a, query)))
         .sort(
           (a, b) =>
             Number(!!projectId && b.projectId === projectId) - Number(!!projectId && a.projectId === projectId) ||
@@ -73,12 +78,36 @@ export default function Agents() {
             (b.lastRunAt ?? "").localeCompare(a.lastRunAt ?? "") ||
             a.name.localeCompare(b.name),
         ),
-    [scoped, tests, filter, projectId],
+    [scoped, tests, filter, query, projectId],
   );
-  const renderItem: ListRenderItem<Agent> = useCallback(
+
+  // In all workspaces, like the desktop, everyone sits under their workspace (global first).
+  const grouped = !workspaceId && scoped.some((a) => a.workspaceId);
+  const items = useMemo(() => {
+    const rows = (list: Agent[]): Item[] => list.map((agent, i) => ({ kind: "agent", key: agent.id, agent, divided: i > 0 }));
+    if (!grouped) return rows(visible);
+    const order = new Map<string | null, number>([[null, -1], ...workspaces.map((w, i): [string, number] => [w.id, i])]);
+    const groups = new Map<string | null, Agent[]>();
+    for (const a of visible) groups.set(a.workspaceId, [...(groups.get(a.workspaceId) ?? []), a]);
+    return [...groups.entries()]
+      .sort(([a], [b]) => (order.get(a) ?? 1e9) - (order.get(b) ?? 1e9))
+      .flatMap(([id, list]): Item[] => {
+        const workspace: Workspace | undefined = workspaces.find((w) => w.id === id);
+        const title = id ? (workspace?.name ?? t("agents.workspace")) : t("agents.global");
+        return [{ kind: "group", key: `g-${id ?? "global"}`, title, icon: id ? workspace?.icon || "🗂️" : null, count: list.length }, ...rows(list)];
+      });
+  }, [grouped, visible, workspaces, t]);
+
+  const renderItem: ListRenderItem<Item> = useCallback(
     ({ item }) => {
-      const n = counts.get(item.id) ?? NONE;
-      return <AgentItem agent={item} running={n.running} queued={n.queued} />;
+      if (item.kind === "group") return <GroupTitle title={item.title} icon={item.icon} count={item.count} />;
+      const n = counts.get(item.agent.id) ?? NONE;
+      return (
+        <>
+          {item.divided && <Hairline inset={78} />}
+          <AgentItem agent={item.agent} running={n.running} queued={n.queued} />
+        </>
+      );
     },
     [counts],
   );
@@ -89,18 +118,22 @@ export default function Agents() {
   return (
     <>
       <Stack.Title large>{t("agents.title")}</Stack.Title>
+      <Stack.SearchBar placeholder={t("agents.search")} hideWhenScrolling={false} onChangeText={(e) => setSearch(e.nativeEvent.text)} onCancelButtonPress={() => setSearch("")} />
       <HeaderActions
         actions={[
+          { icon: "orgChart", label: t("agents.orgChart"), onPress: () => router.push("/agents/org") },
           { icon: "clock", label: t("agents.automations"), onPress: () => router.push("/automations") },
           ...(activityOn ? [{ icon: "pulse" as const, label: t("agents.activity"), onPress: () => router.push("/activity") }] : []),
         ]}
       />
       <FlashList
-        data={data}
-        keyExtractor={(agent) => agent.id}
+        data={items}
+        keyExtractor={(item) => item.key}
+        getItemType={(item) => item.kind}
         renderItem={renderItem}
         extraData={counts}
         contentInsetAdjustmentBehavior="automatic"
+        keyboardDismissMode="on-drag"
         contentContainerStyle={{ paddingHorizontal: space.sm, paddingBottom: 140 }}
         refreshControl={<RefreshControl {...pull} />}
         ListHeaderComponent={
@@ -122,12 +155,14 @@ export default function Agents() {
             )}
           </View>
         }
-        ItemSeparatorComponent={Separator}
+        ListFooterComponent={visible.length > 0 && !query ? <NewAgentRow onPress={newAgent} /> : null}
         ListEmptyComponent={
           agents.isLoading ? (
             <SkeletonRows count={7} avatar={46} />
           ) : agents.isError ? (
             <ErrorState title={t("agents.loadError")} error={errorText(agents.error)} onRetry={() => void agents.refetch()} />
+          ) : query ? (
+            <EmptyState icon="search" title={t("agents.noResults.title")} body={t("agents.noResults.body", { query: search.trim() })} />
           ) : scoped.length ? (
             <EmptyState icon="agents" title={t("agents.noMatch.title")} body={t("agents.noMatch.body")} />
           ) : (
@@ -143,3 +178,70 @@ export default function Agents() {
     </>
   );
 }
+
+function GroupTitle({ title, icon, count }: { title: string; icon: string | null; count: number }) {
+  const c = useColors();
+  return (
+    <View style={styles.group}>
+      {icon ? <T style={{ fontSize: 13 }}>{icon}</T> : <Icon name="globe" size={12} color={c.textMuted} />}
+      <T variant="eyebrow" muted numberOfLines={1} style={{ flexShrink: 1 }}>
+        {title}
+      </T>
+      <T variant="caption" color={c.textFaint} style={{ fontVariant: ["tabular-nums"] }}>
+        {count}
+      </T>
+    </View>
+  );
+}
+
+function NewAgentRow({ onPress }: { onPress: () => void }) {
+  const c = useColors();
+  const { t } = useTranslation("tabs");
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={() => {
+        tap();
+        onPress();
+      }}
+      style={({ pressed }) => [styles.newRow, pressed && { backgroundColor: c.sunken }]}
+    >
+      <View style={[styles.newTile, { borderColor: c.borderStrong }]}>
+        <Icon name="plus" size={16} color={c.textMuted} />
+      </View>
+      <T variant="callout" muted style={{ fontWeight: "500" }}>
+        {t("agents.newAgent")}
+      </T>
+    </Pressable>
+  );
+}
+
+const styles = StyleSheet.create({
+  group: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: space.lg,
+    paddingTop: space.lg,
+    paddingBottom: space.xs,
+  },
+  newRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+    marginTop: space.sm,
+    paddingVertical: space.md,
+    paddingHorizontal: space.lg,
+    borderRadius: radius.md,
+    borderCurve: "continuous",
+  },
+  newTile: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    borderWidth: StyleSheet.hairlineWidth * 2,
+    borderStyle: "dashed",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+});

@@ -1,7 +1,8 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import * as Haptics from "expo-haptics";
 import { Stack, useLocalSearchParams } from "expo-router";
 import { useMemo, useState, type ReactNode } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { formatBytes, type DreamDetail, type DreamFileChange, type DreamWorkspaceChange } from "@godmode/shared";
 import { ACTIVE_DREAM, ChangeKindChip, DreamReasonBadge, DreamStatusBadge, ROLLED_BACK, dreamWhen, reviewedLabel } from "@/components/dream-parts";
@@ -10,7 +11,8 @@ import { Badge, Card, ErrorState, Hairline, LoadingState, Row, SectionTitle, T, 
 import { api, ApiError, errorText, updateDesktopMessage } from "@/lib/api";
 import { useAgents } from "@/lib/hooks";
 import { diffFile, foldContext, type DiffLine, type FileDiff } from "@/lib/line-diff";
-import { qk } from "@/lib/query";
+import { qk, queryClient } from "@/lib/query";
+import { HeaderActions } from "@/components/header-actions";
 import { intlLocale } from "@/lib/i18n";
 import { alpha, fonts, radius, space, useColors, type Colors } from "@/lib/theme";
 
@@ -45,7 +47,17 @@ export default function DreamScreen() {
 
 function DreamView({ dream: d }: { dream: DreamDetail }) {
   const c = useColors();
-  const { t } = useTranslation("dreams");
+  const { t } = useTranslation(["dreams", "agents"]);
+  const stop = useMutation({
+    mutationFn: (runId: string) => api.runs.cancel(runId),
+    onSuccess: () => {
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      void queryClient.invalidateQueries({ queryKey: qk.dream(d.id) });
+      void queryClient.invalidateQueries({ queryKey: qk.dreams(d.agentId) });
+    },
+    onError: (err) => Alert.alert(t("agents:dreamStop.failed"), errorText(err)),
+  });
+  const canStop = ACTIVE_DREAM.includes(d.status) && !!d.runId && !stop.isPending && !(stop.isSuccess && stop.variables === d.runId);
   const agentName = useAgents().byId.get(d.agentId)?.name ?? t("view.theAgent");
   const files = useMemo(() => d.fileChanges.map((f) => ({ file: f, diff: diffFile(f.before, f.after) })), [d.fileChanges]);
   const totals = files.reduce((sum, f) => ({ added: sum.added + f.diff.added, removed: sum.removed + f.diff.removed }), { added: 0, removed: 0 });
@@ -62,6 +74,7 @@ function DreamView({ dream: d }: { dream: DreamDetail }) {
   return (
     <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content}>
       <Stack.Title>{t("view.title")}</Stack.Title>
+      {canStop ? <HeaderActions actions={[{ icon: "stop", label: t("agents:dreamStop.stop"), onPress: () => stop.mutate(d.runId!) }]} /> : null}
       <View style={{ gap: space.sm, paddingTop: space.md }}>
         <Row style={{ gap: 6 }}>
           <Icon name="moon" size={13} color={c.dream} />

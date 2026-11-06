@@ -11,6 +11,7 @@ import { hostOf } from "@/lib/format";
 import { t } from "@/lib/i18n";
 import { isLive, screenHref, useAndroidFrame, useStreamFrame, useVmFrame, type LiveScreen } from "@/lib/screens";
 import { radius, space, useColors } from "@/lib/theme";
+import { showVmMenu, vmActions } from "@/lib/vm-actions";
 
 const LABEL_MUTED = "rgba(255, 255, 255, 0.72)";
 const KIND_ICON: Record<LiveScreen["kind"], IconName> = { browser: "globe", vm: "vm", share: "display", android: "phone" };
@@ -50,6 +51,15 @@ export function ScreenTile({ screen, style, compact }: { screen: LiveScreen; sty
         tap();
         router.push(screenHref(screen));
       }}
+      // A VM's power menu (start, suspend, restart, stop) on a long press.
+      onLongPress={
+        screen.kind === "vm" && vmActions(screen.vm).length
+          ? () => {
+              tap();
+              showVmMenu(screen.vm);
+            }
+          : undefined
+      }
       style={({ pressed }) => [styles.tile, { backgroundColor: c.sunken, opacity: pressed ? 0.85 : 1, transform: [{ scale: pressed ? 0.985 : 1 }] }, style]}
     >
       {uri ? (

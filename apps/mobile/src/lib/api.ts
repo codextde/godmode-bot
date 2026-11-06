@@ -4,6 +4,14 @@ import { File } from "expo-file-system";
 import type {
   Agent,
   AgentCharacter,
+  Artifact,
+  ArtifactMessageResult,
+  ArtifactPatch,
+  ArtifactStartInput,
+  ArtifactStartResult,
+  ArtifactSummary,
+  ArtifactVersion,
+  ArtifactVersionDetail,
   AgentMemory,
   AgentTemplate,
   AnswerQuestionInput,
@@ -416,14 +424,17 @@ export async function pairWith(payload: MobilePairingPayload): Promise<Connectio
 
 /** What the phone may change of the settings, by section (the computer refuses the rest). */
 export type SettingsPatch = {
-  general?: Partial<Pick<Settings["general"], "userName" | "desktopNotifications" | "theme" | "mode" | "language" | "timeFormat">>;
+  general?: Partial<Pick<Settings["general"], "userName" | "desktopNotifications" | "theme" | "mode" | "language" | "timeFormat" | "aiChatTitles" | "aiNotificationSummaries">>;
   runner?: Partial<Omit<Settings["runner"], "claudePath" | "extraArgs" | "bypassPermissions">>;
-  browser?: Partial<Pick<Settings["browser"], "enabled" | "headless" | "keepAliveMinutes" | "liveView" | "stealth" | "muteAudio">>;
-  computer?: Partial<Pick<Settings["computer"], "enabled" | "allowForeground" | "agentCursor" | "liveView" | "liveViewFps">>;
+  browser?: Partial<Pick<Settings["browser"], "enabled" | "headless" | "keepAliveMinutes" | "liveView" | "stealth" | "muteAudio" | "passkeys">>;
+  computer?: Partial<Pick<Settings["computer"], "enabled" | "allowForeground" | "agentCursor" | "liveView" | "liveViewFps" | "screenshotMaxSize">>;
   vm?: Partial<Pick<Settings["vm"], "enabled" | "onQuit" | "idleStopMinutes">>;
   memory?: Partial<Pick<Settings["memory"], "autoCommit" | "reflectAfterRun" | "injectMemory">> & { dreaming?: Partial<Settings["memory"]["dreaming"]> };
   maintenance?: Partial<Settings["maintenance"]>;
-};
+  review?: Partial<Settings["review"]>;
+  voice?: Partial<Omit<Settings["voice"], "openaiBaseUrl" | "hexPath" | "hexModel">>;
+  phone?: Partial<Pick<Settings["phone"], "enabled" | "callerName" | "language" | "maxMinutes" | "quietFrom" | "quietTo" | "inboundGreeting">>;
+} & Partial<Record<"activity" | "artifacts" | "integrations" | "messaging" | "plugins" | "cards" | "ssh" | "sshKeys" | "android", { enabled: boolean }>>;
 
 /** Folders are kept as they are (`path`); repositories are added by their clone URL. */
 export type SourceInput = { kind: "folder"; path: string } | { kind: "git"; url: string; branch?: string | null } | { kind: "remote"; serverId: string; path: string };
@@ -432,6 +443,8 @@ export type WorkspacePatch = {
   name?: string;
   description?: string;
   icon?: string;
+  /** One of AGENT_COLORS (or a hex color from the desktop). */
+  color?: string;
   instructions?: string;
   autoMerge?: boolean;
   browserProfileId?: string | null;
@@ -458,6 +471,9 @@ export type AgentPatch = {
 };
 
 export type ModelChoicePatch = { model?: string | null; effort?: Effort | null; ultracode?: boolean | null };
+
+/** A chat's own project, browser profile and instructions (null / "" = the agent's). */
+export type ChatPlacePatch = { projectId?: string | null; browserProfileId?: string | null; instructions?: string };
 
 export type BrowserInput =
   | { type: "click"; x: number; y: number }
@@ -508,6 +524,27 @@ export const api = {
     heartbeat: (id: string) => get<AgentHeartbeatState>(`/api/agents/${id}/heartbeat`),
     /** "Wake now": one beat right away (400 when the agent is switched off). */
     beat: (id: string) => post<HeartbeatBeat>(`/api/agents/${id}/heartbeat/beat`, {}),
+    /** Everything it works on stands still (409 when it works on nothing); `resume` continues it where it stopped. */
+    pause: (id: string) => post<{ paused: number }>(`/api/agents/${id}/pause`, {}, 30_000),
+    resume: (id: string) => post<{ continued: number }>(`/api/agents/${id}/continue`, {}),
+    /** A one-off task in a new chat; without a prompt it follows its instructions. */
+    runOnce: (id: string, prompt: string, workspaceId: string | null) => post<StartChatResult>(`/api/agents/${id}/run`, { prompt, workspaceId }),
+    /** Same setup, fresh memory, no chats or automations. One that reads secrets in plain text is copied on the computer. */
+    duplicate: (id: string) => post<Agent>(`/api/agents/${id}/duplicate`, {}),
+    /** Its chats, automations and memory go with it; never the built-in agent. */
+    remove: (id: string) => del<{ ok: true }>(`/api/agents/${id}`),
+    /** Every change to its files, newest first. */
+    commits: (id: string, limit = 100) => get<import("@godmode/shared").GitCommit[]>(`/api/agents/${id}/commits`, { limit }),
+    /** Its notes under memory/ (the phone writes nothing else of its folder). */
+    notes: (id: string, dir = "memory") => get<import("@godmode/shared").AgentFileEntry[]>(`/api/agents/${id}/files`, { path: dir }),
+    note: (id: string, path: string) => get<{ path: string; content: string }>(`/api/agents/${id}/file`, { path }),
+    saveNote: (id: string, path: string, content: string, create?: boolean) => put<{ ok: true }>(`/api/agents/${id}/file`, { path, content, ...(create ? { create } : {}) }),
+  },
+
+  teams: {
+    /** Whole teams and companies to install in one go. */
+    templates: () => get<import("@godmode/shared").TeamTemplate[]>("/api/team-templates"),
+    install: (id: string, input: import("@godmode/shared").TeamInstallInput) => post<import("@godmode/shared").TeamInstallResult>(`/api/team-templates/${id}/install`, input, 60_000),
   },
 
   dreams: {
@@ -535,6 +572,18 @@ export const api = {
 
   models: (refresh = false) => get<ModelCatalog>("/api/models", refresh ? { refresh: 1 } : {}),
 
+  /** Chats, messages and tickets by their words; agents' notes are searched on the computer. */
+  search: (q: string, limit = 20) => get<import("@godmode/shared").SearchResults>("/api/search", { q, limit, notes: 0 }),
+
+  voice: {
+    /** The computer writes down what was said, with its own key or Hex (400 `voice_not_set_up` when it has neither). */
+    transcribe: (file: { uri: string; name: string; mime: string }) => {
+      const form = new FormData();
+      form.append("audio", { name: file.name, type: file.mime, bytes: () => new File(file.uri).bytes() } as unknown as Blob);
+      return post<{ text: string }>("/api/voice/transcribe", form, 120_000);
+    },
+  },
+
   conversations: {
     /** With `workspaceId`: the workspace's chats. `archived`: the archive; with `ongoing` only its chats that still go on. */
     list: (q: { search?: string; limit?: number; agentId?: string; workspaceId?: string | null; archived?: boolean; ongoing?: boolean } = {}) =>
@@ -558,7 +607,7 @@ export const api = {
         queue: true,
         queueId: input.queueId,
       }),
-    update: (id: string, input: { title?: string; pinned?: boolean; archived?: boolean } & ModelChoicePatch) => patch<Conversation>(`/api/conversations/${id}`, input),
+    update: (id: string, input: { title?: string; pinned?: boolean; archived?: boolean } & ModelChoicePatch & ChatPlacePatch) => patch<Conversation>(`/api/conversations/${id}`, input),
     queue: {
       edit: (id: string, messageId: string, content: string) => patch<QueuedMessage>(`/api/conversations/${id}/queue/${messageId}`, { content }),
       remove: (id: string, messageId: string) => del<{ ok: true }>(`/api/conversations/${id}/queue/${messageId}`),
@@ -574,6 +623,8 @@ export const api = {
     continue: (id: string) => post<Run>(`/api/conversations/${id}/continue`),
     /** Make the chat's run stand still; it continues where it stopped. */
     pause: (id: string) => post<{ ok: true }>(`/api/conversations/${id}/pause`, {}, 30_000),
+    /** Whether a run that waits for Claude's usage limit continues by itself after the reset. */
+    autoContinue: (id: string, auto: boolean) => patch<import("@godmode/shared").RunPause>(`/api/conversations/${id}/pause`, { auto }),
     /** The follow-up the agent set: moved, run now or cancelled. */
     followup: {
       move: (id: string, dueAt: string) => patch<unknown>(`/api/conversations/${id}/followup`, { dueAt }),
@@ -586,7 +637,10 @@ export const api = {
 
   chat: {
     /** With `workspaceId`: a global agent's chat belongs to that workspace. */
-    start: (input: { agentId?: string; content: string; attachments?: UploadFile[]; workspaceId?: string | null; projectId?: string | null } & ModelChoicePatch) =>
+    start: (
+      input: { agentId?: string; content: string; attachments?: UploadFile[]; workspaceId?: string | null; projectId?: string | null; private?: boolean } & ModelChoicePatch &
+        Omit<ChatPlacePatch, "projectId">,
+    ) =>
       withProject(input, (body) => post<StartChatResult>("/api/chat", body)),
   },
 
@@ -607,8 +661,18 @@ export const api = {
       agentId?: string | null;
     }) => withProject(input, (body) => post<Task>("/api/tasks", body)),
     /** Moving to To do starts the agent; moving away from In progress stops it. Archived tasks are off the board. */
-    update: (id: string, input: { title?: string; description?: string; status?: TaskStatus; agentId?: string | null; archived?: boolean; projectId?: string | null }) =>
-      patch<Task>(`/api/tasks/${id}`, input),
+    update: (
+      id: string,
+      input: { title?: string; description?: string; status?: TaskStatus; agentId?: string | null; archived?: boolean; projectId?: string | null } & Pick<
+        import("@godmode/shared").TaskPatch,
+        "priority" | "dueDate" | "labels" | "goalId" | "waitsFor" | "blockedReason"
+      >,
+    ) => patch<Task>(`/api/tasks/${id}`, input),
+    /** Gone for good: its worktree is removed, a pushed branch and pull request stay. */
+    delete: (id: string) => del<{ ok: true }>(`/api/tasks/${id}`),
+    /** Push the ticket's branch to its own remote (or with a pull request into its base branch). */
+    push: (id: string) => post<Task>(`/api/tasks/${id}/push`, {}, 120_000),
+    openPullRequest: (id: string) => post<Task>(`/api/tasks/${id}/pull-request`, {}, 120_000),
     /** Approve a ticket in review: its open pull request is merged first, then it's done. */
     approve: (id: string) => post<Task>(`/api/tasks/${id}/approve`),
     /** Feedback for the agent in the task's chat; the task goes back to work. */
@@ -624,7 +688,7 @@ export const api = {
   },
 
   runs: {
-    list: (q: { status?: string; limit?: number; agentId?: string } = {}) => get<Run[]>("/api/runs", q),
+    list: (q: { status?: string; limit?: number; agentId?: string; parentRunId?: string } = {}) => get<Run[]>("/api/runs", q),
     get: (id: string) => get<Run>(`/api/runs/${id}`),
     /** The run's raw stream-json log. */
     log: (id: string) => get<string>(`/api/runs/${id}/log`),
@@ -666,6 +730,8 @@ export const api = {
     screenshot: (id: string, size = 960) => get<{ data: string; mime: string; width: number; height: number }>(`/api/vms/${id}/screenshot`, { size }),
     start: (id: string) => post<Vm>(`/api/vms/${id}/start`),
     stop: (id: string) => post<Vm>(`/api/vms/${id}/stop`),
+    suspend: (id: string) => post<Vm>(`/api/vms/${id}/suspend`, {}, 60_000),
+    restart: (id: string) => post<Vm>(`/api/vms/${id}/restart`, {}, 120_000),
     input: (id: string, event: ComputerInputEvent, frame: { width: number; height: number }) => post<{ ok: true }>(`/api/vms/${id}/input`, { event, frame }),
   },
 
@@ -675,9 +741,28 @@ export const api = {
     screenshot: (id: string, size = 720) => get<AndroidScreenshot>(`/api/android/devices/${id}/screenshot`, { size }),
   },
 
+  artifacts: {
+    list: (q: { workspaceId?: string | null; agentId?: string; conversationId?: string } = {}) => get<ArtifactSummary[]>("/api/artifacts", q),
+    get: (id: string) => get<Artifact>(`/api/artifacts/${id}`),
+    update: (id: string, input: Pick<ArtifactPatch, "title" | "pinned" | "refreshPrompt">) => patch<ArtifactSummary>(`/api/artifacts/${id}`, input),
+    /** Data the app saved (`godmode.setData`). */
+    saveData: (id: string, data: unknown) => put<{ dataUpdatedAt: string }>(`/api/artifacts/${id}/data`, { data }),
+    versions: (id: string) => get<ArtifactVersion[]>(`/api/artifacts/${id}/versions`),
+    version: (id: string, version: number) => get<ArtifactVersionDetail>(`/api/artifacts/${id}/versions/${version}`),
+    restore: (id: string, version: number) => post<Artifact>(`/api/artifacts/${id}/restore`, { version }),
+    /** The human's words for its agent, sent to the artifact's chat. */
+    message: (id: string, content: string, source: "human" | "app" = "human") => post<ArtifactMessageResult>(`/api/artifacts/${id}/message`, { content, source }),
+    refresh: (id: string) => post<ArtifactMessageResult>(`/api/artifacts/${id}/refresh`),
+    reviewDone: (id: string) => post<ArtifactMessageResult | { conversationId: null; queued: false }>(`/api/artifacts/${id}/review-done`),
+    start: (input: ArtifactStartInput) => post<ArtifactStartResult>("/api/artifacts/start", input),
+    delete: (id: string) => del<{ ok: true }>(`/api/artifacts/${id}`),
+  },
+
   notifications: {
     list: () => get<AppNotification[]>("/api/notifications", { limit: 30 }),
     read: (ids: string[] | "all") => post<{ ok: true }>("/api/notifications/read", { ids }),
+    /** Removes every notification; the runs behind them stay. */
+    clear: () => del<{ ok: true }>("/api/notifications"),
   },
 
   missingLogins: {
@@ -714,6 +799,19 @@ export const api = {
     /** One of optionId, decision (with an optional note) or text; the run that asked continues with it. */
     answer: (id: string, input: AnswerQuestionInput) => post<AnswerQuestionResult>(`/api/questions/${id}/answer`, input),
   },
+
+  /** What waits for the human, computed by the computer like the desktop's Needs you (read-only). */
+  attention: () => get<import("@godmode/shared").AttentionItem[]>("/api/attention"),
+
+  /** Work the main agent offers to take on: "Do it" starts its chat, "No thanks" declines. */
+  offers: {
+    list: (workspaceId: string | null) => get<import("@godmode/shared").Offer[]>("/api/offers", workspaceId ? { workspaceId } : {}),
+    accept: (id: string) => post<import("@godmode/shared").AcceptOfferResult>(`/api/offers/${id}/accept`, {}, 30_000),
+    dismiss: (id: string) => post<import("@godmode/shared").Offer>(`/api/offers/${id}/dismiss`),
+  },
+
+  /** What started (or skipped) every automation lately, newest first. */
+  automationEvents: (limit = 100) => get<AutomationEvent[]>("/api/automation-events", { limit }),
 };
 
 export function errorText(err: unknown): string {

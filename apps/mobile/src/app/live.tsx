@@ -4,7 +4,6 @@ import { router, useLocalSearchParams } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import type { TFunction } from "i18next";
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, TextInput, useWindowDimensions, View, type GestureResponderEvent } from "react-native";
 import { KeyboardStickyView, useKeyboardState } from "react-native-keyboard-controller";
 import Animated, { FadeIn, FadeOut, ZoomIn } from "react-native-reanimated";
@@ -20,6 +19,7 @@ import { useNow } from "@/lib/hooks";
 import { useLive, type Frame } from "@/lib/live";
 import { qk, queryClient } from "@/lib/query";
 import { useAndroidFrame, useStreamFrame, useVmFrame, type LiveScreen } from "@/lib/screens";
+import { showVmMenu, type VmAction } from "@/lib/vm-actions";
 
 const WHITE = "#FFFFFF";
 const DIM = "rgba(255,255,255,0.7)";
@@ -47,7 +47,7 @@ const MAC_KEYS: Key[] = [
 ];
 
 export default function Live() {
-  const { t } = useTranslation(["chat", "common"]);
+  const { t } = useTranslation(["chat", "common", "integrations"]);
   const params = useLocalSearchParams<{ kind: LiveScreen["kind"]; id: string; title?: string; chat?: string }>();
   const chat = params.chat || null;
   const insets = useSafeAreaInsets();
@@ -101,7 +101,8 @@ export default function Live() {
   });
 
   const vmAction = useMutation({
-    mutationFn: (action: "start" | "stop") => (action === "start" ? api.vms.start(params.id) : api.vms.stop(params.id)),
+    mutationFn: (action: VmAction) => api.vms[action](params.id),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: qk.vms }),
     onError: (err) => Alert.alert(t("live.vmFailed"), errorText(err)),
   });
 
@@ -267,7 +268,7 @@ export default function Live() {
           </View>
         </Glass>
         {params.kind === "vm" && vm?.state === "running" ? (
-          <GlassIconButton icon="power" label={t("live.stopVm")} onPress={() => confirmStop(() => vmAction.mutate("stop"), t)} dark />
+          <GlassIconButton icon="power" label={t("integrations:vm.menu")} onPress={() => showVmMenu(vm, (action) => vmAction.mutate(action))} dark />
         ) : (
           <View style={{ width: 44 }} />
         )}
@@ -343,13 +344,6 @@ export default function Live() {
       ) : null}
     </View>
   );
-}
-
-function confirmStop(stop: () => void, t: TFunction<["chat", "common"]>) {
-  Alert.alert(t("live.stopVmTitle"), t("live.stopVmMessage"), [
-    { text: t("common:actions.cancel"), style: "cancel" },
-    { text: t("common:actions.stop"), style: "destructive", onPress: stop },
-  ]);
 }
 
 const styles = StyleSheet.create({

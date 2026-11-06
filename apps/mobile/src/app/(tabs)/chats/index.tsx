@@ -50,8 +50,7 @@ export default function Chats() {
   const [q, setQ] = useState("");
   useEffect(() => {
     const next = search.trim();
-    if (!next) return setQ("");
-    const timer = setTimeout(() => setQ(next), 300);
+    const timer = setTimeout(() => setQ(next), next ? 300 : 0);
     return () => clearTimeout(timer);
   }, [search]);
   const tab = useChatFilters((s) => s.tab);
@@ -180,6 +179,7 @@ export default function Chats() {
               <WorkspaceChip />
               {unread.length > 0 && <MarkRead onPress={markRead} />}
             </Row>
+            {q ? <SearchEverywhere query={q} /> : null}
             {!q && (
               <SegmentedTabs
                 label={t("chats.sourceLabel")}
@@ -224,6 +224,31 @@ export default function Chats() {
         }
       />
     </>
+  );
+}
+
+/** While searching chats: the same words through messages, tasks and agents too. */
+function SearchEverywhere({ query }: { query: string }) {
+  const c = useColors();
+  const { t } = useTranslation("chat");
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={() => {
+        tap();
+        router.push({ pathname: "/search", params: { q: query } });
+      }}
+      style={({ pressed }) => [
+        { flexDirection: "row", alignItems: "center", gap: space.sm, paddingHorizontal: space.md, height: 44, borderRadius: radius.lg, borderCurve: "continuous", backgroundColor: c.surface },
+        pressed && { backgroundColor: c.sunken },
+      ]}
+    >
+      <Icon name="search" size={15} color={c.textMuted} />
+      <T variant="subhead" numberOfLines={1} style={{ flex: 1 }}>
+        {t("search.everywhere", { query })}
+      </T>
+      <Icon name="chevron" size={12} color={c.textMuted} />
+    </Pressable>
   );
 }
 

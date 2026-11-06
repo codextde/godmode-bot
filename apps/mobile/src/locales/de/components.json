@@ -207,6 +207,10 @@
   "headerActions": {
     "more": "Mehr"
   },
+  "filterToolbar": {
+    "filter": "Filtern",
+    "clear": "Filter zurücksetzen"
+  },
   "taskRow": {
     "status": {
       "backlog": "Backlog",
@@ -446,7 +450,31 @@
   },
   "markdown": {
     "done": "Erledigt",
-    "notDone": "Nicht erledigt"
+    "notDone": "Nicht erledigt",
+    "copyCode": "Code kopieren",
+    "allLines_one": "{{count}} Zeile zeigen",
+    "allLines_other": "Alle {{count}} Zeilen zeigen",
+    "onComputer": "Das öffnest du in Godmode auf deinem Computer.",
+    "table": {
+      "copy": "Tabelle kopieren",
+      "copyMarkdown": "Als Markdown kopieren",
+      "copyCsv": "Als CSV kopieren",
+      "fullScreen": "Vollbild",
+      "title": "Tabelle"
+    },
+    "payment": {
+      "transfer": "Überweisung",
+      "amount": "Betrag",
+      "recipient": "Empfänger",
+      "reference": "Verwendungszweck",
+      "invalid": {
+        "name": "Überweisung nicht angezeigt: Der Empfängername fehlt oder ist länger als 70 Zeichen.",
+        "iban": "Überweisung nicht angezeigt: Die IBAN ist ungültig.",
+        "bic": "Überweisung nicht angezeigt: Die BIC ist ungültig.",
+        "amount": "Überweisung nicht angezeigt: Der Betrag ist ungültig.",
+        "purpose": "Überweisung nicht angezeigt: Der Verwendungszweck ist zu lang (max. 140 Zeichen)."
+      }
+    }
   },
   "setup": {
     "changePicture": "Bild ändern",
@@ -911,7 +939,10 @@
       "stopped": "Gestoppt",
       "done": "Fertig",
       "report": "Bericht",
-      "result": "Ergebnis"
+      "result": "Ergebnis",
+      "transcript": "Vollständiger Verlauf",
+      "allSteps_one": "{{count}} Schritt",
+      "allSteps_other": "Alle {{count}} Schritte"
     },
     "subagents": {
       "helpers_one": "{{count}} Helfer",
@@ -938,6 +969,65 @@
     "thinkingStep": "Denkt nach",
     "thinking": "Denkt nach…",
     "compressedAuto": "Automatisch komprimiert",
-    "compressed": "Chat komprimiert"
+    "compressed": "Chat komprimiert",
+    "quote": "Zitieren",
+    "quoted": "Zitiert",
+    "quoteReply": "Antwort in deiner Nachricht zitieren"
+  },
+  "chatCards": {
+    "handoff": {
+      "newChat": "Neuer Chat",
+      "starting": "Neuer Chat startet…",
+      "continued": "In einem neuen Chat weitergeführt",
+      "failed": "Neuer Chat konnte nicht starten"
+    },
+    "delegate": {
+      "handedTo": "Übergeben an",
+      "anotherAgent": "einen anderen Agenten",
+      "openChat": "Öffnet seinen Chat",
+      "refused": "Übergabe fehlgeschlagen",
+      "working": "Arbeitet daran…",
+      "queued": "In der Warteschlange",
+      "paused": "Pausiert, öffne den Chat, um zu sehen, warum",
+      "done": "Fertig",
+      "failed": "Fehlgeschlagen",
+      "stopped": "Gestoppt",
+      "handingOver": "Wird übergeben…",
+      "handedOver": "Übergeben",
+      "stopFailed": "Konnte nicht gestoppt werden",
+      "stopPart": "Teil von {{name}} stoppen",
+      "whatWentWrong": "Was schiefging",
+      "resultOf": "Ergebnis von {{name}}",
+      "result": "Ergebnis"
+    },
+    "workflow": {
+      "workflow": "Workflow",
+      "running": "Läuft…",
+      "completed": "Abgeschlossen",
+      "stopped": "Gestoppt",
+      "starting": "Startet…",
+      "failed": "Fehlgeschlagen",
+      "noResult": "Kein Ergebnis",
+      "agents": "{{done}}/{{total}} Agenten",
+      "notFinished": "Nicht fertig geworden",
+      "agent": {
+        "queued": "Wartet",
+        "running": "Läuft",
+        "done": "Fertig",
+        "failed": "Fehlgeschlagen"
+      }
+    },
+    "missingLogin": {
+      "needLoginFor": "Ich brauche einen Login für {{service}}",
+      "needLogin": "Ich brauche einen Login für eine Website",
+      "openInbox": "Öffnet den Posteingang"
+    }
+  },
+  "subagentSheet": {
+    "loadFailed": "Chat konnte nicht geladen werden",
+    "gone": "Die Arbeit dieses Helfers ist nicht mehr im Chat"
+  },
+  "attachmentPictures": {
+    "enlarge": "{{name}} größer anzeigen"
   }
 }

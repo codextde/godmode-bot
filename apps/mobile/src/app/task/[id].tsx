@@ -1,4 +1,4 @@
-import { isOverdue, isWaiting, mergesOnApprove, reopenStatus, waitsForAnswer, waitsForSubtasks, waitsForTickets } from "@godmode/shared";
+import { githubBranchUrl, isOverdue, isWaiting, mergesOnApprove, reopenStatus, waitsForAnswer, waitsForSubtasks, waitsForTickets } from "@godmode/shared";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { format, formatDistanceToNowStrict } from "date-fns";
 import { useMemo, useState, type ReactNode } from "react";
@@ -8,6 +8,7 @@ import { useTranslation } from "react-i18next";
 import type { Task, TaskStatus } from "@godmode/shared";
 import { CharacterAvatar } from "@/components/character";
 import { Composer } from "@/components/composer";
+import { HeaderActions, type HeaderMenuItem } from "@/components/header-actions";
 import { Icon } from "@/components/icon";
 import { Markdown } from "@/components/markdown";
 import { openChat } from "@/components/rows";
@@ -15,7 +16,7 @@ import { ProjectPicker } from "@/components/project-picker";
 import { STATUS_META, TaskStatusBadge, TYPE_META } from "@/components/task-row";
 import { TaskTimeline } from "@/components/task-timeline";
 import { Badge, Button, Card, ErrorState, Row, SectionTitle, Skeleton, T, tap, UnassignedAvatar } from "@/components/ui";
-import { ApiError, api, errorText } from "@/lib/api";
+import { ApiError, api, errorText, updateDesktopMessage } from "@/lib/api";
 import { encodeFiles, type PendingFile } from "@/lib/attachments";
 import { BLOCKED_TITLE, dueLabel, formatWork, isWorking, PRIORITY_LABEL, taskRepoLabel } from "@/lib/desktop-parity";
 import { activityText, hostOf } from "@/lib/format";
@@ -65,6 +66,40 @@ export default function TaskScreen() {
         { text: tr("task.markDoneAnyway"), onPress: () => update.mutate({ status: "done" }) },
       ]);
     },
+  });
+
+  const failure = (err: unknown) => (err instanceof ApiError && err.code === "device_forbidden" ? updateDesktopMessage() : errorText(err));
+  const remove = useMutation({
+    mutationFn: () => api.tasks.delete(id),
+    onSuccess: () => {
+      queryClient.removeQueries({ queryKey: qk.task(id) });
+      void queryClient.invalidateQueries({ queryKey: qk.tasks });
+      if (router.canGoBack()) router.back();
+    },
+    onError: (err) => Alert.alert(tr("manage.deleteFailed"), failure(err)),
+  });
+  const push = useMutation({
+    mutationFn: () => api.tasks.push(id),
+    onSuccess: (next) => {
+      onDone(next);
+      const url = next.branch ? githubBranchUrl(next.repoUrl, next.branch) : null;
+      if (url) void Linking.openURL(url);
+    },
+    onError: (err) => Alert.alert(tr("manage.pushFailed"), failure(err)),
+  });
+  const pullRequest = useMutation({
+    mutationFn: () => api.tasks.openPullRequest(id),
+    onSuccess: (next) => {
+      onDone(next);
+      const pr = next.pullRequest;
+      if (pr?.number && pr.state === "open") {
+        Alert.alert(tr("manage.prOpen", { number: pr.number }), undefined, [
+          { text: tr("common:actions.close"), style: "cancel" },
+          { text: tr("manage.view"), onPress: () => void Linking.openURL(pr.url) },
+        ]);
+      } else if (pr && !pr.number) void Linking.openURL(pr.url);
+    },
+    onError: (err) => Alert.alert(tr("manage.prFailed"), failure(err)),
   });
 
   const gone = task.error instanceof ApiError && task.error.status === 404;
@@ -138,9 +173,34 @@ export default function TaskScreen() {
     }
   };
 
+  const edit = (block = false) => router.push({ pathname: "/task-edit", params: block ? { id, block: "1" } : { id } });
+  const confirmDelete = () =>
+    Alert.alert(
+      tr("manage.deleteTitle", { number: t.number }),
+      `${t.branch ? tr("manage.deleteTextBranch") : tr("manage.deleteText")}${t.archivedAt ? "" : ` ${tr("manage.deleteArchiveHint")}`}`,
+      [
+        { text: tr("common:actions.cancel"), style: "cancel" },
+        ...(t.archivedAt ? [] : [{ text: tr("manage.archiveInstead"), onPress: () => archive(true) }]),
+        { text: tr("common:actions.delete"), style: "destructive" as const, onPress: () => remove.mutate() },
+      ],
+    );
+  // Like the desktop's GitHub buttons: only for a branch on GitHub, and only while the agent isn't on it.
+  const github = t.branch ? githubBranchUrl(t.repoUrl, t.branch) : null;
+  const idle = !push.isPending && !pullRequest.isPending && t.status !== "in_progress" && !t.activity;
+  const pr = t.pullRequest;
+  const menu: HeaderMenuItem[] = [];
+  if (github && pr?.state !== "merged") {
+    if (t.branchPushed) menu.push({ icon: "external", title: tr("manage.openBranch"), onPress: () => void Linking.openURL(github) });
+    else if (idle) menu.push({ icon: "branch", title: tr("manage.push"), onPress: () => push.mutate() });
+  }
+  if (github && idle && (!pr || pr.state === "closed")) menu.push({ icon: "pullRequest", title: tr("manage.createPr"), onPress: () => pullRequest.mutate() });
+  if (!t.archivedAt && t.status !== "blocked" && t.status !== "done" && t.status !== "cancelled") menu.push({ icon: "octagon", title: tr("manage.block"), onPress: () => edit(true) });
+  menu.push({ icon: "trash", title: tr("manage.delete"), destructive: true, onPress: confirmDelete });
+
   return (
     <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
       <Stack.Title>{`#${t.number}`}</Stack.Title>
+      <HeaderActions actions={[{ icon: "pencil", label: tr("manage.edit"), onPress: () => edit() }]} menu={menu} />
 
       <View style={{ gap: space.sm }}>
         <T variant="title">{t.title}</T>
@@ -232,7 +292,10 @@ export default function TaskScreen() {
       </Card>
 
       {t.status === "blocked" && (t.blockedReason || t.blockedKind) ? (
-        <Card style={[styles.notice, { backgroundColor: c.dangerSoft, borderColor: "transparent" }]}>
+        <Card
+          style={[styles.notice, { backgroundColor: c.dangerSoft, borderColor: "transparent" }]}
+          onPress={t.blockedKind === "manual" || !t.blockedKind ? () => edit() : undefined}
+        >
           <Icon name="warning" size={16} color={c.danger} />
           <View style={{ flex: 1, gap: 2 }}>
             {t.blockedKind && t.blockedKind !== "manual" ? (
@@ -244,6 +307,11 @@ export default function TaskScreen() {
             {t.blockedKind === "publish" ? (
               <T variant="footnote" muted>
                 {tr("task.publishFailed")}
+              </T>
+            ) : null}
+            {t.blockedKind === "manual" ? (
+              <T variant="footnote" color={c.danger} style={{ fontWeight: "600", marginTop: 2 }}>
+                {t.blockedReason ? tr("manage.editReason") : tr("edit.blockReasonPlaceholder")}
               </T>
             ) : null}
           </View>
@@ -265,9 +333,18 @@ export default function TaskScreen() {
         </Card>
       ) : null}
 
+      {t.status === "blocked" && t.blockedKind === "publish" && t.branch && !t.archivedAt ? (
+        <Button
+          title={pullRequest.isPending ? tr("manage.publishing") : tr("manage.publishAgain")}
+          icon="pullRequest"
+          loading={pullRequest.isPending}
+          onPress={() => pullRequest.mutate()}
+        />
+      ) : null}
+
       <Actions
         task={t}
-        busy={update.isPending || approve.isPending}
+        busy={update.isPending || approve.isPending || remove.isPending}
         hasAgent={!!agent}
         onMove={move}
         onArchive={archive}
@@ -298,7 +375,7 @@ export default function TaskScreen() {
         </View>
       )}
 
-      <Properties task={t} />
+      <Properties task={t} onEdit={t.archivedAt ? undefined : () => edit()} />
 
       <Parts task={t} workspaceId={pickedWorkspace === null || pickedWorkspace === t.workspaceId ? pickedWorkspace : t.workspaceId} />
 
@@ -533,10 +610,12 @@ function ActionButtons({
   );
 }
 
-/** The ticket's fields, read-only on the phone: they are set on the computer. */
-function Properties({ task: t }: { task: Task }) {
+/** The ticket's fields; a tap edits them. */
+function Properties({ task: t, onEdit }: { task: Task; onEdit?: () => void }) {
   const c = useColors();
   const { t: tr } = useTranslation("tasks");
+  const goals = useQuery({ queryKey: qk.goals(t.workspaceId), queryFn: () => api.goals.list(t.workspaceId), enabled: !!t.goalId });
+  const goal = t.goalId ? goals.data?.find((g) => g.id === t.goalId) : undefined;
   const tickets = (numbers: number[]) => {
     const n = numbers.map((x) => `#${x}`);
     return n.length < 2 ? (n[0] ?? "") : tr("task.ticketList", { list: n.slice(0, -1).join(", "), last: n[n.length - 1] });
@@ -544,8 +623,9 @@ function Properties({ task: t }: { task: Task }) {
   const coding = t.type === "coding" || !!t.branch;
   const open = (t.waitsFor ?? []).filter((w) => !w.finished);
   return (
-    <Card style={styles.props}>
+    <Card style={styles.props} onPress={onEdit}>
       <Prop label={tr("task.priority")} value={PRIORITY_LABEL[t.priority]} color={t.priority === "urgent" ? c.danger : undefined} />
+      {goal ? <Prop label={tr("edit.goal")} value={goal.title} /> : null}
       {t.dueDate ? <Prop label={tr("task.dueDate")} value={dueLabel(t.dueDate)} color={isOverdue(t) ? c.danger : undefined} /> : null}
       {t.waitsFor?.length ? (
         <Prop

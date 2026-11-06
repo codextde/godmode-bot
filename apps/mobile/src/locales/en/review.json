@@ -1,0 +1,70 @@
+{
+  "title": "Auto review",
+  "schedule": "Schedule",
+  "enabled": "Auto review",
+  "when": "When",
+  "next": "Next review {{when}}.",
+  "autoFix": "Fix what it finds",
+  "reportOnly": "It only reports what it finds.",
+  "team": "Team's questions first",
+  "model": {
+    "title": "Model",
+    "mainAgent": "Main agent's model"
+  },
+  "now": "Review now",
+  "starting": "Starting…",
+  "stop": "Stop",
+  "running": "Reviewing your setup…",
+  "history": "Reviews",
+  "empty": "No reviews yet.",
+  "loadFailed": "Couldn't load auto review",
+  "startFailed": "Couldn't start the review",
+  "stopFailed": "Couldn't stop the review",
+  "changes_one": "{{count}} change",
+  "changes_other": "{{count}} changes",
+  "forYou_one": "{{count}} for you",
+  "forYou_other": "{{count}} for you",
+  "undo": "Undo",
+  "undoneLabel": "Undone",
+  "openRun": "Open the review's chat",
+  "blocks": {
+    "forYou": "For you",
+    "changes": "Changes",
+    "found": "Found",
+    "agents": "Agents",
+    "numbers": "When it started"
+  },
+  "status": {
+    "queued": "Waiting to start",
+    "running": "Reviewing",
+    "succeeded": "Done",
+    "failed": "Failed",
+    "cancelled": "Stopped"
+  },
+  "schedules": {
+    "morning": "Every morning at 5:00",
+    "night": "Every night at 2:00",
+    "weekdays": "Weekdays at 7:00",
+    "sunday": "Sundays at 5:00"
+  },
+  "detail": {
+    "title": "Review",
+    "manual": "Started by you",
+    "openFailed": "Couldn't open the review",
+    "undoTitle": "Undo this change?",
+    "undoFailed": "Couldn't undo the change",
+    "undoFooter": "Undo puts a change back as it was."
+  },
+  "metrics": {
+    "runs": "Runs",
+    "failed": "Failed",
+    "cancelled": "Stopped",
+    "continuing": "Continuing",
+    "bigChats": "Full chats",
+    "openQuestions": "Questions",
+    "missingLogins": "Missing logins",
+    "logErrors": "Log errors",
+    "memoryOver": "Memory too long"
+  },
+  "teamDetail": "The main agent settles what it can; the rest comes to you."
+}

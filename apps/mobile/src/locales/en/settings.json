@@ -66,11 +66,22 @@
       "instructions": "Instructions",
       "instructionsDetail": "Rules for every agent, workspace and project",
       "browser": "Browser",
-      "browserDetail": "Profiles, background, live view",
       "computer": "Computer",
-      "computerDetail": "Computer use and virtual machines",
       "memory": "Memory",
-      "memoryDetail": "Learning, dreaming, upkeep"
+      "general": "General",
+      "accounts": "Claude accounts",
+      "voice": "Voice",
+      "review": "Auto review",
+      "features": "Features",
+      "calls": "Phone calls",
+      "cleanup": "Cleanup",
+      "health": "System health",
+      "license": "License & billing",
+      "cloud": "Godmode Cloud",
+      "devices": "Devices",
+      "connected": "Connected apps",
+      "logs": "Logs",
+      "about": "About"
     },
     "team": {
       "title": "Your team",
@@ -81,7 +92,6 @@
     },
     "privacy": {
       "title": "Data & privacy",
-      "footer": "Logins, 2FA codes, backups and the rest of Security stay on your computer.",
       "faceId": "Require Face ID",
       "faceIdDetail": "Hides Godmode in the app switcher and asks after 30 seconds away.",
       "security": "Security",
@@ -138,6 +148,11 @@
     "suggestions": {
       "title": "Show suggestions",
       "detail": "Ideas like “Summarize my unread emails” on Home and in a new chat."
+    },
+    "features": {
+      "title": "Features",
+      "on_one": "{{count}} on",
+      "on_other": "{{count}} on"
     }
   },
   "ai": {
@@ -176,10 +191,8 @@
     }
   },
   "capabilities": {
-    "title": "Browser & computer",
     "liveView": "Live view",
     "browser": {
-      "title": "Browser",
       "footer": "Agents browse in their own profiles, with your saved logins filled in by Godmode.",
       "enabled": "Browser for agents",
       "headless": "Run in the background",
@@ -187,8 +200,7 @@
       "stealth": "Look like a person",
       "stealthDetail": "Hides automation signals so sites don't block agents.",
       "mute": "Mute sound",
-      "liveViewDetail": "Watch the browser while an agent works.",
-      "keepAlive": "Close idle browser after"
+      "liveViewDetail": "Watch the browser while an agent works."
     },
     "computer": {
       "title": "Computer use",
@@ -282,6 +294,31 @@
     "desktop": {
       "title": "On your computer",
       "notifications": "Desktop notifications"
+    },
+    "import": {
+      "link": "Import from another assistant",
+      "title": "Import memory",
+      "import": "Import",
+      "from": "From",
+      "other": "Other",
+      "otherAssistant": "your assistant",
+      "step1": "Copy the prompt and send it to {{name}}.",
+      "step2": "Paste the answer here.",
+      "copy": "Copy prompt",
+      "copied": "Copied",
+      "open": "Open {{name}}",
+      "answer": "Answer",
+      "placeholder": "What it remembers about you",
+      "failed": "Couldn't import"
+    },
+    "dreamAll": {
+      "title": "Let all agents dream now",
+      "starting": "Starting…",
+      "started_one": "{{count}} agent dreams now",
+      "started_other": "{{count}} agents dream now",
+      "none": "Nothing to dream about",
+      "noneBody": "No agent has anything new since its last dream, or dreaming is off.",
+      "failed": "Couldn't start the dreams"
     }
   },
   "agents": {
@@ -420,7 +457,6 @@
     "everyWorkspace": "Every workspace",
     "getsContext": "It gets {{name}}'s context, repositories and logins.",
     "anyWorkspace": "It can work in any workspace you start it in.",
-    "routineHint": "Its automation “{{name}}” ({{schedule}}) can be added on your computer.",
     "setupHint": "Logins, tools and folders for new agents are set on your computer.",
     "categories": {
       "leadership": "Leadership",
@@ -542,5 +578,541 @@
     "manage": "Manage workspaces",
     "hideProjects": "Hide projects of {{name}}",
     "showProjects": "Show projects of {{name}}"
+  },
+  "workspaceColor": {
+    "title": "Color",
+    "names": {
+      "violet": "Violet",
+      "indigo": "Indigo",
+      "sky": "Sky",
+      "cyan": "Cyan",
+      "emerald": "Emerald",
+      "lime": "Lime",
+      "amber": "Amber",
+      "orange": "Orange",
+      "rose": "Rose",
+      "fuchsia": "Fuchsia"
+    }
+  },
+  "phone": {
+    "outdatedTitle": "Update Godmode on your computer",
+    "outdatedBody": "Then you can see and change this from your phone too.",
+    "onComputer": "On your computer"
+  },
+  "health": {
+    "title": "System health",
+    "loadFailed": "Couldn't check the system",
+    "allGood": "Everything works",
+    "problems_one": "{{count}} thing needs a look",
+    "problems_other": "{{count}} things need a look",
+    "checked": "Checked {{time}}",
+    "fixOnComputer": "Fix it in Godmode on your computer.",
+    "tools": "Tools",
+    "permissions": "Permissions",
+    "upkeep": {
+      "title": "Automatic upkeep",
+      "autoFix": "Fix problems automatically",
+      "autoUpdate": "Update tools automatically",
+      "autoCleanup": "Clean up automatically",
+      "running": "Working on it right now…",
+      "notYet": "Hasn't run yet.",
+      "lastLook": "Last look {{time}}."
+    },
+    "power": {
+      "title": "Lid-closed mode",
+      "keepWorking": "Keep working",
+      "state": {
+        "off": "Off",
+        "on": "On",
+        "idle": "Waiting for agents to work",
+        "lowBattery": "Paused on low battery",
+        "error": "macOS refused the change"
+      },
+      "battery": "{{percent}}%",
+      "charging": "{{percent}}% · charging",
+      "needsComputer": "Switch it once in Godmode on your Mac: macOS asks for your password there.",
+      "failed": "Couldn't switch lid-closed mode"
+    }
+  },
+  "license": {
+    "title": "License",
+    "loadFailed": "Couldn't load the license",
+    "status": {
+      "active": "Active",
+      "trial": "Free trial",
+      "pastDue": "Payment due",
+      "grace": "Free trial",
+      "unverified": "Not checked yet",
+      "missing": "No license",
+      "invalid": "Invalid key",
+      "expired": "Ended"
+    },
+    "plan": {
+      "private": "Private",
+      "company": "Company",
+      "monthly": "Monthly",
+      "yearly": "Yearly",
+      "lifetime": "Lifetime"
+    },
+    "statusLabel": "Status",
+    "planLabel": "Plan",
+    "key": "Key",
+    "freeUntil": "Free trial until",
+    "trialEnds": "Trial ends",
+    "trialEndsStops": "Trial ends, then stops",
+    "renewsOn": "Renews on",
+    "cancelsOn": "Cancels on",
+    "renews": "Renews",
+    "never": "Never, it's yours",
+    "acceptedUntil": "Accepted until",
+    "keepsWorking": "Keeps working until",
+    "notEnforced": "A build of your own: it doesn't need a license.",
+    "onComputer": "Change the key or the subscription in Godmode on your computer.",
+    "usage": {
+      "title": "On this computer",
+      "since": "Since {{date}}",
+      "tasks": "Tasks done",
+      "automationRuns": "By automations",
+      "worked": "Time worked",
+      "agents": "Agents",
+      "automations": "Automations on",
+      "logins": "Saved logins"
+    },
+    "agents": {
+      "title": "Last 30 days",
+      "runs": "Runs",
+      "time": "Time worked",
+      "tokens": "Tokens",
+      "tokensDetail": "{{input}} in · {{output}} out",
+      "modelRuns_one": "{{count}} run",
+      "modelRuns_other": "{{count}} runs"
+    },
+    "cloud": {
+      "title": "Godmode Cloud",
+      "price": "Price",
+      "perMonth": "{{price}} / month",
+      "perYear": "{{price}} / year",
+      "renewsOn": "Renews on",
+      "endsOn": "Ends on",
+      "computers": "Computers",
+      "relay": "Relay data this month",
+      "of": "{{used}} of {{limit}}",
+      "allIncluded": "Everything is included: there is nothing to pay on this cloud.",
+      "sub": {
+        "trialing": "Trial",
+        "active": "Active",
+        "pastDue": "Payment due",
+        "canceled": "Ended",
+        "unpaid": "Unpaid",
+        "incomplete": "Incomplete",
+        "expired": "Expired",
+        "paused": "Paused"
+      }
+    }
+  },
+  "cloud": {
+    "title": "Cloud",
+    "loadFailed": "Couldn't load the cloud link",
+    "state": {
+      "unlinked": "Not linked",
+      "linking": "Waiting for approval",
+      "connecting": "Connecting…",
+      "online": "Online",
+      "offline": "Offline",
+      "paused": "Paused",
+      "blocked": "Blocked",
+      "revoked": "Removed in the cloud"
+    },
+    "unlinkedTitle": "Not linked to Godmode Cloud",
+    "unlinkedBody": "Link it in Godmode on your computer to reach it from any browser, and from this phone without Tailscale.",
+    "statusTitle": "Link",
+    "stateLabel": "Status",
+    "server": "Cloud",
+    "account": "Account",
+    "plan": "Plan",
+    "connected": "Connected",
+    "linked": "Linked",
+    "access": {
+      "title": "Access",
+      "link": "Cloud link",
+      "browser": "Browser access",
+      "phones": "Phones through the cloud",
+      "secrets": "Secrets through the cloud"
+    },
+    "onComputer": "Linking and access are changed in Godmode on your computer."
+  },
+  "devices": {
+    "title": "Devices",
+    "loadFailed": "Couldn't load your devices",
+    "aloneTitle": "Just this computer",
+    "aloneBody": "Use Godmode on several Macs as one: add a computer in Godmode on your Mac under Settings → Devices.",
+    "thisComputer": "This computer",
+    "primary": "Primary",
+    "standsIn": "Stands in since",
+    "takesOver": "Takes over",
+    "pending": "Changes to send back",
+    "computers": "Computers",
+    "role": {
+      "primary": "Primary",
+      "secondary": "Secondary",
+      "standIn": "Stands in"
+    },
+    "state": {
+      "online": "Online",
+      "connecting": "Connecting…",
+      "offline": "Offline",
+      "updateRequired": "Needs an update"
+    },
+    "self": "{{name}} (this one)",
+    "seen": "Seen {{time}}",
+    "runs_one": "{{count}} running",
+    "runs_other": "{{count}} running",
+    "chats_one": "{{count}} chat",
+    "chats_other": "{{count}} chats",
+    "after": "After {{minutes}} min",
+    "away": {
+      "title": "While a computer is away",
+      "failover": "Chats continue elsewhere",
+      "standIn": "Another computer stands in"
+    },
+    "onComputer": "Add, remove and set up computers in Godmode on your Mac."
+  },
+  "connected": {
+    "title": "Connected apps",
+    "loadFailed": "Couldn't load the connected apps",
+    "emptyTitle": "No connected apps",
+    "emptyBody": "Connect Claude Code or another app in Godmode on your computer to build your team from the terminal.",
+    "footer": "Each app has its own key. Connect new apps in Godmode on your computer.",
+    "access": {
+      "manage": "Sets up and steers",
+      "read": "Looks only"
+    },
+    "calls_one": "{{count}} call",
+    "calls_other": "{{count}} calls",
+    "lastUsed": "Used {{time}} · {{calls}}",
+    "notUsed": "Not used yet",
+    "confirmTitle": "Remove {{name}}?",
+    "confirm": "Its key stops working right away. Agents and automations it created stay.",
+    "confirmInstalled": "Its key stops working right away, and Godmode takes itself out of Claude Code. Agents and automations it created stay.",
+    "removeFailed": "Couldn't remove the app"
+  },
+  "general": {
+    "title": "General",
+    "loadFailed": "Couldn't load the settings",
+    "appearance": "Appearance",
+    "colors": "Light or dark",
+    "animations": {
+      "title": "Animations",
+      "fullLabel": "Full",
+      "lightLabel": "Light",
+      "full": "Characters move and live replies type out.",
+      "light": "Saves energy on this phone: characters stand still and nothing loops."
+    },
+    "language": "Language & region",
+    "chat": {
+      "title": "Chat",
+      "footer": "Just for this phone.",
+      "toolCalls": "Tool calls",
+      "cardsLabel": "Cards",
+      "compactLabel": "Compact",
+      "cards": "Each group of steps in its own card.",
+      "compact": "One muted line per group. Tap it for the steps."
+    },
+    "summaries": {
+      "title": "AI summaries",
+      "footer": "Short texts Haiku writes on your Claude account.",
+      "chatTitles": "Chat titles",
+      "chatTitlesDetail": "Named from the first message",
+      "notifications": "Notification summaries",
+      "notificationsDetail": "Long ones in two or three sentences"
+    }
+  },
+  "voice": {
+    "title": "Voice",
+    "loadFailed": "Couldn't load the voice settings",
+    "provider": "Provider",
+    "browser": "Browser",
+    "keys": "Add the API key on your computer under Integrations → API keys.",
+    "mode": {
+      "title": "Voice mode",
+      "enable": "Voice mode",
+      "enableDetail": "Talk to agents and hear their answers",
+      "autoSpeak": "Speak replies",
+      "autoSpeakDetail": "When you dictated the message",
+      "language": "Language"
+    },
+    "stt": {
+      "title": "Speech to text",
+      "dictation": "Dictation",
+      "dictationDetail": "The microphone in the message field",
+      "browser": "Free, with the system's speech recognition.",
+      "openai": "More accurate, with your OpenAI key.",
+      "hex": "Private and offline on your computer. Hex is set up there."
+    },
+    "tts": {
+      "title": "Text to speech",
+      "rate": "Speaking rate",
+      "voice": "Voice",
+      "elevenlabsVoice": "Voice ID"
+    },
+    "openai": {
+      "sttModel": "Transcription model",
+      "ttsModel": "Speech model"
+    }
+  },
+  "calls": {
+    "title": "Phone calls",
+    "loadFailed": "Couldn't load the call settings",
+    "minutes_one": "{{count}} min",
+    "minutes_other": "{{count}} min",
+    "voice": {
+      "title": "Voice",
+      "footer": "Voices, numbers and incoming calls are set up on your computer.",
+      "name": "Name",
+      "language": "Language",
+      "longest": "Longest call"
+    },
+    "quiet": {
+      "title": "Quiet hours",
+      "on": "No calls to you from {{from}} to {{to}}. Questions wait in the app.",
+      "off": "Agents may call you at any time of day.",
+      "from": "From",
+      "to": "Until"
+    },
+    "greeting": {
+      "title": "Greeting",
+      "hint": "The first thing callers hear",
+      "placeholder": "Hi, you've reached Studio Berg. How can I help?"
+    }
+  },
+  "features": {
+    "title": "Features",
+    "loadFailed": "Couldn't load the features",
+    "footer": "Integrations, plugins, messaging, cards, VMs, SSH and Android phones are switched on at your computer.",
+    "activity": {
+      "title": "Activity",
+      "detail": "Every run of every agent"
+    },
+    "artifacts": {
+      "title": "Artifacts",
+      "detail": "Small apps agents build in a chat"
+    },
+    "integrations": {
+      "title": "Integrations",
+      "detail": "Apps, API tools and MCP servers"
+    },
+    "plugins": {
+      "title": "Plugins",
+      "detail": "Claude Code plugins in every run"
+    },
+    "messaging": {
+      "title": "Messaging",
+      "detail": "Bots on Slack, Telegram and Teams"
+    },
+    "phone": {
+      "title": "Phone calls",
+      "detail": "Agents call people, and you",
+      "persona": "Voice and limits"
+    },
+    "cards": {
+      "title": "Cards",
+      "detail": "Agents pay with saved cards"
+    },
+    "vm": {
+      "title": "Virtual machines",
+      "detail": "macOS VMs agents work in"
+    },
+    "ssh": {
+      "title": "SSH servers",
+      "detail": "Servers agents sign in to"
+    },
+    "sshKeys": {
+      "title": "SSH keys",
+      "detail": "The SSH key manager"
+    },
+    "android": {
+      "title": "Android phones",
+      "detail": "Phones connected to your computer"
+    }
+  },
+  "logs": {
+    "title": "Logs",
+    "loadFailed": "Couldn't load the log",
+    "entries": "Entries",
+    "warnings": "Warnings",
+    "errors": "Errors",
+    "lastEntry": "Last entry",
+    "masked": "Passwords, 2FA codes, API keys and tokens are masked before anything is written.",
+    "issues": "Recurring",
+    "level": {
+      "all": "All",
+      "error": "Errors",
+      "warn": "Warnings",
+      "info": "Info",
+      "debug": "Debug"
+    },
+    "search": "Search the log",
+    "clearSearch": "Clear search",
+    "showDetails": "Shows the details",
+    "empty": "Nothing logged yet",
+    "noMatch": "Nothing matches",
+    "latest_one": "The latest entry",
+    "latest_other": "The latest {{count}} entries"
+  },
+  "about": {
+    "title": "About",
+    "computer": "Your computer",
+    "phone": "This app",
+    "name": "Name",
+    "version": "Version",
+    "platform": "Platform",
+    "website": "Website",
+    "terms": "License terms",
+    "footer": "Commercial software by Codext GmbH. Made with care for people who'd rather delegate."
+  },
+  "browser": {
+    "title": "Browser",
+    "loadFailed": "Couldn't load the browser settings",
+    "passkeys": "Passkeys from Godmode",
+    "passkeysDetail": "Agents sign in with passkeys saved in Godmode.",
+    "profiles": "Profiles",
+    "profilesFooter": "Importing a Chrome profile happens on your computer.",
+    "newProfile": "New profile",
+    "newTitle": "New profile",
+    "renameTitle": "Rename profile",
+    "createFailed": "Couldn't create the profile",
+    "renameFailed": "Couldn't rename the profile",
+    "makeDefault": "Make default",
+    "defaultFailed": "Couldn't change the default",
+    "stopFailed": "Couldn't stop the browser",
+    "deleteTitle": "Delete {{name}}?",
+    "deleteBody": "Its cookies, sign-ins and passkeys go with it.",
+    "deleteFailed": "Couldn't delete the profile",
+    "default": "Default",
+    "running": "Open",
+    "runningChats_one": "Open · {{count}} chat",
+    "runningChats_other": "Open · {{count}} chats",
+    "cookies_one": "{{count}} cookie",
+    "cookies_other": "{{count}} cookies",
+    "actionsHint": "Shows what you can do with it",
+    "botCheck": {
+      "run": "Bot check",
+      "title": "Bot check · {{name}}",
+      "failed": "Bot check failed",
+      "verdictFail_one": "{{count}} signal gives the browser away",
+      "verdictFail_other": "{{count}} signals give the browser away",
+      "verdictWarn": "Passes common bot checks",
+      "verdictPass": "Looks like a regular Chrome",
+      "checking": "Checking how sites see the browser…",
+      "opening": "Opening a test page in this profile's browser",
+      "headless": "Headless",
+      "visible": "Visible window",
+      "stealthOn": "Stealth on",
+      "stealthOff": "Stealth off"
+    },
+    "keepAlive": "Close when idle"
+  },
+  "computer": {
+    "title": "Computer",
+    "loadFailed": "Couldn't load the computer settings",
+    "screenshot": "Screenshot size",
+    "screenshotDetail": "Long edge the model sees. Larger costs more tokens.",
+    "vmOnComputer": "Turn virtual machines on in Godmode on your computer.",
+    "helper": {
+      "title": "Computer-use helper",
+      "name": "Cua Driver",
+      "running": "Running",
+      "idle": "Installed, not running",
+      "notInstalled": "Not installed",
+      "footer": "It starts again when an agent needs it.",
+      "stopFailed": "Couldn't stop Cua Driver"
+    }
+  },
+  "accounts": {
+    "title": "Claude accounts",
+    "loadFailed": "Couldn't load the accounts",
+    "listTitle": "Accounts",
+    "onComputer": "Add, sign in again or remove accounts in Godmode on your computer.",
+    "defaultFailed": "Couldn't change the default",
+    "makeDefaultHint": "Makes it the default account",
+    "thisComputer": "This computer",
+    "unknown": "Claude account",
+    "systemLogin": "This computer's Claude Code login",
+    "addedHere": "Added in Godmode",
+    "signedOut": "Signed out. Sign in again on your computer.",
+    "limitedUntil": "Limit reached, back at {{time}}",
+    "session": "Session",
+    "week": "Week",
+    "resets": "Resets {{time}}",
+    "lockedTitle": "The vault is locked",
+    "lockedBody": "Accounts added in Godmode keep their sign-in in the vault. Until it's unlocked, agents use this computer's Claude Code login.",
+    "switchTitle": "Switching",
+    "autoSwitch": "Switch automatically",
+    "threshold": "Switch at",
+    "thresholdFooter": "New work moves to another account once the default's session or weekly usage reaches this, and work that hits a limit goes on where there's room left.",
+    "autoSwitchOff": "Work stays on the default account."
+  },
+  "cleanup": {
+    "title": "Cleanup",
+    "scanFailed": "Couldn't look at the data folder",
+    "error": "Couldn't clean up",
+    "freed": "Freed {{size}}",
+    "allClean": "All clean",
+    "nothingLeft": "There was nothing left to remove.",
+    "partial": "{{name}}: not everything could go",
+    "storage": {
+      "title": "Storage",
+      "used": "used by Godmode",
+      "byArea": "Storage by area",
+      "reclaim": "{{size}} can be freed safely",
+      "nothing": "Nothing piles up right now",
+      "disk": "{{free}} free of {{total}}",
+      "checked": "checked {{time}}",
+      "last": "Last cleanup {{time}} freed {{size}}",
+      "lastAuto": "Last cleanup {{time}} (automatic) freed {{size}}"
+    },
+    "items": {
+      "title": "Clean up",
+      "footer": "What may still hold work is cleaned up in Godmode on your computer.",
+      "emptyTitle": "Nothing to clean up",
+      "emptyBody": "Godmode's data folder is tidy.",
+      "alreadyClean": "Already clean: {{names}}",
+      "cleaning": "Cleaning…",
+      "free": "Free {{size}}",
+      "nothingToRemove": "Nothing to remove",
+      "count_one": "{{count}} item",
+      "count_other": "{{count}} items",
+      "kept_one": "{{count}} kept",
+      "kept_other": "{{count}} kept"
+    },
+    "optimize": {
+      "title": "Optimize",
+      "now": "Optimize now",
+      "running": "Optimizing…",
+      "error": "Couldn't optimize",
+      "done": "Optimized",
+      "doneFreed": "Optimized · {{size}} freed",
+      "dreamsStarted_one": "{{count}} agent is tidying its memory",
+      "dreamsStarted_other": "{{count}} agents are tidying their memory",
+      "memoryCurrent": "Every memory is up to date",
+      "over_one": "{{count}} chat past {{tokens}} this week",
+      "over_other": "{{count}} chats past {{tokens}} this week",
+      "within": "Every chat of the week under 250k",
+      "overLimit_one": "{{count}} memory over {{chars}} characters",
+      "overLimit_other": "{{count}} memories over {{chars}} characters",
+      "withinLimit": "Every memory under {{chars}} characters",
+      "dreamingNow_one": "{{count}} agent dreaming now",
+      "dreamingNow_other": "{{count}} agents dreaming now",
+      "nextDream": "Next dream {{time}}",
+      "dreamingOff": "Dreaming is off",
+      "compress": "Chats compress at {{pct}}%.",
+      "compressFull": "Chats compress when nearly full.",
+      "compressOff": "Chats don't compress by themselves."
+    },
+    "auto": {
+      "title": "Automatic cleanup",
+      "label": "Clean up automatically",
+      "footer": "Once a day, while no agent works, Godmode removes what is safe to remove."
+    }
   }
 }

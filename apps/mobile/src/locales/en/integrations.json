@@ -1,0 +1,79 @@
+{
+  "title": "Integrations",
+  "outdatedTitle": "Not on this computer yet",
+  "outdatedBody": "Update Godmode on your computer to see this on your phone.",
+  "loadFailed": "Couldn't load integrations",
+  "emptyTitle": "No integrations yet",
+  "emptyBody": "Add MCP servers, API keys and apps in Godmode on your computer.",
+  "on": "On",
+  "off": "Off",
+  "links": {
+    "group": "Tools and access"
+  },
+  "mcp": {
+    "title": "MCP servers",
+    "local": "Program on your computer",
+    "composio": "Composio"
+  },
+  "apiTools": {
+    "title": "API keys",
+    "noAddress": "Key only",
+    "noKey": "No key saved"
+  },
+  "composio": {
+    "title": "Composio apps",
+    "account": "Composio account",
+    "connected": "Connected",
+    "invalid": "Key invalid",
+    "notSetUp": "Not set up",
+    "active": "Connected",
+    "waiting": "Waiting",
+    "attention": "Needs attention"
+  },
+  "plugins": {
+    "title": "Plugins",
+    "emptyTitle": "No plugins yet",
+    "emptyBody": "Install plugins in Godmode on your computer.",
+    "loadFailed": "Couldn't load plugins",
+    "switchOff": "Switch off {{name}}",
+    "switchFailed": "Couldn't switch the plugin off",
+    "allOff": "Plugins are switched off on your computer.",
+    "draft": "Draft"
+  },
+  "messaging": {
+    "title": "Messaging",
+    "emptyTitle": "No bots yet",
+    "emptyBody": "Connect Telegram, Slack or Teams in Godmode on your computer.",
+    "loadFailed": "Couldn't load messaging",
+    "waiting_one": "{{count}} person waits for access",
+    "waiting_other": "{{count}} people wait for access",
+    "state": {
+      "connected": "Connected",
+      "connecting": "Connecting",
+      "error": "Needs attention",
+      "off": "Off",
+      "waitingForVault": "Waiting for the vault"
+    }
+  },
+  "ssh": {
+    "title": "SSH servers",
+    "emptyTitle": "No servers yet",
+    "emptyBody": "Add servers in Godmode on your computer.",
+    "loadFailed": "Couldn't load servers",
+    "test": "Test",
+    "testA11y": "Test signing in to {{name}}",
+    "ok": "Signed in",
+    "okMs": "{{ms}} ms",
+    "failedTitle": "Couldn't sign in to {{name}}",
+    "failedBody": "The server didn't let Godmode in."
+  },
+  "vm": {
+    "menu": "VM power",
+    "start": "Start",
+    "suspend": "Suspend",
+    "restart": "Restart",
+    "stop": "Stop",
+    "interrupts": "Restarting or stopping interrupts agents working in it.",
+    "failed": "Couldn't change the VM"
+  }
+}

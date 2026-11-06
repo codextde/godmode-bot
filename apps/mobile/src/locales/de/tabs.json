@@ -12,6 +12,7 @@
     "newTask": "Neue Aufgabe",
     "inbox": "Eingang",
     "calls": "Anrufe",
+    "artifacts": "Artefakte",
     "status": {
       "connectedThrough": "Verbunden über {{computer}} — {{away}} ist abwesend",
       "connected": "{{computer}} · verbunden",
@@ -45,6 +46,21 @@
     "queued_one": "{{count}} in der Warteschlange",
     "queued_other": "{{count}} in der Warteschlange",
     "liveScreens": "Live-Bildschirme",
+    "offers": {
+      "titleOwner": "{{name}} kann dir das abnehmen",
+      "title": "Arbeit, die dir dein Agent abnehmen kann",
+      "startsWith": "Beginnt mit:",
+      "offered": "Angeboten {{time}}",
+      "decline": "Nein danke",
+      "accept": "Mach das",
+      "startError": "Konnte nicht gestartet werden",
+      "declineError": "Konnte nicht abgelehnt werden"
+    },
+    "attention": {
+      "continue": "Fortsetzen",
+      "continueError": "Konnte nicht fortgesetzt werden",
+      "onComputer": "Entscheide auf deinem Computer"
+    },
     "recent": {
       "title": "Mach da weiter, wo du aufgehört hast",
       "yourAgents": "Deine Agenten",
@@ -159,6 +175,14 @@
     "activity": "Aktivität",
     "newAgent": "Neuer Agent",
     "loadError": "Agenten konnten nicht geladen werden",
+    "search": "Agenten suchen",
+    "orgChart": "Organigramm",
+    "global": "Global",
+    "workspace": "Workspace",
+    "noResults": {
+      "title": "Keine Agenten gefunden",
+      "body": "Kein Agent passt zu „{{query}}“."
+    },
     "filter": {
       "running": "Arbeitet",
       "needs": "Braucht dich",

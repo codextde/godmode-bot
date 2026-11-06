@@ -1,0 +1,108 @@
+{
+  "theAgent": "the agent",
+  "theAgentStart": "The agent",
+  "card": {
+    "artifact": "Artifact",
+    "built": "Built it",
+    "changedCode": "Changed the code",
+    "updatedData": "Updated the data",
+    "updated": "Updated it",
+    "failed": "It didn't work",
+    "building": "Building…",
+    "updating": "Changing it…",
+    "addedFiles_one": "Added {{count}} file",
+    "addedFiles_other": "Added {{count}} files"
+  },
+  "frame": {
+    "stuckTitle": "This artifact didn't load",
+    "stuckBody": "Godmode didn't answer. It may be restarting.",
+    "retry": "Try again"
+  },
+  "list": {
+    "title": "Artifacts",
+    "emptyTitle": "Nothing built yet",
+    "emptyBody": "Describe a dashboard or a tool, or ask for one in any chat.",
+    "loadFailed": "Couldn't load the artifacts",
+    "unavailableTitle": "Update Godmode on your computer",
+    "unavailableBody": "This Godmode doesn't show artifacts on phones yet.",
+    "offTitle": "Artifacts are off",
+    "switchOn": "Switch on",
+    "search": "Search",
+    "noMatch": "Nothing matches “{{query}}”.",
+    "updated": "Updated {{time}}"
+  },
+  "new": {
+    "title": "New artifact",
+    "placeholder": "Describe a dashboard or app",
+    "build": "Build it",
+    "startError": "Couldn't start it"
+  },
+  "starters": {
+    "sales": "Sales dashboard",
+    "kpi": "KPI tracker",
+    "pipeline": "Deal pipeline",
+    "budget": "Budget planner",
+    "content": "Content calendar",
+    "calculator": "Price calculator"
+  },
+  "view": {
+    "placeholder": "Ask {{agent}} to change something…",
+    "busyPlaceholder": "{{agent}} is on it. Add more…",
+    "onIt": "{{agent}} is on it",
+    "queued": "{{agent}} gets it right after the current step",
+    "sendError": "Couldn't send it",
+    "refresh": "Refresh the data",
+    "askFresh": "Ask for fresh data",
+    "refreshing": "{{agent}} is getting fresh data",
+    "refreshError": "Couldn't refresh",
+    "alreadyWorking": "{{agent}} is already working on it",
+    "openChat": "Open its chat",
+    "pin": "Pin to the top",
+    "unpin": "Unpin",
+    "versions": "Versions",
+    "rename": "Rename",
+    "howItRefreshes": "How it refreshes",
+    "delete": "Delete",
+    "deleteTitle": "Delete {{title}}?",
+    "deleteBody": "Its code, every version and its saved data are gone for good. The chat stays.",
+    "keep": "Keep it",
+    "deleteError": "Couldn't delete it",
+    "goneTitle": "This artifact is gone",
+    "goneBody": "It was deleted, or it lives on another computer.",
+    "loadErrorTitle": "Couldn't load it",
+    "working": "{{agent}} is working on it",
+    "appAsksRefresh": "The app asks {{agent}} for fresh data.",
+    "appWantsToSend": "The app wants to send {{agent}}: “{{text}}”",
+    "notNow": "Not now",
+    "send": "Send",
+    "somethingBroke": "Something broke: {{failure}}",
+    "askToFix": "Ask to fix it",
+    "fixPrompt": "The app shows an error: {{failure}}. Please fix it.",
+    "dismiss": "Dismiss",
+    "saveError": "Couldn't save it",
+    "reviewSent": "Sent to {{agent}}",
+    "saveFailed": "Couldn't save it",
+    "renameError": "Couldn't rename it"
+  },
+  "versions": {
+    "title": "Versions",
+    "version": "Version {{version}}",
+    "latest": "Latest",
+    "first": "First version",
+    "viewing": "Version {{version}}",
+    "backToLatest": "Back to latest",
+    "restore": "Restore",
+    "restored": "Restored as version {{version}}",
+    "sameVersion": "Version {{version}} is the same as the current one",
+    "restoreError": "Couldn't restore it"
+  },
+  "refreshSheet": {
+    "title": "How it refreshes",
+    "placeholder": "e.g. Read the orders of the last 60 days from the shop and update revenue, orders and top products.",
+    "save": "Save"
+  },
+  "renameSheet": {
+    "title": "Rename",
+    "save": "Save"
+  }
+}
