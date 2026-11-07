@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { parsePairingLink, type Agent, type ChatFile, type ChatFiles, type MobilePairResult, type MobilePairingOffer, type Task } from "@godmode/shared";
 import { loadConfig } from "../src/config";
 import { closeDb, openDb } from "../src/db";
@@ -223,7 +223,8 @@ describe("showing a file on the computer from a phone", () => {
 
   test("a phone with full access shows it there", async () => {
     expect((await phone(full, "/api/files/reveal", reveal(file))).status).toBe(200);
-    expect(launched.at(-1)?.at(-1)).toBe(file);
+    // macOS selects the file; other systems open the folder it is in.
+    expect(launched.at(-1)?.at(-1)).toBe(process.platform === "darwin" ? file : dirname(file));
   });
 
   test("a file that is gone is a 404, a relative path a 400", async () => {
