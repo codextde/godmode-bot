@@ -16,7 +16,7 @@ import { which } from "../util";
 
 const log = logger("claude-mem");
 
-export const CLAUDE_MEM_VERSION = "15.10.0";
+export const CLAUDE_MEM_VERSION = "15.11.0";
 const REGISTRY = "https://registry.npmjs.org/claude-mem";
 const LAUNCHER = "${CLAUDE_PLUGIN_ROOT}/scripts/claude-mem-launcher.cjs";
 
