@@ -9,6 +9,7 @@ import { HeaderActions } from "@/components/header-actions";
 import { Markdown } from "@/components/markdown";
 import { PdfPage } from "@/components/pdf-page";
 import { ErrorState, T } from "@/components/ui";
+import { zoomImage, ZoomView } from "@/components/zoom-view";
 import FilePreview from "./settings/files/preview";
 import { forgetLocalCopies, servedCopy, shareFile } from "@/lib/agent-files";
 import { errorText } from "@/lib/api";
@@ -68,18 +69,9 @@ function ServedFile() {
           <ErrorState title={t("preview.loadFailed")} error={errorText(copy.error)} onRetry={() => void copy.refetch()} />
         </View>
       ) : kind === "image" ? (
-        <ScrollView
-          contentInsetAdjustmentBehavior="automatic"
-          maximumZoomScale={5}
-          minimumZoomScale={1}
-          centerContent
-          bouncesZoom
-          showsHorizontalScrollIndicator={false}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.zoom}
-        >
-          <Image source={{ uri }} accessibilityLabel={name} contentFit="contain" style={{ width, height: height * 0.75 }} />
-        </ScrollView>
+        <ZoomView max={5} contentInsetAdjustmentBehavior="automatic" centerContent bouncesZoom showsHorizontalScrollIndicator={false} showsVerticalScrollIndicator={false} contentContainerStyle={styles.zoom}>
+          <Image source={{ uri }} accessibilityLabel={name} contentFit="contain" style={{ width, height: height * 0.75 }} {...zoomImage} />
+        </ZoomView>
       ) : kind === "pdf" ? (
         <PdfPage file={copy.data.file} />
       ) : (

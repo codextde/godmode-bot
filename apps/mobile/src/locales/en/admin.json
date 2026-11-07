@@ -181,19 +181,6 @@
       "originsHint": "One per line"
     }
   },
-  "license": {
-    "keyTitle": "Licence key",
-    "key": "Key",
-    "save": "Save key",
-    "add": "Enter licence key",
-    "change": "Change licence key",
-    "refresh": "Check again",
-    "remove": "Remove key",
-    "removeTitle": "Remove the licence key?",
-    "removeEnforced": "Godmode stops starting new work on this computer until a key is added again. Your subscription itself isn't changed.",
-    "removeFree": "Your subscription itself isn't changed; you can add the key again any time.",
-    "failed": "Couldn't change the licence"
-  },
   "calls": {
     "ownerTitle": "Calls to you",
     "number": "Your number",
@@ -268,10 +255,6 @@
     "takeBackTitle": "Take back full access from {{name}}?",
     "takeBackBody": "That phone goes back to what phones may do. Only your computer can give full access again."
   },
-  "billingExtra": {
-    "invoices": "Invoices",
-    "portal": "Billing and payment"
-  },
   "browserExtra": {
     "captcha": "CAPTCHA solving",
     "local": "Click through checkboxes",
@@ -298,32 +281,5 @@
   },
   "logsExtra": {
     "shareFull": "Share the full log"
-  },
-  "licenseExtra": {
-    "manage": "Manage subscription",
-    "remindersTitle": "Trial reminders",
-    "reminderEmail": "Email",
-    "reminderPlaceholder": "you@example.com",
-    "reminderInvalid": "That isn't an email address",
-    "reminderFailed": "Couldn't save the address",
-    "reminderOn": "Reminders go to {{email}}",
-    "reminderRemove": "Stop reminders",
-    "lostKey": "Lost your key?",
-    "lostKeyHint": "It's on the page you see after checkout and on your invoices."
-  },
-  "licenseLink": {
-    "invalid": "This licence link doesn't work.",
-    "alreadyActive": "This licence is already active",
-    "failed": "Couldn't activate the licence",
-    "replaceTitle": "Use the new licence key?",
-    "replaceText": "Godmode already has a working key (ending in {{old}}). Replace it with the key ending in {{next}}?",
-    "replace": "Use new key",
-    "keep": "Keep current key",
-    "confirmTitle": "Activate this licence key?",
-    "confirmText": "A link wants to add the licence key ending in {{next}} to Godmode. Only continue if you just bought it or got it from someone you trust.",
-    "activate": "Activate",
-    "cantUse": "This licence can't be used right now.",
-    "activated": "Godmode is activated",
-    "trialActive": "Your free trial is active"
   }
 }

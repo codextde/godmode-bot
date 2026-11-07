@@ -31,7 +31,6 @@ export default function About() {
   const copy = (value: string) => void copyPlain(value).then(() => Alert.alert(t("manage:install.copied"), value));
   const instance = me.data?.instance ?? connection?.instance;
   const appVersion = Constants.expoConfig?.version ?? "";
-  const open = (path: string) => void Linking.openURL(`${LICENSE_SITE}${path}`).catch(() => undefined);
 
   return (
     <SettingsScroll contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content}>
@@ -64,8 +63,7 @@ export default function About() {
       </Group>
 
       <Group footer={t("about.footer")}>
-        <LinkRow icon="globe" title={t("about.website")} value="usegodmode.com" onPress={() => open("")} />
-        <LinkRow icon="doc" title={t("about.terms")} onPress={() => open("/legal/terms")} />
+        <LinkRow icon="doc" title={t("about.terms")} onPress={() => void Linking.openURL(`${LICENSE_SITE}/legal/terms`).catch(() => undefined)} />
       </Group>
     </SettingsScroll>
   );

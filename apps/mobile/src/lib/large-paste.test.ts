@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { LARGE_PASTE_BYTES, largePaste } from "./large-paste";
+import { fitsInMessage, LARGE_PASTE_BYTES, largePaste } from "./large-paste";
 
 const big = "x".repeat(LARGE_PASTE_BYTES);
 
@@ -24,6 +24,11 @@ describe("largePaste", () => {
     const written = "w".repeat(199_000);
     const pasted = "z".repeat(1500);
     expect(largePaste(written, written + pasted)).toEqual({ pasted, rest: written });
+  });
+
+  test("a paste goes back into the message only while it stays under the limit", () => {
+    expect(fitsInMessage("w".repeat(100), "z".repeat(199_900))).toBe(true);
+    expect(fitsInMessage("w".repeat(101), "z".repeat(199_900))).toBe(false);
   });
 
   test("one more letter at the limit is no paste", () => {

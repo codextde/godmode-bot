@@ -39,6 +39,11 @@ const FONT_FILES = {
   [fonts.monoMedium]: GeistMono_500Medium,
 };
 
+/** Android: a long form opens as a page. A bottom sheet drags instead of scrolling while the keyboard is up, and leaves the field in use behind it. */
+const androidPage = process.env.EXPO_OS === "android" ? ({ presentation: "modal", headerShown: true, title: "" } as const) : null;
+/** The same for a form with a Cancel and Save row of its own. */
+const androidForm = process.env.EXPO_OS === "android" ? ({ presentation: "modal", headerShown: false } as const) : null;
+
 /** What a screen throws while rendering: the app stays open and starts over from here. */
 export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
   const c = useColors();
@@ -135,16 +140,16 @@ export default function RootLayout() {
                 <Stack.Screen name="artifact-file" options={{ title: "" }} />
                 <Stack.Screen name="artifact-new" options={{ presentation: "formSheet", sheetAllowedDetents: [0.62, 1], sheetGrabberVisible: true, headerShown: false }} />
                 <Stack.Screen name="call/[id]" options={{ headerTransparent: process.env.EXPO_OS === "ios", title: "" }} />
-                <Stack.Screen name="call-new" options={{ presentation: "formSheet", sheetAllowedDetents: [1], sheetGrabberVisible: true, headerShown: false }} />
+                <Stack.Screen name="call-new" options={{ presentation: "formSheet", sheetAllowedDetents: [1], sheetGrabberVisible: true, headerShown: false, ...androidForm }} />
                 <Stack.Screen name="human-task/[id]" options={{ presentation: "formSheet", sheetAllowedDetents: [0.75, 1], sheetGrabberVisible: true, headerShown: false }} />
-                <Stack.Screen name="new-task" options={{ presentation: "formSheet", sheetAllowedDetents: [0.8, 1], sheetGrabberVisible: true, headerShown: false }} />
-                <Stack.Screen name="task-edit" options={{ presentation: "formSheet", sheetAllowedDetents: [1], sheetGrabberVisible: true, headerShown: false }} />
+                <Stack.Screen name="new-task" options={{ presentation: "formSheet", sheetAllowedDetents: [0.8, 1], sheetGrabberVisible: true, headerShown: false, ...androidPage }} />
+                <Stack.Screen name="task-edit" options={{ presentation: "formSheet", sheetAllowedDetents: [1], sheetGrabberVisible: true, headerShown: false, ...androidForm }} />
                 <Stack.Screen name="model" options={{ presentation: "formSheet", sheetAllowedDetents: [0.8, 1], sheetGrabberVisible: true, headerShown: false }} />
                 <Stack.Screen name="chat-memory" options={{ presentation: "formSheet", sheetAllowedDetents: [0.62, 1], sheetGrabberVisible: true, headerShown: false }} />
-                <Stack.Screen name="memory-import" options={{ presentation: "formSheet", sheetAllowedDetents: [1], sheetGrabberVisible: true, headerShown: false }} />
+                <Stack.Screen name="memory-import" options={{ presentation: "formSheet", sheetAllowedDetents: [1], sheetGrabberVisible: true, headerShown: false, ...androidForm }} />
                 <Stack.Screen name="chat-options" options={{ presentation: "formSheet", sheetAllowedDetents: [0.62, 1], sheetGrabberVisible: true, headerShown: false }} />
                 <Stack.Screen name="chat-share" options={{ presentation: "formSheet", sheetAllowedDetents: [0.75, 1], sheetGrabberVisible: true, headerShown: false }} />
-                <Stack.Screen name="chat-import" options={{ presentation: "formSheet", sheetAllowedDetents: [1], sheetGrabberVisible: true, headerShown: false }} />
+                <Stack.Screen name="chat-import" options={{ presentation: "formSheet", sheetAllowedDetents: [1], sheetGrabberVisible: true, headerShown: false, ...androidPage }} />
                 <Stack.Screen name="chat-move" options={{ presentation: "formSheet", sheetAllowedDetents: [0.62, 1], sheetGrabberVisible: true, headerShown: false }} />
                 <Stack.Screen name="chat-folder" options={{ presentation: "formSheet", sheetAllowedDetents: [1], sheetGrabberVisible: true, headerShown: false }} />
                 <Stack.Screen name="subagent" options={{ presentation: "formSheet", sheetAllowedDetents: [0.75, 1], sheetGrabberVisible: true, headerShown: false }} />
@@ -154,7 +159,7 @@ export default function RootLayout() {
                 <Stack.Screen name="followup-time" options={{ presentation: "formSheet", sheetAllowedDetents: [0.38, 1], sheetGrabberVisible: true, headerShown: false }} />
                 <Stack.Screen name="workspaces" options={{ presentation: "formSheet", sheetAllowedDetents: [0.5, 1], sheetGrabberVisible: true, headerShown: false }} />
                 <Stack.Screen name="automation/[id]" options={{ headerTransparent: process.env.EXPO_OS === "ios", title: "" }} />
-                <Stack.Screen name="automation-edit" options={{ presentation: "formSheet", sheetAllowedDetents: [1], sheetGrabberVisible: true, headerShown: false }} />
+                <Stack.Screen name="automation-edit" options={{ presentation: "formSheet", sheetAllowedDetents: [1], sheetGrabberVisible: true, headerShown: false, ...androidForm }} />
                 <Stack.Screen name="automation-test" options={{ presentation: "formSheet", sheetAllowedDetents: [0.6, 1], sheetGrabberVisible: true, headerShown: false }} />
                 <Stack.Screen name="run/[id]" options={{ headerTransparent: process.env.EXPO_OS === "ios", title: "" }} />
                 <Stack.Screen name="dream/[id]" options={{ headerTransparent: process.env.EXPO_OS === "ios", title: t("layout.dream") }} />
@@ -164,17 +169,17 @@ export default function RootLayout() {
                 <Stack.Screen name="note" options={{ headerTransparent: process.env.EXPO_OS === "ios", title: "" }} />
                 <Stack.Screen name="chat-file" options={{ headerTransparent: process.env.EXPO_OS === "ios", title: "" }} />
                 <Stack.Screen name="agent-run" options={{ presentation: "formSheet", sheetAllowedDetents: [0.62, 1], sheetGrabberVisible: true, headerShown: false }} />
-                <Stack.Screen name="goal" options={{ presentation: "formSheet", sheetAllowedDetents: [0.62, 1], sheetGrabberVisible: true, headerShown: false }} />
+                <Stack.Screen name="goal" options={{ presentation: "formSheet", sheetAllowedDetents: [0.62, 1], sheetGrabberVisible: true, headerShown: false, ...androidForm }} />
                 <Stack.Screen name="vault/passphrase" options={{ presentation: "formSheet", sheetAllowedDetents: [0.4, 1], sheetGrabberVisible: true, headerShown: false }} />
-                <Stack.Screen name="vault/login-edit" options={{ presentation: "formSheet", sheetAllowedDetents: [1], sheetGrabberVisible: true, headerShown: false }} />
-                <Stack.Screen name="vault/totp-edit" options={{ presentation: "formSheet", sheetAllowedDetents: [1], sheetGrabberVisible: true, headerShown: false }} />
-                <Stack.Screen name="vault/link-totp" options={{ presentation: "formSheet", sheetAllowedDetents: [1], sheetGrabberVisible: true, headerShown: false }} />
-                <Stack.Screen name="vault/card-edit" options={{ presentation: "formSheet", sheetAllowedDetents: [1], sheetGrabberVisible: true, headerShown: false }} />
-                <Stack.Screen name="vault/ssh-key-new" options={{ presentation: "formSheet", sheetAllowedDetents: [0.75, 1], sheetGrabberVisible: true, headerShown: false }} />
+                <Stack.Screen name="vault/login-edit" options={{ presentation: "formSheet", sheetAllowedDetents: [1], sheetGrabberVisible: true, headerShown: false, ...androidForm }} />
+                <Stack.Screen name="vault/totp-edit" options={{ presentation: "formSheet", sheetAllowedDetents: [1], sheetGrabberVisible: true, headerShown: false, ...androidForm }} />
+                <Stack.Screen name="vault/link-totp" options={{ presentation: "formSheet", sheetAllowedDetents: [1], sheetGrabberVisible: true, headerShown: false, ...androidForm }} />
+                <Stack.Screen name="vault/card-edit" options={{ presentation: "formSheet", sheetAllowedDetents: [1], sheetGrabberVisible: true, headerShown: false, ...androidForm }} />
+                <Stack.Screen name="vault/ssh-key-new" options={{ presentation: "formSheet", sheetAllowedDetents: [0.75, 1], sheetGrabberVisible: true, headerShown: false, ...androidForm }} />
                 <Stack.Screen name="vault/key-edit" options={{ presentation: "formSheet", sheetAllowedDetents: [0.5, 1], sheetGrabberVisible: true, headerShown: false }} />
-                <Stack.Screen name="vault/password-import" options={{ presentation: "formSheet", sheetAllowedDetents: [1], sheetGrabberVisible: true, headerShown: false }} />
-                <Stack.Screen name="vault/ssh-key-import" options={{ presentation: "formSheet", sheetAllowedDetents: [0.75, 1], sheetGrabberVisible: true, headerShown: false }} />
-                <Stack.Screen name="vault/ssh-key-edit" options={{ presentation: "formSheet", sheetAllowedDetents: [0.75, 1], sheetGrabberVisible: true, headerShown: false }} />
+                <Stack.Screen name="vault/password-import" options={{ presentation: "formSheet", sheetAllowedDetents: [1], sheetGrabberVisible: true, headerShown: false, ...androidForm }} />
+                <Stack.Screen name="vault/ssh-key-import" options={{ presentation: "formSheet", sheetAllowedDetents: [0.75, 1], sheetGrabberVisible: true, headerShown: false, ...androidForm }} />
+                <Stack.Screen name="vault/ssh-key-edit" options={{ presentation: "formSheet", sheetAllowedDetents: [0.75, 1], sheetGrabberVisible: true, headerShown: false, ...androidForm }} />
                 <Stack.Screen name="agent-field" options={{ presentation: "formSheet", sheetAllowedDetents: [0.62, 1], sheetGrabberVisible: true, headerShown: false }} />
                 <Stack.Screen name="folder-pick" options={{ presentation: "formSheet", sheetAllowedDetents: [1], sheetGrabberVisible: true, headerShown: false }} />
                 <Stack.Screen name="folder-browse" options={{ presentation: "formSheet", sheetAllowedDetents: [1], sheetGrabberVisible: true, headerShown: false }} />
@@ -185,7 +190,6 @@ export default function RootLayout() {
                 <Stack.Screen name="files/delete" options={{ presentation: "formSheet", sheetAllowedDetents: [0.62, 1], sheetGrabberVisible: true, headerShown: false }} />
                 <Stack.Screen name="pull-request" options={{ headerTransparent: process.env.EXPO_OS === "ios", title: "" }} />
                 <Stack.Screen name="pull-request-merge" options={{ presentation: "formSheet", sheetAllowedDetents: [0.62, 1], sheetGrabberVisible: true, headerShown: false }} />
-                <Stack.Screen name="license" options={{ presentation: "formSheet", sheetAllowedDetents: [0.5, 1], sheetGrabberVisible: true, headerShown: false }} />
                 <Stack.Screen name="settings" options={{ presentation: "modal", headerShown: false, contentStyle: { backgroundColor: c.background } }} />
                 <Stack.Screen name="live" options={{ presentation: "fullScreenModal", headerShown: false, contentStyle: { backgroundColor: "#000" } }} />
                 <Stack.Screen name="voice-mode" options={{ presentation: "fullScreenModal", headerShown: false }} />

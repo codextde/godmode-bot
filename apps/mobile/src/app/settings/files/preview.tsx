@@ -16,6 +16,7 @@ import { Markdown } from "@/components/markdown";
 import { MemoryBudget } from "@/components/memory-budget";
 import { PdfPage } from "@/components/pdf-page";
 import { EmptyState, ErrorState, T } from "@/components/ui";
+import { zoomImage, ZoomView } from "@/components/zoom-view";
 import { api, ApiError, errorText, pictureBases } from "@/lib/api";
 import {
   fileKind,
@@ -357,10 +358,9 @@ function ImageView({ agent, path }: { agent: string; path: string }) {
     );
   }
   return (
-    <ScrollView
+    <ZoomView
+      max={5}
       contentInsetAdjustmentBehavior="automatic"
-      maximumZoomScale={5}
-      minimumZoomScale={1}
       centerContent
       bouncesZoom
       showsHorizontalScrollIndicator={false}
@@ -376,8 +376,9 @@ function ImageView({ agent, path }: { agent: string; path: string }) {
         cachePolicy="memory"
         transition={150}
         style={{ width, height: height * 0.75, backgroundColor: loaded ? undefined : c.sunken }}
+        {...zoomImage}
       />
-    </ScrollView>
+    </ZoomView>
   );
 }
 

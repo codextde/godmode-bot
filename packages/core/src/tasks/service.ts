@@ -791,10 +791,15 @@ export function markGoalFillOnly(goalId: string): void {
 
 /** A phone without full access wrote the ticket or to it: its chat runs without raw secrets from now on. */
 export function markTaskFillOnly(id: string): void {
-  const task = requireRow(id);
-  if (task.fill_only) return;
-  sql("UPDATE tasks SET fill_only = 1 WHERE id = ?", id);
-  if (task.conversation_id) sql("UPDATE conversations SET secret_access = 'fill' WHERE id = ?", task.conversation_id);
+  // A part's result goes into its parent's brief, and so on up to the lead.
+  const seen = new Set<string>();
+  for (let at: string | null = id; at && !seen.has(at); ) {
+    seen.add(at);
+    const task = requireRow(at);
+    sql("UPDATE tasks SET fill_only = 1 WHERE id = ?", task.id);
+    if (task.conversation_id) sql("UPDATE conversations SET secret_access = 'fill' WHERE id = ?", task.conversation_id);
+    at = task.parent_id;
+  }
 }
 
 export function updateTask(id: string, patch: TaskPatch, actor: TaskActor = "user"): Task {

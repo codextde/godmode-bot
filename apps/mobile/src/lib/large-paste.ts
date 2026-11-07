@@ -6,6 +6,9 @@ const MIN_PASTE_CHARS = 1024;
 
 export const utf8Size = (text: string) => (typeof TextEncoder === "undefined" ? text.length : new TextEncoder().encode(text).length);
 
+/** Whether a paste, sent along as a file, may go back into the message without passing the limit. */
+export const fitsInMessage = (text: string, pasted: string) => text.length + pasted.length <= MAX_MESSAGE_CHARS;
+
 /** What one change of the field put in, when only a paste that large does that; with the text around it. */
 export function largePaste(before: string, after: string): { pasted: string; rest: string } | null {
   if (after.length - before.length < MIN_PASTE_CHARS) return null;

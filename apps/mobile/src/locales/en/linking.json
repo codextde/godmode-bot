@@ -143,22 +143,6 @@
     "unlink": "Unlink",
     "unlinkFailed": "Couldn't unlink"
   },
-  "billing": {
-    "title": "Subscription",
-    "renewsOn": "Renews on {{date}}.",
-    "endsOn": "Ends on {{date}}.",
-    "cancelPlan": "Cancel subscription",
-    "cancelTitle": "Cancel the subscription?",
-    "cancelUntil": "Everything keeps working until {{date}}. You can resume before then.",
-    "cancelPeriod": "Everything keeps working until the end of the period. You can resume before then.",
-    "keep": "Keep it",
-    "cancel": "Cancel subscription",
-    "resume": "Resume subscription",
-    "resumeTitle": "Resume the subscription?",
-    "resumeOn": "It renews on {{date}} as before.",
-    "cancelFailed": "Couldn't cancel the subscription",
-    "resumeFailed": "Couldn't resume the subscription"
-  },
   "connect": {
     "title": "Connect an app",
     "another": "Another app",

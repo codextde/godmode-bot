@@ -18,7 +18,7 @@ import { addFiles, canScanDocuments, chooseCameraMode, formatBytes, fromPasted, 
 import { isChatFile, openChatFile, openChatImport } from "@/lib/chat-extras";
 import { useChatPrefs } from "@/lib/chat-prefs";
 import { findCommand, rankCommands, useDraft, useDrafts, useSlashCommands } from "@/lib/composer";
-import { largePaste } from "@/lib/large-paste";
+import { fitsInMessage, largePaste } from "@/lib/large-paste";
 import { fonts, radius, space, textScale, type, useColors } from "@/lib/theme";
 import { addPasteListener, setPasteActive } from "../../modules/paste-input";
 
@@ -257,11 +257,13 @@ export function Composer({
             <T variant="caption" muted numberOfLines={2} style={{ flex: 1 }}>
               {tr("composer.pastedAsFile", { size: formatBytes(pastedAs.size) })}
             </T>
-            <Pressable accessibilityRole="button" hitSlop={10} onPress={pasteAsText}>
-              <T variant="caption" style={{ fontWeight: "600" }}>
-                {tr("composer.pasteInline")}
-              </T>
-            </Pressable>
+            {fitsInMessage(text, pastedAs.text) ? (
+              <Pressable accessibilityRole="button" hitSlop={10} onPress={pasteAsText}>
+                <T variant="caption" style={{ fontWeight: "600" }}>
+                  {tr("composer.pasteInline")}
+                </T>
+              </Pressable>
+            ) : null}
           </Animated.View>
         ) : null}
         {hint ? <SlashHint command={hint} /> : null}

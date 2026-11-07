@@ -1138,41 +1138,17 @@
     "details": "Details"
   },
   "licenseNotice": {
-    "trialEnds": {
-      "today": "Your free trial ends today and won't continue.",
-      "tomorrow": "Your free trial ends tomorrow and won't continue.",
-      "inDays_one": "Your free trial ends in {{count}} day and won't continue.",
-      "inDays_other": "Your free trial ends in {{count}} days and won't continue."
+    "needed": "Godmode on your computer needs a licence",
+    "ending": {
+      "today": "From tomorrow, Godmode on your computer needs a licence.",
+      "tomorrow": "From the day after tomorrow, Godmode on your computer needs a licence.",
+      "inDays_one": "In {{count}} day, Godmode on your computer needs a licence.",
+      "inDays_other": "In {{count}} days, Godmode on your computer needs a licence."
     },
-    "trialRenews": {
-      "today": "Your free trial ends today. Your plan continues on its own after that.",
-      "tomorrow": "Your free trial ends tomorrow. Your plan continues on its own after that.",
-      "inDays_one": "Your free trial ends in {{count}} day. Your plan continues on its own after that.",
-      "inDays_other": "Your free trial ends in {{count}} days. Your plan continues on its own after that."
-    },
-    "freeTrial": {
-      "today": "Your free trial ends today.",
-      "tomorrow": "Your free trial ends tomorrow.",
-      "daysLeft_one": "{{count}} day left of your free trial.",
-      "daysLeft_other": "{{count}} days left of your free trial."
-    },
-    "pastDue": "The last payment didn't go through.",
-    "unverified": "Your licence key couldn't be checked yet. Godmode accepts it until {{date}}.",
+    "pastDue": "Check the licence in Godmode on your computer.",
+    "unverified": "Godmode on your computer couldn't check its licence yet. It keeps working until {{date}}.",
     "dateFormat": "MMMM d",
     "viewLicence": "View licence",
-    "addKey": "Add key",
-    "checkAgain": "Check again",
-    "checkFailed": "Couldn't check the licence",
-    "dismiss": "Dismiss for today",
-    "blocked": {
-      "trial": "Your free trial is over",
-      "payment": "Your payment didn't go through",
-      "canceled": "Your subscription has ended",
-      "ended": "Your licence has ended",
-      "activate": "Activate Godmode",
-      "paused": "Godmode paused new work because the last payment failed.",
-      "addKey": "Add your licence key to keep your agents working.",
-      "onComputer": "Add your licence key in Godmode on your computer to keep your agents working."
-    }
+    "dismiss": "Dismiss for today"
   }
 }

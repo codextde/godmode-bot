@@ -1,10 +1,13 @@
 import { Image } from "expo-image";
 import { useState } from "react";
-import { FlatList, Modal, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from "react-native";
+import { Modal, Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
+import Animated, { useAnimatedProps, useSharedValue, type SharedValue } from "react-native-reanimated";
 import { useTranslation } from "react-i18next";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Icon } from "./icon";
 import { T } from "./ui";
+import { zoomImage, ZoomView } from "./zoom-view";
 import { pictureBases } from "@/lib/api";
 import { useSession } from "@/lib/session";
 
@@ -19,20 +22,24 @@ export function PictureViewer({ pictures, start, onClose, onShare }: { pictures:
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const [index, setIndex] = useState(start);
+  const many = pictures.length > 1;
+  const held = useSharedValue(false);
+  const pager = useAnimatedProps(() => ({ scrollEnabled: many && !held.get() }));
   const current = pictures[index] ?? pictures[0];
   return (
     <Modal visible animationType="fade" presentationStyle="overFullScreen" transparent={false} onRequestClose={onClose} statusBarTranslucent>
-      <View style={styles.viewer}>
-        <FlatList
+      <GestureHandlerRootView style={styles.viewer}>
+        <Animated.FlatList
           data={pictures}
           horizontal
           pagingEnabled
           initialScrollIndex={start}
           getItemLayout={(_, i) => ({ length: width, offset: width * i, index: i })}
           keyExtractor={(p, i) => `${p.url}-${i}`}
-          renderItem={({ item }) => <Page picture={item} width={width} height={height} />}
+          renderItem={({ item }) => <Page picture={item} width={width} height={height} held={held} />}
           showsHorizontalScrollIndicator={false}
-          scrollEnabled={pictures.length > 1}
+          scrollEnabled={many}
+          animatedProps={pager}
           onMomentumScrollEnd={(e) => setIndex(Math.round(e.nativeEvent.contentOffset.x / width))}
         />
         <View style={[styles.bar, { paddingTop: insets.top + 6 }]} pointerEvents="box-none">
@@ -53,26 +60,18 @@ export function PictureViewer({ pictures, start, onClose, onShare }: { pictures:
             </Pressable>
           ) : null}
         </View>
-      </View>
+      </GestureHandlerRootView>
     </Modal>
   );
 }
 
 /** One picture, loaded with this phone's key from each of the computer's addresses in turn. */
-function Page({ picture, width, height }: { picture: ViewerPicture; width: number; height: number }) {
+function Page({ picture, width, height, held }: { picture: ViewerPicture; width: number; height: number; held: SharedValue<boolean> }) {
   const connection = useSession((s) => s.connection);
   const [attempt, setAttempt] = useState(0);
   const base = connection ? pictureBases(connection)[attempt] : undefined;
   return (
-    <ScrollView
-      style={{ width, height }}
-      contentContainerStyle={{ flex: 1 }}
-      maximumZoomScale={4}
-      minimumZoomScale={1}
-      centerContent
-      showsHorizontalScrollIndicator={false}
-      showsVerticalScrollIndicator={false}
-    >
+    <ZoomView max={4} held={held} style={{ width, height }} contentContainerStyle={{ flex: 1 }} centerContent showsHorizontalScrollIndicator={false} showsVerticalScrollIndicator={false}>
       {base ? (
         <Image
           source={{ uri: base + picture.url, headers: { authorization: `Bearer ${connection!.token}` }, cacheKey: picture.url }}
@@ -81,13 +80,14 @@ function Page({ picture, width, height }: { picture: ViewerPicture; width: numbe
           contentFit="contain"
           cachePolicy="disk"
           style={{ flex: 1 }}
+          {...zoomImage}
         />
       ) : (
         <View style={styles.missing}>
           <Icon name="photo" size={22} color="rgba(255, 255, 255, 0.5)" />
         </View>
       )}
-    </ScrollView>
+    </ZoomView>
   );
 }
 

@@ -2,6 +2,7 @@ import { differenceInCalendarDays, format, isToday, isYesterday } from "date-fns
 import type { Agent, AgentQuestion, AttentionItem, Conversation, HumanTask, MissingLogin, Routine, RunPause, Task, TaskBlockedKind, TaskPriority, Workspace, WorkspaceSource } from "@godmode/shared";
 import type { IconName } from "@/components/icon";
 import { dateLocale, t } from "@/lib/i18n";
+import { blockedReasonText } from "@/lib/license-text";
 
 /** The desktop's greeting: "Working late" before five, "Good night" from ten. */
 export function greeting(date = new Date()): string {
@@ -275,7 +276,7 @@ export function needsYou(input: {
       kind: review ? "review" : "blocked",
       agentId: task.agentId,
       title: review ? t("system:needs.readyForReview", { number: task.number, title: task.title }) : t("system:needs.isBlocked", { number: task.number, title: task.title }),
-      detail: review ? (task.agentId ? t("system:needs.delivered", { agent: nameOf(task.agentId) }) : "") : shorten(task.blockedReason ?? ""),
+      detail: review ? (task.agentId ? t("system:needs.delivered", { agent: nameOf(task.agentId) }) : "") : shorten(blockedReasonText(task) ?? ""),
       since: task.updatedAt,
       workspaceId: task.workspaceId,
       task,

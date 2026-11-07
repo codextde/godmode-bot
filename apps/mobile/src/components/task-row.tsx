@@ -11,6 +11,7 @@ import { Badge, LiveDot, Row, T, tap, UnassignedAvatar, type Tone } from "./ui";
 import { isWorking } from "@/lib/desktop-parity";
 import { shortTime } from "@/lib/format";
 import { t } from "@/lib/i18n";
+import { blockedReasonText } from "@/lib/license-text";
 import { radius, space, useColors } from "@/lib/theme";
 
 /** The desktop's labels (packages/shared TASK_STATUS_LABELS) and tones (task-meta.tsx). */
@@ -67,7 +68,7 @@ export function TaskRow({ task, agent, workspaceName, projectName, onLongPress }
           : null;
   const blocked =
     task.status === "blocked" && (task.blockedReason || task.blockedKind)
-      ? [task.blockedKind ? blockedPrefix(task.blockedKind) : "", task.blockedReason ?? (task.blockedKind === "interrupted" ? t("taskRow.restartedMidRun") : "")].filter(Boolean).join(" ")
+      ? [task.blockedKind ? blockedPrefix(task.blockedKind) : "", blockedReasonText(task) ?? (task.blockedKind === "interrupted" ? t("taskRow.restartedMidRun") : "")].filter(Boolean).join(" ")
       : null;
   const extra = [
     task.dueDate ? (isOverdue(task) ? t("taskRow.overdue") : t("taskRow.due", { date: task.dueDate.slice(5) })) : null,

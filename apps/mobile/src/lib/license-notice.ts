@@ -13,6 +13,8 @@ export type LicenseNoticeKind = "blocked" | "trial" | "past_due" | "grace" | "un
 export function licenseNotice(s: LicenseState, now = new Date()): LicenseNoticeKind | null {
   if (s.blocked) return "blocked";
   if (s.status === "trial" && s.trialEndsAt) {
+    // One that goes on by itself needs nothing from anyone.
+    if (!s.cancelAtPeriodEnd) return null;
     const left = new Date(s.trialEndsAt).getTime() - now.getTime();
     return left <= 0 || left > 3 * DAY_MS ? null : "trial";
   }
@@ -21,17 +23,6 @@ export function licenseNotice(s: LicenseState, now = new Date()): LicenseNoticeK
   if (s.status === "grace" && s.graceEndsAt) return differenceInCalendarDays(new Date(s.graceEndsAt), now) > GRACE_DAYS ? null : "grace";
   if (s.status === "unverified" && s.unverifiedUntil) return "unverified";
   return null;
-}
-
-export type LicenseBlock = "trial" | "payment" | "canceled" | "ended" | "activate";
-
-/** Why new work is refused, as the desktop's gate tells it apart. */
-export function licenseBlock(s: LicenseState): LicenseBlock {
-  const ended = s.status === "expired";
-  if ((s.status === "missing" && !!s.graceEndsAt) || (ended && s.endReason === "trial_ended")) return "trial";
-  if (ended && s.endReason === "payment_failed") return "payment";
-  if (ended && s.endReason === "canceled") return "canceled";
-  return ended ? "ended" : "activate";
 }
 
 const today = () => format(new Date(), "yyyy-MM-dd");

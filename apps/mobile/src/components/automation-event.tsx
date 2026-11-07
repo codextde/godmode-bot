@@ -6,6 +6,7 @@ import { Icon, type IconName } from "./icon";
 import { Badge, Row, T, type Tone } from "./ui";
 import { RowPressable } from "./row-pressable";
 import { dateLocale } from "@/lib/i18n";
+import { licenseText } from "@/lib/license-text";
 import { radius, space, useColors } from "@/lib/theme";
 
 const EVENT_SOURCES = {
@@ -60,7 +61,7 @@ export function EventRow({ event, automation, onPress }: { event: AutomationEven
         </Row>
         {event.note ? (
           <T variant="footnote" color={event.status === "failed" ? c.danger : c.textMuted}>
-            {event.note}
+            {event.status === "failed" ? licenseText(event.note) : event.note}
           </T>
         ) : null}
       </View>

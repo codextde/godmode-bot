@@ -4,12 +4,14 @@ import { useEffect, useMemo, useRef, useState, type ComponentType } from "react"
 import { ActivityIndicator, Alert, FlatList, Pressable, ScrollView, StyleSheet, useWindowDimensions, View, type ScrollViewInstance } from "react-native";
 import { useTranslation } from "react-i18next";
 import RNWebView, { type WebViewProps } from "react-native-webview";
+import Animated, { useAnimatedProps, useSharedValue, type SharedValue } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { Artifact, ArtifactFile } from "@godmode/shared";
 import { ArtifactPicture, fileIcon } from "@/components/artifact-files";
 import { HeaderActions } from "@/components/header-actions";
 import { Icon } from "@/components/icon";
 import { PdfPage } from "@/components/pdf-page";
+import { zoomImage, ZoomView } from "@/components/zoom-view";
 import { Button, EmptyState, ErrorState, GlassIconButton, Hairline, Row, T, tap } from "@/components/ui";
 import { forgetLocalCopies, servedCopy } from "@/lib/agent-files";
 import { ApiError, api, errorText, pictureBases } from "@/lib/api";
@@ -59,6 +61,8 @@ function Viewer({ artifact, start }: { artifact: Artifact; start: string }) {
   const index = Math.min(wanted, files.length - 1);
   const file = files[index]!;
   const many = files.length > 1;
+  const held = useSharedValue(false);
+  const pagerProps = useAnimatedProps(() => ({ scrollEnabled: !held.get() }));
   const [height, setHeight] = useState(0);
   const [slot] = useState(() => Math.random().toString(36).slice(2, 10));
   useEffect(() => () => forgetLocalCopies(slot), [slot]);
@@ -80,9 +84,10 @@ function Viewer({ artifact, start }: { artifact: Artifact; start: string }) {
       <HeaderActions actions={[{ icon: "download", label: t("files.download"), onPress: () => !download.isPending && download.mutate() }]} />
       <View style={{ flex: 1 }} onLayout={(e) => setHeight(e.nativeEvent.layout.height)}>
         {height > 0 ? (
-          <FlatList
+          <Animated.FlatList
             key={width}
             ref={pager}
+            animatedProps={pagerProps}
             data={files}
             extraData={index}
             horizontal
@@ -98,7 +103,7 @@ function Viewer({ artifact, start }: { artifact: Artifact; start: string }) {
             onMomentumScrollEnd={(e) => setWanted(Math.round(e.nativeEvent.contentOffset.x / width))}
             renderItem={({ item, index: i }) => (
               <View style={{ width, height }}>
-                <Page artifact={artifact} file={item} active={i === index} slot={slot} width={width} height={height} onSave={() => download.mutate()} saving={download.isPending} />
+                <Page artifact={artifact} file={item} active={i === index} slot={slot} width={width} height={height} held={held} onSave={() => download.mutate()} saving={download.isPending} />
               </View>
             )}
           />
@@ -146,6 +151,7 @@ function Page({
   slot,
   width,
   height,
+  held,
   saving,
   onSave,
 }: {
@@ -155,6 +161,7 @@ function Page({
   slot: string;
   width: number;
   height: number;
+  held: SharedValue<boolean>;
   saving: boolean;
   onSave: () => void;
 }) {
@@ -162,17 +169,9 @@ function Page({
   const { t } = useTranslation("artifacts");
   if (file.kind === "image") {
     return (
-      <ScrollView
-        maximumZoomScale={5}
-        minimumZoomScale={1}
-        centerContent
-        bouncesZoom
-        showsHorizontalScrollIndicator={false}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.center}
-      >
-        <ArtifactPicture artifact={artifact} file={file} style={{ width, height }} />
-      </ScrollView>
+      <ZoomView max={5} held={held} centerContent bouncesZoom showsHorizontalScrollIndicator={false} showsVerticalScrollIndicator={false} contentContainerStyle={styles.center}>
+        <ArtifactPicture artifact={artifact} file={file} style={{ width, height }} {...zoomImage} />
+      </ZoomView>
     );
   }
   if (file.kind === "file") {

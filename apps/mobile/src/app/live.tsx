@@ -16,6 +16,7 @@ import { Glass, GlassGroup } from "@/components/glass";
 import { Icon } from "@/components/icon";
 import { frameUri, phoneState, vmState } from "@/components/screen-tile";
 import { Button, GlassIconButton, SMOKE, LiveDot, T, tap } from "@/components/ui";
+import { ZoomView } from "@/components/zoom-view";
 import { api, errorText, type BrowserInput } from "@/lib/api";
 import { hostOf } from "@/lib/format";
 import { useNow } from "@/lib/hooks";
@@ -246,11 +247,10 @@ export default function Live() {
   return (
     <View style={styles.root}>
       <StatusBar hidden />
-      <ScrollView
+      <ZoomView
+        max={control ? 1 : 4}
         style={StyleSheet.absoluteFill}
         contentContainerStyle={{ width, height: box.height + top, paddingTop: top, alignItems: "center", justifyContent: "center" }}
-        maximumZoomScale={control ? 1 : 4}
-        minimumZoomScale={1}
         scrollEnabled={!(android && control)}
         centerContent
         showsHorizontalScrollIndicator={false}
@@ -330,7 +330,7 @@ export default function Live() {
             )}
           </View>
         )}
-      </ScrollView>
+      </ZoomView>
 
       <View style={[styles.top, { paddingTop: insets.top + 8, paddingLeft: insets.left + 16, paddingRight: insets.right + 16 }]}>
         <GlassIconButton icon="close" label={t("common:actions.close")} onPress={() => router.back()} dark />

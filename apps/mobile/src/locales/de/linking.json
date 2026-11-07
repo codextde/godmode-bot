@@ -143,22 +143,6 @@
     "unlink": "Trennen",
     "unlinkFailed": "Trennen fehlgeschlagen"
   },
-  "billing": {
-    "title": "Abo",
-    "renewsOn": "Verlängert sich am {{date}}.",
-    "endsOn": "Endet am {{date}}.",
-    "cancelPlan": "Abo kündigen",
-    "cancelTitle": "Abo kündigen?",
-    "cancelUntil": "Alles funktioniert bis zum {{date}}. Bis dahin kannst du es fortsetzen.",
-    "cancelPeriod": "Alles funktioniert bis zum Ende des Zeitraums. Bis dahin kannst du es fortsetzen.",
-    "keep": "Behalten",
-    "cancel": "Abo kündigen",
-    "resume": "Abo fortsetzen",
-    "resumeTitle": "Abo fortsetzen?",
-    "resumeOn": "Es verlängert sich wie bisher am {{date}}.",
-    "cancelFailed": "Abo konnte nicht gekündigt werden",
-    "resumeFailed": "Abo konnte nicht fortgesetzt werden"
-  },
   "connect": {
     "title": "App verbinden",
     "another": "Andere App",

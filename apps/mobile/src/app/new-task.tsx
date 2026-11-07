@@ -19,7 +19,7 @@ import { Icon } from "@/components/icon";
 import { ProjectPicker } from "@/components/project-picker";
 import { OTHER_REPO, TaskRepoFields } from "@/components/task-repo-fields";
 import { STATUS_META, TYPE_META } from "@/components/task-row";
-import { Button, Skeleton, T, tap } from "@/components/ui";
+import { Button, ErrorState, Skeleton, T, tap } from "@/components/ui";
 import { WorkspaceChip } from "@/components/workspace-chip";
 import { api, ApiError, errorText, updateDesktopMessage } from "@/lib/api";
 import { usePendingFiles } from "@/lib/attachments";
@@ -41,7 +41,8 @@ export default function NewTask() {
   const { agentId, parentId } = useLocalSearchParams<{ agentId?: string; parentId?: string }>();
   const { id: pickedWorkspace, workspace: pickedPlace, workspaces, projectId: scopeProject } = useWorkspace();
   const { fullAccess } = useFullAccess();
-  const parent = useQuery({ queryKey: qk.task(parentId ?? ""), queryFn: () => api.tasks.get(parentId!), enabled: !!parentId }).data;
+  const parentTask = useQuery({ queryKey: qk.task(parentId ?? ""), queryFn: () => api.tasks.get(parentId!), enabled: !!parentId });
+  const parent = parentTask.data;
   const workspaceId = parentId ? (parent?.workspaceId ?? null) : pickedWorkspace;
   const workspace = parentId ? workspaces.find((w) => w.id === workspaceId) : pickedPlace;
   // A workspace switched in the sheet takes its own projects: a pick from the old one doesn't carry over.
@@ -111,6 +112,14 @@ export default function NewTask() {
       setSaving(false);
     }
   };
+
+  if (parentId && !parent && parentTask.isError) {
+    return (
+      <View style={{ flex: 1, backgroundColor: c.background }}>
+        <ErrorState title={t("tasks:task.openFailed")} error={errorText(parentTask.error)} onRetry={() => void parentTask.refetch()} />
+      </View>
+    );
+  }
 
   return (
     <ScrollView

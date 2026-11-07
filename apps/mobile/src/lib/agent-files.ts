@@ -240,7 +240,10 @@ export async function localCopy(agentId: string, path: string, slot: string): Pr
 export async function servedCopy(url: string, name: string, slot: string): Promise<File> {
   const connection = useSession.getState().connection;
   if (!connection) throw new ApiError(401, t("system:api.notPaired"), "not_paired");
-  const target = new File(folder(slot), name);
+  // `base + url` with anything but a path of the computer would send this phone's key to another host.
+  if (!/^\/[^/\\]/.test(url)) throw new ApiError(400, t("system:api.offline"), "bad_url");
+  const leaf = name.replace(/^.*[\\/]/, "");
+  const target = new File(folder(slot), leaf && leaf !== "." && leaf !== ".." ? leaf : "file");
   let last: unknown = null;
   for (const base of pictureBases(connection)) {
     try {

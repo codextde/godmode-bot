@@ -22,6 +22,7 @@ import { api, errorText } from "@/lib/api";
 import { activityText, whenText } from "@/lib/format";
 import { dateLocale, intlLocale, currentLanguage } from "@/lib/i18n";
 import { chatListQuery, useAgents } from "@/lib/hooks";
+import { blockedReasonText } from "@/lib/license-text";
 import { useLive, useRunCounts } from "@/lib/live";
 import { qk, queryClient } from "@/lib/query";
 import { radius, space, useColors } from "@/lib/theme";
@@ -269,7 +270,7 @@ function Plate({ agent, onSwitchOn, switching }: { agent: Agent; onSwitchOn: () 
                     key={task.id}
                     icon={<Icon name="tasks" size={13} color={c.textMuted} />}
                     title={`#${task.number} ${task.title}`}
-                    detail={task.status === "blocked" && task.blockedReason ? `${STATUS_META[task.status].label} — ${task.blockedReason}` : STATUS_META[task.status].label}
+                    detail={task.status === "blocked" && task.blockedReason ? `${STATUS_META[task.status].label} — ${blockedReasonText(task)}` : STATUS_META[task.status].label}
                     onPress={() => openTask(task.id)}
                   />
                 ))}

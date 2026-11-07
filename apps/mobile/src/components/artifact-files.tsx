@@ -22,11 +22,13 @@ export function ArtifactPicture({
   artifact,
   file,
   contentFit = "contain",
+  allowDownscaling,
   style,
 }: {
   artifact: WithFiles;
   file: ArtifactFile;
   contentFit?: "contain" | "cover";
+  allowDownscaling?: boolean;
   style?: StyleProp<ImageStyle>;
 }) {
   const c = useColors();
@@ -41,6 +43,7 @@ export function ArtifactPicture({
       onError={() => setAttempt((a) => a + 1)}
       accessibilityLabel={file.name}
       contentFit={contentFit}
+      allowDownscaling={allowDownscaling}
       cachePolicy="disk"
       recyclingKey={path}
       style={style}

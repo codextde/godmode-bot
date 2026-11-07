@@ -1138,41 +1138,17 @@
     "details": "Details"
   },
   "licenseNotice": {
-    "trialEnds": {
-      "today": "Deine Testphase endet heute und wird nicht verlängert.",
-      "tomorrow": "Deine Testphase endet morgen und wird nicht verlängert.",
-      "inDays_one": "Deine Testphase endet in {{count}} Tag und wird nicht verlängert.",
-      "inDays_other": "Deine Testphase endet in {{count}} Tagen und wird nicht verlängert."
+    "needed": "Godmode auf deinem Computer braucht eine Lizenz",
+    "ending": {
+      "today": "Ab morgen braucht Godmode auf deinem Computer eine Lizenz.",
+      "tomorrow": "Ab übermorgen braucht Godmode auf deinem Computer eine Lizenz.",
+      "inDays_one": "In {{count}} Tag braucht Godmode auf deinem Computer eine Lizenz.",
+      "inDays_other": "In {{count}} Tagen braucht Godmode auf deinem Computer eine Lizenz."
     },
-    "trialRenews": {
-      "today": "Deine Testphase endet heute. Danach läuft dein Plan automatisch weiter.",
-      "tomorrow": "Deine Testphase endet morgen. Danach läuft dein Plan automatisch weiter.",
-      "inDays_one": "Deine Testphase endet in {{count}} Tag. Danach läuft dein Plan automatisch weiter.",
-      "inDays_other": "Deine Testphase endet in {{count}} Tagen. Danach läuft dein Plan automatisch weiter."
-    },
-    "freeTrial": {
-      "today": "Deine Testphase endet heute.",
-      "tomorrow": "Deine Testphase endet morgen.",
-      "daysLeft_one": "Noch {{count}} Tag in deiner Testphase.",
-      "daysLeft_other": "Noch {{count}} Tage in deiner Testphase."
-    },
-    "pastDue": "Die letzte Zahlung ist fehlgeschlagen.",
-    "unverified": "Dein Lizenzschlüssel konnte noch nicht geprüft werden. Godmode akzeptiert ihn bis {{date}}.",
+    "pastDue": "Prüfe die Lizenz in Godmode auf deinem Computer.",
+    "unverified": "Godmode auf deinem Computer konnte seine Lizenz noch nicht prüfen. Es läuft weiter bis {{date}}.",
     "dateFormat": "d. MMMM",
     "viewLicence": "Lizenz ansehen",
-    "addKey": "Schlüssel hinzufügen",
-    "checkAgain": "Erneut prüfen",
-    "checkFailed": "Die Lizenz konnte nicht geprüft werden",
-    "dismiss": "Für heute ausblenden",
-    "blocked": {
-      "trial": "Deine Testphase ist vorbei",
-      "payment": "Deine Zahlung ist nicht durchgegangen",
-      "canceled": "Dein Abo ist beendet",
-      "ended": "Deine Lizenz ist abgelaufen",
-      "activate": "Godmode aktivieren",
-      "paused": "Godmode hat neue Aufgaben pausiert, weil die letzte Zahlung fehlgeschlagen ist.",
-      "addKey": "Trag deinen Lizenzschlüssel ein, damit deine Agenten weiterarbeiten.",
-      "onComputer": "Trag deinen Lizenzschlüssel in Godmode auf deinem Computer ein, damit deine Agenten weiterarbeiten."
-    }
+    "dismiss": "Für heute ausblenden"
   }
 }

@@ -13,6 +13,7 @@ import { ArtifactFrame } from "@/components/artifact-frame";
 import { Glass } from "@/components/glass";
 import { HeaderActions } from "@/components/header-actions";
 import { Icon } from "@/components/icon";
+import { ModalTextInput } from "@/components/modal-field";
 import { SegmentedTabs } from "@/components/segmented-tabs";
 import { Button, EmptyState, ErrorState, Hairline, Row, T, tap } from "@/components/ui";
 import { forgetLocalCopies } from "@/lib/agent-files";
@@ -446,12 +447,11 @@ function TextSheetBody({ title, value, placeholder, multiline, maxLength, allowE
         }
       />
       <View style={{ paddingHorizontal: space.lg }}>
-        <TextInput
+        <ModalTextInput
           value={text}
           onChangeText={setText}
           placeholder={placeholder}
           placeholderTextColor={c.textFaint}
-          autoFocus
           multiline={multiline}
           maxLength={maxLength}
           style={[styles.field, { color: c.text, backgroundColor: c.surface, borderColor: c.border, minHeight: multiline ? 160 : undefined }]}

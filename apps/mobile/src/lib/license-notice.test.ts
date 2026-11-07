@@ -1,7 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 
 mock.module("expo-secure-store", () => ({ getItemAsync: async () => null, setItemAsync: async () => undefined }));
-const { licenseBlock, licenseNotice } = await import("./license-notice");
+const { licenseNotice } = await import("./license-notice");
 
 const NOW = new Date("2026-11-07T12:00:00Z");
 const base = {
@@ -31,10 +31,13 @@ describe("licenseNotice", () => {
   test("a refused licence comes before everything else", () => {
     expect(licenseNotice(state({ status: "past_due", blocked: true }), NOW)).toBe("blocked");
   });
-  test("a paid trial shows in its last three days only", () => {
-    expect(licenseNotice(state({ status: "trial", trialEndsAt: inDays(2) }), NOW)).toBe("trial");
-    expect(licenseNotice(state({ status: "trial", trialEndsAt: inDays(4) }), NOW)).toBeNull();
-    expect(licenseNotice(state({ status: "trial", trialEndsAt: inDays(-1) }), NOW)).toBeNull();
+  test("a paid trial that stops shows in its last three days only", () => {
+    expect(licenseNotice(state({ status: "trial", cancelAtPeriodEnd: true, trialEndsAt: inDays(2) }), NOW)).toBe("trial");
+    expect(licenseNotice(state({ status: "trial", cancelAtPeriodEnd: true, trialEndsAt: inDays(4) }), NOW)).toBeNull();
+    expect(licenseNotice(state({ status: "trial", cancelAtPeriodEnd: true, trialEndsAt: inDays(-1) }), NOW)).toBeNull();
+  });
+  test("a trial that goes on by itself says nothing", () => {
+    expect(licenseNotice(state({ status: "trial", trialEndsAt: inDays(2) }), NOW)).toBeNull();
   });
   test("a failed payment shows, also on a build that doesn't enforce", () => {
     expect(licenseNotice(state({ status: "past_due", enforced: false }), NOW)).toBe("past_due");
@@ -44,17 +47,5 @@ describe("licenseNotice", () => {
     expect(licenseNotice(state({ status: "grace", graceEndsAt: inDays(5) }), NOW)).toBeNull();
     expect(licenseNotice(state({ status: "grace", graceEndsAt: inDays(1), enforced: false }), NOW)).toBeNull();
     expect(licenseNotice(state({ status: "unverified", unverifiedUntil: inDays(9) }), NOW)).toBe("unverified");
-  });
-});
-
-describe("licenseBlock", () => {
-  test("tells the reasons apart like the desktop's gate", () => {
-    expect(licenseBlock(state({ status: "missing", graceEndsAt: inDays(-1) }))).toBe("trial");
-    expect(licenseBlock(state({ status: "missing" }))).toBe("activate");
-    expect(licenseBlock(state({ status: "expired", endReason: "trial_ended" }))).toBe("trial");
-    expect(licenseBlock(state({ status: "expired", endReason: "payment_failed" }))).toBe("payment");
-    expect(licenseBlock(state({ status: "expired", endReason: "canceled" }))).toBe("canceled");
-    expect(licenseBlock(state({ status: "expired" }))).toBe("ended");
-    expect(licenseBlock(state({ status: "invalid" }))).toBe("activate");
   });
 });

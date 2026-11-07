@@ -187,8 +187,9 @@
     "customModel": "Eigene Modell-ID"
   },
   "api": {
-    "license": "Godmode braucht auf deinem Computer eine aktive Lizenz. Trag deinen Lizenzschlüssel dort in Godmode unter Einstellungen → Lizenz ein.",
-    "licenseFull": "Godmode braucht eine aktive Lizenz. Trag deinen Lizenzschlüssel unter Einstellungen → Lizenz ein.",
+    "license": "Godmode auf deinem Computer braucht eine Lizenz.",
+    "licenseCheck": "Prüfe die Lizenz in Godmode auf deinem Computer.",
+    "cloudLimit": "Godmode Cloud ist für diesen Computer gerade nicht verfügbar.",
     "updateDesktop": "Aktualisiere Godmode auf deinem Computer, um das vom Handy aus zu tun.",
     "offline": "Dein Computer ist nicht erreichbar. Prüfe, ob er wach und mit Tailscale oder Godmode Cloud verbunden ist.",
     "offlinePairing": "Dein Computer ist nicht erreichbar. Schalte Tailscale auf diesem Handy mit dem Konto des Computers ein oder verbinde den Computer mit Godmode Cloud.",

@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { Modal, Pressable, StyleSheet, TextInput, View } from "react-native";
+import { Modal, Pressable, StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
+import { ModalTextInput } from "./modal-field";
 import { Button, T } from "./ui";
 import { fonts, radius, space, type, useColors } from "@/lib/theme";
 
@@ -55,8 +56,7 @@ export function TextPrompt({
       <View style={styles.wrap} pointerEvents="box-none">
         <View style={[styles.dialog, { backgroundColor: c.surface }]} accessibilityViewIsModal>
           <T variant="headline">{title}</T>
-          <TextInput
-            autoFocus
+          <ModalTextInput
             value={text}
             onChangeText={(next) => {
               setText(next);

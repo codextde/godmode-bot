@@ -181,19 +181,6 @@
       "originsHint": "Eine pro Zeile"
     }
   },
-  "license": {
-    "keyTitle": "Lizenzschlüssel",
-    "key": "Schlüssel",
-    "save": "Schlüssel speichern",
-    "add": "Lizenzschlüssel eingeben",
-    "change": "Lizenzschlüssel ändern",
-    "refresh": "Erneut prüfen",
-    "remove": "Schlüssel entfernen",
-    "removeTitle": "Lizenzschlüssel entfernen?",
-    "removeEnforced": "Godmode startet auf diesem Computer keine neue Arbeit mehr, bis wieder ein Schlüssel hinzugefügt wird. An deinem Abo selbst ändert sich nichts.",
-    "removeFree": "An deinem Abo selbst ändert sich nichts; du kannst den Schlüssel jederzeit wieder hinzufügen.",
-    "failed": "Lizenz konnte nicht geändert werden"
-  },
   "calls": {
     "ownerTitle": "Anrufe an dich",
     "number": "Deine Nummer",
@@ -268,10 +255,6 @@
     "takeBackTitle": "{{name}} den vollen Zugriff entziehen?",
     "takeBackBody": "Das Handy darf dann wieder nur, was Handys dürfen. Nur dein Computer kann vollen Zugriff wieder geben."
   },
-  "billingExtra": {
-    "invoices": "Rechnungen",
-    "portal": "Abrechnung und Zahlung"
-  },
   "browserExtra": {
     "captcha": "CAPTCHA-Lösen",
     "local": "Checkboxen durchklicken",
@@ -298,32 +281,5 @@
   },
   "logsExtra": {
     "shareFull": "Ganzes Protokoll teilen"
-  },
-  "licenseExtra": {
-    "manage": "Abo verwalten",
-    "remindersTitle": "Erinnerungen zur Testphase",
-    "reminderEmail": "E-Mail",
-    "reminderPlaceholder": "du@beispiel.de",
-    "reminderInvalid": "Das ist keine E-Mail-Adresse",
-    "reminderFailed": "Adresse konnte nicht gespeichert werden",
-    "reminderOn": "Erinnerungen gehen an {{email}}",
-    "reminderRemove": "Erinnerungen beenden",
-    "lostKey": "Schlüssel verloren?",
-    "lostKeyHint": "Er steht auf der Seite nach dem Kauf und auf deinen Rechnungen."
-  },
-  "licenseLink": {
-    "invalid": "Dieser Lizenzlink funktioniert nicht.",
-    "alreadyActive": "Diese Lizenz ist schon aktiv",
-    "failed": "Lizenz konnte nicht aktiviert werden",
-    "replaceTitle": "Neuen Lizenzschlüssel verwenden?",
-    "replaceText": "Godmode hat schon einen gültigen Schlüssel (endet auf {{old}}). Durch den Schlüssel mit der Endung {{next}} ersetzen?",
-    "replace": "Neuen Schlüssel verwenden",
-    "keep": "Aktuellen behalten",
-    "confirmTitle": "Diesen Lizenzschlüssel aktivieren?",
-    "confirmText": "Ein Link möchte den Lizenzschlüssel mit der Endung {{next}} zu Godmode hinzufügen. Mach nur weiter, wenn du ihn gerade gekauft oder von jemandem bekommen hast, dem du vertraust.",
-    "activate": "Aktivieren",
-    "cantUse": "Diese Lizenz kann gerade nicht verwendet werden.",
-    "activated": "Godmode ist aktiviert",
-    "trialActive": "Deine Testphase läuft"
   }
 }

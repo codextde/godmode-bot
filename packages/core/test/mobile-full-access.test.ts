@@ -419,6 +419,14 @@ describe("what a limited phone writes or answers keeps raw secrets out", () => {
     expect(ticketFill(fromFull.id)).toBe(0);
   }, 60_000);
 
+  test("a part marks every ticket above it, not only its parent", async () => {
+    const top = createTask({ title: "Top" }, "user");
+    const middle = createTask({ title: "Middle", parentId: top.id }, "user");
+    expect((await phone(limited, "/api/tasks", send("POST", { title: "Deep part", parentId: middle.id }))).status).toBe(200);
+    expect(get<{ fill_only: number }>("SELECT fill_only FROM tasks WHERE id = ?", middle.id)?.fill_only).toBe(1);
+    expect(get<{ fill_only: number }>("SELECT fill_only FROM tasks WHERE id = ?", top.id)?.fill_only).toBe(1);
+  });
+
   test("a part it adds works without raw secrets, and so does the ticket that reads its result", async () => {
     const lead = createTask({ title: "Computer lead" } as Parameters<typeof createTask>[0]);
     expect(ticketFill(lead.id)).toBe(0);

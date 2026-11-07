@@ -1,5 +1,5 @@
 import type { File } from "expo-file-system";
-import { useEffect, useMemo, useRef, useState, type ComponentType, type Ref } from "react";
+import { useEffect, useRef, useState, type ComponentType, type Ref } from "react";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
@@ -42,8 +42,9 @@ export function PdfViewer({ file, onFailed }: { file: File; onFailed: (reason: P
   const feed = useRef<Generator<string> | null>(null);
   const [shown, setShown] = useState(false);
   const [label, setLabel] = useState<string | null>(null);
-  const [nonce] = useState(randomToken);
-  const html = useMemo(() => pdfViewerPage({ nonce, background: c.background, surface: c.surface, bottom: insets.bottom }), [nonce, c.background, c.surface, insets.bottom]);
+  const opening = useRef(0);
+  // Written once: a new page would reload the web view, losing the document and the place in it.
+  const [html] = useState(() => pdfViewerPage({ nonce: randomToken(), background: c.background, surface: c.surface, bottom: insets.bottom }));
 
   useEffect(() => {
     if (file.size > MAX_BYTES) return onFailed("broken");
@@ -66,9 +67,13 @@ export function PdfViewer({ file, onFailed }: { file: File; onFailed: (reason: P
   const onMessage = (e: WebViewMessageEvent) => {
     const message = JSON.parse(e.nativeEvent.data) as ViewerMessage;
     if (message.type === "hello") {
+      // The page started (again): what an older page was fed must not go on into this one.
+      feed.current = null;
+      const open = ++opening.current;
       file
         .base64()
         .then((pdf) => {
+          if (open !== opening.current) return;
           feed.current = messages([...Object.entries(PDFJS_PARTS), ["pdf", pdf]]);
           sendNext();
         })

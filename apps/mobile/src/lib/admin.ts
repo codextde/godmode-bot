@@ -1,6 +1,6 @@
 import { File, Paths } from "expo-file-system";
 import { Alert } from "react-native";
-import type { AuditEntry, BackupImportResult, LicenseReminderInput, LicenseState, MobileDevice, MobilePairingOffer, MobileStatus, Settings, VaultStatus } from "@godmode/shared";
+import type { AuditEntry, BackupImportResult, MobileDevice, MobilePairingOffer, MobileStatus, Settings, VaultStatus } from "@godmode/shared";
 import { ApiError, errorText, reachableBase, request, type SettingsPatch } from "./api";
 import { t } from "./i18n";
 import { isCancelled, withGrant } from "./secrets";
@@ -57,14 +57,6 @@ export const adminApi = {
     },
   },
 
-  license: {
-    set: (key: string) => request<LicenseState>("PUT", "/api/license", { key }, 30_000),
-    remove: () => request<LicenseState>("DELETE", "/api/license"),
-    refresh: () => request<LicenseState>("POST", "/api/license/refresh", {}, 30_000),
-    /** Reminders before the free trial ends: the address goes to usegodmode.com only. */
-    setReminders: (input: LicenseReminderInput) => request<LicenseState>("PUT", "/api/license/reminders", input, 30_000),
-    removeReminders: () => request<LicenseState>("DELETE", "/api/license/reminders", undefined, 30_000),
-  },
 
   security: {
     audit: (action?: string) => request<AuditEntry[]>("GET", `/api/audit?limit=200${action ? `&action=${encodeURIComponent(action)}` : ""}`),

@@ -76,7 +76,7 @@
       "calls": "Phone calls",
       "cleanup": "Cleanup",
       "health": "System health",
-      "license": "License & billing",
+      "license": "License",
       "cloud": "Godmode Cloud",
       "devices": "Devices",
       "connected": "Connected apps",
@@ -581,7 +581,7 @@
     "status": {
       "active": "Active",
       "trial": "Free trial",
-      "pastDue": "Payment due",
+      "pastDue": "Check on your computer",
       "grace": "Free trial",
       "unverified": "Not checked yet",
       "missing": "No license",
@@ -597,18 +597,10 @@
     },
     "statusLabel": "Status",
     "planLabel": "Plan",
-    "key": "Key",
-    "freeUntil": "Free trial until",
-    "trialEnds": "Trial ends",
-    "trialEndsStops": "Trial ends, then stops",
-    "renewsOn": "Renews on",
-    "cancelsOn": "Cancels on",
-    "renews": "Renews",
-    "never": "Never, it's yours",
     "acceptedUntil": "Accepted until",
     "keepsWorking": "Keeps working until",
     "notEnforced": "A build of your own: it doesn't need a license.",
-    "onComputer": "Change the key or the subscription in Godmode on your computer.",
+    "onComputer": "You manage the licence in Godmode on your computer.",
     "usage": {
       "title": "On this computer",
       "since": "Since {{date}}",
@@ -630,30 +622,19 @@
     },
     "cloud": {
       "title": "Godmode Cloud",
-      "price": "Price",
-      "perMonth": "{{price}} / month",
-      "perYear": "{{price}} / year",
-      "renewsOn": "Renews on",
-      "endsOn": "Ends on",
       "computers": "Computers",
       "relay": "Relay data this month",
       "of": "{{used}} of {{limit}}",
-      "allIncluded": "Everything is included: there is nothing to pay on this cloud.",
       "sub": {
         "trialing": "Trial",
         "active": "Active",
-        "pastDue": "Payment due",
+        "pastDue": "Check on your computer",
         "canceled": "Ended",
-        "unpaid": "Unpaid",
+        "unpaid": "Check on your computer",
         "incomplete": "Incomplete",
         "expired": "Expired",
         "paused": "Paused"
       }
-    },
-    "partners": {
-      "title": "Earn 20% with Godmode",
-      "description": "Get 20% of every payment from the people you bring, for 12 months.",
-      "open": "Become a partner"
     }
   },
   "cloud": {
@@ -911,7 +892,6 @@
     "name": "Name",
     "version": "Version",
     "platform": "Platform",
-    "website": "Website",
     "terms": "License terms",
     "footer": "© Codext GmbH"
   },

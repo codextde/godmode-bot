@@ -24,6 +24,7 @@ import { BLOCKED_TITLE, dueLabel, formatWork, isWorking, PRIORITY_LABEL, taskRep
 import { activityText, hostOf } from "@/lib/format";
 import { useAgents } from "@/lib/hooks";
 import { dateLocale } from "@/lib/i18n";
+import { blockedReasonText } from "@/lib/license-text";
 import { qk, queryClient } from "@/lib/query";
 import { agentsFor, useWorkspace, scopeLabel } from "@/lib/workspace";
 import { radius, space, useColors } from "@/lib/theme";
@@ -309,7 +310,7 @@ export default function TaskScreen() {
                 {BLOCKED_TITLE[t.blockedKind](agent?.name ?? tr("task.theAgent"))}
               </T>
             ) : null}
-            {t.blockedReason ? <T variant="subhead">{t.blockedReason}</T> : null}
+            {t.blockedReason ? <T variant="subhead">{blockedReasonText(t)}</T> : null}
             {t.blockedKind === "publish" ? (
               <T variant="footnote" muted>
                 {tr("task.publishFailed")}

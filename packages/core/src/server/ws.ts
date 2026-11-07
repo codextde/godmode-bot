@@ -397,7 +397,11 @@ bus.on((event) => {
   if (event.type === "replica.changed") return deliver(event, (ws) => !!ws.data.link);
   // The windows show the primary's: this computer's own events still go to the computers linked to it.
   if (forwarded() && !ownEvent(event)) deliver(event, (ws) => !!ws.data.link);
-  else deliver(event, null);
+  else if (event.type === "claude.login") {
+    // A limited phone can't finish a sign-in, so it doesn't get the address either.
+    deliver(event, (ws) => !limitedPhone(ws));
+    deliver({ ...event, status: { ...event.status, url: null } }, limitedPhone);
+  } else deliver(event, null);
 });
 
 let linkSkip: ((peer: string, event: ServerEvent) => boolean) | null = null;

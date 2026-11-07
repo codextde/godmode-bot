@@ -7,6 +7,7 @@ import { Icon, type IconName } from "./icon";
 import { T } from "./ui";
 import { RowPressable } from "./row-pressable";
 import { shortTime } from "@/lib/format";
+import { licenseText } from "@/lib/license-text";
 import { notificationRoute } from "@/lib/notification-links";
 import { qk, queryClient } from "@/lib/query";
 import { radius, space, useColors, type Colors } from "@/lib/theme";
@@ -34,6 +35,7 @@ export const NotificationRow = memo(function NotificationRow({ notification: n, 
   const { t } = useTranslation("components");
   const meta = KIND[n.kind] ?? KIND.info;
   const tone = meta.tone(c);
+  const body = n.link === "/settings/license" ? licenseText(n.body) : n.body;
   return (
     <RowPressable
       accessibilityRole="button"
@@ -54,9 +56,9 @@ export const NotificationRow = memo(function NotificationRow({ notification: n, 
             {shortTime(n.createdAt)}
           </T>
         </View>
-        {n.body ? (
+        {body ? (
           <T variant="footnote" muted numberOfLines={2}>
-            {n.body}
+            {body}
           </T>
         ) : null}
       </View>

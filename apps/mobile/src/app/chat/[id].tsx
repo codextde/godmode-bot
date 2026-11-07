@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { router, Stack, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useHeaderHeight } from "expo-router/react-navigation";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, Switch, TextInput, View, type NativeScrollEvent, type NativeSyntheticEvent } from "react-native";
+import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, Switch, View, type NativeScrollEvent, type NativeSyntheticEvent } from "react-native";
 import { useTranslation } from "react-i18next";
 import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
 import { KeyboardAvoidingView, useKeyboardState } from "react-native-keyboard-controller";
@@ -31,6 +31,7 @@ import { HeaderActions, MenuSheet, type HeaderMenuItem } from "@/components/head
 import { LiveStrip } from "@/components/live-strip";
 import { AssistantMessage, UserMessage } from "@/components/message";
 import { Icon } from "@/components/icon";
+import { ModalTextInput } from "@/components/modal-field";
 import { ModelButton } from "@/components/model-button";
 import { ContextRing } from "@/components/context-ring";
 import { ChatScope, type ChatScopeValue } from "@/components/question-card";
@@ -649,8 +650,7 @@ function RenameDialog({ open, title, onClose, onSave }: { open: boolean; title: 
       <View style={styles.dialogWrap} pointerEvents="box-none">
         <View style={[styles.dialog, { backgroundColor: c.surface }]} accessibilityViewIsModal>
           <T variant="headline">{t("thread.rename")}</T>
-          <TextInput
-            autoFocus
+          <ModalTextInput
             value={text}
             onChangeText={setText}
             onSubmitEditing={save}

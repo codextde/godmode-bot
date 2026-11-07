@@ -76,6 +76,7 @@ import type {
 import { CloudErrorCode, LICENSE_REQUIRED, isPhoneUrlAllowed } from "@godmode/shared";
 import type { PendingFile, UploadFile } from "./attachments";
 import { t } from "./i18n";
+import { sellsSomething } from "./license-text";
 import { useLive } from "./live";
 import { withPending } from "./pending-queue";
 import { accepts, baseUrl, candidateOrder, computerOf, removedBy, type Candidate } from "./peers";
@@ -97,11 +98,8 @@ export class ApiError extends Error {
   }
 }
 
-/** The last answer to who this phone is; a full-access phone adds a licence key itself. */
-let fullAccessPhone = false;
-
 /** New work is refused until the computer has an active licence. */
-const licenseMessage = () => t(fullAccessPhone ? "system:api.licenseFull" : "system:api.license");
+const licenseMessage = () => t("system:api.license");
 
 /** An older Godmode on the computer refuses what the phone asked for (`device_forbidden`). */
 
@@ -124,7 +122,11 @@ async function send(url: string, init: RequestInit, timeoutMs = TIMEOUT_MS): Pro
 async function failure(res: Response): Promise<{ error?: string; code?: string; details?: unknown }> {
   try {
     const body = (await res.json()) as { error?: unknown; code?: unknown; details?: unknown } | null;
-    return { error: typeof body?.error === "string" ? body.error : undefined, code: typeof body?.code === "string" ? body.code : undefined, details: body?.details };
+    const error = typeof body?.error === "string" ? body.error : undefined;
+    const code = typeof body?.code === "string" ? body.code : undefined;
+    // The cloud words its limits with advice to buy a bigger plan; a store app must not show that.
+    const sells = code === CloudErrorCode.PlanLimit || (code === "cloud_error" && !!error && sellsSomething(error));
+    return { error: sells ? t("system:api.cloudLimit") : error, code, details: body?.details };
   } catch {
     return {};
   }
@@ -500,11 +502,7 @@ export type BrowserInput =
   | { type: "text"; text: string };
 
 export const api = {
-  me: () =>
-    get<MobileSession>("/api/mobile/me").then((session) => {
-      fullAccessPhone = session.fullAccess === true;
-      return session;
-    }),
+  me: () => get<MobileSession>("/api/mobile/me"),
   /** Only off: the computer gives a phone full access. */
   setFullAccess: (fullAccess: false) => patch<MobileSession>("/api/mobile/me", { fullAccess }),
   /** Ends this pairing on the computer; its refusals of the key from now on don't count as "removed". */

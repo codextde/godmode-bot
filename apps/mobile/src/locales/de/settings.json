@@ -76,7 +76,7 @@
       "calls": "Anrufe",
       "cleanup": "Aufräumen",
       "health": "Systemzustand",
-      "license": "Lizenz & Abrechnung",
+      "license": "Lizenz",
       "cloud": "Godmode Cloud",
       "devices": "Geräte",
       "connected": "Verbundene Apps",
@@ -581,7 +581,7 @@
     "status": {
       "active": "Aktiv",
       "trial": "Kostenlose Testphase",
-      "pastDue": "Zahlung fällig",
+      "pastDue": "Am Computer prüfen",
       "grace": "Testphase",
       "unverified": "Noch nicht geprüft",
       "missing": "Keine Lizenz",
@@ -597,18 +597,10 @@
     },
     "statusLabel": "Status",
     "planLabel": "Tarif",
-    "key": "Schlüssel",
-    "freeUntil": "Testphase bis",
-    "trialEnds": "Testphase endet",
-    "trialEndsStops": "Testphase endet, dann Schluss",
-    "renewsOn": "Verlängert sich am",
-    "cancelsOn": "Endet am",
-    "renews": "Verlängert sich",
-    "never": "Nie, sie gehört dir",
     "acceptedUntil": "Akzeptiert bis",
     "keepsWorking": "Funktioniert weiter bis",
     "notEnforced": "Ein eigener Build: Er braucht keine Lizenz.",
-    "onComputer": "Schlüssel oder Abo änderst du in Godmode auf deinem Computer.",
+    "onComputer": "Die Lizenz verwaltest du in Godmode auf deinem Computer.",
     "usage": {
       "title": "Auf diesem Computer",
       "since": "Seit {{date}}",
@@ -630,30 +622,19 @@
     },
     "cloud": {
       "title": "Godmode Cloud",
-      "price": "Preis",
-      "perMonth": "{{price}} / Monat",
-      "perYear": "{{price}} / Jahr",
-      "renewsOn": "Verlängert sich am",
-      "endsOn": "Endet am",
       "computers": "Computer",
       "relay": "Weitergeleitete Daten diesen Monat",
       "of": "{{used}} von {{limit}}",
-      "allIncluded": "Alles inklusive: In dieser Cloud gibt es nichts zu bezahlen.",
       "sub": {
         "trialing": "Testphase",
         "active": "Aktiv",
-        "pastDue": "Zahlung fällig",
+        "pastDue": "Am Computer prüfen",
         "canceled": "Beendet",
-        "unpaid": "Unbezahlt",
+        "unpaid": "Am Computer prüfen",
         "incomplete": "Unvollständig",
         "expired": "Abgelaufen",
         "paused": "Pausiert"
       }
-    },
-    "partners": {
-      "title": "Verdiene 20 % mit Godmode",
-      "description": "Du bekommst 20 % jeder Zahlung der Leute, die du bringst, 12 Monate lang.",
-      "open": "Partner werden"
     }
   },
   "cloud": {
@@ -911,7 +892,6 @@
     "name": "Name",
     "version": "Version",
     "platform": "Plattform",
-    "website": "Website",
     "terms": "Lizenzbedingungen",
     "footer": "© Codext GmbH"
   },
