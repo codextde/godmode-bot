@@ -2,7 +2,7 @@ import { useState } from "react";
 import { type LayoutRectangle, Pressable, StyleSheet, View } from "react-native";
 import Animated, { useAnimatedStyle, withSpring } from "react-native-reanimated";
 import { LiveDot, T, tap } from "./ui";
-import { alpha, radius, useColors } from "@/lib/theme";
+import { alpha, radius, textScale, useColors } from "@/lib/theme";
 
 export interface SegmentedTab<V extends string> {
   value: V;
@@ -51,13 +51,13 @@ export function SegmentedTabs<V extends string>({ tabs, value, onChange, label }
             }}
             style={styles.tab}
           >
-            <T variant="footnote" numberOfLines={1} color={active ? c.text : c.textMuted} style={{ fontWeight: "600", flexShrink: 1 }}>
+            <T variant="footnote" numberOfLines={1} maxScale={textScale.control} color={active ? c.text : c.textMuted} style={{ fontWeight: "600", flexShrink: 1 }}>
               {t.label}
             </T>
             {t.count ? (
               <View style={[styles.count, { backgroundColor: alpha(pillTone, t.tone && t.tone !== "neutral" ? 0.14 : 0.08) }]}>
                 {t.tone === "brand" && <LiveDot size={4} color={pillTone} />}
-                <T variant="caption" color={pillTone} style={styles.countText}>
+                <T variant="caption" maxScale={textScale.control} color={pillTone} style={styles.countText}>
                   {t.count}
                 </T>
               </View>
@@ -98,7 +98,7 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     flexBasis: "auto",
     minWidth: 0,
-    height: 34,
+    minHeight: 34,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",

@@ -4,10 +4,11 @@ import { useTranslation } from "react-i18next";
 import { PALETTES, type AppLanguage, type InterfaceMode, type Palette, type Theme, type TimeFormat } from "@godmode/shared";
 import { CloseButton } from "@/components/close-button";
 import { FieldRow, Group, PickerRow, SegmentRow, SwitchRow } from "@/components/form";
+import { useFullAccess } from "@/components/full-access";
 import { QueryState } from "@/components/settings-state";
 import { useAppearance } from "@/lib/appearance";
-import { useChatPrefs, type Animations, type ToolCallView } from "@/lib/chat-prefs";
-import { deviceHour12, useLanguage, useTimeFormat } from "@/lib/i18n";
+import { useChatPrefs, type Animations, type FollowUp, type ToolCallView } from "@/lib/chat-prefs";
+import { useLanguage, useTimeFormat } from "@/lib/i18n";
 import { patchSettings, useSettings } from "@/lib/setup";
 import { useSuggestions } from "@/lib/suggestions";
 import { space } from "@/lib/theme";
@@ -35,14 +36,9 @@ const MODE_OPTIONS = [
   { value: "pro", labelKey: "overview.mode.pro" },
 ] as const satisfies readonly { value: InterfaceMode; labelKey: string }[];
 
-const MODE_BLURB = {
-  easy: "overview.mode.easyBlurb",
-  pro: "overview.mode.proBlurb",
-} as const satisfies Record<InterfaceMode, string>;
-
 /** Settings → General: who you are, how the apps look and read, and how chats look on this phone. */
 export default function General() {
-  const { t } = useTranslation(["settings", "common"]);
+  const { t } = useTranslation(["settings", "common", "manage"]);
   const settings = useSettings();
   const theme = useAppearance((s) => s.theme);
   const palette = useAppearance((s) => s.palette);
@@ -51,6 +47,10 @@ export default function General() {
   const hideSuggestions = useSuggestions((s) => s.hidden);
   const toolCalls = useChatPrefs((s) => s.toolCalls);
   const animations = useChatPrefs((s) => s.animations);
+  const followUp = useChatPrefs((s) => s.followUp);
+  const mcpApps = useChatPrefs((s) => s.mcpApps);
+  const readReplies = useChatPrefs((s) => s.readReplies);
+  const { fullAccess } = useFullAccess();
 
   return (
     <ScrollView contentInsetAdjustmentBehavior="automatic" keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets contentContainerStyle={styles.content}>
@@ -61,11 +61,10 @@ export default function General() {
           const mode = s.general.mode === "easy" ? "easy" : "pro";
           return (
             <>
-              <Group footer={t("overview.preferences.footer")}>
+              <Group>
                 <FieldRow label={t("overview.preferences.yourName")} value={s.general.userName} placeholder={t("overview.preferences.addName")} maxLength={80} onCommit={(userName) => void patchSettings({ general: { userName } })} />
                 <SegmentRow
                   title={t("overview.mode.title")}
-                  detail={t("overview.mode.detail", { blurb: t(MODE_BLURB[mode]) })}
                   options={MODE_OPTIONS.map((o) => ({ value: o.value, label: t(o.labelKey) }))}
                   value={mode}
                   onChange={(next) => void patchSettings({ general: { mode: next } })}
@@ -75,7 +74,6 @@ export default function General() {
               <Group title={t("general.appearance")}>
                 <SegmentRow
                   title={t("general.colors")}
-                  detail={t("overview.theme.detail")}
                   options={THEME_OPTIONS.map((o) => ({ value: o.value, label: t(o.labelKey) }))}
                   value={theme}
                   onChange={(next) => {
@@ -85,14 +83,12 @@ export default function General() {
                 />
                 <PickerRow
                   title={t("overview.palette.title")}
-                  detail={t("overview.palette.detail")}
                   options={PALETTES.map((value) => ({ value, label: t(`overview.palette.names.${value}.label`), detail: t(`overview.palette.names.${value}.blurb`) }))}
                   value={palette}
                   onChange={(next: Palette) => useAppearance.getState().setPalette(next)}
                 />
                 <SegmentRow<Animations>
                   title={t("general.animations.title")}
-                  detail={t(`general.animations.${animations}`)}
                   options={[
                     { value: "full", label: t("general.animations.fullLabel") },
                     { value: "light", label: t("general.animations.lightLabel") },
@@ -105,7 +101,6 @@ export default function General() {
               <Group title={t("general.language")}>
                 <SegmentRow
                   title={t("overview.language.title")}
-                  detail={t("overview.language.detail")}
                   options={LANGUAGE_OPTIONS.map((o) => ({ value: o.value, label: t(o.labelKey) }))}
                   value={language}
                   onChange={(next) => {
@@ -115,7 +110,6 @@ export default function General() {
                 />
                 <SegmentRow
                   title={t("overview.timeFormat.title")}
-                  detail={t("overview.timeFormat.detail", { example: t(deviceHour12() ? "overview.timeFormat.h12" : "overview.timeFormat.h24") })}
                   options={TIME_FORMAT_OPTIONS.map((o) => ({ value: o.value, label: t(o.labelKey) }))}
                   value={timeFormat}
                   onChange={(next) => {
@@ -125,10 +119,9 @@ export default function General() {
                 />
               </Group>
 
-              <Group title={t("general.chat.title")} footer={t("general.chat.footer")}>
+              <Group title={t("general.chat.title")}>
                 <SegmentRow<ToolCallView>
                   title={t("general.chat.toolCalls")}
-                  detail={t(`general.chat.${toolCalls}`)}
                   options={[
                     { value: "cards", label: t("general.chat.cardsLabel") },
                     { value: "compact", label: t("general.chat.compactLabel") },
@@ -136,10 +129,20 @@ export default function General() {
                   value={toolCalls}
                   onChange={(next) => useChatPrefs.getState().setToolCalls(next)}
                 />
+                <SegmentRow<FollowUp>
+                  title={t("manage:followUp.title")}
+                  options={[
+                    { value: "queue", label: t("manage:followUp.queue") },
+                    { value: "steer", label: t("manage:followUp.steer") },
+                  ]}
+                  value={followUp}
+                  onChange={(next) => useChatPrefs.getState().setFollowUp(next)}
+                />
+                {fullAccess ? <SwitchRow icon="puzzle" title={t("general.chat.mcpApps")} value={mcpApps} onChange={(on) => useChatPrefs.getState().setMcpApps(on)} /> : null}
+                <SwitchRow icon="speaker" title={t("general.chat.readReplies")} value={readReplies} onChange={(on) => useChatPrefs.getState().setReadReplies(on)} />
                 <SwitchRow
                   icon="sparkles"
                   title={t("overview.suggestions.title")}
-                  detail={t("overview.suggestions.detail")}
                   value={!hideSuggestions}
                   onChange={(on) => useSuggestions.getState().setHidden(!on)}
                 />
@@ -151,14 +154,12 @@ export default function General() {
                   <SwitchRow
                     icon="chats"
                     title={t("general.summaries.chatTitles")}
-                    detail={t("general.summaries.chatTitlesDetail")}
                     value={s.general.aiChatTitles}
                     onChange={(aiChatTitles) => void patchSettings({ general: { aiChatTitles } })}
                   />
                   <SwitchRow
                     icon="bell"
                     title={t("general.summaries.notifications")}
-                    detail={t("general.summaries.notificationsDetail")}
                     value={s.general.aiNotificationSummaries}
                     onChange={(aiNotificationSummaries) => void patchSettings({ general: { aiNotificationSummaries } })}
                   />

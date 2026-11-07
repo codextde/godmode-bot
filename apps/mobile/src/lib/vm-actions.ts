@@ -1,7 +1,9 @@
 import { ActionSheetIOS, Alert } from "react-native";
 import type { Vm } from "@godmode/shared";
-import { api, errorText } from "./api";
+import { api, ApiError, errorText } from "./api";
 import { t } from "./i18n";
+import { staysAwake } from "./keep-awake";
+import { machinesApi } from "./machines";
 import { qk, queryClient } from "./query";
 
 export type VmAction = "start" | "stop" | "suspend" | "restart";
@@ -24,9 +26,21 @@ export async function runVmAction(vm: Pick<Vm, "id">, action: VmAction): Promise
   }
 }
 
-/** The VM's power menu: the system action sheet on iOS, an alert's buttons on Android. */
-export function showVmMenu(vm: Pick<Vm, "id" | "name" | "state">, onAction?: (action: VmAction) => void) {
-  const actions = vmActions(vm);
+/** A copy of a stopped VM. Only the answer may get lost on the way: the list then shows the copy, under a new id and the VM's name. */
+export async function duplicateVm(vm: Pick<Vm, "id" | "name">, known: Pick<Vm, "id">[]): Promise<Vm> {
+  try {
+    return await staysAwake(`vm-duplicate-${vm.id}`, () => machinesApi.vms.duplicate(vm.id));
+  } catch (err) {
+    const fresh = err instanceof ApiError && err.code === "timeout" ? await api.vms.list().catch(() => null) : null;
+    const copy = fresh?.find((v) => !known.some((k) => k.id === v.id) && v.name.startsWith(vm.name));
+    if (!copy) throw err;
+    return copy;
+  }
+}
+
+/** The VM's power menu: the system action sheet on iOS, an alert's buttons on Android. `only`: just that action, to confirm it. */
+export function showVmMenu(vm: Pick<Vm, "id" | "name" | "state">, onAction?: (action: VmAction) => void, only?: VmAction) {
+  const actions = vmActions(vm).filter((a) => !only || a === only);
   if (!actions.length) return;
   const run = (action: VmAction) => (onAction ? onAction(action) : void runVmAction(vm, action));
   const labels = actions.map((a) => t(`integrations:vm.${a}`));
@@ -45,5 +59,6 @@ export function showVmMenu(vm: Pick<Vm, "id" | "name" | "state">, onAction?: (ac
     );
     return;
   }
-  Alert.alert(vm.name, vm.state === "running" ? t("integrations:vm.interrupts") : undefined, actions.map((a, i) => ({ text: labels[i], style: a === "stop" ? "destructive" : "default", onPress: () => run(a) })), { cancelable: true });
+  const buttons = actions.map((a, i) => ({ text: labels[i], style: a === "stop" ? ("destructive" as const) : ("default" as const), onPress: () => run(a) }));
+  Alert.alert(vm.name, vm.state === "running" ? t("integrations:vm.interrupts") : undefined, only ? [{ text: t("common:actions.cancel"), style: "cancel" }, ...buttons] : buttons, { cancelable: true });
 }

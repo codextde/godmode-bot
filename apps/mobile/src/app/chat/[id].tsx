@@ -1,13 +1,13 @@
 import { FlashList, type FlashListRef, type ListRenderItem } from "@shopify/flash-list";
 import { useQuery } from "@tanstack/react-query";
 import { router, Stack, useFocusEffect, useLocalSearchParams } from "expo-router";
+import { useHeaderHeight } from "expo-router/react-navigation";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, Switch, TextInput, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { KeyboardAvoidingView, useKeyboardState } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
-  characterGreeting,
   type Agent,
   type Conversation,
   type ConversationFollowup,
@@ -23,7 +23,10 @@ import {
   runEndOf,
 } from "@godmode/shared";
 import { CharacterAvatar } from "@/components/character";
-import { Composer, ComposerDock, type ComposerHandle } from "@/components/composer";
+import { ChatFilesScope } from "@/components/chat-files";
+import { ChatMoveCard } from "@/components/chat-move-card";
+import { Composer, ComposerDock, type ComposerHandle, type SendOptions } from "@/components/composer";
+import { useFullAccess } from "@/components/full-access";
 import { HeaderActions, MenuSheet, type HeaderMenuItem } from "@/components/header-actions";
 import { LiveStrip } from "@/components/live-strip";
 import { AssistantMessage, UserMessage } from "@/components/message";
@@ -32,12 +35,15 @@ import { ModelButton } from "@/components/model-button";
 import { ContextRing } from "@/components/context-ring";
 import { ChatScope, type ChatScopeValue } from "@/components/question-card";
 import { QueueTray } from "@/components/queue-tray";
+import { RunnerOfflineBar } from "@/components/runner-offline-bar";
 import { Button, ErrorState, Skeleton, T, tap } from "@/components/ui";
 import { openHumanTask } from "@/components/human-task-row";
 import { ApiError, api, errorText, updateDesktopMessage } from "@/lib/api";
 import { useArchive } from "@/lib/archive";
 import { encodeFiles, type PendingFile } from "@/lib/attachments";
 import { fetchConversation, loadEarlier } from "@/lib/chat-cache";
+import { moveTargets, usePlaces } from "@/lib/chat-extras";
+import { useChatPrefs } from "@/lib/chat-prefs";
 import { isCompressCommand, useContextGauge } from "@/lib/chat-memory";
 import { setQueue } from "@/lib/composer";
 import { askHandoff, canHandoff, handoffChatIn, isHandoffCommand, takeHandoff } from "@/lib/handoff";
@@ -47,10 +53,11 @@ import { useAgents, useNow } from "@/lib/hooks";
 import { useChatRun, useLive, useRunActivity } from "@/lib/live";
 import { qk, queryClient } from "@/lib/query";
 import { subscribeConversation, viewConversation } from "@/lib/realtime";
+import { useSettings } from "@/lib/setup";
 import { screenHref, useChatScreens, type LiveScreen } from "@/lib/screens";
 import { radius, space, type, useColors } from "@/lib/theme";
-import { currentLanguage } from "@/lib/i18n";
 import { useTypewriter } from "@/lib/typewriter";
+import { markVoiceRun, useSpokenReplies } from "@/lib/voice-replies";
 
 type Item =
   | { key: string; role: "intro" }
@@ -106,6 +113,9 @@ export default function Chat() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
   const keyboardOpen = useKeyboardState((s) => s.isVisible);
+  // Android draws the header above the screen, not over it: the keyboard covers the screen from that far down.
+  const headerHeight = useHeaderHeight();
+  const keyboardOffset = process.env.EXPO_OS === "android" ? headerHeight : 0;
   const list = useRef<FlashListRef<Item>>(null);
   const conversation = useQuery({ queryKey: qk.conversation(id), queryFn: () => fetchConversation(id) });
   const forYou = useQuery({ queryKey: qk.chatHumanTasks(id), queryFn: () => api.humanTasks.list({ status: "active", conversationId: id }) });
@@ -118,6 +128,10 @@ export default function Chat() {
   const screens = useChatScreens(conversation.data, agent);
   const composer = useRef<ComposerHandle>(null);
   const [renaming, setRenaming] = useState(false);
+  const { fullAccess } = useFullAccess();
+  const places = usePlaces(fullAccess === true);
+  const awayPlace = places.find((p) => p.runnerId === conversation.data?.runnerId && !!p.runnerId && !p.self && p.state !== "online") ?? null;
+  const settings = useSettings();
   const isPrivate = !!conversation.data?.private;
   usePrivateChatLifetime(id, isPrivate);
   const continuedFrom = conversation.data?.continuedFrom ?? null;
@@ -138,7 +152,8 @@ export default function Chat() {
   const runId = run?.id;
   const running = run?.status === "running";
   const items = useMemo<Item[]>(() => {
-    const out: Item[] = [hasMore ? { key: "earlier", role: "earlier" } : { key: "intro", role: "intro" }];
+    // The agent's picture greets an empty chat only: it never sits above a transcript.
+    const out: Item[] = hasMore ? [{ key: "earlier", role: "earlier" }] : !messages?.length && !running ? [{ key: "intro", role: "intro" }] : [];
     if (isPrivate) out.push({ key: "private", role: "private" });
     if (hasOrigin) out.push({ key: "origin", role: "origin" });
     let answered = false;
@@ -188,7 +203,11 @@ export default function Chat() {
     [id, agent?.name, pause, t],
   );
 
-  const send = async (content: string, files: PendingFile[]) => {
+  const followUp = useChatPrefs((s) => s.followUp);
+  const working = !!run && !paused;
+  useSpokenReplies(id, runId, settings.data?.voice);
+
+  const send = async (content: string, files: PendingFile[], options?: SendOptions) => {
     if (isHandoffCommand(content)) askHandoff(id);
     const key = qk.conversation(id);
     const queueId = newQueueId();
@@ -220,6 +239,8 @@ export default function Chat() {
         });
         // Also settles the queue when the agent took the message before this answer arrived.
         void queryClient.invalidateQueries({ queryKey: key });
+        // Steer (Settings → General, or the other way when the button was held): the agent stops and starts on the queue right away.
+        if (working && (followUp === "steer") !== !!options?.otherWay) void api.conversations.queue.sendNow(id).catch(() => undefined);
         return;
       }
       if ("question" in result) {
@@ -239,6 +260,7 @@ export default function Chat() {
         };
       });
       useLive.getState().runStarted(result.run);
+      if (options?.voice) markVoiceRun(result.run.id);
       requestAnimationFrame(() => list.current?.scrollToEnd({ animated: true }));
     } catch (err) {
       pendingQueued.delete(queueId);
@@ -338,7 +360,12 @@ export default function Chat() {
           ? [{ icon: "pause" as const, title: t("thread.menu.pause"), onPress: () => void api.conversations.pause(id).catch((err) => Alert.alert(t("thread.pauseFailed"), errorText(err))) }]
           : []),
         ...(handoffOk && !handoffQueued ? [{ icon: "handoff" as const, title: t("conv.handoff"), onPress: handoff }] : []),
+        ...(settings.data?.voice.enabled !== false ? [{ icon: "waveform" as const, title: t("voiceMode.title"), onPress: () => router.push({ pathname: "/voice-mode", params: { conversationId: id } }) }] : []),
         { icon: "slider", title: t("conv.settings"), onPress: () => router.push({ pathname: "/chat-options", params: { conversationId: id } }) },
+        ...(fullAccess && !data.private ? [{ icon: "share" as const, title: t("share.menu"), onPress: () => router.push({ pathname: "/chat-share", params: { conversationId: id } }) }] : []),
+        ...(fullAccess && !data.private && moveTargets(places, data.runnerId).length
+          ? [{ icon: "laptop" as const, title: t("move.menu"), onPress: () => router.push({ pathname: "/chat-move", params: { conversationId: id } }) }]
+          : []),
         { icon: "pencil", title: t("common:actions.rename"), onPress: rename },
         ...(data.private
           ? []
@@ -356,7 +383,7 @@ export default function Chat() {
     ({ item }) => {
       switch (item.role) {
         case "intro":
-          return agent ? <Intro agent={agent} conversationId={id} running={!!runId} /> : null;
+          return agent ? <Intro agent={agent} running={!!runId} /> : null;
         case "earlier":
           return <Earlier conversationId={id} />;
         case "user":
@@ -370,7 +397,7 @@ export default function Chat() {
         case "private":
           return <PrivateNote />;
         default:
-          return <AssistantMessage blocks={item.blocks} content={item.content} streaming={item.streaming} agent={agent} />;
+          return <AssistantMessage id={item.key} blocks={item.blocks} content={item.content} streaming={item.streaming} agent={agent} />;
       }
     },
     [agent, id, runId, continuedFrom, delegatedFrom],
@@ -386,7 +413,7 @@ export default function Chat() {
         ]}
         menu={menu}
       />
-      <KeyboardAvoidingView behavior="translate-with-padding" style={{ flex: 1 }}>
+      <KeyboardAvoidingView behavior="translate-with-padding" keyboardVerticalOffset={keyboardOffset} style={{ flex: 1 }}>
         {!conversation.data ? (
           <View style={{ flex: 1 }}>
             {conversation.isError ? (
@@ -397,28 +424,28 @@ export default function Chat() {
           </View>
         ) : (
           <ChatScope.Provider value={scope}>
-            <FlashList
-              ref={list}
-              data={items}
-              keyExtractor={(item) => item.key}
-              contentInsetAdjustmentBehavior="automatic"
-              keyboardDismissMode="interactive"
-              maintainVisibleContentPosition={{ startRenderingFromBottom: true, autoscrollToBottomThreshold: 0.25 }}
-              onStartReached={() => void loadEarlier(id).catch(() => undefined)}
-              onStartReachedThreshold={0.6}
-              contentContainerStyle={styles.list}
-              ItemSeparatorComponent={Gap}
-              renderItem={renderItem}
-              getItemType={(item) => item.role}
-            />
+            <ChatFilesScope conversationId={id} runnerId={conversation.data.runnerId}>
+              <FlashList
+                ref={list}
+                data={items}
+                keyExtractor={(item) => item.key}
+                contentInsetAdjustmentBehavior="automatic"
+                keyboardDismissMode="interactive"
+                maintainVisibleContentPosition={{ startRenderingFromBottom: true, autoscrollToBottomThreshold: 0.25 }}
+                onStartReached={() => void loadEarlier(id).catch(() => undefined)}
+                onStartReachedThreshold={0.6}
+                contentContainerStyle={styles.list}
+                ItemSeparatorComponent={Gap}
+                renderItem={renderItem}
+                getItemType={(item) => item.role}
+              />
+            </ChatFilesScope>
           </ChatScope.Provider>
         )}
         {off && agent ? <SwitchedOffStrip agent={agent} /> : null}
         {forYou.data?.some((task) => !task.questionId) ? <ForYouStrip tasks={forYou.data.filter((task) => !task.questionId)} /> : null}
         {run && primary ? <ChatLiveStrip screen={primary} runId={run.id} /> : null}
-        {paused?.reason === "question" ? (
-          <AskingStrip agentName={agent?.name ?? t("thread.theAgent")} approval={paused.question?.kind === "approval"} />
-        ) : paused ? (
+        {paused?.reason === "question" ? null : paused ? (
           <PausedStrip conversationId={id} pause={paused} onContinue={resume} />
         ) : ended ? (
           <EndedStrip mode={ended.mode} onRetry={retry} busy={retrying} />
@@ -433,6 +460,8 @@ export default function Chat() {
             onHide={() => setCompressHiddenAt(longChat.tokens)}
           />
         ) : null}
+        <ChatMoveCard conversationId={id} />
+        {awayPlace ? <RunnerOfflineBar conversationId={id} place={awayPlace} here={places.find((p) => p.self) ?? null} /> : null}
         <QueueTray
           conversationId={id}
           queue={queue}
@@ -449,8 +478,9 @@ export default function Chat() {
             attachments
             onSend={send}
             onStop={stop}
-            running={!!run && !paused}
-            sendLabel={waiting ? t("thread.send.answer") : paused ? (paused.reason === "user" ? t("thread.send.andContinue") : t("thread.send.queue")) : queueing ? t("thread.send.queue") : null}
+            running={working}
+            sendLabel={waiting ? t("thread.send.answer") : paused ? (paused.reason === "user" ? t("thread.send.andContinue") : t("thread.send.queue")) : working && followUp === "steer" ? t("thread.send.steer") : queueing ? t("thread.send.queue") : null}
+            otherSend={working ? (followUp === "steer" ? t("thread.send.queue") : t("thread.send.steer")) : null}
             placeholder={
               !agent
                 ? t("thread.placeholder.message")
@@ -465,7 +495,9 @@ export default function Chat() {
                       : paused
                         ? t("thread.placeholder.whenContinues", { name: agent.name })
                         : run
-                          ? t("thread.placeholder.queue", { name: agent.name })
+                          ? followUp === "steer"
+                            ? t("thread.placeholder.steer", { name: agent.name })
+                            : t("thread.placeholder.queue", { name: agent.name })
                           : t("thread.placeholder.default", { name: agent.name })
             }
             blocked={!!agent && (!agent.enabled || agent.archived)}
@@ -689,20 +721,6 @@ function ForYouStrip({ tasks }: { tasks: HumanTask[] }) {
         {t("common:actions.open")}
       </T>
     </Pressable>
-  );
-}
-
-/** Above the composer while the chat's run waits for the human's answer: the reply in the composer is the answer. */
-function AskingStrip({ agentName, approval }: { agentName: string; approval: boolean }) {
-  const c = useColors();
-  const { t } = useTranslation(["chat", "common"]);
-  return (
-    <View style={[styles.paused, { backgroundColor: c.warningSoft, borderColor: c.warning }]}>
-      <Icon name="warning" size={15} color={c.warning} />
-      <T variant="footnote" style={{ flex: 1 }} numberOfLines={2}>
-        {approval ? t("thread.asking.approval", { name: agentName }) : t("thread.asking.question", { name: agentName })}
-      </T>
-    </View>
   );
 }
 
@@ -983,31 +1001,14 @@ function EndedStrip({ mode, onRetry, busy }: { mode: RetryMode; onRetry: () => v
   );
 }
 
-/** The agent at the top of the chat, saying hello in its own voice. */
-function Intro({ agent, conversationId, running }: { agent: Agent; conversationId: string; running: boolean }) {
-  const c = useColors();
-  // The phone doesn't know the human's name, so the greeting says "there".
-  const greeting = useMemo(
-    () => characterGreeting({ name: agent.name, personality: agent.personality ?? "", seed: conversationId, lang: currentLanguage() }),
-    [agent.name, agent.personality, conversationId],
-  );
+/** An empty chat: who it is with. */
+function Intro({ agent, running }: { agent: Agent; running: boolean }) {
   return (
     <View style={styles.intro}>
       <CharacterAvatar agent={agent} size={88} running={running} />
       <T variant="headline" style={{ marginTop: 4 }}>
         {agent.name}
       </T>
-      <View style={[styles.bubble, { backgroundColor: c.surface, borderColor: c.border }]}>
-        <View style={[styles.tail, { backgroundColor: c.surface, borderColor: c.border }]} />
-        <T variant="subhead" style={{ textAlign: "center" }}>
-          {greeting}
-        </T>
-      </View>
-      {agent.description ? (
-        <T variant="footnote" muted style={{ textAlign: "center", maxWidth: 280, marginTop: 4 }} numberOfLines={3}>
-          {agent.description}
-        </T>
-      ) : null}
     </View>
   );
 }
@@ -1085,25 +1086,5 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingTop: space.xl,
     paddingBottom: 6,
-  },
-  bubble: {
-    marginTop: 8,
-    maxWidth: 300,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: radius.lg,
-    borderCurve: "continuous",
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-  tail: {
-    position: "absolute",
-    top: -6,
-    alignSelf: "center",
-    width: 12,
-    height: 12,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderLeftWidth: StyleSheet.hairlineWidth,
-    borderTopLeftRadius: 3,
-    transform: [{ rotate: "45deg" }],
   },
 });

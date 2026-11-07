@@ -14,15 +14,11 @@
     "calls": "Calls",
     "artifacts": "Artifacts",
     "status": {
-      "connectedThrough": "Connected through {{computer}} — {{away}} is away",
+      "connectedThrough": "Connected through {{computer}}, {{away}} is away",
       "connected": "{{computer}} · connected",
       "connecting": "Connecting to {{computer}}…",
       "outOfReach": "{{computer}} is out of reach"
     },
-    "datePattern": "EEEE, MMMM d",
-    "agentsReady_one": "1 agent ready",
-    "agentsReady_other": "{{count}} agents ready",
-    "prompt": "What should we get done?",
     "askAgent": "Ask {{name}} anything, or hand over a task…",
     "ask": "Ask anything, or hand over a task…",
     "offline": {
@@ -37,8 +33,6 @@
       "elsewhere_other": "Nothing waits for you here. {{count}} things wait in other workspaces",
       "moreElsewhere_one": "+{{count}} in other workspaces · Inbox",
       "moreElsewhere_other": "+{{count}} in other workspaces · Inbox",
-      "allInInbox_one": "All {{count}} in the Inbox",
-      "allInInbox_other": "All {{count}} in the Inbox",
       "vaultLocked": "The vault is locked",
       "vaultLockedBody": "Agents can't sign in until you unlock it on your computer."
     },
@@ -47,10 +41,8 @@
     "queued_other": "{{count}} queued",
     "liveScreens": "Live screens",
     "offers": {
-      "titleOwner": "{{name}} can take these off your plate",
-      "title": "Work your agent can take off your plate",
-      "startsWith": "Starts with:",
-      "offered": "Offered {{time}}",
+      "titleOwner": "{{name}} offers",
+      "title": "Offers",
       "decline": "No thanks",
       "accept": "Do it",
       "startError": "Couldn't start it",
@@ -87,7 +79,7 @@
     "archivedOngoing_one": "1 archived chat still has work ahead",
     "archivedOngoing_other": "{{count}} archived chats still have work ahead",
     "sourceLabel": "Who started the chats",
-    "filterLabel": "Filter recent chats",
+    "status": "Status",
     "source": {
       "mine": { "label": "Mine", "hint": "Chats you started" },
       "automations": { "label": "Automations", "hint": "Started by an automation or the API" },
@@ -95,10 +87,10 @@
       "all": { "label": "All", "hint": "Every chat" }
     },
     "filter": {
-      "all": { "label": "All", "hint": "Every recent chat" },
-      "running": { "label": "Running", "hint": "Working, queued or waiting for you" },
-      "scheduled": { "label": "Scheduled", "hint": "Continue on their own later" },
-      "done": { "label": "Done", "hint": "Finished chats" }
+      "all": { "label": "All" },
+      "running": { "label": "Running" },
+      "scheduled": { "label": "Scheduled" },
+      "done": { "label": "Done" }
     },
     "empty": {
       "all": { "title": "No chats yet", "body": "New chats you start land in this list, on your computer too." },
@@ -134,7 +126,6 @@
   "tasks": {
     "title": "Tasks",
     "myTasks": "My tasks",
-    "myTasksCount": "My tasks · {{count}}",
     "archived": "Archived tasks",
     "filterActive": "Active",
     "loadError": "Couldn't load the board",
@@ -148,6 +139,12 @@
       "title": "No tasks yet",
       "body": "Hand an agent a task and follow it here: it works on it, then asks you to review."
     },
+    "goals": "Goals",
+    "newGoal": "New goal",
+    "archiveAll": "Archive all",
+    "archiveAllTitle_one": "Archive {{count}} {{status}} task?",
+    "archiveAllTitle_other": "Archive all {{count}} {{status}} tasks?",
+    "archiveAllBody": "Off the board, never deleted.",
     "archiveFailed": "Couldn't archive the task",
     "stopDialog": {
       "title": "Stop the agent?",
@@ -194,7 +191,7 @@
     },
     "empty": {
       "title": "Create your first agent",
-      "body": "Agents are coworkers with their own instructions, memory and schedule — e.g. one that downloads your invoices every month."
+      "body": "Agents are coworkers with their own instructions, memory and schedule, e.g. one that downloads your invoices every month."
     }
   }
 }

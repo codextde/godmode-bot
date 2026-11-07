@@ -1,4 +1,4 @@
-import { githubBranchUrl, isOverdue, isWaiting, mergesOnApprove, reopenStatus, waitsForAnswer, waitsForSubtasks, waitsForTickets } from "@godmode/shared";
+import { githubBranchUrl, isOverdue, parsePullRequestUrl, isWaiting, mergesOnApprove, reopenStatus, waitsForAnswer, waitsForSubtasks, waitsForTickets } from "@godmode/shared";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { format, formatDistanceToNowStrict } from "date-fns";
 import { useMemo, useState, type ReactNode } from "react";
@@ -7,7 +7,9 @@ import { Alert, Linking, Pressable, ScrollView, StyleSheet, View } from "react-n
 import { useTranslation } from "react-i18next";
 import type { Task, TaskStatus } from "@godmode/shared";
 import { CharacterAvatar } from "@/components/character";
+import { ChatFilesScope } from "@/components/chat-files";
 import { Composer } from "@/components/composer";
+import { useFullAccess } from "@/components/full-access";
 import { HeaderActions, type HeaderMenuItem } from "@/components/header-actions";
 import { Icon } from "@/components/icon";
 import { Markdown } from "@/components/markdown";
@@ -23,7 +25,7 @@ import { activityText, hostOf } from "@/lib/format";
 import { useAgents } from "@/lib/hooks";
 import { dateLocale } from "@/lib/i18n";
 import { qk, queryClient } from "@/lib/query";
-import { agentsFor, useWorkspace } from "@/lib/workspace";
+import { agentsFor, useWorkspace, scopeLabel } from "@/lib/workspace";
 import { radius, space, useColors } from "@/lib/theme";
 
 /** A task: what it's about, how far its agent got, and the buttons to move it along. */
@@ -37,6 +39,7 @@ export default function TaskScreen() {
   const { data: agents, byId } = useAgents();
   const { workspaces, id: pickedWorkspace } = useWorkspace();
   const [picking, setPicking] = useState(false);
+  const { fullAccess } = useFullAccess();
 
   const onDone = (next: Task) => {
     queryClient.setQueryData(qk.task(id), next);
@@ -104,6 +107,7 @@ export default function TaskScreen() {
 
   const gone = task.error instanceof ApiError && task.error.status === 404;
   const t = task.data ?? (gone ? undefined : seed);
+  const prInApp = fullAccess === true && !!t?.pullRequest?.number && !!parsePullRequestUrl(t.pullRequest.url);
   if (!t) {
     if (!task.isError) return <TaskSkeleton />;
     return (
@@ -195,6 +199,8 @@ export default function TaskScreen() {
   }
   if (github && idle && (!pr || pr.state === "closed")) menu.push({ icon: "pullRequest", title: tr("manage.createPr"), onPress: () => pullRequest.mutate() });
   if (!t.archivedAt && t.status !== "blocked" && t.status !== "done" && t.status !== "cancelled") menu.push({ icon: "octagon", title: tr("manage.block"), onPress: () => edit(true) });
+  if (!t.archivedAt) menu.push({ icon: "archive", title: tr("task.archive"), onPress: () => archive(true) });
+  if (!t.archivedAt && t.status !== "done" && t.status !== "cancelled") menu.push({ icon: "close", title: tr("task.cancelTask"), destructive: true, onPress: () => move("cancelled") });
   menu.push({ icon: "trash", title: tr("manage.delete"), destructive: true, onPress: confirmDelete });
 
   return (
@@ -207,13 +213,13 @@ export default function TaskScreen() {
         <Row style={{ gap: 6, flexWrap: "wrap" }}>
           <TaskStatusBadge task={t} />
           {t.archivedAt ? <Badge label={tr("task.archived")} /> : null}
-          <Badge label={workspace ? `${workspace.icon || "🗂️"} ${workspace.name}` : tr("task.global")} />
+          <Badge label={workspace ? scopeLabel(workspace) : tr("task.global")} />
           {projects.length > 0 && !t.archivedAt ? (
             <Pressable accessibilityRole="button" accessibilityLabel={project ? tr("task.projectA11y", { name: project.name }) : tr("task.addToProject")} hitSlop={6} onPress={pickProject}>
-              <Badge label={project ? `${project.icon ? `${project.icon} ` : ""}${project.name}` : tr("task.addProject")} tone={project ? "brand" : "neutral"} />
+              <Badge label={project ? scopeLabel(project) : tr("task.addProject")} tone={project ? "brand" : "neutral"} />
             </Pressable>
           ) : project ? (
-            <Badge label={`${project.icon ? `${project.icon} ` : ""}${project.name}`} tone="brand" />
+            <Badge label={scopeLabel(project)} tone="brand" />
           ) : null}
         </Row>
         {picking && (
@@ -384,7 +390,9 @@ export default function TaskScreen() {
           style={styles.pr}
           onPress={() => {
             tap();
-            void Linking.openURL(t.pullRequest!.url);
+            // A pull request on GitHub opens here (checks, merge) for a phone with full access; anything else on the web.
+            if (prInApp) router.push({ pathname: "/pull-request", params: { url: t.pullRequest!.url } });
+            else void Linking.openURL(t.pullRequest!.url);
           }}
         >
           <Icon name="branch" size={17} color={c.textMuted} />
@@ -397,14 +405,14 @@ export default function TaskScreen() {
               {t.branch ? ` · ${t.branch}` : ""}
             </T>
           </View>
-          <Icon name="external" size={14} color={c.textFaint} />
+          <Icon name={prInApp ? "chevron" : "external"} size={prInApp ? 12 : 14} color={c.textFaint} />
         </Card>
       )}
 
       {t.summary && (whole || loadingTexts) ? (
-        <TextSection title={isWorking(t) ? tr("task.previousResult") : t.type === "research" ? tr("task.report") : tr("task.result")} text={whole ? t.summary : undefined} />
+        <TextSection chat={t.conversationId} title={isWorking(t) ? tr("task.previousResult") : t.type === "research" ? tr("task.report") : tr("task.result")} text={whole ? t.summary : undefined} />
       ) : null}
-      {(whole && t.description) || loadingTexts ? <TextSection title={tr("task.details")} text={whole ? t.description : undefined} /> : null}
+      {(whole && t.description) || loadingTexts ? <TextSection chat={t.conversationId} title={tr("task.details")} text={whole ? t.description : undefined} /> : null}
 
       {canFollowUp && (
         <View>
@@ -499,14 +507,16 @@ function TextSkeleton() {
 }
 
 /** A titled card of Markdown; without `text` it is still loading. */
-function TextSection({ title, text }: { title: string; text?: string }) {
+function TextSection({ title, text, chat }: { title: string; text?: string; chat?: string | null }) {
   const { t } = useTranslation("tasks");
   return (
     <View>
       <SectionTitle title={title} />
       <Card style={styles.text}>
         {text ? (
-          <Markdown text={text} />
+          <ChatFilesScope conversationId={chat}>
+            <Markdown text={text} />
+          </ChatFilesScope>
         ) : (
           <View accessibilityRole="progressbar" accessibilityLabel={t("task.loadingSection", { section: title })}>
             <TextSkeleton />
@@ -577,8 +587,6 @@ function Actions({
       break;
   }
   if (onOpenChat) buttons.push({ title: t("task.openChat"), icon: "chats", onPress: onOpenChat });
-  buttons.push({ title: t("task.archive"), icon: "archive", archived: true });
-  if (task.status !== "done" && task.status !== "cancelled") buttons.push({ title: t("task.cancelTask"), icon: "close", status: "cancelled" });
   return <ActionButtons buttons={buttons} busy={busy} onMove={onMove} onArchive={onArchive} />;
 }
 
@@ -594,16 +602,18 @@ function ActionButtons({
   onArchive: (archived: boolean) => void;
 }) {
   if (!buttons.length) return null;
+  // Archiving and cancelling live in the header menu; the rest sit side by side, the main one on the right.
   return (
-    <View style={{ gap: space.sm }}>
-      {buttons.map((b) => (
+    <View style={{ flexDirection: "row", flexWrap: "wrap-reverse", gap: space.sm }}>
+      {[...buttons].reverse().map((b) => (
         <Button
           key={b.title}
           title={b.title}
           icon={b.icon}
-          variant={b.primary ? "primary" : b.status === "cancelled" ? "danger" : "secondary"}
+          variant={b.primary ? "primary" : "secondary"}
           disabled={busy && (!!b.status || b.archived !== undefined)}
           onPress={b.onPress ?? (() => (b.archived !== undefined ? onArchive(b.archived) : onMove(b.status!)))}
+          style={{ flexGrow: 1 }}
         />
       ))}
     </View>
@@ -643,7 +653,7 @@ function Properties({ task: t, onEdit }: { task: Task; onEdit?: () => void }) {
           </Row>
         </Prop>
       ) : null}
-      <Prop label={tr("task.type")} value={TYPE_META[t.type].label} detail={TYPE_META[t.type].hint} />
+      <Prop label={tr("task.type")} value={TYPE_META[t.type].label} />
       {coding ? <Prop label={tr("task.repository")} value={taskRepoLabel(t) || tr("task.workspaceRepo")} mono /> : null}
       {t.branch ? <Prop label={tr("task.branch")} value={`${t.branch} → ${t.baseBranch || tr("task.defaultBranchShort")}`} mono /> : null}
       {t.type === "coding" ? (

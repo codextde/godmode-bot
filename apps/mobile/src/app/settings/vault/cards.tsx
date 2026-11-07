@@ -3,6 +3,8 @@ import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { CardSummary, PurchaseRow } from "@/components/card-parts";
 import { Group } from "@/components/form";
+import { useFullAccess } from "@/components/full-access";
+import { HeaderActions } from "@/components/header-actions";
 import { EmptyState, ErrorState, Skeleton } from "@/components/ui";
 import { errorText } from "@/lib/api";
 import { queryClient } from "@/lib/query";
@@ -10,9 +12,10 @@ import { usePullRefresh } from "@/lib/use-pull-refresh";
 import { isOutdated, useCards, usePurchases, vk } from "@/lib/vault";
 import { space } from "@/lib/theme";
 
-/** Payment cards agents may pay with: masked, with this month's spending and the latest purchases. Changed on the computer. */
+/** Payment cards agents may pay with: masked, with this month's spending and the latest purchases. Added here with full access. */
 export default function Cards() {
   const { t } = useTranslation("vault");
+  const { fullAccess } = useFullAccess();
   const cards = useCards();
   const purchases = usePurchases();
   const pull = usePullRefresh(() => queryClient.invalidateQueries({ queryKey: vk.all }));
@@ -22,6 +25,7 @@ export default function Cards() {
   return (
     <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content} refreshControl={<RefreshControl {...pull} />}>
       <Stack.Screen options={{ title: t("cards.title") }} />
+      {fullAccess ? <HeaderActions actions={[{ icon: "plus", label: t("cardEdit.addTitle"), onPress: () => router.push("/vault/card-edit") }]} /> : null}
       {cards.isLoading ? (
         <View style={{ gap: space.md }}>
           <Skeleton height={112} radius={12} />
@@ -43,7 +47,7 @@ export default function Cards() {
       {recent.length ? (
         <Group title={t("purchases.title")}>
           {recent.map((p) => (
-            <PurchaseRow key={p.id} purchase={p} card={byId.get(p.cardId)} />
+            <PurchaseRow key={p.id} purchase={p} card={byId.get(p.cardId)} actions={!!fullAccess} />
           ))}
         </Group>
       ) : null}

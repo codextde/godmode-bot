@@ -25,7 +25,7 @@ import { getModelCatalog } from "../../runner/models";
 import { getDefaultAgentId } from "../../agents/service";
 import { applyRuntimeSettings } from "../../services/runtime";
 import { powerStatus, setLidClosedAwake } from "../../services/power";
-import { hasDashboardPassword, isPhoneRequest, requestVia } from "../auth";
+import { hasDashboardPassword, isOwnComputer, isPhoneRequest, requestDevice, requestVia, setDashboardPassword } from "../auth";
 import { requireGrant } from "../grants";
 import { body, z } from "../validate";
 import { pendingRequestCount } from "../../messaging/service";
@@ -82,6 +82,16 @@ export function registerSystemRoutes(app: Hono) {
     applyRuntimeSettings(next);
     if (cloud) audit("user", "cloud.settings", null, cloud);
     return c.json(next);
+  });
+
+  // Like POST /api/auth/password, which a phone's channel doesn't reach: for the computer and phones with full access.
+  app.put("/api/settings/dashboard-password", async (c) => {
+    if (!isOwnComputer(c) && !requestDevice(c)?.fullAccess) throw new HttpError(403, "Set the dashboard password on your computer.", "forbidden");
+    const { password } = await body(c, z.object({ password: z.string().min(8).max(512) }));
+    setDashboardPassword(password);
+    updateSettings({ server: { hasDashboardPassword: true } });
+    audit("user", "auth.password_changed", null, requestVia(c));
+    return c.json({ ok: true });
   });
 
   app.get("/api/notifications", (c) => c.json(listNotifications(Number(c.req.query("limit") ?? 100))));

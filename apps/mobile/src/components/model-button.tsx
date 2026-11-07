@@ -6,7 +6,7 @@ import { Icon } from "./icon";
 import { T, tap } from "./ui";
 import { useEffectiveModel, type ModelChoice } from "@/lib/composer";
 import { currentLanguage } from "@/lib/i18n";
-import { radius, useColors } from "@/lib/theme";
+import { radius, textScale, useColors } from "@/lib/theme";
 
 export function EffortGlyph({ level, count, color }: { level: number; count: number; color: ColorValue }) {
   return (
@@ -39,7 +39,7 @@ export function ModelButton({ agent, choice, conversationId }: { agent?: Agent; 
       }}
       style={({ pressed }) => [styles.button, { opacity: pressed ? 0.6 : 1 }]}
     >
-      <T variant="footnote" muted numberOfLines={1} style={{ fontWeight: "600", flexShrink: 1 }}>
+      <T variant="footnote" muted numberOfLines={1} maxScale={textScale.control} style={{ fontWeight: "600", flexShrink: 1 }}>
         {current.label}
       </T>
       {effort ? <EffortGlyph level={current.efforts.indexOf(effort)} count={current.efforts.length} color={c.textMuted} /> : null}

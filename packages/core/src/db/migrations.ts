@@ -2109,4 +2109,54 @@ ALTER TABLE agents ADD COLUMN archived_at TEXT;
 ALTER TABLE routines ADD COLUMN archived_at TEXT;
 `,
   },
+  {
+    id: 132,
+    name: "mobile_full_access",
+    sql: /* sql */ `
+-- Full access for a paired phone (mobile/scope.ts): it may do what the desktop app does. Only the computer switches it on.
+ALTER TABLE mobile_devices ADD COLUMN full_access INTEGER NOT NULL DEFAULT 0;
+`,
+  },
+  {
+    id: 133,
+    name: "mobile_push",
+    sql: /* sql */ `
+-- The Expo push token of a paired phone that wants notifications (mobile/push.ts); never in an API answer.
+ALTER TABLE mobile_devices ADD COLUMN push_token TEXT;
+`,
+  },
+  {
+    id: 134,
+    name: "phone_fill_only_runs",
+    sql: /* sql */ `
+-- A run (or a queued message) a phone without full access wrote: it gets no raw secrets, whatever its chat may read.
+ALTER TABLE runs ADD COLUMN fill_only INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE queued_messages ADD COLUMN fill_only INTEGER NOT NULL DEFAULT 0;
+`,
+  },
+  {
+    id: 135,
+    name: "phone_fill_only_tasks",
+    sql: /* sql */ `
+-- A ticket a phone without full access wrote or wrote to: its chat gets no raw secrets, also on retries and restarts.
+ALTER TABLE tasks ADD COLUMN fill_only INTEGER NOT NULL DEFAULT 0;
+`,
+  },
+  {
+    id: 136,
+    name: "phone_fill_only_goals",
+    sql: /* sql */ `
+-- A goal a phone without full access wrote: the tickets that serve it get no raw secrets.
+ALTER TABLE goals ADD COLUMN fill_only INTEGER NOT NULL DEFAULT 0;
+`,
+  },
+  {
+    id: 137,
+    name: "phone_fill_only_artifacts",
+    sql: /* sql */ `
+-- An artifact's refresh prompt or review a phone without full access wrote: its Refresh and Review done run without raw
+-- secrets until the prompt is saved on the computer.
+ALTER TABLE artifacts ADD COLUMN refresh_fill_only INTEGER NOT NULL DEFAULT 0;
+`,
+  },
 ];

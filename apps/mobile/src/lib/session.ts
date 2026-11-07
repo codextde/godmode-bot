@@ -37,7 +37,20 @@ interface SessionState {
   /** Keep the device group current, as a computer of it lists it (`GET /api/mobile/me`). */
   setGroup: (group: unknown) => void;
   disconnect: (reason?: "removed") => Promise<void>;
+  /**
+   * The paired computer refused `token`: the phone was removed there. Not for a key that is no longer the current one
+   * or that the phone gave up itself (`giveUp`); true when the pairing ended.
+   */
+  refused: (token: string) => Promise<boolean>;
   setAppLock: (on: boolean) => Promise<void>;
+}
+
+/** Keys this phone gave up itself (it unpaired, or paired again): the computer refusing one doesn't mean it was removed. */
+const givenUp = new Set<string>();
+
+/** This phone ends the pairing with `token` itself; the computer closes its socket and refuses it from now on. */
+export function giveUp(token: string) {
+  givenUp.add(token);
 }
 
 export const useSession = create<SessionState>((set, get) => ({
@@ -111,6 +124,12 @@ export const useSession = create<SessionState>((set, get) => ({
   disconnect: async (reason) => {
     await SecureStore.deleteItemAsync(CONNECTION_KEY, STORE_OPTIONS).catch(() => undefined);
     set({ connection: null, endedBecause: reason ?? null });
+  },
+
+  refused: async (token) => {
+    if (get().connection?.token !== token || givenUp.has(token)) return false;
+    await get().disconnect("removed");
+    return true;
   },
 
   setAppLock: async (on) => {

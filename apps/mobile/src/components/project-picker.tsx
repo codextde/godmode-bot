@@ -3,7 +3,8 @@ import { useTranslation } from "react-i18next";
 import type { Project } from "@godmode/shared";
 import { Icon } from "./icon";
 import { T, tap } from "./ui";
-import { radius, space, useColors } from "@/lib/theme";
+import { radius, space, textScale, useColors } from "@/lib/theme";
+import { ownEmoji } from "@/lib/workspace";
 
 /** One row of project chips: "No project" and the projects to pick from. Hidden when there are none. */
 export function ProjectPicker({
@@ -42,7 +43,7 @@ export function ProjectPicker({
       >
         {allowNone && <Chip active={!value} label={t("projectPicker.noProject")} onPress={() => onChange(null)} />}
         {projects.map((p) => (
-          <Chip key={p.id} active={value === p.id} label={p.name} icon={p.icon} folder onPress={() => onChange(p.id)} />
+          <Chip key={p.id} active={value === p.id} label={p.name} icon={ownEmoji(p.icon)} folder onPress={() => onChange(p.id)} />
         ))}
       </ScrollView>
       {hint ? (
@@ -67,7 +68,7 @@ function Chip({ active, label, icon, folder, onPress }: { active: boolean; label
       style={[styles.chip, { backgroundColor: active ? c.primary : c.sunken }]}
     >
       {icon ? <T style={{ fontSize: 14 }}>{icon}</T> : folder ? <Icon name="folder" size={13} color={active ? c.onPrimary : c.textMuted} /> : null}
-      <T variant="subhead" numberOfLines={1} color={active ? c.onPrimary : c.text} style={{ fontWeight: "600" }}>
+      <T variant="subhead" numberOfLines={1} maxScale={textScale.control} color={active ? c.onPrimary : c.text} style={{ fontWeight: "600" }}>
         {label}
       </T>
     </Pressable>
@@ -79,8 +80,8 @@ export function ProjectTag({ project }: { project: Pick<Project, "name" | "icon"
   const c = useColors();
   return (
     <View style={[styles.tag, { backgroundColor: c.sunken }]}>
-      {project.icon ? <T style={{ fontSize: 11 }}>{project.icon}</T> : <Icon name="folder" size={10} color={c.textMuted} />}
-      <T variant="caption" numberOfLines={1} style={{ fontWeight: "600", flexShrink: 1 }}>
+      {ownEmoji(project.icon) ? <T style={{ fontSize: 11 }}>{project.icon}</T> : <Icon name="folder" size={10} color={c.textMuted} />}
+      <T variant="caption" numberOfLines={1} maxScale={textScale.control} style={{ fontWeight: "600", flexShrink: 1 }}>
         {project.name}
       </T>
     </View>

@@ -23,7 +23,7 @@ import { usePendingFiles } from "@/lib/attachments";
 import { useAgents } from "@/lib/hooks";
 import { qk, queryClient } from "@/lib/query";
 import { agentsFor, useWorkspace } from "@/lib/workspace";
-import { radius, space, useColors } from "@/lib/theme";
+import { radius, space, textScale, useColors } from "@/lib/theme";
 
 const NONE = "none";
 
@@ -146,10 +146,11 @@ export default function NewTask() {
             <Chip key={k} active={k === type} onPress={() => setType(k)} label={TYPE_META[k].label} />
           ))}
         </View>
-        <T variant="footnote" muted>
-          {TYPE_META[type].hint}
-          {type === "coding" && !workspace ? t("newTask.codingNeedsWorkspace") : "."}
-        </T>
+        {type === "coding" && !workspace ? (
+          <T variant="footnote" muted>
+            {t("newTask.codingNeedsWorkspace")}
+          </T>
+        ) : null}
       </View>
 
       <ProjectPicker
@@ -170,9 +171,6 @@ export default function NewTask() {
             : agents.map((a) => <Chip key={a.id} active={a.id === agent?.id} onPress={() => setPicked(a.id)} label={a.name} agent={a} />)}
           <Chip active={!agent} onPress={() => setPicked(NONE)} label={t("newTask.unassigned")} />
         </View>
-        <T variant="footnote" muted>
-          {agent ? t("newTask.agentStarts", { name: agent.name }) : t("newTask.waitsInBacklog")}
-        </T>
       </View>
 
       <Button
@@ -200,7 +198,7 @@ function Chip({ active, onPress, label, agent }: { active: boolean; onPress: () 
       style={[styles.chip, { backgroundColor: active ? c.primary : c.sunken }, agent && { paddingLeft: 8 }]}
     >
       {agent ? <CharacterAvatar agent={agent} size={24} /> : null}
-      <T variant="subhead" color={active ? c.onPrimary : c.text} style={{ fontWeight: "600" }}>
+      <T variant="subhead" numberOfLines={1} maxScale={textScale.control} color={active ? c.onPrimary : c.text} style={{ fontWeight: "600" }}>
         {label}
       </T>
     </Pressable>

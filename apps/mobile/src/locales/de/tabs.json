@@ -14,15 +14,11 @@
     "calls": "Anrufe",
     "artifacts": "Artefakte",
     "status": {
-      "connectedThrough": "Verbunden über {{computer}} — {{away}} ist abwesend",
+      "connectedThrough": "Verbunden über {{computer}}, {{away}} ist abwesend",
       "connected": "{{computer}} · verbunden",
       "connecting": "Verbinde mit {{computer}}…",
       "outOfReach": "{{computer}} ist nicht erreichbar"
     },
-    "datePattern": "EEEE, d. MMMM",
-    "agentsReady_one": "1 Agent bereit",
-    "agentsReady_other": "{{count}} Agenten bereit",
-    "prompt": "Was packen wir heute an?",
     "askAgent": "Frag {{name}} etwas oder übergib eine Aufgabe…",
     "ask": "Frag etwas oder übergib eine Aufgabe…",
     "offline": {
@@ -37,8 +33,6 @@
       "elsewhere_other": "Hier wartet nichts auf dich. {{count}} Sachen warten in anderen Workspaces",
       "moreElsewhere_one": "+{{count}} in anderen Workspaces · Eingang",
       "moreElsewhere_other": "+{{count}} in anderen Workspaces · Eingang",
-      "allInInbox_one": "{{count}} im Eingang",
-      "allInInbox_other": "Alle {{count}} im Eingang",
       "vaultLocked": "Der Tresor ist gesperrt",
       "vaultLockedBody": "Agenten können sich erst anmelden, wenn du ihn auf deinem Computer entsperrst."
     },
@@ -47,10 +41,8 @@
     "queued_other": "{{count}} in der Warteschlange",
     "liveScreens": "Live-Bildschirme",
     "offers": {
-      "titleOwner": "{{name}} kann dir das abnehmen",
-      "title": "Arbeit, die dir dein Agent abnehmen kann",
-      "startsWith": "Beginnt mit:",
-      "offered": "Angeboten {{time}}",
+      "titleOwner": "{{name}} bietet an",
+      "title": "Angebote",
       "decline": "Nein danke",
       "accept": "Mach das",
       "startError": "Konnte nicht gestartet werden",
@@ -87,7 +79,7 @@
     "archivedOngoing_one": "1 archivierter Chat hat noch Arbeit vor sich",
     "archivedOngoing_other": "{{count}} archivierte Chats haben noch Arbeit vor sich",
     "sourceLabel": "Wer die Chats gestartet hat",
-    "filterLabel": "Letzte Chats filtern",
+    "status": "Status",
     "source": {
       "mine": { "label": "Meine", "hint": "Chats, die du gestartet hast" },
       "automations": { "label": "Automationen", "hint": "Von einer Automation oder der API gestartet" },
@@ -95,10 +87,10 @@
       "all": { "label": "Alle", "hint": "Alle Chats" }
     },
     "filter": {
-      "all": { "label": "Alle", "hint": "Alle letzten Chats" },
-      "running": { "label": "Aktiv", "hint": "Arbeiten, warten in der Schlange oder auf dich" },
-      "scheduled": { "label": "Geplant", "hint": "Machen später von selbst weiter" },
-      "done": { "label": "Fertig", "hint": "Abgeschlossene Chats" }
+      "all": { "label": "Alle" },
+      "running": { "label": "Aktiv" },
+      "scheduled": { "label": "Geplant" },
+      "done": { "label": "Fertig" }
     },
     "empty": {
       "all": { "title": "Noch keine Chats", "body": "Neue Chats landen in dieser Liste, auch auf deinem Computer." },
@@ -134,7 +126,6 @@
   "tasks": {
     "title": "Aufgaben",
     "myTasks": "Meine Aufgaben",
-    "myTasksCount": "Meine Aufgaben · {{count}}",
     "archived": "Archivierte Aufgaben",
     "filterActive": "Aktiv",
     "loadError": "Das Board konnte nicht geladen werden",
@@ -148,6 +139,12 @@
       "title": "Noch keine Aufgaben",
       "body": "Gib einem Agenten eine Aufgabe und verfolge sie hier: Er arbeitet daran und bittet dich dann um Prüfung."
     },
+    "goals": "Ziele",
+    "newGoal": "Neues Ziel",
+    "archiveAll": "Alle archivieren",
+    "archiveAllTitle_one": "{{count}} Aufgabe aus {{status}} archivieren?",
+    "archiveAllTitle_other": "Alle {{count}} Aufgaben aus {{status}} archivieren?",
+    "archiveAllBody": "Vom Board genommen, nie gelöscht.",
     "archiveFailed": "Aufgabe konnte nicht archiviert werden",
     "stopDialog": {
       "title": "Agenten stoppen?",
@@ -194,7 +191,7 @@
     },
     "empty": {
       "title": "Erstelle deinen ersten Agenten",
-      "body": "Agenten sind Kollegen mit eigenen Anweisungen, eigenem Gedächtnis und Zeitplan — z. B. einer, der jeden Monat deine Rechnungen herunterlädt."
+      "body": "Agenten sind Kollegen mit eigenen Anweisungen, eigenem Gedächtnis und Zeitplan, z. B. einer, der jeden Monat deine Rechnungen herunterlädt."
     }
   }
 }

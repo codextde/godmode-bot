@@ -30,6 +30,8 @@ interface DeviceRow {
   last_seen_at: string | null;
   last_address: string | null;
   created_at: string;
+  full_access: number;
+  push_token: string | null;
 }
 
 let offer: { hash: string; expiresAt: number } | null = null;
@@ -41,11 +43,13 @@ function reviewCodeHash(): string | null {
 const lastSeenWrites = new Map<string, number>();
 let onlineCheck: (deviceId: string) => boolean = () => false;
 let onRevoked: (deviceId: string) => void = () => {};
+let onNarrowed: (deviceId: string) => void = () => {};
 
 /** The WebSocket hub reports which phones are connected and closes a removed phone's sockets. */
-export function setDeviceSocketHooks(hooks: { online: (deviceId: string) => boolean; revoked: (deviceId: string) => void }) {
+export function setDeviceSocketHooks(hooks: { online: (deviceId: string) => boolean; revoked: (deviceId: string) => void; narrowed?: (deviceId: string) => void }) {
   onlineCheck = hooks.online;
   onRevoked = hooks.revoked;
+  onNarrowed = hooks.narrowed ?? (() => {});
 }
 
 function toDevice(row: DeviceRow): MobileDevice {
@@ -59,6 +63,8 @@ function toDevice(row: DeviceRow): MobileDevice {
     lastSeenAt: row.last_seen_at,
     lastAddress: row.last_address,
     online: onlineCheck(row.id),
+    fullAccess: !!row.full_access,
+    push: !!row.push_token,
   };
 }
 
@@ -161,11 +167,57 @@ export function authenticateDevice(token: string, address?: string): MobileDevic
   return toDevice(row);
 }
 
+/** The phone has full access right now (false once it is removed). */
+export function deviceHasFullAccess(id: string): boolean {
+  return get<{ full_access: number }>("SELECT full_access FROM mobile_devices WHERE id = ?", id)?.full_access === 1;
+}
+
 export function renameDevice(id: string, name: string): MobileDevice {
   getDevice(id);
   run("UPDATE mobile_devices SET name = ? WHERE id = ?", name.trim().slice(0, 80), id);
   bus.changed("mobile");
   return getDevice(id);
+}
+
+/** Full access for a phone (mobile/scope.ts). Callers decide who may switch it on; this only stores and audits it. */
+export function setDeviceFullAccess(id: string, fullAccess: boolean, actor = "user", details: Record<string, unknown> = {}): MobileDevice {
+  const device = getDevice(id);
+  if (device.fullAccess === fullAccess) return device;
+  run("UPDATE mobile_devices SET full_access = ? WHERE id = ?", fullAccess ? 1 : 0, id);
+  // Live views it only had with full access end now, not when the app next asks.
+  if (!fullAccess) onNarrowed(id);
+  audit(actor, "mobile.full_access", id, { name: device.name, fullAccess, ...details });
+  bus.changed("mobile");
+  return getDevice(id);
+}
+
+/** The phone's Expo push token (null: no notifications). The same token on another phone moves to this one. */
+export function setDevicePushToken(id: string, token: string | null): MobileDevice {
+  const device = getDevice(id);
+  if (token) run("UPDATE mobile_devices SET push_token = NULL WHERE push_token = ? AND id != ?", token, id);
+  run("UPDATE mobile_devices SET push_token = ? WHERE id = ?", token, id);
+  if (device.push !== !!token) {
+    audit(`device:${id}`, token ? "mobile.push_on" : "mobile.push_off", id, { name: device.name });
+    bus.changed("mobile");
+  }
+  return getDevice(id);
+}
+
+/** The phones that get push notifications, with their tokens (only for mobile/push.ts). */
+export function pushTargets(): { id: string; platform: MobilePlatform; token: string }[] {
+  return all<{ id: string; platform: string; push_token: string }>("SELECT id, platform, push_token FROM mobile_devices WHERE push_token IS NOT NULL").map((r) => ({
+    id: r.id,
+    platform: r.platform === "android" ? "android" : "ios",
+    token: r.push_token,
+  }));
+}
+
+/** Expo said the app is gone from that phone (uninstalled, notifications revoked): stop sending to the token. */
+export function dropPushToken(token: string): void {
+  const rows = all<{ id: string }>("SELECT id FROM mobile_devices WHERE push_token = ?", token);
+  if (!rows.length) return;
+  run("UPDATE mobile_devices SET push_token = NULL WHERE push_token = ?", token);
+  bus.changed("mobile");
 }
 
 export function revokeDevice(id: string, actor = "user") {

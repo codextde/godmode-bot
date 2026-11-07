@@ -4,22 +4,14 @@ import { useTranslation } from "react-i18next";
 import { MAX_INSTRUCTIONS_LENGTH } from "@godmode/shared";
 import { CharacterAvatar } from "@/components/character";
 import { CloseButton } from "@/components/close-button";
+import { useFullAccess } from "@/components/full-access";
 import { Group, LinkRow, TextEditor, Tile } from "@/components/form";
-import { Icon, type IconName } from "@/components/icon";
 import { SectionTitle, T } from "@/components/ui";
 import { useAgents } from "@/lib/hooks";
 import { t } from "@/lib/i18n";
 import { firstLine, lineCount, patchSettings, useSettings } from "@/lib/setup";
 import { radius, space, useColors } from "@/lib/theme";
-import { useWorkspace } from "@/lib/workspace";
-
-const LAYERS = [
-  { icon: "globe", labelKey: "instructions.layers.everyone" },
-  { icon: "layers", labelKey: "instructions.layers.workspace" },
-  { icon: "folder", labelKey: "instructions.layers.project" },
-  { icon: "personCircle", labelKey: "instructions.layers.agent" },
-  { icon: "chats", labelKey: "instructions.layers.chat" },
-] as const satisfies readonly { icon: IconName; labelKey: string }[];
+import { useWorkspace, ownEmoji } from "@/lib/workspace";
 
 function summary(text: string, empty: string): string {
   if (!text.trim()) return empty;
@@ -31,6 +23,9 @@ export default function Instructions() {
   const c = useColors();
   const { t } = useTranslation(["settings", "common"]);
   const settings = useSettings();
+  // Every agent follows these in every run: a phone without full access reads them.
+  const locked = useFullAccess().fullAccess === false;
+  const { t: tc } = useTranslation("components");
   const { workspaces } = useWorkspace();
   const { data: agents } = useAgents();
 
@@ -45,28 +40,6 @@ export default function Instructions() {
       <Stack.Screen options={{ title: t("overview.links.instructions") }} />
       <CloseButton />
 
-      <View style={{ gap: space.md }}>
-        <T variant="subhead" muted>
-          {t("instructions.intro")}
-        </T>
-        <View style={styles.layers}>
-          {LAYERS.map((l, i) => (
-            <View key={l.labelKey} style={styles.layerWrap}>
-              <View style={[styles.layer, { backgroundColor: c.surface, borderColor: c.border }]}>
-                <Icon name={l.icon} size={13} color={c.textMuted} />
-                <T variant="caption" style={{ fontWeight: "600" }}>
-                  {t(l.labelKey)}
-                </T>
-              </View>
-              {i < LAYERS.length - 1 ? <Icon name="chevron" size={9} color={c.textFaint} weight="bold" /> : null}
-            </View>
-          ))}
-        </View>
-        <T variant="footnote" muted>
-          {t("instructions.precedence")}
-        </T>
-      </View>
-
       <View>
         <SectionTitle title={t("instructions.everyAgent")} />
         {settings.data ? (
@@ -76,6 +49,8 @@ export default function Instructions() {
             placeholder={t("instructions.example")}
             maxLength={MAX_INSTRUCTIONS_LENGTH}
             minHeight={180}
+            readOnly={locked}
+            hint={locked ? tc("fullAccess.title") : undefined}
             onSave={(appendSystemPrompt) => patchSettings({ runner: { appendSystemPrompt } }, { quiet: true })}
           />
         ) : (
@@ -88,11 +63,12 @@ export default function Instructions() {
       </View>
 
       {workspaces.length ? (
-        <Group title={t("instructions.workspaces.title")} footer={t("instructions.workspaces.footer")}>
+        <Group title={t("instructions.workspaces.title")}>
           {workspaces.flatMap((w) => [
             <LinkRow
               key={w.id}
-              emoji={w.icon || "🗂️"}
+              emoji={ownEmoji(w.icon)}
+              icon="layers"
               title={w.name}
               detail={summary(w.instructions, t("instructions.workspaces.noContext"))}
               onPress={() => router.push({ pathname: "/settings/workspace/[id]", params: { id: w.id } })}
@@ -102,7 +78,7 @@ export default function Instructions() {
                 key={p.id}
                 lead={
                   <View style={styles.nested}>
-                    <Tile emoji={p.icon || "📁"} size={24} />
+                    <Tile emoji={ownEmoji(p.icon)} icon="folder" size={24} />
                   </View>
                 }
                 title={p.name}
@@ -114,12 +90,12 @@ export default function Instructions() {
         </Group>
       ) : (
         <Group title={t("instructions.workspaces.title")}>
-          <LinkRow icon="plus" title={t("workspaces.create")} detail={t("instructions.workspaces.createDetail")} tone="brand" onPress={() => router.push({ pathname: "/settings/new", params: { kind: "workspace" } })} />
+          <LinkRow icon="plus" title={t("workspaces.create")} tone="brand" onPress={() => router.push({ pathname: "/settings/new", params: { kind: "workspace" } })} />
         </Group>
       )}
 
       {agents?.length ? (
-        <Group title={t("common:words.agents")} footer={t("instructions.agents.footer")}>
+        <Group title={t("common:words.agents")}>
           {agents.map((a) => (
             <LinkRow
               key={a.id}
@@ -132,12 +108,6 @@ export default function Instructions() {
         </Group>
       ) : null}
 
-      <View style={[styles.tip, { borderColor: c.borderStrong }]}>
-        <Icon name="chats" size={15} color={c.textMuted} />
-        <T variant="footnote" muted style={{ flex: 1 }}>
-          {t("instructions.tip")}
-        </T>
-      </View>
     </ScrollView>
   );
 }
@@ -148,27 +118,6 @@ const styles = StyleSheet.create({
     paddingBottom: 60,
     gap: space.xl,
   },
-  layers: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    alignItems: "center",
-    rowGap: space.sm,
-  },
-  layerWrap: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    marginRight: 4,
-  },
-  layer: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    height: 28,
-    paddingHorizontal: 10,
-    borderRadius: radius.pill,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
   placeholder: {
     padding: space.lg,
     borderRadius: radius.lg,
@@ -178,15 +127,5 @@ const styles = StyleSheet.create({
   nested: {
     width: 30,
     paddingLeft: 10,
-  },
-  tip: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: space.md,
-    padding: space.lg,
-    borderRadius: radius.lg,
-    borderCurve: "continuous",
-    borderWidth: 1,
-    borderStyle: "dashed",
   },
 });

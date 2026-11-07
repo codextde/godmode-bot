@@ -203,11 +203,12 @@ describe("the script", () => {
     const started = await startChat({ agentId: agent.id, content: "ASK_MAC_PASSWORD please" });
     const ctx = { runId: started.run.id, conversationId: started.conversation.id, workspaceId: null };
     await until(() => listHumanTasks({ status: "active", conversationId: ctx.conversationId }).length === 1, 15_000, "the task");
+    // The task exists while the tool still answers: its result is on disk only once the run went on.
+    await settled(started.run.id);
     const out = JSON.parse(readFileSync(join(env.stateDir, "ask-result.json"), "utf8")) as { first: { isError?: boolean; content: { text: string }[] } };
     expect(out.first.isError).toBe(true);
     expect(out.first.content[0]!.text).toContain("No Mac password is saved");
     expect(calls()).toHaveLength(0);
-    await settled(started.run.id);
     await saveMacPassword(PASSWORD);
     await until(() => listHumanTasks({ status: "active", conversationId: ctx.conversationId }).length === 0, 15_000, "the task to close");
     await settled(listHumanTasks({ conversationId: ctx.conversationId, status: "all" })[0]!.runId ?? started.run.id);

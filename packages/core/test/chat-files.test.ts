@@ -336,7 +336,8 @@ describe("showing a file in the file manager", () => {
 
   test("phones can't reach this computer's files", async () => {
     const { deviceMayCall } = await import("../src/mobile/scope");
-    expect(deviceMayCall("POST", `/api/conversations/${chat.id}/files`)).toBe(false);
+    // A limited phone hears only of what lies in the agent's folder: test/mobile-chat-files.test.ts.
+    expect(deviceMayCall("POST", `/api/conversations/${chat.id}/files`)).toBe(true);
     expect(deviceMayCall("GET", "/api/files/image")).toBe(false);
     expect(deviceMayCall("GET", "/api/files/markdown")).toBe(false);
     expect(deviceMayCall("POST", "/api/files/reveal")).toBe(false);

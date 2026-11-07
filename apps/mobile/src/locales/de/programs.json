@@ -1,0 +1,162 @@
+{
+  "title": "Programme",
+  "loadFailed": "Die Programmeinstellungen konnten nicht geladen werden",
+  "install": "Installieren",
+  "installing": "Wird installiert…",
+  "installed": "{{name}} installiert",
+  "installFailed": "{{name}} konnte nicht installiert werden",
+  "update": "Aktualisieren",
+  "updating": "Wird aktualisiert…",
+  "fix": "Beheben",
+  "fixing": "Wird behoben…",
+  "notInstalled": "Nicht installiert",
+  "signIn": {
+    "start": "Anmelden",
+    "again": "Neu anmelden",
+    "title": "Claude wird angemeldet",
+    "gettingLink": "Anmeldelink wird geholt…",
+    "steps": "Öffne die Anmeldeseite, melde dich mit deinem Claude-Konto an und tipp auf Authorize. Füg dann den angezeigten Code hier ein.",
+    "openPage": "Seite öffnen",
+    "copyLink": "Link kopieren",
+    "codeLabel": "Code von der Anmeldeseite",
+    "send": "Senden",
+    "startFailed": "Anmeldung konnte nicht gestartet werden",
+    "codeFailed": "Code konnte nicht gesendet werden",
+    "signedIn": "Bei Claude angemeldet",
+    "failed": "Die Anmeldung wurde nicht abgeschlossen"
+  },
+  "health": {
+    "fixBelow": "Installiere oder repariere es unten.",
+    "fixAll": "Alles beheben",
+    "fixAllFailed": "Die Probleme konnten nicht behoben werden",
+    "nothingToFix": "Nichts zu beheben",
+    "fixed": "{{names}} behoben",
+    "fixFailed": "{{name}} konnte nicht behoben werden",
+    "needsYou": "{{name}} braucht dich am Computer",
+    "permissionsFooter": "Diese Berechtigungen fragt macOS direkt am Computer ab.",
+    "lidOnly": "Nur während Agenten arbeiten",
+    "lowBattery": "Bei niedrigem Akku schlafen",
+    "never": "Nie",
+    "percent": "{{percent}} %"
+  },
+  "updates": {
+    "title": "Updates",
+    "checkNow": "Jetzt prüfen",
+    "updateAll_one": "Alle {{count}} aktualisieren",
+    "updateAll_other": "Alle {{count}} aktualisieren",
+    "upToDate": "Aktuell",
+    "checked": "Geprüft {{time}}.",
+    "none": "Noch keine Tools installiert.",
+    "loadFailed": "Konnte nicht nach Updates suchen",
+    "checkFailed": "Suche nach Updates fehlgeschlagen",
+    "allUpToDate": "Alles ist aktuell",
+    "done": "{{names}} aktualisiert",
+    "failed": "{{name}} konnte nicht aktualisiert werden",
+    "installFailed": "Das Update konnte nicht installiert werden"
+  },
+  "accounts": {
+    "add": "Konto hinzufügen",
+    "adding": "Melde dich mit dem Claude-Konto an, das du hinzufügen willst",
+    "signingInAgain": "{{email}} wird neu angemeldet",
+    "signInAgain": "Neu anmelden",
+    "makeDefault": "Als Standard",
+    "remove": "Entfernen",
+    "removeTitle": "{{email}} entfernen?",
+    "removeBody": "Godmode vergisst die Anmeldung dieses Kontos. Workspaces, die es genutzt haben, nehmen ihre anderen Konten. Du kannst es jederzeit wieder hinzufügen.",
+    "removeFailed": "Konto konnte nicht entfernt werden",
+    "added": "{{email}} angemeldet",
+    "vaultLocked": "Entsperr den Tresor am Computer, um Konten hinzuzufügen.",
+    "signedOut": "Abgemeldet. Melde dich neu an, um es zu nutzen."
+  },
+  "logs": {
+    "title": "Protokoll",
+    "share": "Protokoll teilen",
+    "shareFailed": "Das Protokoll konnte nicht geteilt werden",
+    "fix": "Im Code beheben",
+    "fixBody": "{{who}} bekommt dieses Protokoll als Ticket und behebt die Ursachen in Godmodes Code. Schreib dazu, was dir aufgefallen ist, wenn du magst.",
+    "fixBodyPlain": "{{who}} bekommt dieses Protokoll als Ticket und behebt die Ursachen in Godmodes Code.",
+    "fixConfirm": "Ticket anlegen",
+    "fixFailed": "Das Ticket konnte nicht angelegt werden",
+    "filed": "Ticket #{{number}} angelegt",
+    "filedMerge": "Der Fix wird in {{branch}} gemergt, sobald er fertig ist.",
+    "filedReview": "Der Fix wartet auf deine Prüfung.",
+    "nothingNew": "Nichts Neues zu beheben",
+    "anAgent": "Ein Agent",
+    "openTask": "Öffnen",
+    "delete": "Protokoll löschen",
+    "deleteTitle": "Diagnoseprotokoll löschen?",
+    "deleteBody": "Alle Einträge werden entfernt, auch das eigene Protokoll der Desktop-App. Godmode zeichnet ab jetzt weiter auf.",
+    "deleteFailed": "Das Protokoll konnte nicht gelöscht werden"
+  },
+  "cli": {
+    "title": "Claude Code CLI",
+    "path": "Programm",
+    "configDir": "Konfigurationsordner",
+    "auto": "Automatisch"
+  },
+  "advanced": {
+    "title": "Erweitert",
+    "extraArgs": "Zusätzliche Argumente",
+    "extraArgsHint": "Eins pro Zeile, an jeden claude-Lauf angehängt",
+    "bypass": "Berechtigungsabfragen überspringen",
+    "bypassDetail": "Agenten führen Befehle aus und ändern Dateien, ohne zu fragen",
+    "bypassTitle": "Vollständigen Bypass einschalten?",
+    "bypassBody": "Agenten führen dann Befehle aus und ändern Dateien auf dem Computer, ohne vorher zu fragen. Schalte das nur ein, wenn du den Anweisungen deiner Agenten vertraust.",
+    "bypassConfirm": "Einschalten"
+  },
+  "tools": {
+    "title": "Tools",
+    "cua": "Cua Driver",
+    "tart": "Tart (virtuelle Maschinen)",
+    "adb": "adb (Android-Handys)",
+    "notSupported": "Auf diesem Computer nicht verfügbar"
+  },
+  "repair": {
+    "title": "Selbstreparatur",
+    "repo": "Repository",
+    "branch": "Branch",
+    "agent": "Agent",
+    "defaultAgent": "Standard-Agent",
+    "merge": "Fixes automatisch mergen"
+  },
+  "diagnostics": {
+    "verbose": "Detailliertes Protokoll"
+  },
+  "memory": {
+    "title": "Gedächtnis-Backend",
+    "files": "Markdown-Dateien",
+    "filesDetail": "MEMORY.md und ein memory-Ordner pro Agent",
+    "claudeMem": "claude-mem",
+    "claudeMemDetail": "Durchsuchbares Langzeitgedächtnis über das Plugin claude-mem",
+    "claudeMemMissing": "claude-mem ist noch nicht installiert. Bis dahin nutzen Agenten weiter die MEMORY.md."
+  },
+  "computer": {
+    "useCua": "Cua Driver nutzen",
+    "command": "Befehl",
+    "commandPlaceholder": "Automatisch"
+  },
+  "hex": {
+    "title": "Hex",
+    "app": "Hex-App",
+    "model": "Sprachmodell",
+    "download": "Modell auf dem Computer",
+    "ready": "Heruntergeladen und bereit",
+    "notDownloaded": "Nicht heruntergeladen ({{size}})",
+    "downloadAction": "Herunterladen",
+    "missing": "Hex ist nicht installiert und kann für diesen Computer nicht heruntergeladen werden.",
+    "notFound": "Hex ist nicht an diesem Ort.",
+    "path": "Speicherort",
+    "pathPlaceholder": "Automatisch",
+    "version": "Version {{version}}",
+    "found": "Gefunden",
+    "startFailed": "Der Download konnte nicht starten",
+    "phase": {
+      "installing": "Hex wird heruntergeladen… {{percent}} %",
+      "starting": "Hex wird gestartet…",
+      "downloading": "Wird heruntergeladen… {{percent}} %",
+      "verifying": "Download wird geprüft…",
+      "loading": "Modell wird geladen…"
+    }
+  },
+  "openaiBaseUrl": "OpenAI-Adresse"
+}

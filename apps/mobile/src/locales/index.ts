@@ -44,10 +44,26 @@ import en_review from "./en/review.json";
 import de_review from "./de/review.json";
 import en_archive from "./en/archive.json";
 import de_archive from "./de/archive.json";
+import en_admin from "./en/admin.json";
+import de_admin from "./de/admin.json";
+import en_tools from "./en/tools.json";
+import de_tools from "./de/tools.json";
+import en_programs from "./en/programs.json";
+import de_programs from "./de/programs.json";
+import en_linking from "./en/linking.json";
+import de_linking from "./de/linking.json";
+import en_messaging from "./en/messaging.json";
+import de_messaging from "./de/messaging.json";
+import en_ssh from "./en/ssh.json";
+import de_ssh from "./de/ssh.json";
+import en_manage from "./en/manage.json";
+import de_manage from "./de/manage.json";
+import en_machines from "./en/machines.json";
+import de_machines from "./de/machines.json";
 
 export const resources = {
-  en: { common: en_common, system: en_system, components: en_components, tabs: en_tabs, settings: en_settings, onboarding: en_onboarding, chat: en_chat, agents: en_agents, automations: en_automations, memory: en_memory, dreams: en_dreams, tasks: en_tasks, humanTasks: en_humanTasks, inbox: en_inbox, runs: en_runs, calls: en_calls, templates: en_templates, artifacts: en_artifacts, vault: en_vault, files: en_files, integrations: en_integrations, review: en_review, archive: en_archive },
-  de: { common: de_common, system: de_system, components: de_components, tabs: de_tabs, settings: de_settings, onboarding: de_onboarding, chat: de_chat, agents: de_agents, automations: de_automations, memory: de_memory, dreams: de_dreams, tasks: de_tasks, humanTasks: de_humanTasks, inbox: de_inbox, runs: de_runs, calls: de_calls, templates: de_templates, artifacts: de_artifacts, vault: de_vault, files: de_files, integrations: de_integrations, review: de_review, archive: de_archive },
+  en: { common: en_common, system: en_system, components: en_components, tabs: en_tabs, settings: en_settings, onboarding: en_onboarding, chat: en_chat, agents: en_agents, automations: en_automations, memory: en_memory, dreams: en_dreams, tasks: en_tasks, humanTasks: en_humanTasks, inbox: en_inbox, runs: en_runs, calls: en_calls, templates: en_templates, artifacts: en_artifacts, vault: en_vault, files: en_files, integrations: en_integrations, review: en_review, archive: en_archive, admin: en_admin, tools: en_tools, programs: en_programs, linking: en_linking, messaging: en_messaging, ssh: en_ssh, manage: en_manage, machines: en_machines },
+  de: { common: de_common, system: de_system, components: de_components, tabs: de_tabs, settings: de_settings, onboarding: de_onboarding, chat: de_chat, agents: de_agents, automations: de_automations, memory: de_memory, dreams: de_dreams, tasks: de_tasks, humanTasks: de_humanTasks, inbox: de_inbox, runs: de_runs, calls: de_calls, templates: de_templates, artifacts: de_artifacts, vault: de_vault, files: de_files, integrations: de_integrations, review: de_review, archive: de_archive, admin: de_admin, tools: de_tools, programs: de_programs, linking: de_linking, messaging: de_messaging, ssh: de_ssh, manage: de_manage, machines: de_machines },
 } as const;
 
-export const NAMESPACES = ["common", "system", "components", "tabs", "settings", "onboarding", "chat", "agents", "automations", "memory", "dreams", "tasks", "humanTasks", "inbox", "runs", "calls", "templates", "artifacts", "vault", "files", "integrations", "review", "archive"] as const;
+export const NAMESPACES = ["common", "system", "components", "tabs", "settings", "onboarding", "chat", "agents", "automations", "memory", "dreams", "tasks", "humanTasks", "inbox", "runs", "calls", "templates", "artifacts", "vault", "files", "integrations", "review", "archive", "admin", "tools", "programs", "linking", "messaging", "ssh", "manage", "machines"] as const;

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import Animated, { FadeIn, FadeOut, LinearTransition } from "react-native-reanimated";
@@ -78,15 +78,16 @@ export function QueueTray({
 
   // The agent took the message while it was being reworded.
   const taken = !!editing && !queue.some((m) => m.id === editing.id);
-  const editingRef = useRef(editing);
-  editingRef.current = editing;
-  useEffect(() => {
-    const current = editingRef.current;
-    if (!taken || !current) return;
+  const [lost, setLost] = useState<{ text: string } | null>(null);
+  if (taken) {
     setEditing(null);
-    const next = current.text.trim();
-    if (next && next !== current.from) onLost(next);
-  }, [taken, onLost]);
+    const next = editing.text.trim();
+    if (next && next !== editing.from) setLost({ text: next });
+  }
+  const handBack = useEffectEvent((text: string) => onLost(text));
+  useEffect(() => {
+    if (lost) handBack(lost.text);
+  }, [lost]);
 
   if (queue.length === 0) return null;
 

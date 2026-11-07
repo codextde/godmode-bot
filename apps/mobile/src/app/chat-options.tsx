@@ -4,6 +4,8 @@ import { Alert, ScrollView, StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { MAX_INSTRUCTIONS_LENGTH, type Agent, type ConversationWithMessages } from "@godmode/shared";
 import { Group, PickerRow, TextEditor } from "@/components/form";
+import { useFullAccess } from "@/components/full-access";
+import { NewChatPlace } from "@/components/new-chat-place";
 import { ErrorState, Skeleton, T } from "@/components/ui";
 import { ApiError, api, errorText, updateDesktopMessage, type ChatPlacePatch } from "@/lib/api";
 import { fetchConversation } from "@/lib/chat-cache";
@@ -12,7 +14,7 @@ import { useAgents } from "@/lib/hooks";
 import { qk, queryClient } from "@/lib/query";
 import { useSettings } from "@/lib/setup";
 import { space, useColors } from "@/lib/theme";
-import { projectsFor, useProjectIndex, useWorkspace } from "@/lib/workspace";
+import { projectsFor, useProjectIndex, useWorkspace, scopeLabel } from "@/lib/workspace";
 
 const OWN = "__own";
 
@@ -32,6 +34,7 @@ export default function ChatOptionsSheet() {
   });
   const { byId } = useAgents();
   const options = useNewChatOptions((s) => s.options);
+  const { fullAccess } = useFullAccess();
   const data = conversation.data;
   const agent = byId.get(data?.agentId ?? agentId ?? "");
 
@@ -72,6 +75,7 @@ export default function ChatOptionsSheet() {
         )
       ) : (
         <>
+          {!conversationId && agent && fullAccess ? <NewChatPlace agent={agent} /> : null}
           {data || agent ? (
             <Place
               agent={agent}
@@ -143,7 +147,7 @@ function Place({
           value={projectId && projectId !== agentProject?.id ? projectId : OWN}
           options={[
             { value: OWN, label: agentProject ? t("options.agentProject", { name: agent?.name ?? "" }) : t("options.noProject"), detail: agentProject?.name },
-            ...projects.filter((p) => p.id !== agentProject?.id).map((p) => ({ value: p.id, label: p.icon ? `${p.icon} ${p.name}` : p.name })),
+            ...projects.filter((p) => p.id !== agentProject?.id).map((p) => ({ value: p.id, label: scopeLabel(p) })),
           ]}
           onChange={(v) => onChange({ projectId: v === OWN ? null : v })}
         />

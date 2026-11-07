@@ -73,6 +73,20 @@ export function useWorkspace() {
 }
 
 /** Every project by id, with its workspace. */
+const COMPUTER_DEFAULTS = new Set(["🗂", "📁"]);
+
+/** The emoji a workspace or project was given; the computer's default counts as none, and a symbol shows instead. */
+export function ownEmoji(icon: string | null | undefined): string | undefined {
+  const emoji = icon?.trim();
+  return emoji && !COMPUTER_DEFAULTS.has(emoji.replace("\uFE0F", "")) ? emoji : undefined;
+}
+
+/** A workspace's or project's name for a line of text, with the emoji it was given. */
+export function scopeLabel(scope: { name: string; icon?: string | null }): string {
+  const emoji = ownEmoji(scope.icon);
+  return emoji ? `${emoji} ${scope.name}` : scope.name;
+}
+
 export function useProjectIndex() {
   const { workspaces } = useWorkspace();
   return useMemo(() => {

@@ -10,7 +10,7 @@ import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import { ANDROID_KEYS } from "@godmode/shared";
 import { getAgent } from "../agents/service";
-import { chatFillOnly } from "../services/conversations";
+import { chatFillOnly, runFillOnly } from "../services/conversations";
 import { bus } from "../events/bus";
 import { logger } from "../log";
 import { audit } from "../services/audit";
@@ -49,10 +49,10 @@ const FILL_NEEDS_REVEAL =
  * Typing a secret on a phone is as good as showing it: `input` gets it as an argument, which the phone's shell user —
  * the one the `shell` tool runs as — can read. So only runs that may reveal secrets get the fills.
  */
-function mayFill(ctx: { agentId: string; conversationId: string | null }): boolean {
+function mayFill(ctx: { agentId: string; conversationId: string | null; runId: string }): boolean {
   if (!getSettings().android.vaultFill) return false;
   const agent = getAgent(ctx.agentId);
-  return agent.permissions.secretAccess === "reveal" && !(ctx.conversationId && chatFillOnly(ctx.conversationId));
+  return agent.permissions.secretAccess === "reveal" && !(ctx.conversationId && chatFillOnly(ctx.conversationId)) && !runFillOnly(ctx.runId);
 }
 
 function text(t: string, isError = false): AndroidToolResult {

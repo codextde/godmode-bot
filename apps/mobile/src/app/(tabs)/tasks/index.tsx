@@ -2,15 +2,15 @@ import { FlashList, type ListRenderItem } from "@shopify/flash-list";
 import { useQuery } from "@tanstack/react-query";
 import { Link, router, Stack } from "expo-router";
 import { memo, useCallback, useMemo, useState } from "react";
-import { Alert, RefreshControl, View } from "react-native";
+import { Alert, Pressable, RefreshControl, StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { isOverdue, localDay, TASK_PRIORITIES, TASK_STATUSES, type Agent, type Task, type TaskStatus } from "@godmode/shared";
 import { FilterToolbar } from "@/components/filter-toolbar";
-import { HumanTaskRow } from "@/components/human-task-row";
 import { FilterChips } from "@/components/filter-chips";
 import { GoalsStrip } from "@/components/goals-strip";
 import { STATUS_META, TaskRow } from "@/components/task-row";
-import { Button, Card, EmptyState, ErrorState, Hairline, SectionTitle, SkeletonRows } from "@/components/ui";
+import { Icon, type IconName } from "@/components/icon";
+import { Button, EmptyState, ErrorState, Hairline, SectionTitle, SkeletonRows, T, tap } from "@/components/ui";
 import { WorkspaceChip } from "@/components/workspace-chip";
 import { api, errorText } from "@/lib/api";
 import { PRIORITY_LABEL } from "@/lib/desktop-parity";
@@ -19,12 +19,14 @@ import { t } from "@/lib/i18n";
 import { qk, queryClient } from "@/lib/query";
 import { usePullRefresh } from "@/lib/use-pull-refresh";
 import { tasksInProject, useProjectIndex, useWorkspace } from "@/lib/workspace";
-import { space } from "@/lib/theme";
+import { radius, space, textScale, useColors } from "@/lib/theme";
 
-type Item = { kind: "header"; key: string; title: string } | { kind: "task"; key: string; task: Task };
+type Item = { kind: "header"; key: string; title: string; status: TaskStatus; count: number } | { kind: "task"; key: string; task: Task };
 type Shown = "active" | "all" | TaskStatus;
 
 const ACTIVE: readonly TaskStatus[] = ["todo", "in_progress", "in_review", "blocked"];
+/** The columns that clear with one action, like the desktop's board. */
+const ARCHIVE_ALL: ReadonlySet<TaskStatus> = new Set(["done", "cancelled"]);
 
 const ALL = "all";
 const UNASSIGNED = "unassigned";
@@ -56,8 +58,10 @@ export default function Tasks() {
   const tasks = useQuery({ queryKey: qk.taskList(workspaceId), queryFn: () => api.tasks.list({ workspaceId }) });
   const { byId: agents } = useAgents();
   const names = useMemo(() => new Map(workspaces.map((w) => [w.id, w.name])), [workspaces]);
-  const pull = usePullRefresh(() => Promise.all([tasks.refetch(), mine.refetch(), queryClient.invalidateQueries({ queryKey: qk.goals(workspaceId) })]));
+  const goals = useQuery({ queryKey: qk.goals(workspaceId), queryFn: () => api.goals.list(workspaceId) });
+  const pull = usePullRefresh(() => Promise.all([tasks.refetch(), mine.refetch(), goals.refetch()]));
   const [view, setView] = useState<Shown>("active");
+  const [goalsOpen, setGoalsOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [agent, setAgent] = useState(ALL);
   const [priority, setPriority] = useState(ALL);
@@ -98,17 +102,18 @@ export default function Tasks() {
     for (const status of statuses) {
       const column = board.filter((t) => t.status === status).sort((a, b) => a.position - b.position || b.number - a.number);
       if (!column.length) continue;
-      if (statuses.length > 1) out.push({ kind: "header", key: `h-${status}`, title: `${STATUS_META[status].label} · ${column.length}` });
+      if (statuses.length > 1 || ARCHIVE_ALL.has(status)) out.push({ kind: "header", key: `h-${status}`, title: `${STATUS_META[status].label} · ${column.length}`, status, count: column.length });
       for (const task of column) out.push({ kind: "task", key: task.id, task });
     }
     return out;
   }, [board, view]);
   const forYou = mine.data ?? [];
+  const activeGoals = (goals.data ?? []).filter((g) => g.status === "active").length;
   const activeCount = ACTIVE.reduce((n, s) => n + (counts.get(s) ?? 0), 0);
 
   const renderItem: ListRenderItem<Item> = useCallback(
     ({ item, index }) => {
-      if (item.kind === "header") return <GroupTitle title={item.title} />;
+      if (item.kind === "header") return <GroupTitle title={item.title} action={ARCHIVE_ALL.has(item.status) ? () => archiveColumn(item.status, board.filter((t) => t.status === item.status)) : undefined} />;
       const t = item.task;
       return (
         <TaskItem
@@ -120,7 +125,7 @@ export default function Tasks() {
         />
       );
     },
-    [agents, workspaceId, names, projectId, projects, items],
+    [agents, workspaceId, names, projectId, projects, items, board],
   );
 
   return (
@@ -152,7 +157,10 @@ export default function Tasks() {
           },
           { id: "label", title: t("tasks:list.label"), icon: "tag", value: label, options: filterOptions.labels, onChange: setLabel },
         ]}
-        menu={[{ icon: "archive", title: t("tasks.archived"), onPress: () => router.push("/archived-tasks") }]}
+        menu={[
+          { icon: "flag", title: t("tasks.newGoal"), onPress: () => router.push(workspaceId ? { pathname: "/goal", params: { workspaceId } } : "/goal") },
+          { icon: "archive", title: t("tasks.archived"), onPress: () => router.push("/archived-tasks") },
+        ]}
       />
       <FlashList
         data={items}
@@ -164,21 +172,12 @@ export default function Tasks() {
         refreshControl={<RefreshControl {...pull} />}
         ListHeaderComponent={
           <View style={{ paddingHorizontal: space.sm, paddingTop: space.sm, gap: space.lg }}>
-            <WorkspaceChip />
-            {forYou.length > 0 && (
-              <View>
-                <SectionTitle title={t("tasks.myTasksCount", { count: forYou.length })} action={t("common:words.all")} onAction={() => router.push("/my-tasks")} />
-                <Card style={{ paddingVertical: 4 }}>
-                  {forYou.slice(0, 3).map((t, i) => (
-                    <View key={t.id}>
-                      {i > 0 && <Hairline inset={72} />}
-                      <HumanTaskRow task={t} agent={t.agentId ? agents.get(t.agentId) : undefined} />
-                    </View>
-                  ))}
-                </Card>
-              </View>
-            )}
-            <GoalsStrip workspaceId={workspaceId} bleed={space.lg} />
+            <View style={styles.top}>
+              <WorkspaceChip />
+              {forYou.length > 0 && <TopPill icon="person" label={t("tasks.myTasks")} count={forYou.length} onPress={() => router.push("/my-tasks")} />}
+              {activeGoals > 0 && <TopPill icon="flag" label={t("tasks.goals")} count={activeGoals} open={goalsOpen} onPress={() => setGoalsOpen((v) => !v)} />}
+            </View>
+            {goalsOpen && <GoalsStrip workspaceId={workspaceId} bleed={space.lg} />}
             {onBoard.length > 0 && (
               <FilterChips
                 bleed={space.lg}
@@ -223,12 +222,56 @@ export default function Tasks() {
   );
 }
 
-function GroupTitle({ title }: { title: string }) {
+function GroupTitle({ title, action }: { title: string; action?: () => void }) {
+  const { t } = useTranslation("tabs");
   return (
     <View style={{ paddingHorizontal: space.sm, paddingTop: space.lg }}>
-      <SectionTitle title={title} />
+      <SectionTitle title={title} action={action ? t("tasks.archiveAll") : undefined} onAction={action} />
     </View>
   );
+}
+
+/** A short way into what stands beside the board, on the workspace's line. */
+function TopPill({ icon, label, count, open, onPress }: { icon: IconName; label: string; count: number; open?: boolean; onPress: () => void }) {
+  const c = useColors();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${label}, ${count}`}
+      accessibilityState={open === undefined ? undefined : { expanded: open }}
+      hitSlop={6}
+      onPress={() => {
+        tap();
+        onPress();
+      }}
+      style={({ pressed }) => [styles.pill, { backgroundColor: open ? c.brandSoft : c.sunken, opacity: pressed ? 0.7 : 1 }]}
+    >
+      <Icon name={icon} size={12} color={open ? c.brandStrong : c.textMuted} />
+      <T variant="subhead" numberOfLines={1} maxScale={textScale.control} style={{ fontWeight: "600" }}>
+        {label}
+      </T>
+      <T variant="footnote" muted maxScale={textScale.control} style={{ fontVariant: ["tabular-nums"] }}>
+        {count}
+      </T>
+    </Pressable>
+  );
+}
+
+/** Clearing a column: off the board, never deleted. */
+function archiveColumn(status: TaskStatus, column: Task[]) {
+  if (!column.length) return;
+  const label = STATUS_META[status].label;
+  Alert.alert(t("tabs:tasks.archiveAllTitle", { count: column.length, status: label }), t("tabs:tasks.archiveAllBody"), [
+    { text: t("common:actions.cancel"), style: "cancel" },
+    {
+      text: t("tabs:tasks.archiveAll"),
+      onPress: () =>
+        void api.tasks
+          .archive(column.map((task) => task.id))
+          .catch((err) => Alert.alert(t("tabs:tasks.archiveFailed"), errorText(err)))
+          .finally(() => void queryClient.invalidateQueries({ queryKey: qk.tasks })),
+    },
+  ]);
 }
 
 function archiveTask(id: string) {
@@ -279,4 +322,21 @@ const TaskItem = memo(function TaskItem({
       </Link.Menu>
     </Link>
   );
+});
+
+const styles = StyleSheet.create({
+  top: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    gap: space.sm,
+  },
+  pill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    minHeight: 32,
+    paddingHorizontal: 12,
+    borderRadius: radius.pill,
+  },
 });

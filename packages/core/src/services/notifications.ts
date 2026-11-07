@@ -35,11 +35,33 @@ export function runNotifiedUser(runId: string): boolean {
   );
 }
 
+const announced = new Set<(n: AppNotification) => void>();
+
+/**
+ * Called for every notification that starts here (and those of a runner without phones of its own), not for copies
+ * that arrive from another computer of the group: that computer tells the phones itself (mobile/push.ts).
+ */
+export function onNotificationAnnounced(fn: (n: AppNotification) => void): () => void {
+  announced.add(fn);
+  return () => announced.delete(fn);
+}
+
+export function announceNotification(n: AppNotification): void {
+  for (const fn of announced) {
+    try {
+      fn(n);
+    } catch {
+      /* a listener's problem stays its own */
+    }
+  }
+}
+
 export function notify(kind: NotificationKind, title: string, body = "", link: string | null = null): AppNotification {
   const row: NotificationRow = { id: newId("ntf"), kind, title, body, link, read: 0, created_at: now() };
   insert("notifications", { ...row });
   const n = toModel(row);
   bus.emit({ type: "notification", notification: n });
+  announceNotification(n);
   return n;
 }
 

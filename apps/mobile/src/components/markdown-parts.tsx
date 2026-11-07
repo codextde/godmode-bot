@@ -3,15 +3,23 @@ import { accessibilityLabel, contentShape, frame, shapes } from "@expo/ui/swift-
 import { useRecyclingState } from "@shopify/flash-list";
 import * as Clipboard from "expo-clipboard";
 import { memo, useEffect, useState, type ReactNode } from "react";
-import { UITextView as Text } from "@bsky.app/react-native-uitextview";
-import { Alert, Modal, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { UITextView } from "@bsky.app/react-native-uitextview";
+import { Alert, Modal, Pressable, ScrollView, StyleSheet, View, type TextProps, type TextStyle } from "react-native";
 import { useTranslation } from "react-i18next";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Icon } from "./icon";
+import { QrCode } from "./qr-code";
 import { T, tap } from "./ui";
-import { formatIban, parsePayment, tableCsv, tableMarkdown, type Align } from "@/lib/chat-blocks";
+import { epcPayload, formatIban, parsePayment, tableCsv, tableMarkdown, type Align } from "@/lib/chat-blocks";
 import { currentLanguage, intlLocale } from "@/lib/i18n";
-import { fonts, radius, space, type, useColors } from "@/lib/theme";
+import { fonts, radius, scaledText, space, type, useColors, useFontScale, withFont } from "@/lib/theme";
+
+/** Reading text: grows with Dynamic Type up to the limit, and wraps. */
+export function Text({ style, ...props }: TextProps & { uiTextView?: boolean }) {
+  const fontScale = useFontScale();
+  const flat: TextStyle = StyleSheet.flatten(style) ?? {};
+  return <UITextView {...props} allowFontScaling={false} style={scaledText(flat.fontFamily ? withFont(flat) : flat, fontScale)} />;
+}
 
 function copy(text: string) {
   void Clipboard.setStringAsync(text);
@@ -306,6 +314,12 @@ export const PaymentCard = memo(function PaymentCard({ source }: { source: strin
         {p.bic ? <PaymentRow label="BIC" value={p.bic} /> : null}
         {reference ? <PaymentRow label={t("markdown.payment.reference")} value={reference} /> : null}
       </View>
+      <View style={[styles.payQr, { borderTopColor: c.border }]}>
+        <QrCode value={epcPayload(p)} size={168} label={t("markdown.payment.qrLabel")} />
+        <T variant="caption" muted>
+          {t("markdown.payment.scan")}
+        </T>
+      </View>
     </View>
   );
 });
@@ -416,6 +430,12 @@ const styles = StyleSheet.create({
   payRows: {
     borderTopWidth: StyleSheet.hairlineWidth,
     paddingLeft: space.md,
+  },
+  payQr: {
+    alignItems: "center",
+    gap: space.sm,
+    padding: space.md,
+    borderTopWidth: StyleSheet.hairlineWidth,
   },
   payRow: {
     flexDirection: "row",

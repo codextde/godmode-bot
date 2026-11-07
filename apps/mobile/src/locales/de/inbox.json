@@ -1,4 +1,17 @@
 {
+  "tabs": {
+    "open": "Offen",
+    "resolved": "Erledigt",
+    "dismissed": "Verworfen"
+  },
+  "closed": {
+    "reopen": "Wieder öffnen",
+    "loadFailed": "Die Liste ließ sich nicht laden",
+    "empty": {
+      "resolved": "Noch nichts erledigt",
+      "dismissed": "Nichts verworfen"
+    }
+  },
   "title": "Posteingang",
   "anAgent": "Ein Agent",
   "attention": "Braucht dich",
@@ -49,6 +62,37 @@
     "addOnComputer": "Füge den Login in Godmode auf deinem Computer hinzu, dort ist der Tresor.",
     "dismiss": "Verwerfen",
     "markResolved": "Als gelöst markieren"
+  },
+  "loginActions": {
+    "addLogin": "Login hinzufügen",
+    "updateLogin": "Login aktualisieren",
+    "add2fa": "2FA hinzufügen"
+  },
+  "linkTotp": {
+    "title": "Gespeicherten 2FA-Code verwenden",
+    "gone": "Diese Anfrage ist erledigt",
+    "link": "Verknüpfen",
+    "linkFailed": "2FA-Code konnte nicht verknüpft werden",
+    "loginFor": "Login für {{host}}",
+    "noLogin": "Für {{host}} ist noch kein Login gespeichert. Füge zuerst den Login hinzu und verknüpfe dann hier seinen 2FA-Code.",
+    "search": "2FA-Codes durchsuchen",
+    "loadFailed": "2FA-Codes konnten nicht geladen werden",
+    "noMatch": "Kein 2FA-Code passt zu „{{query}}“.",
+    "noCodes": "Dein Tresor enthält noch keine 2FA-Codes.",
+    "suggestedFor": "Vorschläge für {{host}}",
+    "allCodes": "Alle 2FA-Codes",
+    "matches": "Treffer",
+    "hiddenMore_one": "{{count}} weiterer. Tipp weiter, um einzugrenzen.",
+    "hiddenMore_other": "{{count}} weitere. Tipp weiter, um einzugrenzen.",
+    "importNew": "Neuen Code importieren",
+    "notLinked": "Nicht verknüpft",
+    "outcome": {
+      "alreadyLinked": "Bereits mit {{who}} verknüpft. Damit ist die Anfrage erledigt.",
+      "links": "Verknüpft ihn mit {{who}}.",
+      "staysCovered": "Er bleibt bei {{owner}}, das {{host}} bereits abdeckt.",
+      "sameAccount": "Gleiches Konto: Er bleibt bei {{owner}} ({{domain}}) und {{host}} wird zu diesem Login hinzugefügt, damit beide Anmeldungen den Code bekommen.",
+      "moves": "Verschiebt ihn von {{from}} zu {{who}}."
+    }
   },
   "notifications": {
     "title": "Mitteilungen",

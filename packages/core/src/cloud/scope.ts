@@ -60,6 +60,7 @@ const RULES: [methods: string, path: string, rule: Rule][] = [
   ["GET", "/api/bootstrap", A],
   ["GET", "/api/settings", A],
   ["PUT", "/api/settings", settingsGroups],
+  ["PUT", "/api/settings/dashboard-password", refused(COMPUTER_ONLY)],
   ["GET|DELETE", "/api/notifications", A],
   ["POST", "/api/notifications/read", A],
   ["GET", "/api/audit", A],
@@ -106,6 +107,8 @@ const RULES: [methods: string, path: string, rule: Rule][] = [
 
   ["GET", "/api/vault/status", A],
   ["POST", "/api/vault/lock", A],
+  // A random password, made up on the spot: nothing of the vault.
+  ["POST", "/api/vault/generate-password", A],
   ["POST", "/api/vault/setup", refused(COMPUTER_ONLY)],
   ["POST", "/api/vault/remember", refused(COMPUTER_ONLY)],
   ["POST", "/api/vault/unlock", S],
@@ -234,6 +237,7 @@ const RULES: [methods: string, path: string, rule: Rule][] = [
   ["POST", "/api/missing-logins/:id/link-totp", S],
   ["GET", "/api/files/image", A],
   ["GET", "/api/files/markdown", A],
+  ["GET", "/api/files/pdf", "owner"],
   ["GET", "/api/files/text", A],
   ["POST", "/api/files/reveal", refused(COMPUTER_ONLY)],
 
@@ -454,6 +458,7 @@ const RULES: [methods: string, path: string, rule: Rule][] = [
   ["POST", "/api/backup/export", S],
   ["POST", "/api/backup/import", S],
   ["POST", "/api/voice/transcribe", A],
+  ["GET", "/api/voice/dictation", A],
   ["POST", "/api/voice/speak", A],
   ["GET", "/api/voice/hex", A],
   ["POST", "/api/voice/hex/prepare", A],
@@ -478,7 +483,8 @@ const RULES: [methods: string, path: string, rule: Rule][] = [
   ["GET|PUT", "/api/mobile", refused(PHONES_ONLY)],
   ["POST|DELETE", "/api/mobile/pairing", refused(PHONES_ONLY)],
   ["PATCH|DELETE", "/api/mobile/devices/:id", refused(PHONES_ONLY)],
-  ["GET|DELETE", "/api/mobile/me", refused(PHONES_ONLY)],
+  ["GET|PATCH|DELETE", "/api/mobile/me", refused(PHONES_ONLY)],
+  ["POST|DELETE", "/api/mobile/me/push", refused(PHONES_ONLY)],
 
   // Keys for apps on this computer are made and taken away there.
   ["GET|POST", "/api/connectors", refused(COMPUTER_ONLY)],

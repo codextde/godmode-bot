@@ -8,6 +8,8 @@ import type {
   AgentFileEntry,
   AgentFileSearchHit,
   ApiTool,
+  ChatFile,
+  ChatFiles,
   ComposioConnection,
   Credential,
   MacPasswordStatus,
@@ -17,6 +19,7 @@ import type {
   PaymentCard,
   SshKeysOverview,
 } from "@godmode/shared";
+import { deviceFolderRefusal } from "./scope";
 
 const ID = "[^/]+";
 
@@ -128,6 +131,21 @@ export const phoneMessaging = (c: MessagingConnection): MessagingConnection => (
 
 export const phoneSshKeys = (o: SshKeysOverview): SshKeysOverview => ({ ...o, dir: "", keys: o.keys.map((k) => ({ ...k, path: null })) });
 
+/**
+ * Of the files a chat names, only what the phone may open in the folder of the chat's agent anyway (`deviceFolderRefusal`),
+ * under its path there: nothing else of this computer, not even whether it exists. Pictures load from the agent's folder.
+ */
+export function phoneChatFiles(body: ChatFiles): ChatFiles {
+  const { agentId } = body;
+  const shown = (f: ChatFile): ChatFile[] => {
+    if (!agentId || f.remote || f.agentPath === undefined || deviceFolderRefusal(agentId, f.agentPath)) return [];
+    const version = f.image ? new URL(f.image, "http://core").searchParams.get("v") : null;
+    const image = f.image ? `/api/agents/${agentId}/files/raw?path=${encodeURIComponent(f.agentPath)}${version ? `&v=${version}` : ""}` : null;
+    return [{ ref: f.ref, path: f.agentPath, agentPath: f.agentPath, name: f.name, kind: f.kind, image, markdown: null }];
+  };
+  return { local: false, agentId, files: body.files.map((list) => list.flatMap(shown)) };
+}
+
 type View = (body: unknown) => unknown;
 
 const VIEWS: [method: string, path: RegExp, view: View][] = [
@@ -141,6 +159,7 @@ const VIEWS: [method: string, path: RegExp, view: View][] = [
   ["GET", /^\/api\/mods$/, list(phoneMod)],
   ["PATCH", new RegExp(`^/api/mods/${ID}$`), (b) => phoneMod(b as Mod)],
   ["GET", /^\/api\/messaging$/, list(phoneMessaging)],
+  ["POST", new RegExp(`^/api/conversations/${ID}/files$`), (b) => phoneChatFiles(b as ChatFiles)],
   ["GET", new RegExp(`^/api/agents/${ID}/files$`), (b) => (Array.isArray(b) ? (b as AgentFileEntry[]).filter((e) => visibleFile(e.path)) : b)],
   ["GET", new RegExp(`^/api/agents/${ID}/files/search$`), (b) => (Array.isArray(b) ? (b as AgentFileSearchHit[]).filter((e) => visibleFile(e.path)) : b)],
 ];

@@ -1,16 +1,19 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Stack } from "expo-router";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
-import type { ClaudeAccount, ClaudeAccountsState, ClaudeUsageWindow } from "@godmode/shared";
+import type { ClaudeAccount, ClaudeAccountLogin, ClaudeAccountsState, ClaudeUsageWindow } from "@godmode/shared";
+import { useFullAccess } from "@/components/admin";
 import { CloseButton } from "@/components/close-button";
-import { Group, StepperRow, SwitchRow } from "@/components/form";
+import { Group, LinkRow, StepperRow, SwitchRow } from "@/components/form";
 import { Icon } from "@/components/icon";
+import { SignInSteps } from "@/components/program-parts";
 import { FormSkeleton, QueryState } from "@/components/settings-state";
 import { Badge, Card, Row, T, tap } from "@/components/ui";
 import { errorText } from "@/lib/api";
-import { intlLocale } from "@/lib/i18n";
+import { intlLocale, t as translate } from "@/lib/i18n";
+import { programsApi } from "@/lib/programs";
 import { queryClient } from "@/lib/query";
 import { settingsApi, sq } from "@/lib/settings-api";
 import { patchSettings, useSettings } from "@/lib/setup";
@@ -27,10 +30,21 @@ function timeOf(iso: string): string {
     : d.toLocaleString(intlLocale(), { weekday: "short", hour: "2-digit", minute: "2-digit" });
 }
 
-/** Claude subscriptions agents run on: usage, the default, and when work moves to another one. Sign-ins happen on the computer. */
+const setLogin = (login: ClaudeAccountLogin) => queryClient.setQueryData<ClaudeAccountsState>(sq.claudeAccounts, (s) => (s ? { ...s, login } : s));
+const setList = (accounts: ClaudeAccount[]) => queryClient.setQueryData<ClaudeAccountsState>(sq.claudeAccounts, (s) => (s ? { ...s, accounts } : s));
+
+/**
+ * Claude subscriptions agents run on: usage, the default, and when work moves to another one. A full-access phone also
+ * adds accounts, signs them in again and removes them, like the desktop app; on the others that happens on the computer.
+ */
 export default function ClaudeAccounts() {
-  const { t } = useTranslation(["settings", "common"]);
-  const accounts = useQuery({ queryKey: sq.claudeAccounts, queryFn: settingsApi.claudeAccounts.list });
+  const { t } = useTranslation(["settings", "common", "programs"]);
+  const admin = useFullAccess().fullAccess === true;
+  const accounts = useQuery({
+    queryKey: sq.claudeAccounts,
+    queryFn: settingsApi.claudeAccounts.list,
+    refetchInterval: (q) => (q.state.data?.login.state === "waiting" ? 1500 : false),
+  });
   const settings = useSettings();
   const [refreshing, setRefreshing] = useState(false);
   const makeDefault = useMutation({
@@ -54,6 +68,44 @@ export default function ClaudeAccounts() {
       setRefreshing(false);
     }
   };
+  const startLogin = useMutation({
+    mutationFn: programsApi.accounts.startLogin,
+    onSuccess: setLogin,
+    onError: (err) => Alert.alert(t("programs:signIn.startFailed"), errorText(err)),
+  });
+  const cancelLogin = useMutation({ mutationFn: programsApi.accounts.cancelLogin, onSuccess: setLogin });
+  const submitCode = useMutation({ mutationFn: programsApi.accounts.submitCode, onSuccess: setLogin });
+  const sendCode = (code: string) =>
+    submitCode.mutateAsync(code).then(
+      () => true,
+      (err: unknown) => {
+        Alert.alert(t("programs:signIn.codeFailed"), errorText(err));
+        return false;
+      },
+    );
+  const remove = useMutation({
+    mutationFn: programsApi.accounts.remove,
+    onSuccess: setList,
+    onError: (err) => Alert.alert(t("programs:accounts.removeFailed"), errorText(err)),
+  });
+  useLoginOutcome(accounts.data?.login);
+
+  const actions = (a: ClaudeAccount) => {
+    const name = a.email ?? t("accounts.unknown");
+    const confirmRemove = () =>
+      Alert.alert(t("programs:accounts.removeTitle", { email: name }), t("programs:accounts.removeBody"), [
+        { text: t("common:actions.cancel"), style: "cancel" },
+        { text: t("programs:accounts.remove"), style: "destructive", onPress: () => remove.mutate(a.id) },
+      ]);
+    const buttons = [
+      ...(!a.isDefault && !a.needsSignIn ? [{ text: t("programs:accounts.makeDefault"), onPress: () => makeDefault.mutate(a.id) }] : []),
+      ...(!a.system ? [{ text: t("programs:accounts.signInAgain"), onPress: () => startLogin.mutate(a.id) }] : []),
+      ...(!a.system ? [{ text: t("programs:accounts.remove"), style: "destructive" as const, onPress: confirmRemove }] : []),
+    ];
+    if (!buttons.length) return;
+    Alert.alert(name, undefined, [...buttons, { text: t("common:actions.cancel"), style: "cancel" }]);
+  };
+
   const r = settings.data?.runner;
   const autoSwitch = r?.accountAutoSwitch ?? true;
 
@@ -68,16 +120,47 @@ export default function ClaudeAccounts() {
       <QueryState query={accounts} icon="personCircle" errorTitle={t("accounts.loadFailed")} skeleton={<FormSkeleton groups={2} rows={2} />}>
         {(state) => {
           const extra = state.accounts.filter((a) => !a.system).length;
+          const login = state.login;
+          const waiting = login.state === "waiting";
+          const again = waiting && login.accountId ? state.accounts.find((a) => a.id === login.accountId) : undefined;
           return (
             <>
               {state.locked && extra > 0 ? <Locked /> : null}
-              <Group title={t("accounts.listTitle")} footer={t("accounts.onComputer")}>
+              <Group title={t("accounts.listTitle")} footer={admin && state.locked ? t("programs:accounts.vaultLocked") : undefined}>
                 {state.accounts.map((a) => (
-                  <AccountRow key={a.id} account={a} busy={makeDefault.isPending && makeDefault.variables === a.id} onPress={() => makeDefault.mutate(a.id)} />
+                  <AccountRow
+                    key={a.id}
+                    account={a}
+                    admin={admin}
+                    busy={(makeDefault.isPending && makeDefault.variables === a.id) || (remove.isPending && remove.variables === a.id)}
+                    onPress={() => (admin ? actions(a) : makeDefault.mutate(a.id))}
+                  />
                 ))}
+                {admin && waiting ? (
+                  <SignInSteps
+                    key="sign-in"
+                    title={again ? t("programs:accounts.signingInAgain", { email: again.email ?? t("accounts.unknown") }) : t("programs:accounts.adding")}
+                    url={login.url}
+                    submitting={submitCode.isPending}
+                    cancelling={cancelLogin.isPending}
+                    onSubmit={sendCode}
+                    onCancel={() => cancelLogin.mutate()}
+                  />
+                ) : null}
+                {admin && !waiting ? (
+                  <LinkRow
+                    key="add"
+                    icon="plus"
+                    tone="brand"
+                    title={t("programs:accounts.add")}
+                    value={startLogin.isPending ? t("common:status.loading") : undefined}
+                    chevron={false}
+                    onPress={() => !startLogin.isPending && !state.locked && startLogin.mutate(null)}
+                  />
+                ) : null}
               </Group>
               {r ? (
-                <Group title={t("accounts.switchTitle")} footer={autoSwitch ? t("accounts.thresholdFooter") : t("accounts.autoSwitchOff")}>
+                <Group title={t("accounts.switchTitle")}>
                   <SwitchRow icon="move" title={t("accounts.autoSwitch")} value={autoSwitch} onChange={(accountAutoSwitch) => void patchSettings({ runner: { accountAutoSwitch } })} />
                   {autoSwitch ? (
                     <StepperRow
@@ -101,6 +184,18 @@ export default function ClaudeAccounts() {
   );
 }
 
+/** Tells how an account's sign-in ended, once it ended. */
+function useLoginOutcome(login: ClaudeAccountLogin | undefined) {
+  const state = login?.state ?? "idle";
+  const prev = useRef(state);
+  const message = login?.message ?? null;
+  useEffect(() => {
+    if (prev.current === "waiting" && state === "done") Alert.alert(translate("programs:accounts.added", { email: message ?? "" }));
+    if (prev.current === "waiting" && state === "failed") Alert.alert(translate("programs:signIn.failed"), message ?? undefined);
+    prev.current = state;
+  }, [state, message]);
+}
+
 function Locked() {
   const c = useColors();
   const { t } = useTranslation("settings");
@@ -119,14 +214,14 @@ function Locked() {
   );
 }
 
-function AccountRow({ account: a, busy, onPress }: { account: ClaudeAccount; busy: boolean; onPress: () => void }) {
+function AccountRow({ account: a, admin, busy, onPress }: { account: ClaudeAccount; admin: boolean; busy: boolean; onPress: () => void }) {
   const c = useColors();
-  const { t } = useTranslation("settings");
+  const { t } = useTranslation(["settings", "programs"]);
   const name = a.email ?? (a.system ? t("accounts.thisComputer") : t("accounts.unknown"));
   const plan = planLabel(a.plan);
   const subtitle = a.needsSignIn ? (
     <T variant="footnote" color={c.danger} numberOfLines={2}>
-      {t("accounts.signedOut")}
+      {admin ? t("programs:accounts.signedOut") : t("accounts.signedOut")}
     </T>
   ) : a.limitedUntil ? (
     <T variant="footnote" color={c.warning} numberOfLines={1}>
@@ -137,12 +232,12 @@ function AccountRow({ account: a, busy, onPress }: { account: ClaudeAccount; bus
       {a.system ? t("accounts.systemLogin") : a.organization || a.name || t("accounts.addedHere")}
     </T>
   );
-  const selectable = !a.isDefault && !a.needsSignIn;
+  const selectable = admin ? !a.system || !a.isDefault : !a.isDefault && !a.needsSignIn;
   return (
     <Pressable
-      accessibilityRole="radio"
+      accessibilityRole={admin ? "button" : "radio"}
       accessibilityState={{ checked: a.isDefault, disabled: !selectable }}
-      accessibilityHint={selectable ? t("accounts.makeDefaultHint") : undefined}
+      accessibilityHint={selectable && !admin ? t("accounts.makeDefaultHint") : undefined}
       disabled={!selectable || busy}
       onPress={() => {
         tap();

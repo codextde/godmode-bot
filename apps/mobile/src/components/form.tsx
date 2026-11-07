@@ -6,7 +6,7 @@ import { Icon, type IconName } from "./icon";
 import { Card, Hairline, SectionTitle, T, tap } from "./ui";
 import { intlLocale } from "@/lib/i18n";
 import { useAutosave, useEditable, type SaveState } from "@/lib/setup";
-import { fonts, radius, space, useColors } from "@/lib/theme";
+import { fonts, radius, space, textScale, useColors, useLargeText } from "@/lib/theme";
 
 /** A titled card of rows with hairlines between them, and an optional note below. */
 export function Group({
@@ -57,11 +57,11 @@ export function Tile({ icon, emoji, size = 30, tint }: { icon?: IconName; emoji?
   );
 }
 
-function Label({ title, detail, tone }: { title: string; detail?: ReactNode; tone?: "danger" | "brand" }) {
+function Label({ title, detail, tone }: { title: string; detail?: ReactNode; tone?: "danger" | "brand" | "dim" }) {
   const c = useColors();
   return (
     <View style={{ flex: 1, minWidth: 0, gap: 1 }}>
-      <T variant="callout" color={tone === "danger" ? c.danger : tone === "brand" ? c.brandStrong : c.text} style={{ fontWeight: "500" }} numberOfLines={1}>
+      <T variant="callout" color={tone === "danger" ? c.danger : tone === "brand" ? c.brandStrong : tone === "dim" ? c.textMuted : c.text} style={{ fontWeight: "500" }} numberOfLines={1}>
         {title}
       </T>
       {detail ? (
@@ -95,6 +95,7 @@ export function LinkRow({
   chevron?: boolean;
 }) {
   const c = useColors();
+  const large = useLargeText();
   return (
     <Pressable
       accessibilityRole="button"
@@ -105,8 +106,8 @@ export function LinkRow({
       style={({ pressed }) => [styles.row, pressed && { backgroundColor: c.sunken }]}
     >
       {lead ?? (icon || emoji ? <Tile icon={icon} emoji={emoji} tint={tone === "danger" ? c.danger : tone === "brand" ? c.brandStrong : undefined} /> : null)}
-      <Label title={title} detail={detail} tone={tone} />
-      {value ? (
+      <Label title={title} detail={large && value ? value : detail} tone={tone} />
+      {value && !large ? (
         <T variant="subhead" muted numberOfLines={1} style={styles.value}>
           {value}
         </T>
@@ -137,9 +138,9 @@ export function SwitchRow({
 }) {
   const c = useColors();
   return (
-    <View style={[styles.row, disabled && { opacity: 0.45 }]}>
-      {icon ? <Tile icon={icon} /> : null}
-      <Label title={title} detail={detail} />
+    <View style={styles.row}>
+      {icon ? <Tile icon={icon} tint={disabled ? c.textFaint : undefined} /> : null}
+      <Label title={title} detail={detail} tone={disabled ? "dim" : undefined} />
       <Switch
         accessibilityLabel={title}
         value={value}
@@ -149,6 +150,8 @@ export function SwitchRow({
           onChange(next);
         }}
         trackColor={{ true: c.brand, false: c.sunken }}
+        // iOS's Switch pins itself to the top of its row (alignSelf flex-start) unless told otherwise.
+        style={{ alignSelf: "center" }}
       />
     </View>
   );
@@ -229,7 +232,7 @@ export function StepperRow({
         <Pressable accessibilityLabel={t("form.less", { title })} disabled={!canDown} hitSlop={6} onPress={() => move(-1)} style={[styles.stepBtn, { opacity: canDown ? 1 : 0.3 }]}>
           <Icon name="minus" size={13} color={c.text} weight="bold" />
         </Pressable>
-        <T variant="subhead" style={styles.stepValue}>
+        <T variant="subhead" numberOfLines={1} maxScale={textScale.control} style={styles.stepValue}>
           {format(value)}
         </T>
         <Pressable accessibilityLabel={t("form.more", { title })} disabled={!canUp} hitSlop={6} onPress={() => move(1)} style={[styles.stepBtn, { opacity: canUp ? 1 : 0.3 }]}>
@@ -263,6 +266,7 @@ export function PickerRow<V extends string>({
   onChange: (next: V) => void;
 }) {
   const c = useColors();
+  const large = useLargeText();
   const [open, setOpen] = useState(false);
   const current = options.find((o) => o.value === value);
   return (
@@ -277,10 +281,12 @@ export function PickerRow<V extends string>({
         style={({ pressed }) => [styles.row, pressed && { backgroundColor: c.sunken }]}
       >
         {icon ? <Tile icon={icon} /> : null}
-        <Label title={title} detail={detail} />
-        <T variant="subhead" muted numberOfLines={1} style={styles.value}>
-          {current?.label ?? value}
-        </T>
+        <Label title={title} detail={large ? (current?.label ?? value) : detail} />
+        {large ? null : (
+          <T variant="subhead" muted numberOfLines={1} style={styles.value}>
+            {current?.label ?? value}
+          </T>
+        )}
         <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
           <Icon name="down" size={12} color={c.textFaint} weight="semibold" style={{ transform: [{ rotate: open ? "180deg" : "0deg" }] }} />
         </View>
@@ -339,7 +345,7 @@ export function Segmented<V extends string>({ options, value, onChange }: { opti
             }}
             style={[styles.segment, active && { backgroundColor: c.surface, borderColor: c.border }]}
           >
-            <T variant="footnote" numberOfLines={1} color={active ? c.text : c.textMuted} style={{ fontWeight: active ? "600" : "500" }}>
+            <T variant="footnote" numberOfLines={1} maxScale={textScale.control} color={active ? c.text : c.textMuted} style={{ fontWeight: active ? "600" : "500" }}>
               {o.label}
             </T>
           </Pressable>
@@ -392,23 +398,25 @@ export function FieldRow({
   stacked?: boolean;
 }) {
   const c = useColors();
+  const stack = useLargeText() || stacked;
   const { text, setText, done } = useEditable(value);
   const commit = () => {
     const next = done();
     if (next !== null) onCommit(next);
   };
   return (
-    <View style={[styles.row, stacked && { flexDirection: "column", alignItems: "stretch", gap: 2 }]}>
-      <T variant={stacked ? "footnote" : "callout"} muted={stacked} style={stacked ? undefined : { fontWeight: "500" }}>
+    <View style={[styles.row, stack && { flexDirection: "column", alignItems: "stretch", gap: 2 }]}>
+      <T variant={stack ? "footnote" : "callout"} muted={stack} style={stack ? undefined : { fontWeight: "500" }}>
         {label}
       </T>
-      <View style={[{ flexDirection: "row", alignItems: "center", gap: 2 }, !stacked && { flex: 1 }]}>
+      <View style={[{ flexDirection: "row", alignItems: "center", gap: 2 }, !stack && { flex: 1 }]}>
         {prefix && text ? (
           <T variant="callout" muted>
             {prefix}
           </T>
         ) : null}
         <TextInput
+          maxFontSizeMultiplier={textScale.label}
           accessibilityLabel={label}
           value={text}
           onChangeText={setText}
@@ -419,7 +427,7 @@ export function FieldRow({
           maxLength={maxLength}
           returnKeyType="done"
           submitBehavior="blurAndSubmit"
-          style={[styles.field, { color: c.text, textAlign: stacked ? "left" : "right" }]}
+          style={[styles.field, { color: c.text, textAlign: stack ? "left" : "right" }]}
         />
       </View>
     </View>
@@ -454,6 +462,7 @@ export function TextEditor({
   minHeight = 140,
   label,
   hint,
+  readOnly = false,
 }: {
   value: string;
   onSave: (next: string) => Promise<boolean>;
@@ -462,6 +471,8 @@ export function TextEditor({
   minHeight?: number;
   label: string;
   hint?: string;
+  /** Shown, not edited (the computer keeps it); `hint` says why. */
+  readOnly?: boolean;
 }) {
   const c = useColors();
   const { t } = useTranslation("components");
@@ -476,6 +487,7 @@ export function TextEditor({
       ]}
     >
       <TextInput
+        maxFontSizeMultiplier={textScale.label}
         accessibilityLabel={label}
         value={draft}
         onChangeText={setDraft}
@@ -487,9 +499,10 @@ export function TextEditor({
         placeholder={placeholder}
         placeholderTextColor={c.textFaint}
         maxLength={maxLength}
+        editable={!readOnly}
         multiline
         scrollEnabled={false}
-        style={[styles.editorInput, { color: c.text, minHeight }]}
+        style={[styles.editorInput, { color: readOnly ? c.textMuted : c.text, minHeight }]}
       />
       <View style={[styles.editorFoot, { borderTopColor: c.border }]}>
         <T variant="caption" muted style={{ flex: 1 }} numberOfLines={1}>

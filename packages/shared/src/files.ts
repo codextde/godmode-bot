@@ -16,8 +16,12 @@ export interface ChatFile {
   /** Where the core serves the file, when it is Markdown the chat can open in its reader. */
   markdown: string | null;
   text?: string | null;
+  /** Where the core serves the file, when it is a PDF. */
+  pdf?: string | null;
   /** It is on the chat's runner, not on the core's machine. */
   remote?: boolean;
+  /** For a phone: where it lies in the folder of the chat's agent, when it does. Phones open it there. */
+  agentPath?: string;
 }
 
 export interface ChatFiles {
@@ -25,6 +29,8 @@ export interface ChatFiles {
   local: boolean;
   /** Per message, the paths that exist. */
   files: ChatFile[][];
+  /** For a phone: the chat's agent, whose folder `agentPath` starts in. */
+  agentId?: string | null;
 }
 
 export const CHAT_IMAGE_PATH = "/api/files/image";
@@ -32,6 +38,9 @@ export const CHAT_MARKDOWN_PATH = "/api/files/markdown";
 /** Larger Markdown is data, not something to read. */
 export const MAX_CHAT_MARKDOWN_BYTES = 2 * 1024 * 1024;
 export const MARKDOWN_NAME = /\.(?:md|markdown|mdx|mdown|mkd)$/i;
+export const CHAT_PDF_PATH = "/api/files/pdf";
+/** Like an agent's file a phone opens. */
+export const MAX_CHAT_PDF_BYTES = 25 * 1024 * 1024;
 export const CHAT_TEXT_PATH = "/api/files/text";
 export const MAX_CHAT_TEXT_BYTES = 1024 * 1024;
 export const CODE_NAME =
@@ -59,6 +68,10 @@ export function chatImageUrl(path: string, version: number): string {
 
 export function chatTextUrl(path: string, version: number): string {
   return `${CHAT_TEXT_PATH}?path=${encodeURIComponent(path)}&v=${Math.round(version)}`;
+}
+
+export function chatPdfUrl(path: string, version: number): string {
+  return `${CHAT_PDF_PATH}?path=${encodeURIComponent(path)}&v=${Math.round(version)}`;
 }
 
 export function chatMarkdownUrl(path: string, version: number): string {

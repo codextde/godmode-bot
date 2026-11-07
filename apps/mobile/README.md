@@ -4,14 +4,14 @@ The phone app for Godmode: hand over tasks with photos and files, follow answers
 question or approve a step with one tap, pause and stop runs, run automations, see what every agent did, and watch an
 agent's browser, shared screen or VM live (tap to take control). The chat input works like the desktop's: photos and
 files, dictation, Claude Code's slash commands, a queue for messages sent while the agent works, and the model, effort
-and Ultracode. It does what the desktop does wherever a phone safely can: artifacts (in a sandboxed WebView with the
-same `window.godmode` bridge), agents' files, teams, the board, automations, auto review, settings and status, and
-read-only lists of passwords, integrations, plugins and servers. Secrets, installs, commands, pairing and security
-settings stay on the computer. It controls the Godmode running on your computer and nothing else.
+and Ultracode. A paired phone is limited at first: it works with agents, chats, tasks and automations, and what it starts never sees raw
+secrets. Turn on Full access for that phone in Godmode on your computer (Settings → Phone) and it does what the desktop
+app does, with Face ID before every secret. Push notifications go through Expo's push service from your own computer.
+It controls the Godmode running on your computer and nothing else.
 
 Built with [Expo](https://expo.dev) SDK 58 and Expo Router: native tabs and headers (Liquid Glass on iOS 26),
 `expo-glass-effect` for floating controls, `expo-camera` for pairing, `expo-secure-store` for the device key,
-`expo-image-picker` and `expo-document-picker` for attachments.
+`expo-image-picker` and `expo-document-picker` for attachments, `expo-notifications` for push.
 
 ## Connecting
 

@@ -6,10 +6,14 @@ import { useTranslation } from "react-i18next";
 import type { Agent, AppNotification, MissingLogin, MissingLoginKind, MissingLoginStatus } from "@godmode/shared";
 import { CharacterAvatar } from "@/components/character";
 import { FilterChips } from "@/components/filter-chips";
+import { Segmented } from "@/components/form";
+import { useFullAccess } from "@/components/full-access";
 import { HeaderActions } from "@/components/header-actions";
 import { openHumanTask } from "@/components/human-task-row";
 import { Icon, type IconName } from "@/components/icon";
+import { ClosedList, type ClosedStatus } from "@/components/inbox-closed";
 import { NotificationRow, openNotificationLink } from "@/components/notification-row";
+import { ChatScope, QuestionCard } from "@/components/question-card";
 import { openChat } from "@/components/rows";
 import { openTask } from "@/components/task-row";
 import { Badge, Button, Card, EmptyState, ErrorState, Hairline, Row, SectionTitle, SkeletonRows, T, tap } from "@/components/ui";
@@ -63,6 +67,7 @@ export default function Inbox() {
   const pull = usePullRefresh(() => Promise.all([needs.refetch(), notifications.refetch()]));
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
+  const [tab, setTab] = useState<"open" | ClosedStatus>("open");
   const query = search.trim().toLowerCase();
 
   const agentName = useCallback((id: string | null) => (id ? (agents.get(id)?.name ?? "") : ""), [agents]);
@@ -104,7 +109,19 @@ export default function Inbox() {
         keyboardDismissMode="on-drag"
         refreshControl={<RefreshControl {...pull} />}
       >
-        {total > 0 && counts.size > 1 ? (
+        <Segmented
+          value={tab}
+          onChange={setTab}
+          options={[
+            { value: "open", label: t("tabs.open") },
+            { value: "resolved", label: t("tabs.resolved") },
+            { value: "dismissed", label: t("tabs.dismissed") },
+          ]}
+        />
+
+        {tab !== "open" ? <ClosedList status={tab} query={query} /> : null}
+
+        {tab === "open" && total > 0 && counts.size > 1 ? (
           <FilterChips
             bleed={space.lg}
             value={filter}
@@ -116,7 +133,7 @@ export default function Inbox() {
           />
         ) : null}
 
-        <View>
+        {tab === "open" ? <View>
           <SectionTitle title={waiting ? t("attentionCount", { count: waiting }) : t("attention")} />
           {needs.loading ? (
             <Card>
@@ -158,9 +175,9 @@ export default function Inbox() {
               ))}
             </View>
           )}
-        </View>
+        </View> : null}
 
-        {filter === "all" ? (
+        {tab === "open" && filter === "all" ? (
           <Notifications
             list={query ? shownNotifications : notifications.data}
             loading={notifications.isLoading}
@@ -193,7 +210,7 @@ function NeedRow({ need: n }: { need: Need }) {
   const question = n.question;
   return (
     <View>
-      <Pressable accessibilityRole={open ? "button" : undefined} disabled={!open} onPress={open} style={({ pressed }) => [styles.need, pressed && { backgroundColor: c.sunken }]}>
+      <Pressable accessibilityRole={open ? "button" : undefined} disabled={!open} onPress={open} style={({ pressed }) => [styles.need, question && styles.asked, pressed && { backgroundColor: c.sunken }]}>
         <View style={[styles.needIcon, { backgroundColor: tint.bg }]}>
           <Icon name={NEED_ICON[n.kind]} size={14} color={tint.fg} />
         </View>
@@ -201,7 +218,7 @@ function NeedRow({ need: n }: { need: Need }) {
           <T variant="subhead" style={{ fontWeight: "600" }} numberOfLines={2}>
             {n.title}
           </T>
-          {n.detail || n.kind === "access" ? (
+          {(n.detail && !question) || n.kind === "access" ? (
             <T variant="footnote" muted numberOfLines={2}>
               {n.kind === "access" ? [n.detail, t("onComputer")].filter(Boolean).join(" · ") : n.detail}
             </T>
@@ -212,9 +229,14 @@ function NeedRow({ need: n }: { need: Need }) {
         </T>
       </Pressable>
       {question ? (
-        <Row style={styles.rowActions}>
-          <StopButton runId={question.runId} agent={byId.get(question.agentId)?.name ?? t("anAgent")} />
-        </Row>
+        <View style={styles.answer}>
+          <ChatScope.Provider value={{ conversationId: question.conversationId, agentName: byId.get(question.agentId)?.name ?? t("anAgent"), openQuestionId: question.id }}>
+            <QuestionCard inline question={{ ...question, type: "question", askedAt: question.createdAt }} />
+          </ChatScope.Provider>
+          <Row>
+            <StopButton runId={question.runId} agent={byId.get(question.agentId)?.name ?? t("anAgent")} />
+          </Row>
+        </View>
       ) : n.kind === "paused" && n.conversationId ? (
         <Row style={styles.rowActions}>
           <ContinueButton conversationId={n.conversationId} />
@@ -335,7 +357,17 @@ function setLoginStatus(item: MissingLogin, status: MissingLoginStatus) {
 function LoginCard({ item, agent }: { item: MissingLogin; agent?: Agent }) {
   const c = useColors();
   const { t } = useTranslation("inbox");
+  const { fullAccess } = useFullAccess();
   const kind = LOGIN_KIND[item.kind] ?? LOGIN_KIND.other;
+  // Like the desktop: a missing 2FA code is picked from the vault, anything else gets a login (resolved once saved).
+  const act =
+    item.kind === "missing_totp"
+      ? { title: t("loginActions.add2fa"), icon: "shield" as const, open: () => router.push({ pathname: "/vault/link-totp", params: { id: item.id } }) }
+      : {
+          title: item.kind === "invalid_credential" ? t("loginActions.updateLogin") : t("loginActions.addLogin"),
+          icon: "key" as const,
+          open: () => router.push({ pathname: "/vault/login-edit", params: { missingLoginId: item.id } }),
+        };
   const kindLabel = t(kind.labelKey);
   return (
     <Card style={[styles.login, { borderColor: kind.tone === "danger" ? c.danger : c.border }]}>
@@ -363,10 +395,21 @@ function LoginCard({ item, agent }: { item: MissingLogin; agent?: Agent }) {
           {agent ? t("login.reportedBy", { name: agent.name }) : item.agentId ? t("login.reportedByAgent") : t("login.reportedByGodmode")} · {shortTime(item.updatedAt || item.createdAt)}
         </T>
       </Row>
-      <T variant="footnote" muted>
-        {t("login.addOnComputer")}
-      </T>
-      <Row style={{ gap: space.sm }}>
+      {fullAccess === false ? (
+        <T variant="footnote" muted>
+          {t("login.addOnComputer")}
+        </T>
+      ) : null}
+      <Row style={{ gap: space.sm, flexWrap: "wrap" }}>
+        {fullAccess ? <LoginButton
+            title={act.title}
+            icon={act.icon}
+            primary
+            onPress={() => {
+              tap();
+              act.open();
+            }}
+          /> : null}
         <LoginButton title={t("login.dismiss")} icon="close" onPress={() => setLoginStatus(item, "dismissed")} />
         <LoginButton title={t("login.markResolved")} icon="check" onPress={() => setLoginStatus(item, "resolved")} />
       </Row>
@@ -374,12 +417,17 @@ function LoginCard({ item, agent }: { item: MissingLogin; agent?: Agent }) {
   );
 }
 
-function LoginButton({ title, icon, onPress }: { title: string; icon: IconName; onPress: () => void }) {
+function LoginButton({ title, icon, onPress, primary }: { title: string; icon: IconName; onPress: () => void; primary?: boolean }) {
   const c = useColors();
+  const fg = primary ? c.onPrimary : c.text;
   return (
-    <Pressable accessibilityRole="button" onPress={onPress} style={({ pressed }) => [styles.loginButton, { backgroundColor: c.sunken, opacity: pressed ? 0.7 : 1 }]}>
-      <Icon name={icon} size={12} color={c.text} weight="semibold" />
-      <T variant="footnote" style={{ fontWeight: "600" }}>
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      style={({ pressed }) => [styles.loginButton, { backgroundColor: primary ? c.primary : c.sunken, opacity: pressed ? 0.7 : 1 }]}
+    >
+      <Icon name={icon} size={12} color={fg} weight="semibold" />
+      <T variant="footnote" color={fg} style={{ fontWeight: "600" }}>
         {title}
       </T>
     </Pressable>
@@ -480,6 +528,15 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     gap: space.md,
     padding: space.lg,
+  },
+  asked: {
+    alignItems: "center",
+    paddingBottom: space.sm,
+  },
+  answer: {
+    gap: space.sm,
+    paddingHorizontal: space.lg,
+    paddingBottom: space.md,
   },
   needIcon: {
     width: 30,

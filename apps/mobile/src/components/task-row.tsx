@@ -23,10 +23,10 @@ export const STATUS_META: Record<TaskStatus, { label: string; tone: Tone }> = {
   cancelled: { get label() { return t("components:taskRow.status.cancelled"); }, tone: "neutral" },
 };
 
-export const TYPE_META: Record<TaskType, { label: string; hint: string }> = {
-  general: { get label() { return t("components:taskRow.type.general.label"); }, get hint() { return t("components:taskRow.type.general.hint"); } },
-  coding: { get label() { return t("components:taskRow.type.coding.label"); }, get hint() { return t("components:taskRow.type.coding.hint"); } },
-  research: { get label() { return t("components:taskRow.type.research.label"); }, get hint() { return t("components:taskRow.type.research.hint"); } },
+export const TYPE_META: Record<TaskType, { label: string }> = {
+  general: { get label() { return t("components:taskRow.type.general.label"); } },
+  coding: { get label() { return t("components:taskRow.type.coding.label"); } },
+  research: { get label() { return t("components:taskRow.type.research.label"); } },
 };
 
 /** What a blocked card leads with, like the desktop's BLOCKED_META. */

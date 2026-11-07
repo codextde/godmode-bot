@@ -1791,7 +1791,7 @@
     },
     "can": {
       "title": "Was ein Handy kann",
-      "body": "Mit Agenten chatten, Läufe stoppen, Automationen starten, VMs starten und stoppen und Browser, geteilte Bildschirme und VMs live ansehen. Steuern kann es nur Browser und Bildschirme, die du in einem Chat geteilt hast. Logins, 2FA-Codes, Backups, Integrationen und Einstellungen lassen sich vom Handy aus nicht öffnen."
+      "body": "Mit Agenten chatten, Läufe stoppen, Automationen starten, VMs starten und stoppen und Browser, geteilte Bildschirme und VMs live ansehen. Steuern kann es nur Browser und Bildschirme, die du in einem Chat geteilt hast. Logins, 2FA-Codes, Backups, Integrationen und Einstellungen lassen sich vom Handy aus nicht öffnen, außer du gibst ihm vollen Zugriff."
     },
     "hero": {
       "eyebrow": "Godmode für iOS und Android",
@@ -1814,7 +1814,14 @@
       "paired": "gekoppelt {{time}}",
       "removeLabel": "{{name}} entfernen",
       "confirmTitle": "{{name}} entfernen?",
-      "confirmDescription": "Es wird sofort getrennt und kann Godmode nicht mehr steuern. Du kannst es mit einem neuen Code wieder koppeln."
+      "confirmDescription": "Es wird sofort getrennt und kann Godmode nicht mehr steuern. Du kannst es mit einem neuen Code wieder koppeln.",
+      "fullAccess": "Voller Zugriff",
+      "fullAccessLabel": "Voller Zugriff für {{name}}",
+      "fullAccessTitle": "{{name}} vollen Zugriff geben?",
+      "fullAccessDescription": "Es kann dann Passwörter sehen und alles ändern, wie dieser Computer.",
+      "fullAccessAllow": "Vollen Zugriff erlauben",
+      "fullAccessError": "Der Zugriff des Handys konnte nicht geändert werden",
+      "push": "Bekommt Mitteilungen"
     }
   },
   "security": {

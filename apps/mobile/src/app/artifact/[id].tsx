@@ -1,6 +1,7 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Image } from "expo-image";
 import { router, Stack, useLocalSearchParams } from "expo-router";
+import { useHeaderHeight } from "expo-router/react-navigation";
 import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Alert, FlatList, Linking, Modal, Pressable, StyleSheet, TextInput, View } from "react-native";
 import { useTranslation } from "react-i18next";
@@ -29,6 +30,9 @@ export default function ArtifactScreen() {
   const { t } = useTranslation(["artifacts", "common"]);
   const insets = useSafeAreaInsets();
   const keyboardOpen = useKeyboardState((s) => s.isVisible);
+  // Android draws the header above the screen, not over it.
+  const headerHeight = useHeaderHeight();
+  const keyboardOffset = process.env.EXPO_OS === "android" ? headerHeight : 0;
   const query = useQuery({ queryKey: qk.artifact(id), queryFn: () => api.artifacts.get(id) });
   const artifact = query.data;
   const running = useRunningChats();
@@ -156,7 +160,7 @@ export default function ArtifactScreen() {
           { icon: "trash", title: t("view.delete"), onPress: remove, destructive: true },
         ]}
       />
-      <KeyboardAvoidingView behavior="translate-with-padding" style={styles.fill}>
+      <KeyboardAvoidingView behavior="translate-with-padding" keyboardVerticalOffset={keyboardOffset} style={styles.fill}>
         {viewing !== null ? (
           <Row style={[styles.versionBar, { backgroundColor: c.sunken }]}>
             <T variant="subhead" style={{ flex: 1, fontWeight: "600" }}>

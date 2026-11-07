@@ -5,6 +5,7 @@ import { useState } from "react";
 import { ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { formatBytes, type CleanupId, type CleanupItem, type CleanupReport, type CleanupRun, type OptimizeReport, type OptimizeRun, type StorageArea } from "@godmode/shared";
+import { useFullAccess } from "@/components/admin";
 import { CloseButton } from "@/components/close-button";
 import { Group, SwitchRow } from "@/components/form";
 import { Icon, type IconName } from "@/components/icon";
@@ -42,6 +43,8 @@ const LARGE_CHAT = 250_000;
 const cleanable = (i: CleanupItem) => i.count > 0 && !i.blocked;
 /** The phone cleans what Godmode removes by itself too; the rest needs a look on the computer. */
 const phoneMay = (i: CleanupItem) => i.recommended && cleanable(i);
+/** With full access the phone cleans everything the desktop does, after a confirm for what isn't recommended. */
+const mayWith = (full: boolean | undefined) => (i: CleanupItem) => (full ? cleanable(i) : phoneMay(i));
 
 function cleanupResult(run: CleanupRun) {
   const failed = run.results.filter((r) => !r.ok);
@@ -94,7 +97,7 @@ export default function Cleanup() {
             <Items report={data} busy={scanning} />
             {optimize.data ? <Optimize report={optimize.data} /> : null}
             {maintenance ? (
-              <Group title={t("cleanup.auto.title")} footer={t("cleanup.auto.footer")}>
+              <Group title={t("cleanup.auto.title")}>
                 <SwitchRow icon="broom" title={t("cleanup.auto.label")} value={maintenance.autoCleanup} onChange={(autoCleanup) => void patchSettings({ maintenance: { autoCleanup } })} />
               </Group>
             ) : null}
@@ -173,8 +176,10 @@ function Items({ report, busy }: { report: CleanupReport; busy: boolean }) {
   const listed = (i: CleanupItem) => i.count > 0 || i.entries.some((e) => e.kept);
   const items = report.items.filter(listed);
   const clean = report.items.filter((i) => !listed(i));
+  const { fullAccess } = useFullAccess();
+  const may = mayWith(fullAccess);
   const [picked, setPicked] = useState<Set<CleanupId> | null>(null);
-  const selected = new Set([...(picked ?? report.items.filter(phoneMay).map((i) => i.id))].filter((id) => report.items.some((i) => i.id === id && phoneMay(i))));
+  const selected = new Set([...(picked ?? report.items.filter(phoneMay).map((i) => i.id))].filter((id) => report.items.some((i) => i.id === id && may(i))));
   const total = items.filter((i) => selected.has(i.id)).reduce((n, i) => n + i.bytes, 0);
   const run = useMutation({
     mutationFn: (ids: CleanupId[]) => settingsApi.cleanup.run(ids),
@@ -195,7 +200,7 @@ function Items({ report, busy }: { report: CleanupReport; busy: boolean }) {
 
   return (
     <View style={{ gap: space.md }}>
-      <Group title={t("cleanup.items.title")} footer={items.some((i) => !i.recommended) ? t("cleanup.items.footer") : undefined}>
+      <Group title={t("cleanup.items.title")} footer={!fullAccess && items.some((i) => !i.recommended) ? t("cleanup.items.footer") : undefined}>
         {items.length === 0 ? (
           <Row style={styles.allClean}>
             <Icon name="checkCircle" size={20} color={c.success} />
@@ -210,32 +215,38 @@ function Items({ report, busy }: { report: CleanupReport; busy: boolean }) {
           </Row>
         ) : (
           items.map((item) => (
-            <ItemRow key={item.id} item={item} selected={selected.has(item.id)} busy={run.isPending && selected.has(item.id)} onToggle={() => toggle(item.id)} />
+            <ItemRow key={item.id} item={item} may={may(item)} selected={selected.has(item.id)} busy={run.isPending && selected.has(item.id)} onToggle={() => toggle(item.id)} />
           ))
         )}
       </Group>
       {items.length && clean.length ? (
         <T variant="footnote" muted style={{ paddingHorizontal: 4 }}>
-          {t("cleanup.items.alreadyClean", { names: clean.map((i) => i.name).join(" · ") })}
+          {t("cleanup.items.alreadyClean", { count: clean.length })}
         </T>
       ) : null}
-      {items.some(phoneMay) ? (
+      {items.some(may) ? (
         <Button
           title={run.isPending ? t("cleanup.items.cleaning") : total ? t("cleanup.items.free", { size: formatBytes(total) }) : t("cleanup.items.title")}
           icon="broom"
           loading={run.isPending}
           disabled={!selected.size || busy}
-          onPress={() => run.mutate([...selected])}
+          onPress={() => {
+            const unusual = items.filter((i) => selected.has(i.id) && !i.recommended);
+            if (!unusual.length) return run.mutate([...selected]);
+            Alert.alert(t("cleanup.items.title"), unusual.map((i) => i.name).join(" · "), [
+              { text: t("common:actions.cancel"), style: "cancel" },
+              { text: t("cleanup.items.free", { size: formatBytes(total) }), style: "destructive", onPress: () => run.mutate([...selected]) },
+            ]);
+          }}
         />
       ) : null}
     </View>
   );
 }
 
-function ItemRow({ item, selected, busy, onToggle }: { item: CleanupItem; selected: boolean; busy: boolean; onToggle: () => void }) {
+function ItemRow({ item, may, selected, busy, onToggle }: { item: CleanupItem; may: boolean; selected: boolean; busy: boolean; onToggle: () => void }) {
   const c = useColors();
   const { t } = useTranslation("settings");
-  const may = phoneMay(item);
   const kept = item.entries.filter((e) => e.kept).length;
   const amount = [item.count > 0 ? t("cleanup.items.count", { count: item.count }) : null, kept ? t("cleanup.items.kept", { count: kept }) : null].filter(Boolean).join(" · ");
   return (
@@ -273,7 +284,7 @@ function ItemRow({ item, selected, busy, onToggle }: { item: CleanupItem; select
           <T variant="footnote" color={c.warning}>
             {item.blocked}
           </T>
-        ) : !item.recommended && item.count > 0 ? (
+        ) : !item.recommended && item.count > 0 && !may ? (
           <T variant="footnote" muted>
             {t("phone.onComputer")}
           </T>

@@ -1,14 +1,19 @@
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, StyleSheet, TextInput, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import Animated, { FadeIn } from "react-native-reanimated";
 import type { WorkspaceSource } from "@godmode/shared";
 import { EmojiGrid, Group, LinkRow } from "./form";
-import { Icon } from "./icon";
+import { useFullAccess } from "./full-access";
+import { MenuSheet } from "./header-actions";
+import { Icon, type IconName } from "./icon";
 import { Badge, Button, T, tap } from "./ui";
 import type { SourceInput } from "@/lib/api";
+import { pickFolder } from "@/lib/folder-pick";
+import { useSshServers } from "@/lib/integrations";
 import { useEditable } from "@/lib/setup";
 import { radius, space, useColors } from "@/lib/theme";
+import { ownEmoji } from "@/lib/workspace";
 
 /** Picture, name and one line about a workspace or project; each saves when you're done with it. */
 export function Identity({
@@ -21,7 +26,7 @@ export function Identity({
   icon: string;
   name: string;
   description: string;
-  fallbackIcon: string;
+  fallbackIcon: IconName;
   onChange: (patch: { icon?: string; name?: string; description?: string }) => void;
 }) {
   const c = useColors();
@@ -42,7 +47,7 @@ export function Identity({
           }}
           style={({ pressed }) => [styles.bigTile, { backgroundColor: c.sunken, borderColor: picking ? c.brand : c.border, opacity: pressed ? 0.75 : 1 }]}
         >
-          <T style={{ fontSize: 34 }}>{icon || fallbackIcon}</T>
+          {ownEmoji(icon) ? <T style={{ fontSize: 34 }}>{icon}</T> : <Icon name={fallbackIcon} size={28} color={c.textMuted} />}
           <View style={[styles.editBadge, { backgroundColor: c.surface, borderColor: c.border }]}>
             <Icon name="pencil" size={10} color={c.text} weight="bold" />
           </View>
@@ -112,12 +117,10 @@ export function Sources({
   sources,
   onSave,
   onSync,
-  footer,
 }: {
   sources: WorkspaceSource[];
   onSave: (next: SourceInput[]) => Promise<boolean>;
   onSync: (sourceId: string) => Promise<unknown>;
-  footer: string;
 }) {
   const c = useColors();
   const { t } = useTranslation(["components", "common"]);
@@ -125,6 +128,25 @@ export function Sources({
   const [url, setUrl] = useState("");
   const [branch, setBranch] = useState("");
   const [busy, setBusy] = useState(false);
+  const [choosing, setChoosing] = useState(false);
+  const { fullAccess } = useFullAccess();
+  const servers = useSshServers(fullAccess === true);
+
+  // Saving replaces the whole list, and it may have changed while a sheet or an alert was open.
+  const latest = useRef(sources);
+  useLayoutEffect(() => {
+    latest.current = sources;
+  });
+
+  const addFolder = async () => {
+    const path = await pickFolder({ title: t("setup.addFolder"), action: t("setup.useFolder") });
+    if (path) void onSave([...inputsOf(latest.current), { kind: "folder", path }]);
+  };
+  const addRemote = async (server: { id: string; name: string }) => {
+    const path = await pickFolder({ title: t("setup.remoteTitle", { name: server.name }), action: t("setup.useFolder"), serverId: server.id });
+    if (path) void onSave([...inputsOf(latest.current), { kind: "remote", serverId: server.id, path }]);
+  };
+  const list = servers.data ?? [];
 
   const add = async () => {
     if (!url.trim()) return;
@@ -140,11 +162,11 @@ export function Sources({
   const remove = (source: WorkspaceSource) =>
     Alert.alert(t("setup.removeTitle", { name: source.name }), source.kind === "git" ? t("setup.removeRepoMessage") : t("setup.removeFolderMessage"), [
       { text: t("common:actions.cancel"), style: "cancel" },
-      { text: t("common:actions.remove"), style: "destructive", onPress: () => void onSave(inputsOf(sources.filter((s) => s.id !== source.id))) },
+      { text: t("common:actions.remove"), style: "destructive", onPress: () => void onSave(inputsOf(latest.current.filter((s) => s.id !== source.id))) },
     ]);
 
   return (
-    <Group title={t("setup.sourcesTitle")} footer={footer}>
+    <Group title={t("setup.sourcesTitle")}>
       {sources.map((s) => {
         const status = STATUS[s.status];
         const where =
@@ -226,8 +248,13 @@ export function Sources({
           </View>
         </Animated.View>
       ) : (
-        <LinkRow icon="plus" title={t("setup.addRepo")} tone="brand" chevron={false} onPress={() => setAdding(true)} />
+        <>
+          <LinkRow icon="plus" title={t("setup.addRepo")} tone="brand" chevron={false} onPress={() => setAdding(true)} />
+          {fullAccess ? <LinkRow icon="folder" title={t("setup.addFolder")} tone="brand" chevron={false} onPress={() => void addFolder()} /> : null}
+          {fullAccess && list.length ? <LinkRow icon="server" title={t("setup.addRemote")} tone="brand" chevron={false} onPress={() => (list.length === 1 ? void addRemote(list[0]!) : setChoosing(true))} /> : null}
+        </>
       )}
+      <MenuSheet items={list.map((s) => ({ icon: "server" as const, title: s.name, onPress: () => void addRemote(s) }))} open={choosing} onClose={() => setChoosing(false)} />
     </Group>
   );
 }

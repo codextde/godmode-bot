@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
-import { ExternalLink, Network, QrCode, RefreshCw, ShieldCheck, Smartphone, Trash2 } from "lucide-react";
+import { Bell, ExternalLink, Network, QrCode, RefreshCw, ShieldCheck, Smartphone, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import type { MobileDevice, MobileStatus, Settings } from "@godmode/shared";
@@ -235,6 +235,13 @@ function DeviceRow({ device, readOnly }: { device: MobileDevice; readOnly: boole
   const { t } = useTranslation(["settings", "common"]);
   const qc = useQueryClient();
   const [confirm, setConfirm] = useState(false);
+  const [confirmFull, setConfirmFull] = useState(false);
+  const full = useMutation({
+    mutationFn: (on: boolean) => api.mobile.setFullAccess(device.id, on),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: qk.mobile }),
+    onError: (e) => toastApiError(e, t("phone.device.fullAccessError"), qc),
+  });
+  const fullAccess = full.isPending ? full.variables : device.fullAccess;
   const remove = useMutation({
     mutationFn: () => api.mobile.removeDevice(device.id),
     onSuccess: () => {
@@ -256,11 +263,28 @@ function DeviceRow({ device, readOnly }: { device: MobileDevice; readOnly: boole
         {device.online && <span className="absolute -top-0.5 -right-0.5 size-2.5 rounded-full border-2 border-card bg-brand" />}
       </div>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium">{device.name}</p>
+        <p className="flex items-center gap-1.5 text-sm font-medium">
+          <span className="truncate">{device.name}</span>
+          {device.push && (
+            <span title={t("phone.device.push")} className="shrink-0 text-muted-foreground">
+              <Bell className="size-3" role="img" aria-label={t("phone.device.push")} />
+            </span>
+          )}
+        </p>
         <p className="truncate text-xs text-muted-foreground">
           {[device.model ?? (device.platform === "ios" ? "iPhone" : "Android"), seen, t("phone.device.paired", { time: formatDistanceToNow(new Date(device.createdAt), { addSuffix: true, locale: dateLocale() }) })].join(" · ")}
         </p>
       </div>
+      <label className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
+        {t("phone.device.fullAccess")}
+        <Switch
+          size="sm"
+          checked={fullAccess}
+          disabled={readOnly || full.isPending}
+          aria-label={t("phone.device.fullAccessLabel", { name: device.name })}
+          onCheckedChange={(on) => (on ? setConfirmFull(true) : full.mutate(false))}
+        />
+      </label>
       {!readOnly && (
         <Button variant="ghost" size="icon-sm" className="text-muted-foreground hover:text-destructive" aria-label={t("phone.device.removeLabel", { name: device.name })} onClick={() => setConfirm(true)}>
           {remove.isPending ? <Spinner /> : <Trash2 />}
@@ -277,6 +301,18 @@ function DeviceRow({ device, readOnly }: { device: MobileDevice; readOnly: boole
             <AlertDialogAction variant="destructive" onClick={() => remove.mutate()}>
               {t("common:actions.remove")}
             </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog open={confirmFull} onOpenChange={setConfirmFull}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("phone.device.fullAccessTitle", { name: device.name })}</AlertDialogTitle>
+            <AlertDialogDescription>{t("phone.device.fullAccessDescription")}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("common:actions.cancel")}</AlertDialogCancel>
+            <AlertDialogAction onClick={() => full.mutate(true)}>{t("phone.device.fullAccessAllow")}</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { MAX_INSTRUCTIONS_LENGTH } from "@godmode/shared";
 import { CharacterAvatar } from "@/components/character";
 import { CloseButton } from "@/components/close-button";
+import { useFullAccess } from "@/components/full-access";
 import { Group, LinkRow, PickerRow, TextEditor } from "@/components/form";
 import { Identity, Sources } from "@/components/setup";
 import { EmptyState, SectionTitle } from "@/components/ui";
@@ -14,13 +15,14 @@ import { useAgents } from "@/lib/hooks";
 import { qk, queryClient } from "@/lib/query";
 import { patchProject } from "@/lib/setup";
 import { space } from "@/lib/theme";
-import { useWorkspace } from "@/lib/workspace";
+import { useWorkspace, ownEmoji } from "@/lib/workspace";
 
 const DEFAULT = "default";
 
 export default function ProjectScreen() {
-  const { t } = useTranslation(["settings", "common", "archive"]);
+  const { t } = useTranslation(["settings", "common", "archive", "manage", "components"]);
   const { id } = useLocalSearchParams<{ id: string }>();
+  const admin = useFullAccess().fullAccess === true;
   const { workspaces, loading } = useWorkspace();
   const { data: agents } = useAgents();
   const profiles = useQuery({ queryKey: qk.browserProfiles, queryFn: api.browser.profiles });
@@ -70,10 +72,11 @@ export default function ProjectScreen() {
       <Stack.Screen options={{ title: p.name, headerLargeTitleEnabled: false }} />
       <CloseButton />
 
-      <Identity icon={p.icon} name={p.name} description={p.description} fallbackIcon="📁" onChange={(patch) => void patchProject(p.id, patch)} />
+      <Identity icon={p.icon} name={p.name} description={p.description} fallbackIcon="folder" onChange={(patch) => void patchProject(p.id, patch)} />
 
       <LinkRow
-        emoji={workspace.icon || "🗂️"}
+        emoji={ownEmoji(workspace.icon)}
+        icon="layers"
         title={workspace.name}
         detail={t("project.workspaceDetail")}
         onPress={() => router.push({ pathname: "/settings/workspace/[id]", params: { id: workspace.id } })}
@@ -91,7 +94,7 @@ export default function ProjectScreen() {
       </View>
 
       {team.length ? (
-        <Group title={t("project.agents")} footer={t("project.agentsFooter")}>
+        <Group title={t("project.agents")}>
           {team.map((a) => (
             <LinkRow
               key={a.id}
@@ -106,7 +109,6 @@ export default function ProjectScreen() {
 
       <Sources
         sources={p.sources}
-        footer={t("project.sourcesFooter")}
         onSave={(sources) => patchProject(p.id, { sources })}
         onSync={(sourceId) => api.projects.sync(p.id, sourceId)}
       />
@@ -122,6 +124,11 @@ export default function ProjectScreen() {
       </Group>
 
       <Group>
+        <LinkRow
+          icon="move"
+          title={t("manage:project.move")}
+          onPress={() => (admin ? router.push({ pathname: "/scope-move", params: { kind: "project", id: p.id } }) : Alert.alert(t("components:fullAccess.title")))}
+        />
         <LinkRow icon="archive" title={t("archive:archive")} chevron={false} onPress={() => archive({ kind: "project", id: p.id, name: p.name })} />
         <LinkRow icon="trash" title={t("project.delete")} tone="danger" chevron={false} onPress={remove} />
       </Group>

@@ -9,7 +9,9 @@ import { KeyboardStickyView, useKeyboardState } from "react-native-keyboard-cont
 import Animated, { FadeIn, FadeOut, ZoomIn } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { browserView, type AndroidInputEvent, type AndroidKey, type ComputerInputEvent } from "@godmode/shared";
+import { PHONE_BUTTONS } from "@/components/android-parts";
 import { AndroidTouchSurface } from "@/components/android-touch";
+import { useFullAccess } from "@/components/full-access";
 import { Glass, GlassGroup } from "@/components/glass";
 import { Icon } from "@/components/icon";
 import { frameUri, phoneState, vmState } from "@/components/screen-tile";
@@ -18,6 +20,7 @@ import { api, errorText, type BrowserInput } from "@/lib/api";
 import { hostOf } from "@/lib/format";
 import { useNow } from "@/lib/hooks";
 import { useLive, type Frame } from "@/lib/live";
+import { machinesApi, normalizeUrl } from "@/lib/machines";
 import { qk, queryClient } from "@/lib/query";
 import { useAndroidFrame, useStreamFrame, useVmFrame, type LiveScreen } from "@/lib/screens";
 import { showVmMenu, type VmAction } from "@/lib/vm-actions";
@@ -61,8 +64,8 @@ const MAC_KEYS: Key[] = [
 ];
 
 export default function Live() {
-  const { t } = useTranslation(["chat", "common", "integrations"]);
-  const params = useLocalSearchParams<{ kind: LiveScreen["kind"]; id: string; title?: string; chat?: string }>();
+  const { t } = useTranslation(["chat", "common", "integrations", "machines"]);
+  const params = useLocalSearchParams<{ kind: LiveScreen["kind"]; id: string; title?: string; chat?: string; note?: string }>();
   const chat = params.chat || null;
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
@@ -90,13 +93,15 @@ export default function Live() {
   const online = useLive((s) => s.status === "online");
   const fresh = !!frame && (params.kind === "browser" ? online : now - frame.at < 8000);
   const [control, setControl] = useState(false);
+  const [buttons, setButtons] = useState(false);
   const [typing, setTyping] = useState(false);
   const keyboard = useKeyboardState((k) => (k.isVisible ? k.height : 0));
   const [text, setText] = useState("");
   const [ripple, setRipple] = useState<{ x: number; y: number; id: number; secondary: boolean } | null>(null);
   const android = params.kind === "android";
-  // Only a phone a chat uses, like a screen shared in a chat: the computer refuses the others.
-  const phoneInChat = !!phone?.assignments.some((a) => a.kind === "conversation");
+  const admin = useFullAccess().fullAccess === true;
+  // Only a phone a chat uses, like a screen shared in a chat: the computer refuses the others, unless this phone has full access.
+  const phoneInChat = admin || !!phone?.assignments.some((a) => a.kind === "conversation");
   const canControl = android ? phone?.state === "connected" && phoneInChat : params.kind !== "vm" || vm?.state === "running";
   // Shared screens and VMs are whole Macs: they take right clicks and shortcuts; a browser tab doesn't.
   const mac = params.kind === "vm" || params.kind === "share";
@@ -143,6 +148,22 @@ export default function Live() {
     },
     [frame, params.id, t],
   );
+
+  // A full-access phone goes to another address in the browser it watches, like the desktop's address bar.
+  const [editingUrl, setEditingUrl] = useState(false);
+  const [urlDraft, setUrlDraft] = useState("");
+  // Everything selected at first, like Safari's address bar: what is typed replaces it.
+  const [urlSelection, setUrlSelection] = useState<{ start: number; end: number } | undefined>();
+  const canNavigate = admin && params.kind === "browser" && profile?.running !== false && !!frame;
+  const navigate = useMutation({
+    mutationFn: (url: string) => machinesApi.browser.navigate(params.id, url, chat),
+    onError: (err) => Alert.alert(t("machines:live.navFailed"), errorText(err)),
+  });
+  const go = () => {
+    const url = normalizeUrl(urlDraft);
+    setEditingUrl(false);
+    if (url) navigate.mutate(url);
+  };
 
   const launch = useMutation({
     mutationFn: () => api.browser.launch(params.id),
@@ -220,7 +241,7 @@ export default function Live() {
           ? profile?.running === false
             ? t("live.notRunning")
             : hostOf(frame?.url) || t("live.browser")
-          : frame?.title || t("live.sharedScreen");
+          : params.note || frame?.title || t("live.sharedScreen");
 
   return (
     <View style={styles.root}>
@@ -313,19 +334,60 @@ export default function Live() {
 
       <View style={[styles.top, { paddingTop: insets.top + 8, paddingLeft: insets.left + 16, paddingRight: insets.right + 16 }]}>
         <GlassIconButton icon="close" label={t("common:actions.close")} onPress={() => router.back()} dark />
-        <Glass style={styles.title} scheme="dark" fallback={SMOKE}>
-          {fresh ? <LiveDot size={7} /> : <View style={[styles.idleDot]} />}
-          <View style={{ flexShrink: 1 }}>
-            <T variant="footnote" color={WHITE} numberOfLines={1} style={{ fontWeight: "600" }}>
-              {params.title ?? vm?.name ?? phone?.name ?? t("live.screen")}
-            </T>
-            <T variant="caption" color={DIM} numberOfLines={1}>
-              {subtitle}
-            </T>
-          </View>
-        </Glass>
+        {editingUrl ? (
+          <Glass style={styles.title} scheme="dark" fallback={SMOKE}>
+            <Icon name="globe" size={14} color={DIM} />
+            <TextInput
+              autoFocus
+              value={urlDraft}
+              selection={urlSelection}
+              onChangeText={(next) => {
+                setUrlSelection(undefined);
+                setUrlDraft(next);
+              }}
+              onSubmitEditing={go}
+              onBlur={() => setEditingUrl(false)}
+              keyboardType="url"
+              autoCapitalize="none"
+              autoCorrect={false}
+              returnKeyType="go"
+              clearButtonMode="while-editing"
+              accessibilityLabel={t("machines:live.address")}
+              placeholder={t("machines:live.address")}
+              placeholderTextColor={DIM}
+              style={styles.urlInput}
+            />
+          </Glass>
+        ) : (
+          <Pressable
+            style={{ flex: 1 }}
+            disabled={!canNavigate}
+            accessibilityHint={canNavigate ? t("machines:live.editAddress") : undefined}
+            onPress={() => {
+              tap();
+              const url = frame?.url ?? "";
+              setUrlDraft(url);
+              setUrlSelection({ start: 0, end: url.length });
+              setEditingUrl(true);
+            }}
+          >
+            <Glass style={styles.title} scheme="dark" fallback={SMOKE}>
+              {navigate.isPending ? <ActivityIndicator size="small" color={WHITE} /> : fresh ? <LiveDot size={7} /> : <View style={[styles.idleDot]} />}
+              <View style={{ flexShrink: 1 }}>
+                <T variant="footnote" color={WHITE} numberOfLines={1} style={{ fontWeight: "600" }}>
+                  {params.title ?? vm?.name ?? phone?.name ?? t("live.screen")}
+                </T>
+                <T variant="caption" color={DIM} numberOfLines={1}>
+                  {subtitle}
+                </T>
+              </View>
+            </Glass>
+          </Pressable>
+        )}
         {params.kind === "vm" && vm?.state === "running" ? (
           <GlassIconButton icon="power" label={t("integrations:vm.menu")} onPress={() => showVmMenu(vm, (action) => vmAction.mutate(action))} dark />
+        ) : canNavigate && frame?.url ? (
+          <GlassIconButton icon="refresh" label={t("machines:live.reload")} disabled={navigate.isPending} onPress={() => navigate.mutate(frame.url!)} dark />
         ) : (
           <View style={{ width: 44 }} />
         )}
@@ -336,7 +398,7 @@ export default function Live() {
           {typing && (
             <Animated.View entering={FadeIn} style={{ width: "100%", maxWidth: 520, gap: 8 }}>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="always" contentContainerStyle={styles.keys}>
-                {(android ? PHONE_KEYS : [...KEYS, ...(params.kind === "vm" ? MAC_KEYS : [])]).map((k) => (
+                {(android ? PHONE_KEYS : [...KEYS, ...(mac ? MAC_KEYS : [])]).map((k) => (
                   <Pressable key={k.a11y} accessibilityRole="button" accessibilityLabel={t(`live.keys.${k.a11y}`)} onPress={() => sendKey(k)}>
                     {({ pressed }) => (
                       <Glass style={[styles.key, pressed && styles.keyPressed]} scheme="dark" fallback={SMOKE}>
@@ -379,7 +441,23 @@ export default function Live() {
               <GlassIconButton icon="back" label={t("live.phone.back")} onPress={() => navKey("back")} dark />
               <GlassIconButton icon="navHome" label={t("live.phone.home")} onPress={() => navKey("home")} dark />
               <GlassIconButton icon="navRecents" label={t("live.phone.recents")} onPress={() => navKey("recents")} dark />
+              <GlassIconButton icon="more" label={t("live.phone.buttons")} onPress={() => setButtons((v) => !v)} dark />
             </GlassGroup>
+          )}
+          {android && control && !typing && buttons && (
+            <Animated.View entering={FadeIn} style={{ width: "100%", maxWidth: 520 }}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.keys}>
+                {PHONE_BUTTONS.map((b) => (
+                  <Pressable key={b.key} accessibilityRole="button" accessibilityLabel={t(`machines:${b.label}`)} onPress={() => navKey(b.key)}>
+                    {({ pressed }) => (
+                      <Glass style={[styles.key, pressed && styles.keyPressed]} scheme="dark" fallback={SMOKE}>
+                        <Icon name={b.icon} size={16} color={WHITE} />
+                      </Glass>
+                    )}
+                  </Pressable>
+                ))}
+              </ScrollView>
+            </Animated.View>
           )}
           <GlassGroup style={styles.tools} spacing={14}>
             <Pressable
@@ -476,6 +554,7 @@ const styles = StyleSheet.create({
     height: 48,
   },
   typeInput: { flex: 1, color: WHITE, fontSize: 16 },
+  urlInput: { flex: 1, color: WHITE, fontSize: 15, height: 44 },
   enter: {
     paddingHorizontal: 12,
     height: 36,

@@ -5,6 +5,7 @@ import * as vault from "../../vault/vault";
 import {
   createCredential,
   deleteCredential,
+  generatePassword,
   getCredential,
   linkCredentialTotpIfFree,
   listCredentials,
@@ -263,6 +264,12 @@ export function registerVaultRoutes(app: Hono): void {
     await vault.setRememberDevice(remember);
     audit("user", "vault.remember_device", null, { remember });
     return c.json(vault.status());
+  });
+
+  // The vault's password generator for apps without a secure random source of their own (the phone). Nothing is stored.
+  app.post("/api/vault/generate-password", async (c) => {
+    const input = await body(c, z.object({ length: z.number().int().min(8).max(128).optional(), numbers: z.boolean().optional(), symbols: z.boolean().optional() }));
+    return c.json({ password: generatePassword(input.length ?? 20, input) });
   });
 
   /* ---------------------------------------------------------------- */

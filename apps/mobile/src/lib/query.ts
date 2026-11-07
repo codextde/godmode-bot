@@ -1,7 +1,10 @@
 import { QueryClient } from "@tanstack/react-query";
 import { ApiError } from "./api";
 
-export const queryClient = new QueryClient({
+const kept = globalThis as typeof globalThis & { godmodeQueries?: QueryClient };
+
+/** One client for the app's life: Fast Refresh runs this file again, while the open socket keeps the client it started with. */
+export const queryClient = (kept.godmodeQueries ??= new QueryClient({
   defaultOptions: {
     queries: {
       staleTime: 15_000,
@@ -9,13 +12,15 @@ export const queryClient = new QueryClient({
       retry: (count, err) => !(err instanceof ApiError && err.status >= 400 && err.status < 500) && count < 2,
     },
   },
-});
+}));
 
 export const qk = {
   bootstrap: ["bootstrap"],
   me: ["me"],
   workspaces: ["workspaces"],
   settings: ["settings"],
+  /** Under settings: whatever refreshes them asks again. */
+  dictation: (provider: string) => ["settings", "dictation", provider],
   agents: ["agents"],
   agent: (id: string) => ["agents", id],
   agentMemory: (id: string) => ["agents", id, "memory"],

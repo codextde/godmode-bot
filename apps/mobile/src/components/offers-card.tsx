@@ -1,5 +1,4 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { formatDistanceToNowStrict } from "date-fns";
 import { router } from "expo-router";
 import { useState } from "react";
 import { ActivityIndicator, Alert, Pressable, StyleSheet, View } from "react-native";
@@ -11,7 +10,6 @@ import { Icon } from "./icon";
 import { Card, Hairline, Row, T, tap } from "./ui";
 import { api, ApiError, errorText } from "@/lib/api";
 import { useAgents } from "@/lib/hooks";
-import { dateLocale } from "@/lib/i18n";
 import { qk, queryClient } from "@/lib/query";
 import { useWorkspace } from "@/lib/workspace";
 import { radius, space, useColors } from "@/lib/theme";
@@ -131,16 +129,10 @@ function OfferRow({ offer, pending, disabled, onAccept, onDismiss }: { offer: Of
         style={[styles.prompt, { backgroundColor: c.sunken, borderLeftColor: c.borderStrong }]}
       >
         <T variant="footnote" numberOfLines={long && !open ? 2 : undefined}>
-          <T variant="footnote" muted>
-            {t("home.offers.startsWith")}{" "}
-          </T>
           {offer.prompt}
         </T>
       </Pressable>
-      <Row style={{ gap: space.sm }}>
-        <T variant="caption" muted numberOfLines={1} style={{ flex: 1 }}>
-          {t("home.offers.offered", { time: formatDistanceToNowStrict(new Date(offer.createdAt), { addSuffix: true, locale: dateLocale() }) })}
-        </T>
+      <Row style={{ gap: space.sm, justifyContent: "flex-end" }}>
         <Pressable
           accessibilityRole="button"
           disabled={disabled}

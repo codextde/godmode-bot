@@ -4,7 +4,8 @@ import { router, Stack, useFocusEffect, useLocalSearchParams } from "expo-router
 import { useCallback, useRef, useState } from "react";
 import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
-import type { AutomationEvent, Routine, RoutineNotify } from "@godmode/shared";
+import { findModel, type AutomationEvent, type Routine, type RoutineNotify } from "@godmode/shared";
+import { useFullAccess } from "@/components/admin";
 import { EventRow } from "@/components/automation-event";
 import { CharacterAvatar } from "@/components/character";
 import { Group, SwitchRow } from "@/components/form";
@@ -14,8 +15,10 @@ import { appName, runLabel, runRoutine, setRoutineEnabled, triggerText, TRIGGER_
 import { openChat } from "@/components/rows";
 import { runStatusLabel } from "@/components/run-row";
 import { Badge, Button, Card, EmptyState, ErrorState, Hairline, LoadingState, Row, SectionTitle, SkeletonRows, T, tap } from "@/components/ui";
+import { WebhookPanel } from "@/components/webhook-panel";
 import { api, errorText } from "@/lib/api";
 import { useArchive } from "@/lib/archive";
+import { useModelCatalog } from "@/lib/composer";
 import { isFailingRoutine } from "@/lib/desktop-parity";
 import { whenText } from "@/lib/format";
 import { dateLocale } from "@/lib/i18n";
@@ -66,6 +69,8 @@ function AutomationView({ routine, refetchList }: { routine: Routine; refetchLis
   const id = routine.id;
   const { byId } = useAgents();
   const agent = byId.get(routine.agentId);
+  const admin = useFullAccess().fullAccess === true;
+  const catalog = useModelCatalog();
   const working = useLive((s) => Object.values(s.runs).some(({ run }) => run.routineId === id));
   const [starting, setStarting] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -92,7 +97,9 @@ function AutomationView({ routine, refetchList }: { routine: Routine; refetchLis
   const trigger = routine.trigger;
   const status = routine.triggerStatus;
   const keepsChat = routine.reuseConversation && !!routine.conversationId;
-  const editable = trigger.type === "schedule" || trigger.type === "condition";
+  const eventTrigger = trigger.type === "app" || trigger.type === "webhook";
+  const editable = admin || !eventTrigger;
+  const checkModel = trigger.type === "condition" ? trigger.checkModel : null;
   const edit = () => router.push({ pathname: "/automation-edit", params: { id } });
 
   const refresh = async () => {
@@ -147,6 +154,7 @@ function AutomationView({ routine, refetchList }: { routine: Routine; refetchLis
 
   const menu: HeaderMenuItem[] = [
     ...(routine.conversationId ? [{ icon: "chats" as IconName, title: t("automation.openChat"), onPress: () => openChat(routine.conversationId!) }] : []),
+    ...(admin && eventTrigger ? [{ icon: "wand" as IconName, title: t("testEvent.menu"), onPress: () => router.push({ pathname: "/automation-test", params: { id } }) }] : []),
     { icon: "archive", title: t("archive:archive"), onPress: () => archive({ kind: "routine", id: routine.id, name: routine.name }) },
     { icon: "trash", title: t("common:actions.delete"), destructive: true, onPress: remove },
   ];
@@ -229,6 +237,8 @@ function AutomationView({ routine, refetchList }: { routine: Routine; refetchLis
         {routine.filter ? <Info label={t("automation.onlyWhen")} value={routine.filter} /> : null}
       </Group>
 
+      {admin && trigger.type === "webhook" ? <WebhookPanel routine={routine} /> : null}
+
       {trigger.type === "condition" ? (
         <View>
           <SectionTitle title={t("automation.condition")} />
@@ -258,12 +268,12 @@ function AutomationView({ routine, refetchList }: { routine: Routine; refetchLis
       <Group title={t("common:words.settings")}>
         <SwitchRow
           title={t("automation.enabled")}
-          detail={editable ? t("automation.enabledHint") : t("automation.enabledHintEvents")}
           value={routine.enabled}
           onChange={(enabled) => setRoutineEnabled(routine, enabled)}
         />
         <Info label={t("automation.tellMe")} value={t(NOTIFY_LABELS[routine.notify])} />
         <Info label={t("automation.keepOneChat")} value={routine.reuseConversation ? t("common:status.on") : t("common:status.off")} />
+        {trigger.type === "condition" ? <Info label={t("edit.checkModel")} value={checkModel ? (findModel(catalog.data?.models ?? [], checkModel)?.label ?? checkModel) : t("edit.agentModel")} /> : null}
         <Info label={t("automation.logins")} value={routine.fillOnly ? t("automation.loginsFillOnly") : t("automation.loginsLikeAgent")} />
       </Group>
 

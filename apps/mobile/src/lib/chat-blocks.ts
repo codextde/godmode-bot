@@ -169,6 +169,12 @@ export function parseAmount(raw: string): number | null {
   return Math.round(Number(s) * 100) / 100;
 }
 
+/** The transfer as an EPC QR code (GiroCode) carries it, like the desktop's. */
+export function epcPayload(p: Payment): string {
+  const reference = p.reference.trim();
+  return ["BCD", "002", "1", "SCT", p.bic, p.name, p.iban, p.amount == null ? "" : `EUR${p.amount.toFixed(2)}`, "", reference, reference ? "" : p.purpose].join("\n").replace(/\n+$/, "");
+}
+
 export function parsePayment(source: string): { ok: true; payment: Payment } | { ok: false; error: PaymentError } {
   const p: Payment = { name: "", iban: "", bic: "", amount: null, purpose: "", reference: "" };
   let amountRaw = "";

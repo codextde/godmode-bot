@@ -156,7 +156,7 @@ import { link } from "../remote/runners";
 import { loginFillScope } from "../browser/fill";
 import { errorMessage } from "../computer/engine";
 import { DEVICE_URL, approveOnPage, ensureSignIn, githubLogin, otherRunsSignIn, signInEnd } from "../github/signIn";
-import { chatFillOnly, chatGoal, createConversation, handoffAllowed, isPrivateChat, maskSecretInChat, sendMessage } from "../services/conversations";
+import { chatFillOnly, chatGoal, createConversation, handoffAllowed, isPrivateChat, maskSecretInChat, runFillOnly, sendMessage } from "../services/conversations";
 import { HANDOFF_BRIEF_MAX, HANDOFF_TITLE_MAX, handOff } from "../services/handoff";
 import { assignVm, createVm, getVm, listVms, sharedDirOf, startVm, stopVm, suspendVm, vmInUse, vmOfRun, vmStatus } from "../vm/service";
 import { resolveVmId } from "../vm/assignments";
@@ -239,8 +239,11 @@ const isManager = (a: Agent) => a.permissions.canManageAgents;
 const managesSetup = (a: Agent) => isManager(a) && config().role !== "runner";
 const canDelegate = (a: Agent) => a.permissions.allowDelegation || a.permissions.canManageAgents;
 const canReveal = (a: Agent) => a.permissions.secretAccess === "reveal";
-/** Raw secrets in this run: the agent may read them, and its chat's task didn't come from an agent that may not. */
-const revealsHere = (a: Agent, ctx: RunContext) => canReveal(a) && !chatFillOnly(ctx.conversationId);
+/**
+ * Raw secrets in this run: the agent may read them, its chat's task didn't come from an agent that may not, and no phone
+ * without full access wrote what started the run.
+ */
+const revealsHere = (a: Agent, ctx: RunContext) => canReveal(a) && !chatFillOnly(ctx.conversationId) && !runFillOnly(ctx.runId);
 
 const json = (v: unknown) => JSON.stringify(v, null, 2);
 

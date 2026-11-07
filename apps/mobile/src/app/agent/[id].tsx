@@ -1,10 +1,10 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { formatDistanceToNowStrict } from "date-fns";
 import { router, Stack, useLocalSearchParams } from "expo-router";
-import { useMemo, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, Switch, View } from "react-native";
 import { useTranslation } from "react-i18next";
-import { findModel, leadOf, presenceLabel, reportsOf, type Agent, type Routine, type TaskStatus } from "@godmode/shared";
+import { leadOf, presenceLabel, reportsOf, type Agent, type Routine, type TaskStatus } from "@godmode/shared";
 import { useAgentMenu } from "@/components/agent-actions";
 import { AgentHistory, FailedRunBanner } from "@/components/agent-history";
 import { DreamsCard } from "@/components/dreams-card";
@@ -16,9 +16,8 @@ import { triggerText } from "@/components/routine-row";
 import { ConversationRow, openChat } from "@/components/rows";
 import { openTask, STATUS_META } from "@/components/task-row";
 import { Badge, Button, Card, ErrorState, Hairline, LiveDot, LoadingState, Row, SectionTitle, SkeletonRows, T, tap } from "@/components/ui";
-import { useProjectIndex, useWorkspace } from "@/lib/workspace";
+import { useProjectIndex, scopeLabel } from "@/lib/workspace";
 import { api, errorText } from "@/lib/api";
-import { useModelCatalog } from "@/lib/composer";
 import { activityText, whenText } from "@/lib/format";
 import { dateLocale, intlLocale, currentLanguage } from "@/lib/i18n";
 import { chatListQuery, useAgents } from "@/lib/hooks";
@@ -61,9 +60,8 @@ export default function AgentScreen() {
 function AgentView({ agent, team }: { agent: Agent; team: Agent[] }) {
   const id = agent.id;
   const { t } = useTranslation(["agents", "common"]);
-  const { workspaces } = useWorkspace();
   const project = useProjectIndex().get(agent.projectId ?? "")?.project;
-  const catalog = useModelCatalog();
+  const [aboutOpen, setAboutOpen] = useState(false);
   const counts = useRunCounts().get(id);
   const presence = useAgentPresence(agent, { running: counts?.running, queued: counts?.queued });
   const routines = useQuery({ queryKey: qk.agentRoutines(id), queryFn: () => api.routines.list({ agentId: id }) });
@@ -78,13 +76,10 @@ function AgentView({ agent, team }: { agent: Agent; team: Agent[] }) {
 
   const lead = leadOf(agent, team);
   const reports = reportsOf(agent, team);
-  const workspace = workspaces.find((w) => w.id === agent.workspaceId);
-  const model = agent.model ? (findModel(catalog.data?.models ?? [], agent.model)?.label ?? agent.model) : t("detail.defaultModel");
-  const meta = [
-    agent.isDefault ? t("detail.reportsToYou") : lead ? t("detail.reportsTo", { name: lead.name }) : null,
+  const subtitle = [
+    agent.role,
+    !agent.isDefault && lead ? t("detail.reportsTo", { name: lead.name }) : null,
     reports.length ? t("detail.leads", { count: reports.length }) : null,
-    workspace ? `${workspace.icon ? `${workspace.icon} ` : ""}${workspace.name}` : t("detail.global"),
-    [model, agent.effort ? t("detail.effort", { effort: agent.effort }) : null, agent.ultracode ? "Ultracode" : null].filter(Boolean).join(" · "),
   ].filter(Boolean);
   const tone = presence.state === "working" ? "brand" : presence.state === "failed" ? "danger" : presence.needsYou ? "warning" : "neutral";
   const runTask = () => router.push({ pathname: "/new-task", params: { agentId: agent.id } });
@@ -98,27 +93,29 @@ function AgentView({ agent, team }: { agent: Agent; team: Agent[] }) {
       />
       <View style={styles.hero}>
         <CharacterAvatar agent={agent} size={76} mood={moodOf(presence)} style={{ marginTop: space.md }} />
-        <Row style={{ gap: space.sm }}>
-          <T variant="title">{agent.name}</T>
-          {agent.isDefault && <Badge label={t("detail.builtIn")} />}
-        </Row>
-        {agent.role ? (
-          <T variant="subhead" style={{ textAlign: "center", fontWeight: "600" }}>
-            {agent.role}
+        <View style={{ alignItems: "center", gap: 2 }}>
+          <T variant="title" style={{ textAlign: "center" }}>
+            {agent.name}
           </T>
+          {subtitle.length ? (
+            <T variant="subhead" muted style={{ textAlign: "center" }}>
+              {subtitle.join(" · ")}
+            </T>
+          ) : null}
+        </View>
+        {presence.state !== "idle" || project ? (
+          <Row style={{ gap: 6, flexWrap: "wrap", justifyContent: "center" }}>
+            {presence.state !== "idle" ? <Badge label={presenceLabel(presence, currentLanguage())} tone={tone} live={presence.state === "working"} /> : null}
+            {project ? <Badge label={scopeLabel(project)} /> : null}
+          </Row>
         ) : null}
         {agent.description ? (
-          <T variant="subhead" muted style={{ textAlign: "center", maxWidth: 320 }}>
-            {agent.description}
-          </T>
+          <Pressable accessibilityRole="button" accessibilityState={{ expanded: aboutOpen }} onPress={() => setAboutOpen((open) => !open)}>
+            <T variant="subhead" style={{ textAlign: "center", maxWidth: 340 }} numberOfLines={aboutOpen ? undefined : 2}>
+              {agent.description}
+            </T>
+          </Pressable>
         ) : null}
-        <Row style={{ gap: 6, flexWrap: "wrap", justifyContent: "center" }}>
-          <Badge label={presenceLabel(presence, currentLanguage())} tone={tone} live={presence.state === "working"} />
-          {project ? <Badge label={`${project.icon ? `${project.icon} ` : ""}${project.name}`} /> : null}
-        </Row>
-        <T variant="footnote" muted style={{ textAlign: "center" }}>
-          {meta.join("  ·  ")}
-        </T>
         <Row style={{ gap: space.sm, alignSelf: "stretch", marginTop: space.sm }}>
           <Button title={t("detail.runTask")} icon="play" variant="secondary" disabled={!agent.enabled} onPress={runTask} style={{ flex: 1 }} />
           <Button title={t("detail.chat")} icon="compose" onPress={() => router.push({ pathname: "/compose", params: { agentId: agent.id } })} style={{ flex: 1 }} />
@@ -127,7 +124,7 @@ function AgentView({ agent, team }: { agent: Agent; team: Agent[] }) {
 
       <FailedRunBanner agent={agent} />
 
-      <Plate agent={agent} onRunTask={runTask} onSwitchOn={() => toggle.mutate(true)} switching={toggle.isPending} />
+      <Plate agent={agent} onSwitchOn={() => toggle.mutate(true)} switching={toggle.isPending} />
 
       <AgentHistory agent={agent} />
 
@@ -183,7 +180,7 @@ function AgentView({ agent, team }: { agent: Agent; team: Agent[] }) {
  * Everything the agent has going on, like the desktop's: what it works on right now, what stands still (and why), its
  * tickets on the board, the follow-ups it promised and its next automations.
  */
-function Plate({ agent, onRunTask, onSwitchOn, switching }: { agent: Agent; onRunTask: () => void; onSwitchOn: () => void; switching: boolean }) {
+function Plate({ agent, onSwitchOn, switching }: { agent: Agent; onSwitchOn: () => void; switching: boolean }) {
   const c = useColors();
   const { t } = useTranslation(["agents", "common"]);
   const runs = useLive((s) => s.runs);
@@ -220,9 +217,7 @@ function Plate({ agent, onRunTask, onSwitchOn, switching }: { agent: Agent; onRu
             <T variant="subhead" muted>
               {agent.enabled ? t("plate.empty", { name: agent.name }) : t("plate.switchedOff", { name: agent.name })}
             </T>
-            {agent.enabled ? (
-              <Button title={t("detail.runTask")} icon="play" variant="secondary" onPress={onRunTask} />
-            ) : (
+            {agent.enabled ? null : (
               <Button title={t("plate.switchOn")} icon="power" variant="secondary" loading={switching} onPress={onSwitchOn} />
             )}
           </View>
@@ -444,7 +439,7 @@ function RoutineRow({ routine }: { routine: Routine }) {
       >
         <Icon name="play" size={12} color={c.text} />
       </Pressable>
-      <Switch value={enabled} onValueChange={(v) => toggle.mutate(v)} trackColor={{ true: c.brand, false: c.sunken }} />
+      <Switch value={enabled} onValueChange={(v) => toggle.mutate(v)} trackColor={{ true: c.brand, false: c.sunken }} style={{ alignSelf: "center" }} />
     </Pressable>
   );
 }

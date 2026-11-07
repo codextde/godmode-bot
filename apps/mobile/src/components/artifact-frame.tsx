@@ -200,8 +200,8 @@ export function ArtifactFrame({
         pointerEvents={interactive ? "auto" : "none"}
         // Links leave through the bridge; the page itself never goes anywhere else.
         onShouldStartLoadWithRequest={(r) => {
-          if (r.url === "about:blank" || r.url.startsWith("about:") || r.url.startsWith("data:") || r.url.startsWith("blob:")) return true;
-          if (r.isTopFrame === false) return /^https:/i.test(r.url);
+          if (r.url.startsWith("about:")) return true;
+          if (r.isTopFrame === false) return /^(https|data|blob):/i.test(r.url);
           if (r.navigationType === "click" && /^(https?:\/\/|mailto:|tel:)/i.test(r.url)) void Linking.openURL(r.url);
           return false;
         }}

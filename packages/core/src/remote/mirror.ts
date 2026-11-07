@@ -53,6 +53,7 @@ import {
 import { HttpError, now, truncate } from "../util";
 import { getQuestion } from "../services/questions";
 import { liteMessage } from "../services/liteMessage";
+import { announceNotification } from "../services/notifications";
 import { clearRemoteRun, clearRunner, remoteRuns, setRemoteRun } from "./activeRuns";
 import { primaryRunnerId } from "./group";
 
@@ -797,7 +798,7 @@ function onMissingLogin(runnerId: string, raw: unknown): boolean {
 }
 
 /** Stored and shown once per id; whether it was read is this computer's. */
-function onNotification(raw: unknown): boolean {
+function onNotification(runnerId: string, raw: unknown): boolean {
   const n = record(raw);
   const id = safeId(n?.id);
   const title = text(n?.title)?.trim();
@@ -821,6 +822,8 @@ function onNotification(raw: unknown): boolean {
     created_at: notification.createdAt,
   });
   bus.emit({ type: "notification", notification });
+  // A computer of the device group tells its phones itself; a runner has none.
+  if (get<{ kind: string }>("SELECT kind FROM runners WHERE id = ?", runnerId)?.kind !== "device") announceNotification(notification);
   return true;
 }
 
@@ -974,7 +977,7 @@ function apply(runnerId: string, raw: unknown): boolean {
     case "question.updated":
       return onQuestion(runnerId, type, e.question);
     case "notification":
-      return onNotification(e.notification);
+      return onNotification(runnerId, e.notification);
     case "browser.frame":
       return onBrowserFrame(runnerId, e);
     case "browser.empty":

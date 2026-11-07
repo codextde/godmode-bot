@@ -1,14 +1,14 @@
 import { existsSync } from "node:fs";
 import type { Context, Hono } from "hono";
-import { isPhoneRequest } from "../auth";
+import { isLimitedPhone, isPhoneRequest } from "../auth";
 import { MAX_GOAL_TITLE_LENGTH, MAX_GOAL_WHY_LENGTH, MAX_TASK_ATTACHMENT_BYTES, MAX_TASK_DESCRIPTION_LENGTH, MAX_TASK_TITLE_LENGTH, TASK_PRIORITIES, TASK_STATUSES, TASK_TYPES } from "@godmode/shared";
-import { approveTask, archiveTasks, checkoutDir, createTask, deleteTask, getTask, listTaskEvents, listTasks, pushTaskBranch, sendTaskMessage, updateTask } from "../../tasks/service";
+import { approveTask, archiveTasks, checkoutDir, createTask, deleteTask, getTask, listTaskEvents, listTasks, markGoalFillOnly, markTaskFillOnly, pushTaskBranch, sendTaskMessage, updateTask } from "../../tasks/service";
 import { unsavedWork } from "../../services/cleanup";
 import { readTaskAttachment, saveTaskAttachment } from "../../tasks/attachments";
 import { HttpError, badRequest } from "../../util";
 import { body, z } from "../validate";
 import { expectSlow } from "../../mcp/http";
-import { createGoal, deleteGoal, listGoals, updateGoal } from "../../tasks/goals";
+import { createGoal, deleteGoal, getGoal, listGoals, updateGoal } from "../../tasks/goals";
 
 /** Shown in the app (images, PDFs, plain text); anything else is only downloaded. */
 const INLINE = /^(image\/(png|jpe?g|gif|webp|avif|bmp)|application\/pdf|text\/plain)$/i;
@@ -94,8 +94,22 @@ const SUMMARY_CHARS = 280;
 export function registerTaskRoutes(app: Hono): void {
   // Goals: what the work is for.
   app.get("/api/goals", (c) => c.json(listGoals({ workspaceId: c.req.query("workspaceId") || "all" })));
-  app.post("/api/goals", async (c) => c.json(createGoal(await body(c, goalSchema)), 201));
-  app.patch("/api/goals/:id", async (c) => c.json(updateGoal(c.req.param("id"), await body(c, goalSchema.partial()))));
+  // A goal's words go into the brief of every ticket that serves it: written by a phone without full access, those
+  // tickets work without raw secrets.
+  app.post("/api/goals", async (c) => {
+    const goal = createGoal(await body(c, goalSchema));
+    if (isLimitedPhone(c)) markGoalFillOnly(goal.id);
+    return c.json(goal, 201);
+  });
+  app.patch("/api/goals/:id", async (c) => {
+    const id = c.req.param("id");
+    const patch = await body(c, goalSchema.partial());
+    if (isLimitedPhone(c)) {
+      const current = getGoal(id);
+      if ((["title", "why"] as const).some((k) => patch[k] !== undefined && patch[k]!.trim() !== (current[k] ?? "").trim())) markGoalFillOnly(id);
+    }
+    return c.json(updateGoal(id, patch));
+  });
   app.delete("/api/goals/:id", (c) => {
     deleteGoal(c.req.param("id"));
     return c.json({ ok: true });
@@ -134,11 +148,24 @@ export function registerTaskRoutes(app: Hono): void {
 
   app.get("/api/tasks/:id", (c) => c.json(getTask(c.req.param("id"))));
 
-  app.post("/api/tasks", async (c) => c.json(createTask((await body(c, createSchema)) as Parameters<typeof createTask>[0])));
+  // What a phone without full access writes on a ticket, its agent works on without raw secrets (also later, on retries).
+  app.post("/api/tasks", async (c) => c.json(createTask((await body(c, createSchema)) as Parameters<typeof createTask>[0], "user", { fillOnly: isLimitedPhone(c) })));
 
-  app.patch("/api/tasks/:id", async (c) =>
-    c.json(updateTask(c.req.param("id"), (await body(c, patchSchema)) as Parameters<typeof updateTask>[1])),
-  );
+  app.patch("/api/tasks/:id", async (c) => {
+    const id = c.req.param("id");
+    const patch = (await body(c, patchSchema)) as Parameters<typeof updateTask>[1];
+    if (isLimitedPhone(c)) {
+      const current = getTask(id);
+      const rewrites = (["title", "description", "blockedReason", "goalId"] as const).some((k) => patch[k] !== undefined && patch[k] !== current[k]);
+      // Labels and the tickets it waits for go into its brief too (their results among them).
+      const sameList = (a: string[], b: string[]) => JSON.stringify([...a].sort()) === JSON.stringify([...b].sort());
+      const relists =
+        (patch.labels !== undefined && !sameList(patch.labels, current.labels)) ||
+        (patch.waitsFor !== undefined && !sameList(patch.waitsFor, current.waitsFor.map((w) => w.id)));
+      if (rewrites || relists) markTaskFillOnly(id);
+    }
+    return c.json(updateTask(id, patch));
+  });
 
   // A ticket's timeline, oldest first (the newest `limit` rows).
   app.get("/api/tasks/:id/events", (c) => {
@@ -149,11 +176,11 @@ export function registerTaskRoutes(app: Hono): void {
   app.delete("/api/tasks/:id", async (c) => {
     const id = c.req.param("id");
     // A phone deletes a ticket only while nothing in its worktree would go with it; its removal is guarded like the cleanup's.
-    if (isPhoneRequest(c)) {
+    if (isLimitedPhone(c)) {
       const dir = checkoutDir(getTask(id).id);
       if (existsSync(dir) && (await unsavedWork(dir))) throw new HttpError(403, "Delete it on your computer: its worktree has unsaved changes.", "device_forbidden");
     }
-    await deleteTask(id, isPhoneRequest(c) ? { keep: unsavedWork } : {});
+    await deleteTask(id, isLimitedPhone(c) ? { keep: unsavedWork } : {});
     return c.json({ ok: true as const });
   });
 
@@ -162,8 +189,12 @@ export function registerTaskRoutes(app: Hono): void {
       c,
       z.object({ content: z.string().max(100_000).default(""), attachments: z.array(attachmentSchema).optional() }),
     );
+    const limited = isLimitedPhone(c);
+    if (limited) markTaskFillOnly(c.req.param("id"));
     // From a phone the answer to a question counts as given from the phone.
-    return c.json(await sendTaskMessage(c.req.param("id"), content, attachments, { actor: "user", via: isPhoneRequest(c) ? "phone" : "task" }));
+    return c.json(
+      await sendTaskMessage(c.req.param("id"), content, attachments, { actor: "user", via: isPhoneRequest(c) ? "phone" : "task", ...(limited ? { fillOnly: true } : {}) }),
+    );
   });
 
   app.post("/api/tasks/:id/approve", async (c) => {

@@ -26,6 +26,7 @@ import type {
   Bootstrap,
   BrowserProfile,
   ComputerInputEvent,
+  DictationStatus,
   Effort,
   AgentHeartbeatInput,
   Conversation,
@@ -78,7 +79,7 @@ import { t } from "./i18n";
 import { useLive } from "./live";
 import { withPending } from "./pending-queue";
 import { accepts, baseUrl, candidateOrder, computerOf, removedBy, type Candidate } from "./peers";
-import { useSession, type Connection } from "./session";
+import { giveUp, useSession, type Connection } from "./session";
 
 const TIMEOUT_MS = 12_000;
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
@@ -89,6 +90,8 @@ export class ApiError extends Error {
     public status: number,
     message: string,
     public code?: string,
+    /** What the computer added to the refusal, e.g. what a workspace still holds. */
+    public details?: unknown,
   ) {
     super(message);
   }
@@ -115,10 +118,10 @@ async function send(url: string, init: RequestInit, timeoutMs = TIMEOUT_MS): Pro
 }
 
 /** The `{ error, code }` body the computer and the cloud gateway answer errors with; empty when there is none. */
-async function failure(res: Response): Promise<{ error?: string; code?: string }> {
+async function failure(res: Response): Promise<{ error?: string; code?: string; details?: unknown }> {
   try {
-    const body = (await res.json()) as { error?: unknown; code?: unknown } | null;
-    return { error: typeof body?.error === "string" ? body.error : undefined, code: typeof body?.code === "string" ? body.code : undefined };
+    const body = (await res.json()) as { error?: unknown; code?: unknown; details?: unknown } | null;
+    return { error: typeof body?.error === "string" ? body.error : undefined, code: typeof body?.code === "string" ? body.code : undefined, details: body?.details };
   } catch {
     return {};
   }
@@ -297,10 +300,10 @@ export function retryAddresses() {
  * sent once, so a slow answer never turns into a second message or run. A write moves on only when the answer shows it
  * never reached the computer.
  */
-export async function request<T>(method: string, path: string, body?: unknown, minTimeoutMs = 0): Promise<T> {
+export async function request<T>(method: string, path: string, body?: unknown, minTimeoutMs = 0, extraHeaders?: Record<string, string>): Promise<T> {
   const connection = useSession.getState().connection;
   if (!connection) throw new ApiError(401, t("system:api.notPaired"), "not_paired");
-  const headers: Record<string, string> = { authorization: `Bearer ${connection.token}`, accept: "application/json" };
+  const headers: Record<string, string> = { ...extraHeaders, authorization: `Bearer ${connection.token}`, accept: "application/json" };
   const form = body instanceof FormData;
   if (body !== undefined && !form) headers["content-type"] = "application/json";
   const payload = body === undefined ? undefined : form ? body : JSON.stringify(body);
@@ -327,10 +330,11 @@ export async function request<T>(method: string, path: string, body?: unknown, m
       const type = res.headers.get("content-type") ?? "";
       return (type.includes("application/json") ? await res.json() : await res.text()) as T;
     }
-    const { error, code } = await failure(res);
+    const { error, code, details } = await failure(res);
     if (isRemoved(res.status, code)) {
       if (removedBy(connection, found)) {
-        await useSession.getState().disconnect("removed");
+        // A request with a key the phone has since replaced or given up says nothing about the current pairing.
+        await useSession.getState().refused(connection.token);
         throw new ApiError(401, t("system:api.removed"), "unauthorized");
       }
       // Another computer of the group that doesn't have this phone's key yet; it refused before doing anything.
@@ -340,7 +344,7 @@ export async function request<T>(method: string, path: string, body?: unknown, m
     if (!isUnreachable(res.status, code)) {
       useSession.getState().setActive(base, found);
       if (code === LICENSE_REQUIRED) throw new ApiError(res.status, licenseMessage(), code);
-      throw new ApiError(res.status, error ?? t("system:api.requestFailed", { status: res.status }), code);
+      throw new ApiError(res.status, error ?? t("system:api.requestFailed", { status: res.status }), code, details);
     }
     forget(base);
     // 502/504: the request may have reached the computer (the link dropped on the way back, or it answered oddly).
@@ -486,7 +490,19 @@ export type BrowserInput =
 
 export const api = {
   me: () => get<MobileSession>("/api/mobile/me"),
-  unpair: () => del<{ ok: true }>("/api/mobile/me"),
+  /** Only off: the computer gives a phone full access. */
+  setFullAccess: (fullAccess: false) => patch<MobileSession>("/api/mobile/me", { fullAccess }),
+  /** Ends this pairing on the computer; its refusals of the key from now on don't count as "removed". */
+  unpair: () => {
+    const token = useSession.getState().connection?.token;
+    if (token) giveUp(token);
+    return del<{ ok: true }>("/api/mobile/me");
+  },
+  /** This phone's push notifications: its Expo push token on the computer, or none. */
+  push: {
+    on: (token: string, platform: "ios" | "android") => post<MobileSession>("/api/mobile/me/push", { token, platform }),
+    off: () => del<MobileSession>("/api/mobile/me/push"),
+  },
   bootstrap: () => get<Bootstrap>("/api/bootstrap"),
   workspaces: () => get<Workspace[]>("/api/workspaces"),
 
@@ -585,6 +601,8 @@ export const api = {
       form.append("audio", { name: file.name, type: file.mime, bytes: () => new File(file.uri).bytes() } as unknown as Blob);
       return post<{ text: string }>("/api/voice/transcribe", form, 120_000);
     },
+    /** Whether the computer writes recordings down and which; an older Godmode refuses to say (403). */
+    dictation: () => get<DictationStatus>("/api/voice/dictation"),
   },
 
   conversations: {
@@ -671,6 +689,8 @@ export const api = {
         "priority" | "dueDate" | "labels" | "goalId" | "waitsFor" | "blockedReason"
       >,
     ) => patch<Task>(`/api/tasks/${id}`, input),
+    /** Off the board, never deleted. */
+    archive: (ids: string[], archived = true) => post<Task[]>("/api/tasks/archive", { ids, archived }),
     /** Gone for good: its worktree is removed, a pushed branch and pull request stay. */
     delete: (id: string) => del<{ ok: true }>(`/api/tasks/${id}`),
     /** Push the ticket's branch to its own remote (or with a pull request into its base branch). */
@@ -778,6 +798,7 @@ export const api = {
 
   missingLogins: {
     open: () => get<MissingLogin[]>("/api/missing-logins", { status: "open" }),
+    list: (status: MissingLoginStatus) => get<MissingLogin[]>("/api/missing-logins", { status }),
     /** Dismissed, marked resolved or opened again; the login itself is added on the computer. */
     setStatus: (id: string, status: MissingLoginStatus) => patch<MissingLogin>(`/api/missing-logins/${id}`, { status }),
   },
@@ -809,6 +830,7 @@ export const api = {
   questions: {
     /** What agents asked and wait for; answered by writing into the chat (or with optionId / decision). */
     open: () => get<AgentQuestion[]>("/api/questions", { status: "open" }),
+    list: (status: "resolved" | "withdrawn") => get<AgentQuestion[]>("/api/questions", { status }),
     /** One of optionId, decision (with an optional note) or text; the run that asked continues with it. */
     answer: (id: string, input: AnswerQuestionInput) => post<AnswerQuestionResult>(`/api/questions/${id}/answer`, input),
   },

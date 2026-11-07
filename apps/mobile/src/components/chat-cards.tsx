@@ -8,6 +8,7 @@ import Animated, { FadeIn } from "react-native-reanimated";
 import type { CharacterMood, MessageBlock, Run, ToolTaskAgent } from "@godmode/shared";
 import { readableModelId, tokensLabel } from "@godmode/shared";
 import { CharacterAvatar } from "./character";
+import { useFullAccess } from "./full-access";
 import { Icon } from "./icon";
 import { Markdown } from "./markdown";
 import { ChatScope } from "./question-card";
@@ -405,6 +406,8 @@ export function MissingLoginCard({ block }: { block: ToolUse }) {
   const service = (typeof input.service === "string" && input.service) || hostOf(input.url);
   const kind = typeof input.kind === "string" && input.kind in MISSING_KIND ? (input.kind as keyof typeof MISSING_KIND) : "other";
   const reason = typeof input.reason === "string" ? input.reason.trim() : "";
+  // With full access the inbox adds the login or links the 2FA code right there.
+  const { fullAccess } = useFullAccess();
   return (
     <Animated.View entering={FadeIn.duration(180)}>
       <Pressable
@@ -432,9 +435,11 @@ export function MissingLoginCard({ block }: { block: ToolUse }) {
               {reason}
             </T>
           ) : null}
-          <T variant="caption" muted>
-            {t("inbox:login.addOnComputer")}
-          </T>
+          {fullAccess === false ? (
+            <T variant="caption" muted>
+              {t("inbox:login.addOnComputer")}
+            </T>
+          ) : null}
         </View>
         <Icon name="chevron" size={11} color={c.textFaint} weight="semibold" style={{ marginTop: 4 }} />
       </Pressable>

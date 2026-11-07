@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import Constants from "expo-constants";
 import * as LocalAuthentication from "expo-local-authentication";
 import { router, Stack } from "expo-router";
+import { useState } from "react";
 import { Alert, ScrollView, StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { effortLabel, findModel } from "@godmode/shared";
@@ -9,6 +10,8 @@ import { CloseButton } from "@/components/close-button";
 import { ChoiceRow, Group, LinkRow, SwitchRow } from "@/components/form";
 import { Icon, type IconName } from "@/components/icon";
 import { Logo } from "@/components/logo";
+import { SettingsSearchResults } from "@/components/settings-search";
+import { ThisPhoneAccess } from "@/components/this-phone-access";
 import { ToolsLinks } from "@/components/tools-links";
 import { Button, Card, LiveDot, Row, T } from "@/components/ui";
 import { api } from "@/lib/api";
@@ -33,7 +36,7 @@ const FEATURES = ["activity", "artifacts", "integrations", "plugins", "messaging
 
 export default function Settings() {
   const c = useColors();
-  const { t } = useTranslation(["settings", "common", "archive"]);
+  const { t } = useTranslation(["settings", "common", "archive", "admin", "programs", "manage"]);
   const connection = useSession((s) => s.connection);
   const appLock = useSession((s) => s.appLock);
   const status = useLive((s) => s.status);
@@ -49,8 +52,21 @@ export default function Settings() {
     queryKey: ["biometrics"],
     queryFn: async () => (await LocalAuthentication.hasHardwareAsync()) && (await LocalAuthentication.isEnrolledAsync()),
   });
+  const [search, setSearch] = useState("");
+  const searchBar = <Stack.SearchBar placeholder={t("manage:search.placeholder")} autoCapitalize="none" onChangeText={(e) => setSearch(e.nativeEvent.text)} onCancelButtonPress={() => setSearch("")} />;
 
   if (!connection) return null;
+  // Same root and leading children as below, so the search bar keeps its focus while results replace the list.
+  if (search.trim()) {
+    return (
+      <ScrollView contentInsetAdjustmentBehavior="automatic" keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" contentContainerStyle={styles.content}>
+        <Stack.Screen options={{ title: t("common:words.settings") }} />
+        {searchBar}
+        <CloseButton />
+        <SettingsSearchResults query={search} />
+      </ScrollView>
+    );
+  }
   const instance = me.data?.instance ?? connection.instance;
   const s = settings.data;
   const model = s ? (findModel(catalog.data?.models ?? [], s.runner.model)?.label ?? s.runner.model) : undefined;
@@ -70,7 +86,9 @@ export default function Settings() {
   };
 
   const toggleLock = async (on: boolean) => {
-    const result = await LocalAuthentication.authenticateAsync({ promptMessage: on ? t("overview.lock.turnOn") : t("overview.lock.turnOff") });
+    const android = process.env.EXPO_OS === "android";
+    const promptMessage = on ? t(android ? "overview.lock.turnOnAndroid" : "overview.lock.turnOn") : t(android ? "overview.lock.turnOffAndroid" : "overview.lock.turnOff");
+    const result = await LocalAuthentication.authenticateAsync({ promptMessage });
     if (result.success) await useSession.getState().setAppLock(on);
   };
 
@@ -90,6 +108,7 @@ export default function Settings() {
   return (
     <ScrollView contentInsetAdjustmentBehavior="automatic" keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
       <Stack.Screen options={{ title: t("common:words.settings") }} />
+      {searchBar}
       <CloseButton />
 
       <Card style={styles.computer}>
@@ -111,7 +130,7 @@ export default function Settings() {
       </Card>
 
       {computers.length > 1 ? (
-        <Group title={t("overview.computers.title")} footer={t("overview.computers.footer")}>
+        <Group title={t("overview.computers.title")}>
           <ChoiceRow
             icon="bolt"
             title={t("overview.computers.automatic")}
@@ -132,8 +151,14 @@ export default function Settings() {
         </Group>
       ) : null}
 
-      <Group title={t("overview.preferences.title")} footer={t("overview.preferences.footer")}>
+      <Group title={t("overview.preferences.title")}>
         <LinkRow icon="slider" title={t("overview.links.general")} onPress={() => router.push("/settings/general")} />
+        <LinkRow
+          icon="bell"
+          title={t("overview.links.notifications")}
+          value={typeof me.data?.device.push === "boolean" ? (me.data.device.push ? t("common:status.on") : t("common:status.off")) : undefined}
+          onPress={() => router.push("/settings/notifications")}
+        />
         <LinkRow
           icon="sparkles"
           title={t("overview.links.ai")}
@@ -144,7 +169,7 @@ export default function Settings() {
         <LinkRow
           icon="text"
           title={t("overview.links.instructions")}
-          detail={s ? (s.runner.appendSystemPrompt.trim() ? firstLine(s.runner.appendSystemPrompt) : t("overview.links.instructionsDetail")) : undefined}
+          detail={s?.runner.appendSystemPrompt.trim() ? firstLine(s.runner.appendSystemPrompt) : undefined}
           onPress={() => router.push("/settings/instructions")}
         />
         <LinkRow icon="globe" title={t("overview.links.browser")} onPress={() => router.push("/settings/browser")} />
@@ -186,25 +211,29 @@ export default function Settings() {
 
       <Group title={t("overview.privacy.title")}>
         {biometrics.data ? (
-          <SwitchRow icon="faceid" title={t("overview.privacy.faceId")} detail={t("overview.privacy.faceIdDetail")} value={appLock} onChange={(on) => void toggleLock(on)} />
+          <SwitchRow icon="faceid" title={t(process.env.EXPO_OS === "android" ? "overview.privacy.screenLock" : "overview.privacy.faceId")} value={appLock} onChange={(on) => void toggleLock(on)} />
         ) : null}
-        <Info icon="lock" label={t("overview.privacy.security")} value={t("overview.privacy.onComputer")} />
+        <LinkRow icon="lock" title={t("admin:security.title")} onPress={() => router.push("/settings/security")} />
+        <LinkRow icon="archive" title={t("admin:backup.title")} onPress={() => router.push("/settings/backup")} />
         <LinkRow icon="broom" title={t("overview.links.cleanup")} onPress={() => router.push("/settings/cleanup")} />
       </Group>
 
       <Group title={t("overview.app.title")}>
         <LinkRow icon="pulse" title={t("overview.links.health")} onPress={() => router.push("/settings/health")} />
+        <LinkRow icon="terminal" title={t("programs:title")} onPress={() => router.push("/settings/programs")} />
         <LinkRow icon="key" title={t("overview.links.license")} onPress={() => router.push("/settings/license")} />
         <LinkRow icon="network" title={t("overview.links.cloud")} onPress={() => router.push("/settings/cloud")} />
         <LinkRow icon="cpu" title={t("overview.links.devices")} onPress={() => router.push("/settings/devices")} />
+        <LinkRow icon="phone" title={t("admin:phones.title")} onPress={() => router.push("/settings/phones")} />
         <LinkRow icon="plug" title={t("overview.links.connected")} onPress={() => router.push("/settings/connected-apps")} />
         <LinkRow icon="list" title={t("overview.links.logs")} onPress={() => router.push("/settings/logs")} />
         <LinkRow icon="bolt" title={t("overview.links.about")} onPress={() => router.push("/settings/about")} />
       </Group>
 
-      <Group footer={t("overview.app.footer")}>
+      <Group>
         <Info icon="network" label={isGatewayUrl(connection.activeUrl) ? "Godmode Cloud" : "Tailscale"} value={hostOf(connection.activeUrl)} />
         <Info icon="phone" label={t("overview.app.thisPhone")} value={me.data?.device.name ?? connection.deviceName} />
+        <ThisPhoneAccess />
       </Group>
 
       <Button title={t("overview.disconnect.button")} variant="danger" icon="logout" onPress={disconnect} />

@@ -900,6 +900,7 @@ export const api = {
     pairing: () => post<MobilePairingOffer>("/api/mobile/pairing"),
     cancelPairing: () => del<{ ok: true }>("/api/mobile/pairing"),
     renameDevice: (id: string, name: string) => patch<MobileDevice>(`/api/mobile/devices/${id}`, { name }),
+    setFullAccess: (id: string, fullAccess: boolean) => patch<MobileDevice>(`/api/mobile/devices/${id}`, { fullAccess }),
     removeDevice: (id: string) => del<{ ok: true }>(`/api/mobile/devices/${id}`),
   },
 

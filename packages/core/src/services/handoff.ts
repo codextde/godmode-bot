@@ -7,7 +7,7 @@ import { get } from "../db";
 import { badRequest } from "../util";
 import { endGoalAfterTurn } from "../runner/runner";
 import { handoffBriefPrompt } from "../runner/prompt";
-import { chatGoal, createContinuation, deleteConversation, getConversationSummary, handoffAllowed, sendMessage } from "./conversations";
+import { chatGoal, createContinuation, deleteConversation, getConversationSummary, handoffAllowed, runFillOnly, sendMessage } from "./conversations";
 
 export const HANDOFF_TITLE_MAX = 80;
 export const HANDOFF_BRIEF_MAX = 20_000;
@@ -31,7 +31,8 @@ export async function handOff(input: {
   const from = get<{ title: string }>("SELECT title FROM conversations WHERE id = ?", input.from)!;
   const title = input.title.trim().slice(0, HANDOFF_TITLE_MAX) || from.title;
   const goal = chatGoal(input.from, input.claudeConfigDir);
-  const fresh = createContinuation(input.from, title);
+  // A brief from a run without raw secrets (a phone without full access started it) starts a chat without them.
+  const fresh = createContinuation(input.from, title, { fillOnly: !!input.runId && runFillOnly(input.runId) });
   try {
     await sendMessage(fresh.id, { content: brief, prompt: handoffBriefPrompt(from.title, input.from, brief), source: "handoff" });
     if (goal) await sendMessage(fresh.id, { content: `/goal ${goal}`, source: "handoff" });

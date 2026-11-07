@@ -83,15 +83,41 @@ window.addEventListener("unhandledrejection",function(e){if(e.reason&&e.reason.g
 })();</script><script>${scriptSafe(ARTIFACT_KIT_JS)}</script>`;
 }
 
+/** Whether the page brings its own <html>, <head> or <body>; comments and scripts don't count. In one pass: a regex over them starts over at every "<!--" that never closes. */
+function isWholePage(html: string): boolean {
+  const tag = /<!--|<script\b|<(?:html|head|body)[\s>]/gi;
+  for (let found = tag.exec(html); found; found = tag.exec(html)) {
+    if (/^<(?:html|head|body)/i.test(found[0])) return true;
+    const end = found[0] === "<!--" ? /-->/g : /<\/script\b/gi;
+    end.lastIndex = tag.lastIndex;
+    if (!end.exec(html)) return false;
+    tag.lastIndex = end.lastIndex;
+  }
+  return false;
+}
+
+/**
+ * The page with the policy and the bridge in front of any byte of it, so nothing in it can decide where they land or run
+ * ahead of them. A page's own <html> and <head> after this only add their attributes and contents. What is looked for in
+ * the page only sets the layout: a fragment gets its <body>.
+ */
+export function policyFirstDocument(html: string, head: string): string {
+  return `<!doctype html><html><head><meta charset="utf-8">${head}</head>${isWholePage(html) ? html : `<body>${html}</body>`}`;
+}
+
+/** The bridge sets the theme's class before the page's <html> is parsed, and the parser then drops the page's own class: this puts it back. */
+function pageClasses(html: string): string {
+  const open = /<html\b/i.exec(html)?.index ?? -1;
+  if (open === -1) return "";
+  const close = html.indexOf(">", open);
+  const tag = html.slice(open, close === -1 ? undefined : close);
+  const classes = /\sclass="([\w\s:./-]*)"/i.exec(tag)?.[1]?.split(/\s+/).filter(Boolean) ?? [];
+  return classes.length ? `<script>document.documentElement.classList.add(...${JSON.stringify(classes)});</script>` : "";
+}
+
+/** The artifact in the desktop app's frame, whose server sets the policy. */
 export function artifactDocument(html: string, bridge: string): string {
-  const plain = html.replace(/<!--[\s\S]*?-->|<script\b[\s\S]*?<\/script>/gi, (m) => " ".repeat(m.length));
-  const head = /<head(\s[^>]*)?>/i.exec(plain);
-  if (head) return html.slice(0, head.index + head[0].length) + bridge + html.slice(head.index + head[0].length);
-  const root = /<html(\s[^>]*)?>/i.exec(plain);
-  if (root) return html.slice(0, root.index + root[0].length) + `<head>${bridge}</head>` + html.slice(root.index + root[0].length);
-  const doctype = /<!doctype[^>]*>/i.exec(plain);
-  const body = doctype ? html.slice(doctype.index + doctype[0].length) : html;
-  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">${bridge}</head><body>${body}</body></html>`;
+  return policyFirstDocument(html, pageClasses(html) + bridge);
 }
 
 const standaloneCsp = (from: string) =>
@@ -102,7 +128,8 @@ export const ARTIFACT_STANDALONE_CSP = standaloneCsp("");
 export function standaloneDocument(html: string, data: unknown, theme: "light" | "dark", files?: ArtifactDocumentFiles): string {
   const origin = files?.base ? /^https?:\/\/[^/]+/.exec(files.base)?.[0] : null;
   const from = origin ? ` ${origin}` : "";
-  return artifactDocument(html, standaloneCsp(from) + bridgeScript("standalone", data, theme, true, files));
+  const viewport = `<meta name="viewport" content="width=device-width, initial-scale=1">`;
+  return policyFirstDocument(html, viewport + standaloneCsp(from) + pageClasses(html) + bridgeScript("standalone", data, theme, true, files));
 }
 
 /**
@@ -116,5 +143,5 @@ export function webViewDocument(html: string, token: string, data: unknown, them
   const relay = `<script>(function(){var T=${JSON.stringify(token)},A={data:1,theme:1,reply:1};window.addEventListener("message",function(e){var m=e.data;if(e.source!==window||!m||m.__gm!==T||A[m.type]||!window.ReactNativeWebView)return;try{window.ReactNativeWebView.postMessage(JSON.stringify(m));}catch(x){}});})();</script>`;
   // A phone-wide viewport first: a page's own viewport tag comes later and wins.
   const viewport = `<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">`;
-  return artifactDocument(html, viewport + standaloneCsp(from) + relay + bridgeScript(token, data, theme, false, files));
+  return policyFirstDocument(html, viewport + standaloneCsp(from) + relay + pageClasses(html) + bridgeScript(token, data, theme, false, files));
 }

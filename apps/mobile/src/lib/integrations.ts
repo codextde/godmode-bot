@@ -38,7 +38,7 @@ export const useComposioStatus = () => useQuery({ queryKey: ik.composioStatus, q
 export const useComposioConnections = () => useQuery({ queryKey: ik.composioConnections, queryFn: integrationsApi.composioConnections });
 export const usePlugins = () => useQuery({ queryKey: ik.plugins, queryFn: integrationsApi.plugins });
 export const useMessaging = () => useQuery({ queryKey: ik.messaging, queryFn: integrationsApi.messaging });
-export const useSshServers = () => useQuery({ queryKey: ik.sshServers, queryFn: integrationsApi.sshServers });
+export const useSshServers = (enabled = true) => useQuery({ queryKey: ik.sshServers, queryFn: integrationsApi.sshServers, enabled });
 
 export function hostOfUrl(url: string): string {
   try {

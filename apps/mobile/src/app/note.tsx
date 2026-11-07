@@ -6,10 +6,13 @@ import { useEffect, useState } from "react";
 import { Alert, RefreshControl, ScrollView, StyleSheet, TextInput, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { NOTES_DIR, failureText, nameOf } from "@/components/agent-actions";
+import { NeedsFullAccessScreen } from "@/components/full-access";
 import { HeaderActions } from "@/components/header-actions";
+import { useRevealLocked } from "@/components/this-phone-access";
 import { Markdown } from "@/components/markdown";
 import { Card, ErrorState, LoadingState, T } from "@/components/ui";
 import { api } from "@/lib/api";
+import { useAgents } from "@/lib/hooks";
 import { qk, queryClient } from "@/lib/query";
 import { usePullRefresh } from "@/lib/use-pull-refresh";
 import { fonts, radius, space, useColors } from "@/lib/theme";
@@ -31,9 +34,19 @@ export default function Note() {
   const { t } = useTranslation(["agents", "common"]);
   const params = useLocalSearchParams<{ agentId: string; path?: string; dir?: string }>();
   const agentId = params.agentId;
-  if (inNotes(params.path)) return <ExistingNote agentId={agentId} path={params.path} />;
+  const locked = useRevealLocked(useAgents().byId.get(agentId));
+  if (inNotes(params.path)) return <ExistingNote agentId={agentId} path={params.path} locked={locked} />;
   const dir = params.dir === NOTES_DIR || inNotes(params.dir) ? params.dir : NOTES_DIR;
-  if (!params.path) return <NewNote agentId={agentId} dir={dir} />;
+  if (!params.path) {
+    return locked ? (
+      <>
+        <Stack.Title>{t("notes.new")}</Stack.Title>
+        <NeedsFullAccessScreen />
+      </>
+    ) : (
+      <NewNote agentId={agentId} dir={dir} />
+    );
+  }
   return (
     <View style={{ flex: 1, justifyContent: "center" }}>
       <Stack.Title>{t("notes.note")}</Stack.Title>
@@ -42,9 +55,10 @@ export default function Note() {
   );
 }
 
-function ExistingNote({ agentId, path }: { agentId: string; path: string }) {
+function ExistingNote({ agentId, path, locked }: { agentId: string; path: string; locked: boolean }) {
   const c = useColors();
   const { t } = useTranslation(["agents", "common"]);
+  const { t: tc } = useTranslation("components");
   const navigation = useNavigation();
   const note = useQuery({ queryKey: qk.agentNote(agentId, path), queryFn: () => api.agents.note(agentId, path), refetchOnMount: "always" });
   const pull = usePullRefresh(note.refetch);
@@ -109,12 +123,17 @@ function ExistingNote({ agentId, path }: { agentId: string; path: string }) {
           actions={[{ icon: "check", label: t("common:actions.save"), prominent: true, onPress: () => !save.isPending && save.mutate(draft.text) }]}
           menu={[{ icon: "close", title: dirty ? t("notes.discardChanges") : t("notes.stopEditing"), onPress: discard, destructive: dirty }]}
         />
-      ) : (
+      ) : locked ? null : (
         <HeaderActions actions={[{ icon: "pencil", label: t("common:actions.edit"), onPress: () => setDraft({ text: content, base: content }) }]} />
       )}
       <T variant="footnote" muted numberOfLines={1} style={{ fontFamily: fonts.mono }}>
         {path}
       </T>
+      {locked ? (
+        <T variant="footnote" muted>
+          {tc("fullAccess.title")}
+        </T>
+      ) : null}
       {draft ? (
         <View style={[styles.editor, { backgroundColor: c.surface, borderColor: c.borderStrong }]}>
           <TextInput

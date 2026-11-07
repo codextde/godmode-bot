@@ -56,7 +56,7 @@ import {
 } from "../../agents/files";
 import { getSettings } from "../../services/settings";
 import { HttpError, conflict } from "../../util";
-import { isPhoneRequest } from "../auth";
+import { isLimitedPhone } from "../auth";
 import { requireGrant } from "../grants";
 import { body, computerTargetSchema, z } from "../validate";
 
@@ -220,7 +220,7 @@ export function registerAgentRoutes(app: Hono): void {
       }),
     );
     // From a phone its agents and automations start like ones made there: no logins or inherited tools, fill-only secrets.
-    return c.json(await installTeam(c.req.param("id"), input, "user", { phone: isPhoneRequest(c) }), 201);
+    return c.json(await installTeam(c.req.param("id"), input, "user", { phone: isLimitedPhone(c) }), 201);
   });
 
   app.get("/api/agents/:id", (c) => c.json(getAgent(c.req.param("id"))));
@@ -228,7 +228,7 @@ export function registerAgentRoutes(app: Hono): void {
   app.post("/api/agents", async (c) => {
     const input = await body(c, agentSchema);
     // An agent set up from the phone starts with no logins, no inherited tools and fill-only secrets; it's widened on the computer.
-    if (isPhoneRequest(c)) Object.assign(input, { permissions: { credentialIds: [], totpIds: [], secretAccess: "fill" }, inheritMcp: false });
+    if (isLimitedPhone(c)) Object.assign(input, { permissions: { credentialIds: [], totpIds: [], secretAccess: "fill" }, inheritMcp: false });
     // Letting an agent read secrets in plain text needs a fresh passphrase confirmation (unless it's already the default).
     if (input.permissions?.secretAccess === "reveal" && getSettings().security.defaultSecretAccess !== "reveal") requireGrant(c);
     return c.json(await createAgent(input));
@@ -258,7 +258,7 @@ export function registerAgentRoutes(app: Hono): void {
   // Same setup, fresh memory, no chats or automations. A copy that reads secrets needs the passphrase like a new one.
   app.post("/api/agents/:id/duplicate", async (c) => {
     const source = getAgent(c.req.param("id"));
-    if (source.permissions.secretAccess === "reveal" && isPhoneRequest(c)) {
+    if (source.permissions.secretAccess === "reveal" && isLimitedPhone(c)) {
       throw new HttpError(403, `${source.name} reads secrets in plain text: copy it in Godmode on your computer.`, "device_forbidden");
     }
     if (source.permissions.secretAccess === "reveal" && getSettings().security.defaultSecretAccess !== "reveal") requireGrant(c);
@@ -275,7 +275,7 @@ export function registerAgentRoutes(app: Hono): void {
       z.object({ prompt: z.string().trim().max(100_000).optional(), workspaceId: z.string().trim().max(100).nullable().optional() }),
     );
     if (!agent.enabled) throw conflict(`Agent "${agent.name}" is disabled`);
-    return c.json(await startChat({ agentId: agent.id, content: prompt || DEFAULT_TASK_PROMPT, origin: "chat", workspaceId }));
+    return c.json(await startChat({ agentId: agent.id, content: prompt || DEFAULT_TASK_PROMPT, origin: "chat", workspaceId, fillOnly: isLimitedPhone(c) }));
   });
 
   // Pause everything the agent is working on; it continues where it stopped.
@@ -400,7 +400,7 @@ export function registerAgentRoutes(app: Hono): void {
   app.get("/api/dreams/:id", (c) => {
     const dream = getDream(c.req.param("id"));
     // A phone reads MEMORY.md, as in its memory editor; the agent's other files stay on the computer.
-    return c.json(isPhoneRequest(c) ? { ...dream, fileChanges: dream.fileChanges.filter((f) => f.path === "MEMORY.md") } : dream);
+    return c.json(isLimitedPhone(c) ? { ...dream, fileChanges: dream.fileChanges.filter((f) => f.path === "MEMORY.md") } : dream);
   });
 
   app.post("/api/dreams/:id/revert", async (c) => c.json(await revertDream(c.req.param("id"))));
@@ -408,7 +408,7 @@ export function registerAgentRoutes(app: Hono): void {
   /* Routines ---------------------------------------------------------- */
 
   // A phone never gets a webhook's secret URL: webhooks are set up on the computer.
-  const forCaller = (c: Context, r: Routine): Routine => (isPhoneRequest(c) ? { ...r, webhookPath: null } : r);
+  const forCaller = (c: Context, r: Routine): Routine => (isLimitedPhone(c) ? { ...r, webhookPath: null } : r);
 
   app.get("/api/routines", (c) => c.json(listRoutines({ agentId: c.req.query("agentId") || undefined }).map((r) => forCaller(c, r))));
 
@@ -416,7 +416,7 @@ export function registerAgentRoutes(app: Hono): void {
     const input = await body(c, routineSchema);
     const trigger = await resolveAppTrigger(input.trigger as RoutineTrigger | undefined, input.agentId);
     // Set up from a phone, its runs fill logins but read no raw secrets, like an agent made there.
-    return c.json(forCaller(c, createRoutine({ ...input, trigger, ...(isPhoneRequest(c) ? { fillOnly: true } : {}) })));
+    return c.json(forCaller(c, createRoutine({ ...input, trigger, ...(isLimitedPhone(c) ? { fillOnly: true } : {}) })));
   });
 
   app.patch("/api/routines/:id", async (c) => {
@@ -428,7 +428,7 @@ export function registerAgentRoutes(app: Hono): void {
       ? await resolveAppTrigger(patch.trigger as RoutineTrigger, patch.agentId ?? getRoutine(routineId).agentId)
       : undefined;
     // What a phone writes runs without raw secrets from then on; switching it on or off changes nothing it does.
-    const fromPhone = isPhoneRequest(c) && Object.keys(patch).some((k) => k !== "enabled");
+    const fromPhone = isLimitedPhone(c) && Object.keys(patch).some((k) => k !== "enabled");
     return c.json(forCaller(c, updateRoutine(routineId, { ...patch, trigger, ...(fromPhone ? { fillOnly: true } : {}) })));
   });
 

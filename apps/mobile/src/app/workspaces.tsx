@@ -6,7 +6,7 @@ import type { Workspace } from "@godmode/shared";
 import { Icon } from "@/components/icon";
 import { Card, Hairline, Skeleton, T, tap } from "@/components/ui";
 import { workspaceTint } from "@/components/workspace-color";
-import { useWorkspace } from "@/lib/workspace";
+import { useWorkspace, ownEmoji } from "@/lib/workspace";
 import { radius, space, useColors } from "@/lib/theme";
 
 /** Pick the workspace, or one of its projects, the phone works in: chats, tasks and agents follow it, and new ones start in it. */
@@ -115,7 +115,7 @@ function WorkspaceChoice({
       <Choice
         selected={selected}
         onPress={() => onPick(null)}
-        icon={<T style={{ fontSize: 19 }}>{workspace.icon || "🗂️"}</T>}
+        icon={ownEmoji(workspace.icon) ? <T style={{ fontSize: 19 }}>{workspace.icon}</T> : <Icon name="layers" size={18} color={c.textMuted} />}
         tint={workspaceTint(workspace.color)}
         title={workspace.name}
         body={workspace.description || (count ? t("overview.team.projects", { count }) : undefined)}
@@ -144,7 +144,7 @@ function WorkspaceChoice({
             nested
             selected={selectedProject === p.id}
             onPress={() => onPick(p.id)}
-            icon={p.icon ? <T style={{ fontSize: 15 }}>{p.icon}</T> : <Icon name="folder" size={14} color={c.textMuted} />}
+            icon={ownEmoji(p.icon) ? <T style={{ fontSize: 15 }}>{p.icon}</T> : <Icon name="folder" size={14} color={c.textMuted} />}
             tint={p.color ? workspaceTint(p.color) : undefined}
             title={p.name}
             body={p.description}

@@ -1,9 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
-import { Stack } from "expo-router";
+import { router, Stack } from "expo-router";
 import { Alert, RefreshControl, ScrollView, StyleSheet } from "react-native";
 import { useTranslation } from "react-i18next";
 import type { ConnectStatus, Connector } from "@godmode/shared";
+import { useFullAccess } from "@/components/admin";
 import { CloseButton } from "@/components/close-button";
 import { Group, LinkRow } from "@/components/form";
 import { QueryState } from "@/components/settings-state";
@@ -15,9 +16,10 @@ import { settingsApi, sq } from "@/lib/settings-api";
 import { usePullRefresh } from "@/lib/use-pull-refresh";
 import { space } from "@/lib/theme";
 
-/** Settings → Connected apps: Claude Code and other MCP clients with a key to Godmode. Seen and revoked here; keys are made on the computer. */
+/** Settings → Connected apps: Claude Code and other MCP clients with a key to Godmode. Seen and revoked here; a full-access phone also connects new ones. */
 export default function ConnectedApps() {
-  const { t } = useTranslation("settings");
+  const { t } = useTranslation(["settings", "linking"]);
+  const { fullAccess } = useFullAccess();
   const status = useQuery({ queryKey: sq.connectors, queryFn: settingsApi.connectors.status });
   const pull = usePullRefresh(status.refetch);
 
@@ -26,17 +28,24 @@ export default function ConnectedApps() {
       <Stack.Screen options={{ title: t("connected.title") }} />
       <CloseButton />
       <QueryState query={status} icon="plug" errorTitle={t("connected.loadFailed")}>
-        {(s) =>
-          s.connectors.length ? (
-            <Group footer={t("connected.footer")}>
-              {s.connectors.map((c) => (
-                <ConnectorRow key={c.id} connector={c} />
-              ))}
-            </Group>
-          ) : (
-            <EmptyState icon="plug" title={t("connected.emptyTitle")} body={t("connected.emptyBody")} />
-          )
-        }
+        {(s) => (
+          <>
+            {fullAccess ? (
+              <Group>
+                <LinkRow icon="plus" tone="brand" chevron={false} title={t("linking:connect.title")} onPress={() => router.push("/settings/connect-app")} />
+              </Group>
+            ) : null}
+            {s.connectors.length ? (
+              <Group>
+                {s.connectors.map((c) => (
+                  <ConnectorRow key={c.id} connector={c} />
+                ))}
+              </Group>
+            ) : (
+              <EmptyState icon="plug" title={t("connected.emptyTitle")} body={fullAccess ? undefined : t("connected.emptyBody")} />
+            )}
+          </>
+        )}
       </QueryState>
     </ScrollView>
   );

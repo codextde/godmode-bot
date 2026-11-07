@@ -1,14 +1,21 @@
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { router, Stack } from "expo-router";
-import { ActivityIndicator, Alert, ScrollView, StyleSheet, View } from "react-native";
+import { Alert, ScrollView, StyleSheet } from "react-native";
 import { useTranslation } from "react-i18next";
-import { findModel } from "@godmode/shared";
+import { findModel, type Settings } from "@godmode/shared";
+import { useFullAccess } from "@/components/admin";
 import { CloseButton } from "@/components/close-button";
-import { Group, LinkRow, PickerRow, StepperRow, SwitchRow } from "@/components/form";
+import { ChoiceRow, Group, LinkRow, PickerRow, StepperRow, SwitchRow } from "@/components/form";
+import { ActionPill, ToolRow, reportInstall } from "@/components/program-parts";
+import { FormSkeleton } from "@/components/settings-state";
+import { ErrorState } from "@/components/ui";
+import { patchAnySettings } from "@/lib/admin";
 import { ApiError, errorText, updateDesktopMessage } from "@/lib/api";
 import { useModelCatalog } from "@/lib/composer";
 import { intlLocale } from "@/lib/i18n";
-import { settingsApi } from "@/lib/settings-api";
+import { programsApi } from "@/lib/programs";
+import { queryClient } from "@/lib/query";
+import { settingsApi, sq } from "@/lib/settings-api";
 import { patchSettings, useSettings } from "@/lib/setup";
 import { space } from "@/lib/theme";
 
@@ -19,9 +26,12 @@ const SCHEDULES = [
   { value: "0 3 * * 0", labelKey: "memory.schedule.sundays" },
 ] as const;
 
+const CUSTOM = "custom";
+
 export default function Memory() {
-  const { t } = useTranslation(["settings", "common"]);
+  const { t } = useTranslation(["settings", "common", "manage"]);
   const settings = useSettings();
+  const admin = useFullAccess().fullAccess === true;
   const s = settings.data;
   const m = s?.memory;
   const d = m?.dreaming;
@@ -44,31 +54,42 @@ export default function Memory() {
     onError: (err) => Alert.alert(t("memory.dreamAll.failed"), err instanceof ApiError && err.code === "device_forbidden" ? updateDesktopMessage() : errorText(err)),
   });
   const presets = SCHEDULES.map((o) => ({ value: o.value as string, label: t(o.labelKey) }));
-  const schedules = SCHEDULES.some((o) => o.value === cron) ? presets : [{ value: cron, label: t("memory.schedule.custom", { cron }) }, ...presets];
+  const schedules = [
+    ...(SCHEDULES.some((o) => o.value === cron) ? presets : [{ value: cron, label: t("memory.schedule.custom", { cron }) }, ...presets]),
+    { value: CUSTOM, label: t("manage:dreaming.customItem") },
+  ];
 
   return (
     <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content}>
       <Stack.Screen options={{ title: t("overview.links.memory") }} />
       <CloseButton />
       {!s || !m || !d ? (
-        <View style={styles.loading}>
-          <ActivityIndicator />
-        </View>
+        settings.isError ? (
+          <ErrorState title={t("computer.loadFailed")} error={errorText(settings.error)} onRetry={() => void settings.refetch()} />
+        ) : (
+          <FormSkeleton groups={3} rows={3} />
+        )
       ) : (
         <>
-          <Group title={t("overview.links.memory")} footer={t("memory.memory.footer")}>
-            <SwitchRow icon="brain" title={t("memory.memory.inject")} detail={t("memory.memory.injectDetail")} value={m.injectMemory} onChange={(injectMemory) => void patchSettings({ memory: { injectMemory } })} />
-            <SwitchRow icon="sparkles" title={t("memory.memory.reflect")} detail={t("memory.memory.reflectDetail")} value={m.reflectAfterRun} onChange={(reflectAfterRun) => void patchSettings({ memory: { reflectAfterRun } })} />
+          {admin ? <Backend backend={m.backend} /> : null}
+          <Group title={t("overview.links.memory")}>
+            <SwitchRow icon="brain" title={t("memory.memory.inject")} value={m.injectMemory} onChange={(injectMemory) => void patchSettings({ memory: { injectMemory } })} />
+            <SwitchRow icon="sparkles" title={t("memory.memory.reflect")} value={m.reflectAfterRun} onChange={(reflectAfterRun) => void patchSettings({ memory: { reflectAfterRun } })} />
             <SwitchRow icon="branch" title={t("memory.memory.autoCommit")} value={m.autoCommit} onChange={(autoCommit) => void patchSettings({ memory: { autoCommit } })} />
           </Group>
 
-          <Group title={t("memory.dreaming.title")} footer={t("memory.dreaming.footer")}>
+          <Group title={t("memory.dreaming.title")}>
             <SwitchRow icon="moon" title={t("memory.dreaming.title")} value={d.enabled} onChange={(enabled) => void patchSettings({ memory: { dreaming: { enabled } } })} />
-            <PickerRow icon="clock" title={t("memory.dreaming.when")} value={cron} options={schedules} onChange={(next) => void patchSettings({ memory: { dreaming: { cron: next } } })} />
+            <PickerRow
+              icon="clock"
+              title={t("memory.dreaming.when")}
+              value={cron}
+              options={schedules}
+              onChange={(next) => (next === CUSTOM ? router.push("/dream-schedule") : void patchSettings({ memory: { dreaming: { cron: next } } }))}
+            />
             <SwitchRow
               icon="folder"
               title={t("memory.dreaming.tidy")}
-              detail={t("memory.dreaming.tidyDetail")}
               value={d.tidyWorkspace}
               onChange={(tidyWorkspace) => void patchSettings({ memory: { dreaming: { tidyWorkspace } } })}
             />
@@ -77,7 +98,6 @@ export default function Memory() {
               <SwitchRow
                 icon="sparkles"
                 title={t("memory.dreaming.offers")}
-                detail={t("memory.dreaming.offersDetail")}
                 value={d.offers}
                 onChange={(offers) => void patchSettings({ memory: { dreaming: { offers } } })}
               />
@@ -122,12 +142,6 @@ export default function Memory() {
             <LinkRow icon="inbox" title={t("memory.import.link")} onPress={() => router.push("/memory-import")} />
           </Group>
 
-          <Group title={t("memory.upkeep.title")} footer={t("memory.upkeep.footer")}>
-            <SwitchRow icon="wrench" title={t("memory.upkeep.autoFix")} value={s.maintenance.autoFix} onChange={(autoFix) => void patchSettings({ maintenance: { autoFix } })} />
-            <SwitchRow icon="refresh" title={t("memory.upkeep.autoUpdate")} value={s.maintenance.autoUpdate} onChange={(autoUpdate) => void patchSettings({ maintenance: { autoUpdate } })} />
-            <SwitchRow icon="trash" title={t("memory.upkeep.autoCleanup")} value={s.maintenance.autoCleanup} onChange={(autoCleanup) => void patchSettings({ maintenance: { autoCleanup } })} />
-          </Group>
-
           <Group title={t("memory.desktop.title")}>
             <SwitchRow icon="bell" title={t("memory.desktop.notifications")} value={s.general.desktopNotifications} onChange={(desktopNotifications) => void patchSettings({ general: { desktopNotifications } })} />
           </Group>
@@ -137,14 +151,39 @@ export default function Memory() {
   );
 }
 
+/** Where agents keep their memory (full-access phones, like the desktop app); claude-mem is installed from here too. */
+function Backend({ backend }: { backend: Settings["memory"]["backend"] }) {
+  const { t } = useTranslation("programs");
+  const doctor = useQuery({ queryKey: sq.doctor, queryFn: () => settingsApi.doctor.get(), enabled: backend === "claude-mem" });
+  const dep = doctor.data?.dependencies.find((d) => d.id === "claude-mem");
+  const install = useMutation({
+    mutationFn: () => programsApi.doctor.install("claude-mem"),
+    onSettled: async (result, err) => {
+      reportInstall(err ?? result, { done: t("installed", { name: "claude-mem" }), failed: t("installFailed", { name: "claude-mem" }) });
+      queryClient.setQueryData(sq.doctor, await settingsApi.doctor.get(true).catch(() => doctor.data));
+    },
+  });
+  const missing = backend === "claude-mem" && dep && !dep.ok;
+  return (
+    <Group title={t("memory.title")} footer={missing ? t("memory.claudeMemMissing") : undefined}>
+      <ChoiceRow icon="doc" title={t("memory.files")} detail={t("memory.filesDetail")} selected={backend === "files"} onPress={() => void patchAnySettings({ memory: { backend: "files" } })} />
+      <ChoiceRow icon="brain" title={t("memory.claudeMem")} detail={t("memory.claudeMemDetail")} selected={backend === "claude-mem"} onPress={() => void patchAnySettings({ memory: { backend: "claude-mem" } })} />
+      {missing ? (
+        <ToolRow
+          title={dep.name}
+          detail={dep.detail}
+          ok={false}
+          action={dep.installable ? <ActionPill label={t("install")} busyLabel={t("installing")} busy={install.isPending} onPress={() => install.mutate()} /> : undefined}
+        />
+      ) : null}
+    </Group>
+  );
+}
+
 const styles = StyleSheet.create({
   content: {
     padding: space.lg,
     paddingBottom: 60,
     gap: space.xl,
-  },
-  loading: {
-    paddingTop: 80,
-    alignItems: "center",
   },
 });

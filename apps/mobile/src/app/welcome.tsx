@@ -26,10 +26,7 @@ export default function Welcome() {
       <ScrollView contentContainerStyle={{ paddingTop: insets.top + 48, paddingHorizontal: space.xxl, paddingBottom: 180 }}>
         <Animated.View entering={FadeInDown.duration(500)}>
           <Logo size={64} />
-          <T variant="eyebrow" muted style={{ marginTop: space.xxl }}>
-            {t("welcome.eyebrow", { platform: process.env.EXPO_OS === "ios" ? "iPhone" : "Android" })}
-          </T>
-          <T variant="largeTitle" style={{ marginTop: space.sm, fontSize: 36, lineHeight: 40 }}>
+          <T variant="largeTitle" style={{ marginTop: space.xxl, fontSize: 36, lineHeight: 40 }}>
             {t("welcome.title")}
           </T>
           <T variant="body" muted style={{ marginTop: space.md }}>

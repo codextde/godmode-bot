@@ -51,8 +51,10 @@ export function triggerText(r: Routine, withNext = true): string {
       const schedule = `${scheduleToHuman(r.cron, trigger.startWindowMinutes, trigger.runsPerWindow, currentLanguage(), uses12Hour())}${zone}`;
       return next ? t("components:routineRow.withNextRun", { schedule, when: next }) : schedule;
     }
-    case "app":
-      return `${trigger.triggerName} · ${appName(trigger.toolkit)}`;
+    case "app": {
+      const more = trigger.moreEvents?.length;
+      return `${trigger.triggerName} · ${appName(trigger.toolkit)}${more ? ` ${t("components:routineRow.moreEvents", { count: more })}` : ""}`;
+    }
     case "condition": {
       const often = cronToHuman(r.cron, currentLanguage(), uses12Hour());
       return t("components:routineRow.conditionChecked", { condition: trigger.condition, often: `${often.charAt(0).toLowerCase()}${often.slice(1)}` });
@@ -160,6 +162,7 @@ export const RoutineRow = memo(function RoutineRow({ routine, agent, working }: 
         value={routine.enabled}
         onValueChange={(enabled) => setRoutineEnabled(routine, enabled)}
         trackColor={{ true: c.brand, false: c.sunken }}
+        style={{ alignSelf: "center" }}
       />
     </Pressable>
   );

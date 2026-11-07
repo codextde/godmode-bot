@@ -5,16 +5,19 @@ import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, TextInput,
 import { useTranslation } from "react-i18next";
 import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
 import type { SlashCommand } from "@godmode/shared";
-import { parseSlashCommand } from "@godmode/shared";
+import { CHAT_SHARE_CODE_PREFIX, parseSlashCommand } from "@godmode/shared";
 import { AttachmentTray } from "./attachments";
+import { useFullAccess } from "./full-access";
 import { Glass } from "./glass";
+import { MenuSheet } from "./header-actions";
 import { Icon } from "./icon";
 import { T, tap } from "./ui";
 import { VoiceButton } from "./voice-button";
 import { errorText } from "@/lib/api";
 import { addFiles, canScanDocuments, chooseCameraMode, fromPasted, MAX_FILES, pickFrom, type FileSource, type PendingFile } from "@/lib/attachments";
+import { isChatFile, openChatFile, openChatImport } from "@/lib/chat-extras";
 import { findCommand, rankCommands, useDraft, useDrafts, useSlashCommands } from "@/lib/composer";
-import { fonts, radius, space, type, useColors } from "@/lib/theme";
+import { fonts, radius, space, textScale, type, useColors } from "@/lib/theme";
 import { addPasteListener, setPasteActive } from "../../modules/paste-input";
 
 export interface ComposerHandle {
@@ -22,6 +25,14 @@ export interface ComposerHandle {
   setText: (text: string) => void;
   /** Add text below whatever is being written. */
   insert: (text: string) => void;
+}
+
+/** How the human sent this message. */
+export interface SendOptions {
+  /** Spoken into the field: the reply may be read out. */
+  voice: boolean;
+  /** Held the button and took the other way than the usual one (steer instead of queue, or the reverse). */
+  otherWay: boolean;
 }
 
 /**
@@ -40,11 +51,12 @@ export function Composer({
   attachments: allowFiles,
   trailing,
   sendLabel,
+  otherSend,
   voice,
   blocked,
   ref,
 }: {
-  onSend: (text: string, files: PendingFile[]) => Promise<unknown> | void;
+  onSend: (text: string, files: PendingFile[], options: SendOptions) => Promise<unknown> | void;
   onStop?: () => void;
   running?: boolean;
   placeholder?: string;
@@ -60,7 +72,9 @@ export function Composer({
   trailing?: ReactNode;
   /** What sending does right now, e.g. "Queue message". */
   sendLabel?: string | null;
-  /** A mic that dictates into the field (the computer writes it down). */
+  /** What holding the button offers instead, e.g. steer while messages queue. */
+  otherSend?: string | null;
+  /** A mic that dictates into the field (the computer or the phone writes it down). */
   voice?: boolean;
   /** Write, but don't send (e.g. while the agent is switched off): the text waits as a draft. */
   blocked?: boolean;
@@ -78,6 +92,11 @@ export function Composer({
   const [menuDismissed, setMenuDismissed] = useState<string | null>(null);
   const [menuForced, setMenuForced] = useState(false);
   const [dictating, setDictating] = useState(false);
+  const [otherOpen, setOtherOpen] = useState(false);
+  // The run ended under the open menu: nothing may pop up by itself with the next one.
+  if (otherOpen && !otherSend) setOtherOpen(false);
+  const dictated = useRef(false);
+  const { fullAccess } = useFullAccess();
   const commands = useSlashCommands(agentId);
 
   useImperativeHandle(ref, () => ({
@@ -124,10 +143,25 @@ export function Composer({
   };
 
   const attach = async (source: FileSource) => {
-    const picked = await pickFrom(source, MAX_FILES - files.length);
+    const chosen = await pickFrom(source, MAX_FILES - files.length);
+    // A shared chat opens as one instead of going along as an attachment.
+    const shared = fullAccess ? chosen.find(isChatFile) : undefined;
+    if (shared) await openChatFile(shared).catch((err: unknown) => Alert.alert(tr("composer.chatFileFailed"), errorText(err)));
+    const picked = chosen.filter((f) => f !== shared);
     if (!picked.length) return;
     const current = useDrafts.getState().drafts[draftKey]?.files ?? [];
     setDraft(draftKey, { files: addFiles(current, picked) });
+  };
+
+  const onChange = (next: string) => {
+    // A chat's share code pasted into the empty field opens the chat, like the desktop.
+    const pasted = next.trim();
+    if (allowFiles && fullAccess && !text.trim() && pasted.startsWith(CHAT_SHARE_CODE_PREFIX) && next.length > text.length + 1) {
+      openChatImport(pasted);
+      return;
+    }
+    setText(next);
+    setMenuForced(false);
   };
 
   const pasteOn = !!allowFiles && focused && !disabled;
@@ -148,18 +182,21 @@ export function Composer({
     setDraft(draftKey, { files: files.filter((f) => f.id !== id) });
   };
 
-  const submit = async () => {
+  const submit = async (otherWay = false) => {
     if (!canSend) return;
     const content = text.trim();
     const sent = files;
+    const voiced = dictated.current;
+    dictated.current = false;
     tap();
     setSending(true);
     setMenuForced(false);
     useDrafts.getState().clear(draftKey);
     try {
-      await onSend(content, sent);
+      await onSend(content, sent, { voice: voiced, otherWay });
     } catch {
       // Nothing gets lost: the caller shows the error, the field gets the text and files back next to anything new.
+      dictated.current = voiced;
       const cur = useDrafts.getState().drafts[draftKey];
       setDraft(draftKey, { text: cur?.text ? `${content}\n\n${cur.text}` : content, files: [...sent, ...(cur?.files ?? [])] });
     } finally {
@@ -170,6 +207,7 @@ export function Composer({
   const active = showStop || canSend;
   // What was said goes where the cursor would: after what is written so far.
   const insertDictated = (said: string) => {
+    dictated.current = true;
     const cur = useDrafts.getState().drafts[draftKey]?.text ?? "";
     setDraft(draftKey, { text: cur.trim() ? `${cur.trimEnd()} ${said}` : said });
   };
@@ -184,10 +222,7 @@ export function Composer({
         <TextInput
           ref={input}
           value={text}
-          onChangeText={(t) => {
-            setText(t);
-            setMenuForced(false);
-          }}
+          onChangeText={onChange}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
           placeholder={files.length ? tr("composer.addMessage") : (placeholder ?? tr("composer.message"))}
@@ -195,6 +230,7 @@ export function Composer({
           multiline
           autoFocus={autoFocus}
           editable={!disabled}
+          maxFontSizeMultiplier={textScale.label}
           style={[styles.input, { color: c.text }]}
           submitBehavior="newline"
           accessibilityLabel={tr("composer.message")}
@@ -214,7 +250,7 @@ export function Composer({
               hitSlop={4}
               style={({ pressed }) => [styles.tool, { backgroundColor: menuOpen ? c.sunken : "transparent", opacity: pressed ? 0.6 : 1 }]}
             >
-              <T style={[styles.slash, { color: menuOpen ? c.text : c.textMuted }]}>/</T>
+              <T maxScale={textScale.control} style={[styles.slash, { color: menuOpen ? c.text : c.textMuted }]}>/</T>
             </Pressable>
           ) : null}
           {dictating ? null : <View style={{ flex: 1 }} />}
@@ -231,6 +267,10 @@ export function Composer({
                   onStop?.();
                 } else void submit();
               }}
+              onLongPress={otherSend && canSend ? () => {
+                tap();
+                setOtherOpen(true);
+              } : undefined}
               style={({ pressed }) => [
                 styles.send,
                 { backgroundColor: active ? c.primary : c.sunken, opacity: pressed ? 0.75 : 1, transform: [{ scale: pressed ? 0.94 : 1 }] },
@@ -245,6 +285,7 @@ export function Composer({
           )}
         </View>
       </Glass>
+      {otherSend ? <MenuSheet items={[{ icon: "send", title: otherSend, onPress: () => void submit(true) }]} open={otherOpen} onClose={() => setOtherOpen(false)} /> : null}
     </View>
   );
 }

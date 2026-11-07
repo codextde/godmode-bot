@@ -4,6 +4,7 @@ import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, V
 import { useTranslation } from "react-i18next";
 import type { ArchiveKind } from "@godmode/shared";
 import { CharacterAvatar } from "@/components/character";
+import { CloseButton } from "@/components/close-button";
 import { Group, Tile } from "@/components/form";
 import type { IconName } from "@/components/icon";
 import { EmptyState, ErrorState, Hairline, SkeletonRows, T } from "@/components/ui";
@@ -41,6 +42,7 @@ export default function Archive() {
   return (
     <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content} refreshControl={<RefreshControl {...pull} />}>
       <Stack.Screen options={{ title: t("title") }} />
+      <CloseButton />
       {list.isLoading ? (
         <SkeletonRows count={4} avatar={30} />
       ) : list.error instanceof ApiError && list.error.code === "device_forbidden" ? (

@@ -230,7 +230,7 @@ export function startDevices(h: LinkHandler, deliver: (event: ServerEvent) => vo
     // Its computer is away and this one runs the group's work now: the chat continues here.
     if (awayDevice(owner) && runsShared()) {
       await continueHere(conversationId, { resume: false });
-      return sendMessage(conversationId, { content: input.content, prompt: input.prompt, marker: input.marker, trigger: input.trigger as never });
+      return sendMessage(conversationId, { content: input.content, prompt: input.prompt, marker: input.marker, trigger: input.trigger as never, fillOnly: input.fillOnly });
     }
     const result = await sendThere(conversationId, owner, input);
     return { message: getMessage(result.message.id), run: getRun(result.run.id) };
@@ -1392,7 +1392,7 @@ export function adoptPushedChat(input: { conversation: unknown; messages: unknow
 async function sendThere(
   conversationId: string,
   owner: string,
-  input: { content: string; prompt?: string; marker?: MessageBlock[]; trigger?: string },
+  input: { content: string; prompt?: string; marker?: MessageBlock[]; trigger?: string; fillOnly?: boolean },
 ): Promise<{ message: Message; run: Run }> {
   await prepareRemoteMessage(conversationId).catch(() => undefined);
   const l = link(owner);

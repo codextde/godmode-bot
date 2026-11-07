@@ -7,7 +7,7 @@ import { CharacterAvatar } from "./character";
 import { MenuSheet, type HeaderMenuItem } from "./header-actions";
 import { Icon, type IconName } from "./icon";
 import { openChat } from "./rows";
-import { Card, Hairline, T, tap } from "./ui";
+import { Card, Hairline, SectionTitle, T, tap } from "./ui";
 import { ApiError, api, errorText } from "@/lib/api";
 import { whenText } from "@/lib/format";
 import { useNow } from "@/lib/hooks";
@@ -48,7 +48,6 @@ function moves(now: Date): { title: string; at: Date }[] {
 
 /** Chats agents will pick up again on their own (followup_schedule), soonest first. Nothing when there are none. */
 export function FollowupsSection({ followups, agents }: { followups: Followup[]; agents: Map<string, Agent> }) {
-  const c = useColors();
   const { t } = useTranslation("components");
   const now = useNow(30_000);
   const running = useRunningChats();
@@ -56,15 +55,7 @@ export function FollowupsSection({ followups, agents }: { followups: Followup[];
   const sorted = [...followups].sort((a, b) => a.dueAt.localeCompare(b.dueAt));
   return (
     <View>
-      <View style={styles.heading}>
-        <Icon name="clock" size={12} color={c.textMuted} />
-        <T variant="eyebrow" muted>
-          {t("followupRow.title")}
-        </T>
-      </View>
-      <T variant="footnote" muted style={styles.hint}>
-        {t("followupRow.hint")}
-      </T>
+      <SectionTitle title={t("followupRow.title")} />
       <Card style={{ overflow: "hidden" }}>
         {sorted.map((f, i) => (
           <View key={f.conversationId}>
@@ -171,17 +162,6 @@ function FollowupRow({ followup: f, agent, now, working }: { followup: Followup;
 }
 
 const styles = StyleSheet.create({
-  heading: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 4,
-  },
-  hint: {
-    paddingHorizontal: 4,
-    marginTop: 2,
-    marginBottom: space.sm,
-  },
   row: {
     flexDirection: "row",
     alignItems: "center",

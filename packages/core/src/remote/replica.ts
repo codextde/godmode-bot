@@ -67,8 +67,8 @@ const STATE: Omit<ReplicaTable, "setup">[] = [
   { table: "messaging_connections", own: [], entity: "messaging", key: ["id"] },
   { table: "messaging_users", own: [], entity: "messaging", key: ["id"] },
   { table: "messaging_chats", own: [], entity: "messaging", key: ["id"] },
-  // A phone paired with one computer of the group works with all of them.
-  { table: "mobile_devices", own: ["app_version", "last_seen_at", "last_address"], entity: "mobile", key: ["id"] },
+  // A phone paired with one computer of the group works with all of them; each computer gives it full access itself.
+  { table: "mobile_devices", own: ["app_version", "last_seen_at", "last_address", "full_access"], entity: "mobile", key: ["id"] },
 ];
 
 /** VMs are machines of the computer they were made on. */

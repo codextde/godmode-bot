@@ -19,7 +19,7 @@
     "edit": "Edit memory",
     "dreamingTitle": "{{name}} is dreaming",
     "dreamingMessage": "It is tidying up its memory right now. Edit it when the dream has ended.",
-    "dreamingBanner": "{{name}} is dreaming — it is tidying up this memory. Editing is paused until the dream ends.",
+    "dreamingBanner": "{{name}} is dreaming. It is tidying up this memory. Editing is paused until the dream ends.",
     "updated": "updated {{ago}}",
     "notWritten": "not written yet",
     "unsaved": "Unsaved",
@@ -33,7 +33,7 @@
   },
   "budget": {
     "ofTarget": "of {{target}} characters",
-    "cut": "Chats load only the first {{limit}} characters — the end is missing.",
+    "cut": "Chats load only the first {{limit}} characters. The end is missing.",
     "over": "{{over}} over the target. The next dream shortens it.",
     "full": "Loaded in full into every chat.",
     "a11y": "Size of the memory"

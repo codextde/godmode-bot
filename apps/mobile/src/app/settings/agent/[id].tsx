@@ -11,10 +11,13 @@ import {
   heartbeatIntervalLabel,
   type Effort,
 } from "@godmode/shared";
+import { AgentAccess, AgentTeam } from "@/components/agent-setup";
 import { CharacterAvatar } from "@/components/character";
 import { CloseButton } from "@/components/close-button";
+import { useFullAccess } from "@/components/full-access";
 import { Group, LinkRow, PickerRow, SegmentRow, SwitchRow, TextEditor } from "@/components/form";
 import { Icon } from "@/components/icon";
+import { InheritedInstructions } from "@/components/inherited-instructions";
 import { Badge, EmptyState, Row, SectionTitle, tap } from "@/components/ui";
 import { useEffectiveModel, NO_CHOICE } from "@/lib/composer";
 import { useAgents } from "@/lib/hooks";
@@ -43,6 +46,11 @@ export default function AgentSettings() {
   const { catalog, current } = useEffectiveModel(agent, NO_CHOICE);
   const name = useEditable(agent?.name ?? "");
   const role = useEditable(agent?.role ?? "");
+  // An agent that reads raw secrets keeps what it is told as the computer wrote it, unless this phone has full access.
+  const fullAccess = useFullAccess().fullAccess;
+  const locked = fullAccess === false && agent?.permissions.secretAccess === "reveal";
+  const { t: tc } = useTranslation("components");
+  const lockedHint = locked ? tc("fullAccess.title") : undefined;
 
   if (!agent) {
     return (
@@ -135,7 +143,7 @@ export default function AgentSettings() {
 
       {!agent.isDefault ? (
         <Group>
-          <SwitchRow icon="power" title={t("agent.active")} detail={agent.enabled ? t("agent.activeOn") : t("agent.activeOff")} value={agent.enabled} onChange={(enabled) => save({ enabled })} />
+          <SwitchRow icon="power" title={t("agent.active")} value={agent.enabled} onChange={(enabled) => save({ enabled })} />
         </Group>
       ) : null}
 
@@ -147,8 +155,11 @@ export default function AgentSettings() {
           placeholder={t("agent.instructionsPlaceholder")}
           maxLength={50_000}
           minHeight={180}
+          readOnly={locked}
+          hint={lockedHint}
           onSave={(instructions) => patchAgent(agent.id, { instructions }, { quiet: true })}
         />
+        <InheritedInstructions workspaceId={agent.workspaceId} />
       </View>
 
       <View>
@@ -159,12 +170,13 @@ export default function AgentSettings() {
           placeholder={t("agent.descriptionPlaceholder")}
           maxLength={2000}
           minHeight={64}
-          hint={t("agent.descriptionHint")}
+          readOnly={locked}
+          hint={lockedHint}
           onSave={(description) => patchAgent(agent.id, { description }, { quiet: true })}
         />
       </View>
 
-      <Group footer={t("agent.memoryFooter")}>
+      <Group>
         <LinkRow icon="brain" title={t("overview.links.memory")} detail="MEMORY.md" onPress={() => router.push({ pathname: "/memory/[id]", params: { id: agent.id } })} />
       </Group>
 
@@ -179,7 +191,9 @@ export default function AgentSettings() {
         />
       </Group>
 
-      <Group title={t("agent.thinking.title")} footer={t("agent.thinking.footer")}>
+      <AgentTeam agent={agent} />
+
+      <Group title={t("agent.thinking.title")}>
         <PickerRow
           icon="cpu"
           title={t("ai.defaultModel.model")}
@@ -223,7 +237,7 @@ export default function AgentSettings() {
         ) : null}
       </Group>
 
-      <Group title={t("agents.heartbeat")} footer={t("agent.heartbeat.footer")}>
+      <Group title={t("agents.heartbeat")}>
         <SwitchRow icon="pulse" title={t("agents.heartbeat")} value={hb.enabled} onChange={(enabled) => save({ heartbeat: { enabled } })} />
         <PickerRow
           icon="clock"
@@ -254,10 +268,14 @@ export default function AgentSettings() {
             placeholder={t("agent.heartbeat.checklistPlaceholder")}
             maxLength={MAX_HEARTBEAT_CHECKLIST_LENGTH}
             minHeight={100}
+            readOnly={locked}
+            hint={lockedHint}
             onSave={(checklist) => patchAgent(agent.id, { heartbeat: { checklist } }, { quiet: true })}
           />
         </View>
       ) : null}
+
+      <AgentAccess agent={agent} />
     </ScrollView>
   );
 }

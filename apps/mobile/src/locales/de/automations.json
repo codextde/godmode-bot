@@ -6,7 +6,7 @@
     "noMatch": "Keine passenden Automationen",
     "clearFilters": "Filter zurücksetzen",
     "emptyTitle": "Noch keine Automationen",
-    "emptyBody": "Richte selbst eine ein — eine Posteingangs-Zusammenfassung am Morgen, ein Antwortentwurf für jede Kundenmail, ein Blick auf die Preise der Konkurrenz."
+    "emptyBody": "Richte selbst eine ein: eine Posteingangs-Zusammenfassung am Morgen, ein Antwortentwurf für jede Kundenmail, ein Blick auf die Preise der Konkurrenz."
   },
   "describe": {
     "title": "Beschreib, was automatisiert werden soll",
@@ -118,16 +118,33 @@
       "conditionNext": "Die nächste Prüfung ist {{when}}.",
       "conditionBody": "Sobald eine Prüfung die Bedingung erfüllt findet, erscheint sie hier.",
       "webhookTitle": "Noch keine Aufrufe",
-      "webhookBody": "Ruf die Webhook-URL auf — oder sende ein Test-Ereignis — und es erscheint hier."
+      "webhookBody": "Ruf die Webhook-URL auf, oder sende ein Test-Ereignis, und es erscheint hier."
     }
   },
   "edit": {
+    "timezone": "Zeitzone",
+    "timezoneSearch": "Zeitzone suchen",
+    "timezoneEmpty": "Keine Zeitzone gefunden",
+    "reveal": {
+      "title": "Secrets für die KI sichtbar machen",
+      "footer": "Ein Agent hat diese Automation eingerichtet, daher füllen ihre Läufe Logins in Seiten ein, können Passwörter und 2FA-Codes aber nicht lesen. Schalte das nur ein, wenn du dem Prompt oben vertraust."
+    },
+    "runOn": {
+      "label": "Ausführen auf",
+      "any": "Beliebiges Gerät",
+      "another": "Anderer Computer",
+      "primary": "primär",
+      "thisComputer": "dieser Computer",
+      "anyHint": "Läuft dort, wo deine Zeitpläne laufen: auf dem primären Computer oder einem anderen, solange er einspringt.",
+      "pickedHint": "Nur {{name}} führt sie aus, auch wenn ein anderer Computer einspringt. Was er verpasst, während er weg ist, läuft, sobald er zurück ist.",
+      "pickedOfflineHint": "Nur {{name}} führt sie aus, auch wenn ein anderer Computer einspringt. Was er verpasst, während er weg ist, läuft, sobald er zurück ist (gerade offline).",
+      "unlistedHint": "An einen Computer gebunden, der nicht aufgeführt ist: einer, der die Gruppe verlassen hat (dann führt der primäre sie aus), oder einer, den dieser Computer nicht sieht, solange der primäre weg ist."
+    },
     "titleNew": "Neue Automation",
     "titleEdit": "Automation bearbeiten",
     "loadFailed": "Automation konnte nicht geladen werden",
     "createFailed": "Automation konnte nicht erstellt werden",
     "updateFailed": "Automation konnte nicht aktualisiert werden",
-    "intro": "Wenn es passiert, legt der Agent los — auch wenn du nicht da bist.",
     "whenRun": "Wann soll sie laufen?",
     "when": "Wenn…",
     "conditionPlaceholder": "ein Konkurrent den Preis seines Pro-Plans ändert (acme.com/pricing)",
@@ -145,7 +162,8 @@
       "name": "Gib deiner Automation einen Namen",
       "condition": "Beschreib, worauf geachtet werden soll",
       "prompt": "Sag dem Agenten, was er jedes Mal tun soll",
-      "promptEvent": "Sag dem Agenten, was er mit jedem Ereignis tun soll"
+      "promptEvent": "Sag dem Agenten, was er mit jedem Ereignis tun soll",
+      "moreApps": "Vervollständige oder entferne die weiteren App-Ereignisse"
     },
     "namePlaceholder": {
       "schedule": "Wöchentlicher Zahlenbericht",
@@ -163,14 +181,96 @@
       "app": "der Absender ist ein Kunde oder der Betreff erwähnt eine Rechnung",
       "webhook": "die Bestellsumme liegt über 100 €"
     },
-    "triggerHint": {
-      "schedule": "Jeden Morgen, jeden Montag, am 1.…",
-      "condition": "Regelmäßig geprüft, in normaler Sprache"
-    },
     "notifyFooter": {
       "never": "Keine Mitteilungen. Eine fehlerhafte Automation erscheint trotzdem unter „Braucht dich“. Am Handy eingerichtet oder geändert, füllen ihre Läufe Logins aus, lesen aber nie Passwörter im Klartext.",
       "always": "Eine Mitteilung nach jedem Lauf, mit dem, was sie getan hat. Am Handy eingerichtet oder geändert, füllen ihre Läufe Logins aus, lesen aber nie Passwörter im Klartext.",
       "failures": "Ein Fehler wird einmal gemeldet, bis wieder ein Lauf klappt. Am Handy eingerichtet oder geändert, füllen ihre Läufe Logins aus, lesen aber nie Passwörter im Klartext."
+    },
+    "agentModel": "Modell des Agenten",
+    "checkModel": "Modell für Prüfungen",
+    "checkModelHint": "Ein kleineres, schnelleres Modell hält häufige Prüfungen günstig; die eigentliche Arbeit macht das Modell des Agenten.",
+    "addAppEvent": "Weiteres Ereignis hinzufügen",
+    "moreAppEvent": "Oder wenn",
+    "webhookAfterSave": "Die URL bekommst du direkt nach dem Speichern.",
+    "webhookAfterCreate": "Die URL bekommst du direkt nach dem Erstellen.",
+    "notifyFooterFull": {
+      "never": "Keine Mitteilungen. Eine fehlerhafte Automation erscheint trotzdem unter „Braucht dich“.",
+      "always": "Eine Mitteilung nach jedem Lauf, mit dem, was sie getan hat.",
+      "failures": "Ein Fehler wird einmal gemeldet, bis wieder ein Lauf klappt."
     }
+  },
+  "appTrigger": {
+    "pickAccount": "Wähl ein verbundenes Konto",
+    "pickEvent": "Wähl das Ereignis, auf das reagiert werden soll",
+    "loadingSettings": "Einstellungen des Ereignisses werden geladen…",
+    "settingsFailed": "Einstellungen des Ereignisses konnten nicht geladen werden",
+    "settingsFailedHint": "{{problem}}. Prüf Composio und versuch es dann erneut.",
+    "composioFailed": "Composio-Einstellungen nicht erreichbar",
+    "connectFirstTitle": "Verbinde zuerst deine Apps",
+    "connectFirstDescription": "App-Ereignisse kommen von Composio. Hinterleg deinen Composio-API-Key und verbinde Gmail, Slack, Kalender oder eine andere App, dann wähl, was diese Automation starten soll.",
+    "setUpComposio": "Composio einrichten",
+    "accountsFailed": "Verbundene Konten konnten nicht geladen werden",
+    "chooseAgentFirst": "Wähl zuerst den Agenten. Er kann nur Konten beobachten, auf die er Zugriff hat.",
+    "noUsableTitle": "Kein Konto, das {{name}} nutzen kann",
+    "noUsableDescription": "Die verbundenen Konten gehören anderen Agenten oder Workspaces. Verbinde eines für {{name}}, seinen Workspace oder global und wähl dann das Ereignis, das diese Automation startet.",
+    "connectApp": "App verbinden",
+    "noAppsTitle": "Noch keine Apps verbunden",
+    "noAppsDescription": "Verbinde auf der Seite „Integrationen“ eine App wie Gmail, Slack oder Google Kalender und wähl dann hier das Ereignis, das diese Automation startet.",
+    "account": "Konto",
+    "scope": {
+      "oneAgent": "Ein Agent",
+      "workspace": "Workspace",
+      "global": "Global"
+    },
+    "instant": "Sofort",
+    "everyFewMin": "Alle paar Min.",
+    "event": "Ereignis",
+    "keep": "{{name}} behalten",
+    "currentEvent": "Aktuelles Ereignis",
+    "changeEvent": "Ereignis ändern",
+    "change": "Ändern",
+    "pollHint": "Composio prüft {{app}} alle paar Minuten darauf, neue Ereignisse können also ein paar Minuten brauchen.",
+    "needsSetup": "Braucht eine einmalige Einrichtung in {{app}}, bevor Ereignisse ankommen.",
+    "eventsFailed": "{{app}}-Ereignisse konnten nicht geladen werden",
+    "noEvents": "{{app}} bietet keine Ereignisse, auf die reagiert werden kann. Versuch es stattdessen mit einer Bedingung. Der Agent prüft sie regelmäßig.",
+    "searchPlaceholder": "{{app}}-Ereignisse suchen…",
+    "searchLabel": "{{app}}-Ereignisse suchen",
+    "noMatch": "Keine {{app}}-Ereignisse passen zu „{{query}}“.",
+    "removeEvent": "Ereignis entfernen"
+  },
+  "schemaForm": {
+    "example": "z. B. {{example}}",
+    "required": "Pflichtfeld",
+    "invalidJson": "Gib gültiges JSON ein",
+    "wholeNumber": "Gib eine ganze Zahl ein",
+    "number": "Gib eine Zahl ein",
+    "notSet": "Nicht gesetzt"
+  },
+  "testEvent": {
+    "invalidJson": "Das sieht nach JSON aus, lässt sich aber nicht lesen. Korrigier es oder sende einfachen Text.",
+    "descriptionApp": "Führt „{{name}}“ aus, als hätte {{app}} das gesendet. Der Filter wird wie bei einem echten Ereignis geprüft.",
+    "descriptionWebhook": "Führt „{{name}}“ aus, als wäre die URL damit aufgerufen worden. Der Filter wird wie bei einem echten Ereignis geprüft.",
+    "sendFailed": "Testereignis konnte nicht gesendet werden",
+    "title": "Testereignis senden",
+    "dataLabel": "Ereignisdaten",
+    "hint": "JSON oder einfacher Text. Leer lassen, um ein kleines Beispiel zu senden.",
+    "send": "Senden",
+    "menu": "Mit eigenen Daten testen"
+  },
+  "webhook": {
+    "locked": "Entsperr den Tresor, um die URL zu sehen.",
+    "lockedHint": "Der geheime Teil ist verschlüsselt gespeichert.",
+    "warning": "Jeder mit dieser URL kann die Automation starten. Erneuere sie, falls sie bekannt wird.",
+    "copyCurl": "curl-Befehl kopieren",
+    "rotate": "URL erneuern",
+    "rotateTitle": "URL von „{{name}}“ erneuern?",
+    "rotateDescription": "Godmode erstellt eine neue geheime URL. Was noch die alte aufruft, bekommt einen Fehler, bis du es aktualisierst.",
+    "rotated": "Neue Webhook-URL erstellt",
+    "rotatedDescription": "Die alte URL funktioniert nicht mehr. Aktualisiere die Dienste, die sie aufrufen.",
+    "rotateFailed": "Webhook-URL konnte nicht erneuert werden",
+    "title": "Webhook-URL",
+    "urlLabel": "Geheime URL",
+    "faceId": "Webhook-URL von „{{name}}“ anzeigen",
+    "localOnly": "Diese Adresse funktioniert nur auf dem Computer selbst. Um Aufrufe von anderen Diensten zu empfangen, mach Godmode über einen Tunnel oder Reverse Proxy erreichbar und nutze denselben Pfad."
   }
 }

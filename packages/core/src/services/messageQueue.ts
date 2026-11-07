@@ -14,7 +14,7 @@ import { bus } from "../events/bus";
 import { badRequest, conflict, newId, notFound, now, parseJson } from "../util";
 import { redact } from "../vault/vault";
 import { activeRunForConversation, cancelRun, listActiveRuns, startRun, waitForRun } from "../runner/runner";
-import { addMessage, emitConversationUpdated, handoffAllowed, messageTarget, promptWithFiles, saveAttachments, sendMessage, setConversationState } from "./conversations";
+import { addMessage, emitConversationUpdated, handoffAllowed, markChatFillOnly, messageTarget, promptWithFiles, saveAttachments, sendMessage, setConversationState } from "./conversations";
 import { continueConversation, pauseOf } from "./pauses";
 
 interface QueueRow {
@@ -24,6 +24,8 @@ interface QueueRow {
   attachments: string;
   voice: number;
   created_at: string;
+  /** A phone without full access wrote it: it only reaches a run without raw secrets. */
+  fill_only: number;
 }
 
 /** What the human typed, before redaction — memory only (the database keeps the redacted text). */
@@ -52,9 +54,8 @@ export function hasQueued(conversationId: string): boolean {
 }
 
 /** A message waits that the running agent would get between two steps (a slash command waits for the next turn). */
-export function hasDeliverable(conversationId: string): boolean {
-  const first = rows(conversationId)[0];
-  return !!first && !isCommand(first);
+export function hasDeliverable(conversationId: string, fillOnlyRun = false): boolean {
+  return forRun(rows(conversationId), fillOnlyRun).length > 0;
 }
 
 function emitQueue(conversationId: string) {
@@ -86,7 +87,18 @@ function head(queue: QueueRow[]): QueueRow[] {
   return next < 0 ? queue : queue.slice(0, next);
 }
 
-function enqueue(conversationId: string, input: SendMessageInput): QueuedMessage {
+/**
+ * What a run gets of the queue between two steps: the head without a slash command, and in a run with raw secrets only
+ * up to the first message a phone without full access wrote (that one starts its own fill-only turn).
+ */
+function forRun(queue: QueueRow[], fillOnlyRun: boolean): QueueRow[] {
+  const taken = head(queue);
+  if (!taken.length || isCommand(taken[0]!)) return [];
+  const phone = fillOnlyRun ? -1 : taken.findIndex((r) => bool(r.fill_only));
+  return phone < 0 ? taken : taken.slice(0, phone);
+}
+
+function enqueue(conversationId: string, input: SendMessageInput & { fillOnly?: boolean }): QueuedMessage {
   const { agent } = messageTarget(conversationId);
   const content = (input.content ?? "").trim();
   const files = input.attachments ?? [];
@@ -99,6 +111,7 @@ function enqueue(conversationId: string, input: SendMessageInput): QueuedMessage
     attachments: JSON.stringify(files.length ? saveAttachments(agent, files) : []),
     voice: int(input.voice ?? false)!,
     created_at: now(),
+    fill_only: int(!!input.fillOnly)!,
   };
   insert("queued_messages", { ...row });
   typed.set(row.id, content);
@@ -110,7 +123,7 @@ function enqueue(conversationId: string, input: SendMessageInput): QueuedMessage
  * A message from the human: straight to the agent when the chat is idle, into the queue while the agent works or its run
  * is paused. With `steer`, the agent stops what it is doing and starts on the queue right away.
  */
-export async function submitMessage(conversationId: string, input: SendMessageInput): Promise<SendMessageOutcome> {
+export async function submitMessage(conversationId: string, input: SendMessageInput & { fillOnly?: boolean }): Promise<SendMessageOutcome> {
   if (handoffCommand(input.content ?? "") !== null && !handoffAllowed(conversationId)) {
     throw badRequest("Private chats and chats of tasks, apps or other agents can't go on in a new chat.");
   }
@@ -118,6 +131,7 @@ export async function submitMessage(conversationId: string, input: SendMessageIn
   const paused = pauseOf(conversationId);
   if (!busy && !paused && !hasQueued(conversationId)) return sendMessage(conversationId, { ...input, trigger: "chat" });
   const queued = enqueue(conversationId, input);
+  if (input.fillOnly) markChatFillOnly(conversationId);
   // Also with runs waiting behind the pause: the paused run is the one that takes the queue.
   if (paused) {
     // Writing to a chat the human paused continues it with the message. While Claude's limit is reached there is
@@ -142,13 +156,15 @@ export async function submitMessage(conversationId: string, input: SendMessageIn
   return started && message ? { message, run: started.run } : { queued };
 }
 
-export function editQueued(conversationId: string, id: string, content: string): QueuedMessage {
+/** `fillOnly`: a phone without full access edits it; it then only reaches a run without raw secrets. */
+export function editQueued(conversationId: string, id: string, content: string, opts: { fillOnly?: boolean } = {}): QueuedMessage {
   const row = requireRow(conversationId, id);
   const text = content.trim();
   if (!text && !parseJson<Attachment[]>(row.attachments, []).length) throw badRequest("Message is empty");
   // The stored text has the secret masked, and that is all an editor ever sees.
   if ((typed.get(id) ?? row.content) !== row.content) throw badRequest("This message contains a saved secret, so it can't be edited. Remove it and write it again.");
-  sql("UPDATE queued_messages SET content = ? WHERE id = ?", redact(text), id);
+  sql("UPDATE queued_messages SET content = ?, fill_only = MAX(fill_only, ?) WHERE id = ?", redact(text), int(!!opts.fillOnly)!, id);
+  if (opts.fillOnly) markChatFillOnly(conversationId);
   typed.set(id, text);
   emitQueue(conversationId);
   return toQueued({ ...row, content: redact(text) });
@@ -168,9 +184,9 @@ export function clearQueue(conversationId: string): void {
  * Hand the waiting messages to the run that is working in the chat (called between two of its steps). Slash commands
  * stay: Claude Code only runs them at the start of a turn.
  */
-export function takeQueued(conversationId: string, agent: Agent): { message: QueuedMessage; prompt: string }[] {
-  const taken = head(rows(conversationId));
-  if (!taken.length || isCommand(taken[0]!)) return [];
+export function takeQueued(conversationId: string, agent: Agent, fillOnlyRun = false): { message: QueuedMessage; prompt: string }[] {
+  const taken = forRun(rows(conversationId), fillOnlyRun);
+  if (!taken.length) return [];
   const out = taken.map((r) => {
     const message = toQueued(r);
     return { message, prompt: promptWithFiles(typed.get(r.id) ?? r.content, agent, message.attachments) };
@@ -198,6 +214,7 @@ export async function startQueued(conversationId: string): Promise<{ run: Run; m
       voice: taken.some((r) => bool(r.voice)),
       userMessageId: messages[0]!.id,
       alsoAnswers: messages.slice(1).map((m) => m.id),
+      fillOnly: taken.some((r) => bool(r.fill_only)),
     });
   } catch (err) {
     // The messages stay in the queue: nothing the human wrote gets lost.

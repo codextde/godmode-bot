@@ -5,11 +5,14 @@
  * (mobile/views.ts), but never reaches secrets, backups, security or this computer's other files (only the ones attached
  * to tasks, and what it uploads itself). It can't point an agent at a folder, a program or a
  * permission the computer didn't give it, and only controls screens the human shared in a chat, Android phones a chat
- * uses and Godmode's VMs.
+ * uses and Godmode's VMs. Chats it starts and runs its messages start get no raw secrets (fill-only).
+ *
+ * A phone the computer gave full access (`MobileDevice.fullAccess`) is treated like the desktop app: none of these rules
+ * apply to it, nor mobile/views.ts — only HARD, which holds for every phone.
  */
 import { lstatSync, realpathSync, type Stats } from "node:fs";
 import { join, relative, sep } from "node:path";
-import { computerView, type ComputerTarget } from "@godmode/shared";
+import { computerView, personalityPreset, type ComputerTarget } from "@godmode/shared";
 import { all, get } from "../db";
 import { getSettings } from "../services/settings";
 import { NULLABLE_SETTINGS, sameSettingShape, settingInRange } from "../services/settingShape";
@@ -22,6 +25,11 @@ const ROUTES: [method: string, path: RegExp][] = [
   ["GET", /^\/api\/bootstrap$/],
   ["GET", /^\/api\/mobile\/me$/],
   ["DELETE", /^\/api\/mobile\/me$/],
+  // The phone switches its own full access off (never on: see HARD).
+  ["PATCH", /^\/api\/mobile\/me$/],
+  // Its own push notifications: its Expo push token on, or off.
+  ["POST", /^\/api\/mobile\/me\/push$/],
+  ["DELETE", /^\/api\/mobile\/me\/push$/],
   ["GET", /^\/api\/workspaces$/],
   ["POST", /^\/api\/workspaces$/],
   ["PATCH", new RegExp(`^/api/workspaces/${ID}$`)],
@@ -104,6 +112,8 @@ const ROUTES: [method: string, path: RegExp][] = [
   ["GET", new RegExp(`^/api/conversations/${ID}/messages/${ID}/images/${ID}$`)],
   // Pictures the human attached to a chat: only images from the agent's workspace/uploads (the core checks the path).
   ["GET", new RegExp(`^/api/conversations/${ID}/attachment$`)],
+  // Which paths a chat names exist: answered only for the folder of its agent (mobile/views.ts phoneChatFiles).
+  ["POST", new RegExp(`^/api/conversations/${ID}/files$`)],
   ["PATCH", new RegExp(`^/api/conversations/${ID}$`)],
   ["DELETE", new RegExp(`^/api/conversations/${ID}$`)],
   ["POST", new RegExp(`^/api/conversations/${ID}/messages$`)],
@@ -123,6 +133,8 @@ const ROUTES: [method: string, path: RegExp][] = [
   ["GET", /^\/api\/search$/],
   // Dictation: the computer transcribes with its own key or Hex; spoken replies and setting up Hex stay there.
   ["POST", /^\/api\/voice\/transcribe$/],
+  // Whether it does (provider, ready, formats): else the phone dictates with its own speech recognition.
+  ["GET", /^\/api\/voice\/dictation$/],
 
   ["GET", /^\/api\/tasks$/],
   ["POST", /^\/api\/tasks\/attachments$/],
@@ -131,6 +143,8 @@ const ROUTES: [method: string, path: RegExp][] = [
   ["GET", new RegExp(`^/api/tasks/${ID}/events$`)],
   ["POST", /^\/api\/tasks$/],
   ["PATCH", new RegExp(`^/api/tasks/${ID}$`)],
+  // Clearing a column of the board, like archiving its tasks one by one.
+  ["POST", /^\/api\/tasks\/archive$/],
   ["POST", new RegExp(`^/api/tasks/${ID}/messages$`)],
   ["POST", new RegExp(`^/api/tasks/${ID}/approve$`)],
   // Deleting a ticket removes its worktree; a pushed branch and pull request stay. Pushing uses the ticket's own remote.
@@ -327,6 +341,8 @@ const AGENT_KEYS = ["name", "role", "description", "instructions", "personality"
 /** Requests whose JSON body may only carry these fields when a phone sends them. */
 const BODIES: [method: string, path: RegExp, keys: string[]][] = [
   ["PUT", /^\/api\/settings$/, Object.keys(SETTINGS)],
+  ["PATCH", /^\/api\/mobile\/me$/, ["fullAccess"]],
+  ["POST", /^\/api\/mobile\/me\/push$/, ["token", "platform"]],
   ["POST", /^\/api\/workspaces$/, WORKSPACE_KEYS],
   ["PATCH", new RegExp(`^/api/workspaces/${ID}$`), WORKSPACE_KEYS],
   ["POST", /^\/api\/projects$/, ["workspaceId", ...PROJECT_KEYS]],
@@ -338,12 +354,14 @@ const BODIES: [method: string, path: RegExp, keys: string[]][] = [
   // A chat's project, browser profile and instructions; never its folder, screen, VM, servers or phones.
   ["PATCH", new RegExp(`^/api/conversations/${ID}$`), ["title", "pinned", "archived", "model", "effort", "ultracode", "projectId", "browserProfileId", "instructions"]],
   ["PATCH", new RegExp(`^/api/conversations/${ID}/pause$`), ["auto"]],
+  ["POST", new RegExp(`^/api/conversations/${ID}/files$`), ["messages"]],
   ["POST", new RegExp(`^/api/conversations/${ID}/messages$`), ["content", "attachments", "queue", "queueId"]],
   ["PATCH", new RegExp(`^/api/conversations/${ID}/queue/${ID}$`), ["content"]],
   ["POST", /^\/api\/chat$/, ["agentId", "content", "attachments", "workspaceId", "projectId", "model", "effort", "ultracode", "private", "browserProfileId", "instructions"]],
   // A task's repository and branch are picked on the computer: the phone never points an agent at another repository.
   ["POST", /^\/api\/tasks$/, ["workspaceId", "projectId", "title", "description", "type", "status", "agentId"]],
   ["PATCH", new RegExp(`^/api/tasks/${ID}$`), ["title", "description", "status", "agentId", "archived", "projectId", "priority", "dueDate", "labels", "goalId", "waitsFor", "blockedReason"]],
+  ["POST", /^\/api\/tasks\/archive$/, ["ids", "archived"]],
   ["POST", new RegExp(`^/api/tasks/${ID}/messages$`), ["content", "attachments"]],
   ["POST", new RegExp(`^/api/tasks/${ID}/approve$`), []],
   ["POST", /^\/api\/tasks\/tsk_[^/]+\/(push|pull-request)$/, []],
@@ -398,6 +416,23 @@ const BODIES: [method: string, path: RegExp, keys: string[]][] = [
   ["POST", /^\/api\/optimize$/, []],
   ["POST", /^\/api\/power\/lid$/, ["enabled"]],
 ];
+
+const ONLY_COMPUTER_FULL_ACCESS = "Only Godmode on your computer can give a phone full access.";
+const switchesFullAccessOn = (body: Record<string, unknown>) => ("fullAccess" in body && body.fullAccess !== false ? ONLY_COMPUTER_FULL_ACCESS : null);
+
+/**
+ * What no phone does, also one with full access (which skips everything else in this file): switching full access on,
+ * for itself or another phone. Only the computer itself does that (server/routes/mobile.ts checks it there too).
+ */
+const HARD: [method: string, path: RegExp, refusal: (body: Record<string, unknown>) => string | null][] = [
+  ["PATCH", new RegExp(`^/api/mobile/devices/${ID}$`), switchesFullAccessOn],
+  ["PATCH", /^\/api\/mobile\/me$/, switchesFullAccessOn],
+];
+
+/** The body check every phone's request to this route meets (null = the route has none). */
+export function deviceHardRule(method: string, path: string): ((body: Record<string, unknown>) => string | null) | null {
+  return HARD.find(([m, re]) => m === method && re.test(path))?.[2] ?? null;
+}
 
 export function deviceMayCall(method: string, path: string): boolean {
   const m = method === "HEAD" ? "GET" : method;
@@ -495,7 +530,7 @@ function notesPathRefusal(agentId: string, value: unknown): string | null {
 
 /**
  * Why a phone's body is refused beyond its fields (null = fine): settings keep their shape and the phone's sections, and
- * folders may only be kept where they already are — a phone adds repositories, never a folder of this computer.
+ * folders, here or on an SSH server, may only be kept where they already are — a phone adds repositories, never a folder.
  */
 export function deviceBodyRefusal(method: string, path: string, body: Record<string, unknown>): string | null {
   if (path === "/api/settings") return settingsRefusal(body);
@@ -504,13 +539,62 @@ export function deviceBodyRefusal(method: string, path: string, body: Record<str
   if (method === "PATCH" && path.startsWith("/api/mods/")) return body.enabled === false ? null : "Switch plugins on in Godmode on your computer.";
   const file = method === "PUT" ? AGENT_FILES.exec(path) : null;
   if (file) return notesPathRefusal(file[1]!, body.path);
+  const brief = briefRefusal(method, path, body);
+  if (brief) return brief;
   if (!("sources" in body)) return null;
   const sources = body.sources;
   if (!Array.isArray(sources)) return null;
-  const folders = sources.filter((s): s is { kind: "folder"; path?: unknown } => typeof s === "object" && s !== null && (s as { kind?: unknown }).kind === "folder");
-  if (!folders.length) return null;
-  const known = new Set(existingFolders(method, path));
-  return folders.every((f) => typeof f.path === "string" && known.has(f.path)) ? null : "Add folders of your computer in Godmode there. From the phone you can add git repositories.";
+  const given = sources.filter((s): s is { kind?: unknown; path?: unknown; serverId?: unknown } => typeof s === "object" && s !== null);
+  const folders = given.filter((s) => s.kind === "folder");
+  const remotes = given.filter((s) => s.kind === "remote");
+  if (!folders.length && !remotes.length) return null;
+  const there = existingFolders(method, path);
+  if (!folders.every((f) => there.some((r) => r.kind === "folder" && r.path === f.path))) return "Add folders of your computer in Godmode there. From the phone you can add git repositories.";
+  // New chats there start on that server: as much of a computer-level step as a folder of this one.
+  return remotes.every((f) => there.some((r) => r.kind === "remote" && r.path === f.path && r.server_id === f.serverId)) ? null : "Add folders on a server in Godmode on your computer, or give this phone full access there.";
+}
+
+const BRIEF_ON_COMPUTER = "Change what agents are told to do in Godmode on your computer, or give this phone full access there.";
+const AGENT_PATH = new RegExp(`^/api/agents/(${ID})$`);
+const WORKSPACE_PATH = new RegExp(`^/api/workspaces/(${ID})$`);
+
+/** `key` is in the body with other text than `current` has (whitespace aside). */
+const rewrites = (body: Record<string, unknown>, key: string, current: string | null | undefined) =>
+  key in body && String(body[key] ?? "").trim() !== (current ?? "").trim();
+
+/**
+ * Text agents follow in every run stays as the computer wrote it: an agent that reads raw secrets keeps its
+ * instructions, description, personality and heartbeat duties, and a workspace its instructions and description (every
+ * agent working there gets them). Agents a phone makes read no raw secrets anyway; a project's context a phone writes
+ * marks the project instead (server/routes/workspaces.ts), and the global instructions are refused in settingsRefusal.
+ */
+function briefRefusal(method: string, path: string, body: Record<string, unknown>): string | null {
+  const agent = method === "PATCH" ? AGENT_PATH.exec(path) : null;
+  if (agent) {
+    if (!agentReveals(agent[1]!)) return null;
+    const row =
+      get<AgentBrief>("SELECT instructions, description, personality, heartbeat FROM agents WHERE id = ?", agent[1]!) ??
+      get<AgentBrief>("SELECT instructions, description, personality, heartbeat FROM agents WHERE slug = ?", agent[1]!);
+    if (!row) return null;
+    const personality = rewrites(body, "personality", row.personality) && !personalityPreset(String(body.personality ?? "").trim());
+    const checklist = (body.heartbeat as { checklist?: unknown } | null | undefined)?.checklist;
+    const duties = checklist !== undefined && String(checklist ?? "").trim() !== (parseJson<{ checklist?: string } | null>(row.heartbeat, null)?.checklist ?? "").trim();
+    return rewrites(body, "instructions", row.instructions) || rewrites(body, "description", row.description) || personality || duties ? BRIEF_ON_COMPUTER : null;
+  }
+  if (method === "POST" && path === "/api/workspaces") return rewrites(body, "instructions", "") || rewrites(body, "description", "") ? BRIEF_ON_COMPUTER : null;
+  const workspace = method === "PATCH" ? WORKSPACE_PATH.exec(path) : null;
+  if (workspace) {
+    const row = get<{ instructions: string; description: string }>("SELECT instructions, description FROM workspaces WHERE id = ?", workspace[1]!);
+    return row && (rewrites(body, "instructions", row.instructions) || rewrites(body, "description", row.description)) ? BRIEF_ON_COMPUTER : null;
+  }
+  return null;
+}
+
+interface AgentBrief {
+  instructions: string;
+  description: string;
+  personality: string | null;
+  heartbeat: string | null;
 }
 
 /** A phone sets up schedules and conditions; app events and webhooks need connections and secret URLs that live on the computer. */
@@ -522,7 +606,7 @@ function routineRefusal(body: Record<string, unknown>): string | null {
     : "Set up app and webhook automations in Godmode on your computer.";
 }
 
-function existingFolders(method: string, path: string): string[] {
+function existingFolders(method: string, path: string): { kind: string; path: string; server_id: string | null }[] {
   if (method !== "PATCH") return [];
   const [, , kind, id] = path.split("/");
   const owner =
@@ -530,11 +614,11 @@ function existingFolders(method: string, path: string): string[] {
       ? { workspace: id, project: null }
       : { workspace: get<{ workspace_id: string }>("SELECT workspace_id FROM projects WHERE id = ?", id)?.workspace_id, project: id };
   if (!owner.workspace) return [];
-  return all<{ path: string }>(
-    "SELECT path FROM workspace_sources WHERE kind = 'folder' AND workspace_id = ? AND project_id IS ?",
+  return all<{ kind: string; path: string; server_id: string | null }>(
+    "SELECT kind, path, server_id FROM workspace_sources WHERE kind IN ('folder', 'remote') AND workspace_id = ? AND project_id IS ?",
     owner.workspace,
     owner.project,
-  ).map((r) => r.path);
+  );
 }
 
 function settingsRefusal(body: Record<string, unknown>): string | null {
@@ -548,6 +632,8 @@ function settingsRefusal(body: Record<string, unknown>): string | null {
       if (value === true && ON_AT_COMPUTER[section]?.includes(key) && current[section]?.[key] !== true) return "Turn this on in Godmode on your computer.";
       // Hex is a program and a model download: it is set up on the computer.
       if (section === "voice" && key === "sttProvider" && value === "hex" && current.voice?.sttProvider !== "hex") return "Set up Hex in Godmode on your computer.";
+      // Every run of every agent follows the global instructions (briefRefusal).
+      if (section === "runner" && key === "appendSystemPrompt" && String(value ?? "").trim() !== String(current.runner?.appendSystemPrompt ?? "").trim()) return BRIEF_ON_COMPUTER;
     }
   }
   return null;
@@ -561,10 +647,29 @@ function cleanupRefusal(body: Record<string, unknown>): string | null {
 
 const ANDROID_INPUT = new RegExp(`^/api/android/devices/(${ID})/input$`);
 
-/** Why a phone may not control what the path names (null = it may): an Android phone only while a chat uses it. */
+const AGENT_MEMORY = new RegExp(`^/api/agents/(${ID})/(memory|file)$`);
+const MEMORY_ON_COMPUTER = "This agent reads secrets in plain text: change its memory in Godmode on your computer, or give this phone full access there.";
+
+/** An agent that reads raw secrets (by id, else by slug, as the routes find it). */
+function agentReveals(idOrSlug: string): boolean {
+  const row = get<{ permissions: string }>("SELECT permissions FROM agents WHERE id = ?", idOrSlug) ?? get<{ permissions: string }>("SELECT permissions FROM agents WHERE slug = ?", idOrSlug);
+  return !!row && parseJson<{ secretAccess?: string }>(row.permissions, {}).secretAccess === "reveal";
+}
+
+/**
+ * Why a phone may not control what the path names (null = it may): an Android phone only while a chat uses it. What an
+ * agent that reads raw secrets remembers (MEMORY.md, its notes, an import into the main agent's memory) is written on
+ * the computer: every later run of it follows it (see briefRefusal).
+ */
 export function deviceTargetRefusal(method: string, path: string): string | null {
   const android = method === "POST" ? ANDROID_INPUT.exec(path) : null;
   if (android && !deviceMayUseAndroid(android[1]!)) return "Only Android phones a chat uses can be controlled from the phone.";
+  const memory = method === "PUT" ? AGENT_MEMORY.exec(path) : null;
+  if (memory && agentReveals(memory[1]!)) return MEMORY_ON_COMPUTER;
+  if (method === "POST" && path === "/api/memory/import") {
+    const main = get<{ id: string }>("SELECT id FROM agents WHERE is_default = 1 LIMIT 1");
+    if (main && agentReveals(main.id)) return MEMORY_ON_COMPUTER;
+  }
   return null;
 }
 

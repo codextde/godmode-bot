@@ -1791,7 +1791,7 @@
     },
     "can": {
       "title": "What a phone can do",
-      "body": "Chat with agents, stop runs, run automations, start and stop VMs, and watch browsers, shared screens and VMs live. It can only take control of browsers and of screens you shared in a chat. Logins, 2FA codes, backups, integrations and settings can't be opened from a phone."
+      "body": "Chat with agents, stop runs, run automations, start and stop VMs, and watch browsers, shared screens and VMs live. It can only take control of browsers and of screens you shared in a chat. Logins, 2FA codes, backups, integrations and settings can't be opened from a phone unless you give it full access."
     },
     "hero": {
       "eyebrow": "Godmode for iOS and Android",
@@ -1814,7 +1814,14 @@
       "paired": "paired {{time}}",
       "removeLabel": "Remove {{name}}",
       "confirmTitle": "Remove {{name}}?",
-      "confirmDescription": "It's disconnected right away and can't control Godmode anymore. You can pair it again with a new code."
+      "confirmDescription": "It's disconnected right away and can't control Godmode anymore. You can pair it again with a new code.",
+      "fullAccess": "Full access",
+      "fullAccessLabel": "Full access for {{name}}",
+      "fullAccessTitle": "Give {{name}} full access?",
+      "fullAccessDescription": "It can then see passwords and change everything, like this computer.",
+      "fullAccessAllow": "Allow full access",
+      "fullAccessError": "Could not change the phone's access",
+      "push": "Gets notifications"
     }
   },
   "security": {

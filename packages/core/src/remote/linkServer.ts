@@ -57,7 +57,7 @@ const PATCH_KEY_WITHIN = 512;
 const ALLOWED_METHODS = new Set(["GET", "POST", "PUT", "PATCH", "DELETE"]);
 /**
  * Headers a controller may set on a forwarded request; the rest (auth, cookies, host, origin, forwarding) are ours.
- * `x-godmode-phone` says one of its phones asked: the phones' rules apply here too (server/auth.ts).
+ * `x-godmode-phone` says one of its phones asked: "1" a limited one, whose rules apply here too (server/auth.ts).
  */
 const FORWARD_HEADERS = new Set(["content-type", "accept", "x-godmode-grant", "x-godmode-phone"]);
 /** The sandbox policy of a file answer travels with it. */

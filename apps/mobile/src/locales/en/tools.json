@@ -1,0 +1,513 @@
+{
+  "loadFailed": "Couldn't load integrations",
+  "discard": {
+    "title": "Discard your changes?",
+    "keep": "Keep editing",
+    "discard": "Discard"
+  },
+  "fields": {
+    "name": "Name",
+    "description": "Description"
+  },
+  "errors": {
+    "title": "Check this first",
+    "nameMissing": "Give the server a name.",
+    "nameInvalid": "Use letters, numbers, “-”, “_” or “.” in the name (no spaces).",
+    "commandMissing": "Which program should Godmode start?",
+    "urlProtocol": "Use an http(s) URL.",
+    "urlInvalid": "Enter a full URL, e.g. https://example.com/mcp",
+    "envNeedsName": "Every environment variable value needs a name.",
+    "headerNeedsName": "Every header value needs a name.",
+    "envInvalid": "“{{key}}” is not a valid environment variable name.",
+    "headerInvalid": "“{{key}}” is not a valid header name.",
+    "duplicate": "“{{key}}” is listed twice.",
+    "toolName": "Give the tool a name.",
+    "apiKey": "That doesn't look like a whole key. Check what you pasted.",
+    "baseUrlProtocol": "Use an https:// address.",
+    "baseUrlQuery": "Leave out ?query and #fragment in the address.",
+    "baseUrlInvalid": "Enter the full address, e.g. https://api.example.com",
+    "baseUrlMissing": "Where do requests go? e.g. https://api.example.com",
+    "headerName": "Header names have no spaces, e.g. x-api-key.",
+    "queryName": "Enter a parameter name, e.g. key or api_key.",
+    "envVar": "Letters, digits and _, ending in _KEY, _TOKEN or _SECRET, e.g. GEMINI_API_KEY.",
+    "docsUrl": "Enter a full documentation link, e.g. https://docs.example.com",
+    "testPath": "The test request needs the API address."
+  },
+  "transports": {
+    "stdio": {
+      "label": "Local command"
+    },
+    "http": {
+      "label": "HTTP"
+    },
+    "sse": {
+      "label": "SSE"
+    }
+  },
+  "scope": {
+    "title": "Available to",
+    "global": "Every agent",
+    "globalHint": "In every workspace",
+    "workspace": "One workspace",
+    "workspaceHint": "Its agents only",
+    "agent": "One agent",
+    "agentHint": "Only that agent",
+    "which": "Workspace",
+    "whichAgent": "Agent"
+  },
+  "secrets": {
+    "name": "Name",
+    "value": "Value",
+    "newValue": "New value",
+    "stored": "Stored encrypted",
+    "keep": "Keep the stored value",
+    "replace": "Replace {{key}}",
+    "removeNamed": "Remove {{key}}",
+    "remove": "Remove row"
+  },
+  "list": {
+    "switch": "{{name}} on or off",
+    "switchFailed": "Couldn't switch it"
+  },
+  "mcp": {
+    "add": "Add MCP server",
+    "addTitle": "New MCP server",
+    "notFound": "This server is gone",
+    "saveFailed": "Couldn't save the MCP server",
+    "deleteTitle": "Delete {{name}}?",
+    "deleteBody": "Agents lose its tools from their next run.",
+    "deleteFailed": "Couldn't delete the server",
+    "delete": "Delete server",
+    "namePlaceholder": "linear",
+    "descriptionPlaceholder": "Optional",
+    "transport": "Transport",
+    "command": "Command",
+    "arguments": "Arguments",
+    "argumentsHint": "Separate with spaces; quote arguments that contain spaces.",
+    "argumentCount_one": "{{count}} argument.",
+    "argumentCount_other": "{{count}} arguments.",
+    "envVars": "Environment variables",
+    "headers": "Headers",
+    "headerValuePlaceholder": "e.g. Bearer <token>",
+    "addVariable": "Add variable",
+    "addHeader": "Add header",
+    "secretsHint": "Values are encrypted in your vault and never shown again; you can only replace them.",
+    "enabled": "Enabled",
+    "test": "Test connection",
+    "saveAndTest": "Save and test",
+    "connecting": "Connecting…",
+    "connected_one": "Connected · {{count}} tool",
+    "connected_other": "Connected · {{count}} tools",
+    "noTools": "The server started but didn't report any tools.",
+    "testFailed": "The server didn't respond correctly",
+    "unknownError": "Unknown error",
+    "managedFooter": "Set up through Composio. Its apps are managed in Composio."
+  },
+  "api": {
+    "add": "Add API tool",
+    "addTitle": "New API tool",
+    "notFound": "This tool is gone",
+    "saveFailed": "Couldn't save the tool",
+    "grantTitle": "Confirm on your computer",
+    "grantBody": "This sends the saved key somewhere new. Paste the key again to make the change here, or make it in Godmode on your computer.",
+    "deleteTitle": "Delete {{name}}?",
+    "deleteBody": "Its key is deleted too. Agents can't use it any more.",
+    "deleteFailed": "Couldn't delete the tool",
+    "delete": "Delete tool",
+    "enabled": "Enabled",
+    "whatItIs": "What it is",
+    "namePlaceholder": "Nano Banana",
+    "useFor": "What agents can use it for",
+    "useForPlaceholder": "e.g. Generate product photos and edit images.",
+    "key": "API key",
+    "keyPlaceholder": "Paste the API key",
+    "keySavedPlaceholder": "Saved. Paste a new key to replace it",
+    "encrypted": "Encrypted in your vault and never shown again.",
+    "keyWillBeRemoved": "The key is removed when you save.",
+    "keepKey": "Keep the saved key",
+    "removeKey": "Remove key",
+    "whereKeyGoes": "Where the key goes",
+    "address": "API address",
+    "addressHint": "Godmode only ever sends the key to addresses under this one.",
+    "insecure": "Over http:// the key travels unencrypted: fine for a local server only.",
+    "bearer": "Bearer",
+    "header": "Header",
+    "query": "Query",
+    "headerName": "Header name",
+    "prefix": "Prefix",
+    "paramName": "Parameter",
+    "preview": "Sent as",
+    "howToUse": "How to use it",
+    "docs": "Documentation",
+    "docsPlaceholder": "Endpoints, a sample request, model names, limits.",
+    "docsLink": "Documentation link",
+    "advanced": "Advanced",
+    "envTitle": "Also as an environment variable",
+    "envHint": "For scripts, SDKs and command-line tools. Agents can read the key then; it stays masked in chats and logs.",
+    "variable": "Variable",
+    "testRequest": "Test request",
+    "test": "Test the key",
+    "testing": "Testing…",
+    "keyWorks": "The key works",
+    "testFailed": "Test failed",
+    "grantReason": "Send the key of {{name}} somewhere new"
+  },
+  "presets": {
+    "custom": "Any other API",
+    "customTagline": "Your key, its address and docs",
+    "getKeyAt": "Get a key at {{site}}",
+    "gemini": {
+      "tagline": "Images with Google Gemini",
+      "description": "Generate and edit images with Nano Banana (Google's Gemini image models): illustrations, product shots, photo edits, images with text."
+    },
+    "openai": {
+      "tagline": "GPT Image, GPT, speech",
+      "description": "Images with GPT Image (generate and edit), plus OpenAI's GPT models for text and vision, text-to-speech and transcription."
+    },
+    "elevenlabs": {
+      "tagline": "Voices and sound effects",
+      "description": "Lifelike speech in many voices and languages, sound effects from a description, and speech-to-text."
+    },
+    "replicate": {
+      "tagline": "Thousands of open models",
+      "description": "Run open models for images (FLUX), video, audio, upscaling and background removal."
+    },
+    "perplexity": {
+      "tagline": "Web search with sources",
+      "description": "Up-to-date answers from the web with cited sources: research, news, fact checks."
+    }
+  },
+  "plugins": {
+    "onTitle": "Switch on {{name}}?",
+    "onBody": "Its code runs in your agents' sessions on your computer.",
+    "on": "Switch on",
+    "onFailed": "Couldn't switch the plugin on",
+    "deleteTitle": "Delete {{name}}?",
+    "deleteBody": "Agents no longer load it.",
+    "deleteFailed": "Couldn't delete the plugin",
+    "update": "Update to {{version}}",
+    "updateFailed": "Couldn't update the plugin",
+    "updateBadge": "Update",
+    "checkUpdates": "Check for updates",
+    "checkFailed": "Couldn't check for updates"
+  },
+  "pluginAdmin": {
+    "ability": {
+      "tools": {
+        "label": "Sees and changes tool calls",
+        "detail": "It can block a tool call, rewrite its input or act on its result."
+      },
+      "prompts": {
+        "label": "Reads and rewrites prompts",
+        "detail": "It sees what is sent to the agent and can change it, the system prompt included."
+      },
+      "transcript": {
+        "label": "Edits what the conversation keeps",
+        "detail": "It can rewrite messages and tool results before the model reads them."
+      },
+      "turns": {
+        "label": "Follows the agent's turns",
+        "detail": "It is told when a turn starts, takes a step and ends."
+      },
+      "notes": {
+        "label": "Posts notes into the chat",
+        "detail": "Its log lines, toasts and status show up in the chat as notes from the mod."
+      },
+      "panes": {
+        "label": "Draws panes and bands",
+        "detail": "These show in Claude Code's own terminal and desktop app, not in Godmode's chats."
+      },
+      "model": {
+        "label": "Calls the model",
+        "detail": "It can ask Claude questions of its own, which costs tokens."
+      },
+      "store": {
+        "label": "Remembers things between chats",
+        "detail": "It keeps values of its own across sessions."
+      },
+      "files_read": {
+        "label": "Reads files on this computer",
+        "detail": "It can read any file the agent's run can read."
+      },
+      "files_write": {
+        "label": "Writes files on this computer",
+        "detail": "It can create and overwrite files."
+      },
+      "process": {
+        "label": "Runs programs on this computer",
+        "detail": "It can start commands of its own, outside the agent's tools."
+      },
+      "network": {
+        "label": "Talks to the internet",
+        "detail": "It can send requests to any server."
+      },
+      "env": {
+        "label": "Reads environment variables",
+        "detail": "These can hold API keys."
+      },
+      "programs": {
+        "label": "Starts programs of its own",
+        "detail": "It ships command hooks, servers, monitors or scripts that Claude Code runs on this computer."
+      }
+    },
+    "abilities": {
+      "skills_one": "Adds {{count}} skill",
+      "skills_other": "Adds {{count}} skills",
+      "skillsDetail": "Instructions the agent loads when a task needs them, or when you name them.",
+      "subagents_one": "Adds {{count}} subagent",
+      "subagents_other": "Adds {{count}} subagents",
+      "subagentsDetail": "Specialists the agent can hand parts of its work to.",
+      "commands_one": "Adds {{count}} slash command",
+      "commands_other": "Adds {{count}} slash commands",
+      "commandsDetail": "Prompts you or the agent start with a /name.",
+      "hooks_one": "Runs commands on {{count}} event",
+      "hooks_other": "Runs commands on {{count}} events",
+      "hooksDetail": "Shell commands on this computer on {{events}}.",
+      "hooksDetailMore": "Shell commands on this computer on {{events}} and more.",
+      "mcpServers_one": "Starts {{count}} MCP server",
+      "mcpServers_other": "Starts {{count}} MCP servers",
+      "mcpServersDetail": "Programs on this computer that give the agent tools of their own."
+    },
+    "hook": {
+      "tool_call": "Every tool call",
+      "tool_check": "Permission checks",
+      "tool_describe": "Tool descriptions",
+      "prompt_submit": "Prompts",
+      "prompt_compose": "The system prompt",
+      "prompt_context": "Prompt context",
+      "session_start": "Session start",
+      "session_end": "Session end",
+      "session_append": "Conversation rows",
+      "session_compact": "Compaction",
+      "turn_start": "Turn start",
+      "turn_step": "Model requests",
+      "turn_complete": "Turn end",
+      "ui_render": "Drawing",
+      "command_run": "Slash commands",
+      "toolCalls": "{{tool}} calls"
+    },
+    "icons": {
+      "puzzle": "Puzzle piece",
+      "shield": "Shield",
+      "fileLock": "Locked file",
+      "terminal": "Terminal",
+      "eyeOff": "Hidden",
+      "gauge": "Gauge",
+      "timer": "Timer",
+      "gitBranch": "Git branch",
+      "scroll": "Scroll",
+      "bell": "Bell",
+      "filter": "Filter",
+      "wand": "Wand",
+      "video": "Video",
+      "layers": "Layers",
+      "sparkles": "Sparkles",
+      "bot": "Robot"
+    },
+    "whatItCanDo": "What it can do",
+    "reachesOutside": "Reaches outside the conversation",
+    "hooksInto": "Hooks into",
+    "nothingHooked": "Nothing yet. It doesn't hook into Claude Code.",
+    "notCheckedReadCode": "Not checked yet. Until Claude Code has checked it, read the code to see what this plugin does.",
+    "noHooks": "No hooks.",
+    "hooksUnknown": "Not known until Claude Code checks the plugin.",
+    "noHooksYet": "No hooks yet.",
+    "nothingFoundContents": "Nothing Godmode could find.",
+    "titleLabel": "Title",
+    "descriptionLabel": "Description",
+    "descriptionPlaceholder": "What this plugin does, in a sentence or two.",
+    "iconLabel": "Icon",
+    "edit": "Edit",
+    "editFailed": "Couldn't save the plugin",
+    "newPlugin": {
+      "title": "New plugin",
+      "placeholder": "Protect .env files",
+      "pluginName": "Plugin name",
+      "create": "Create plugin",
+      "createFailed": "Couldn't create the plugin"
+    },
+    "importFolder": {
+      "title": "Import a plugin folder",
+      "use": "Import",
+      "busy": "Importing…",
+      "failed": "Couldn't import the folder"
+    },
+    "contentsView": {
+      "version": "Version",
+      "commit": "Commit",
+      "files": "Files",
+      "everySession": "Every session",
+      "skills": "Skills",
+      "subagents": "Subagents",
+      "commands": "Commands",
+      "hooks": "Hooks",
+      "mcpServers": "MCP servers",
+      "nothingFound": "Godmode found no skills, subagents, commands, hooks or MCP servers in it.",
+      "unknown": "What it brings isn't known yet. Check for updates to read it again.",
+      "manifestAndHooks": "Manifest and hooks",
+      "browseGitHub": "Browse every file on GitHub",
+      "showFewer": "Show fewer",
+      "showAll": "Show all {{n}}"
+    },
+    "codeFiles": {
+      "staleTitle": "The saved code changed while you were editing",
+      "staleHint": "Saving replaces it with what you have here.",
+      "loadSaved": "Load the saved code instead",
+      "newFile": "New file",
+      "newFilePath": "Path of the new file",
+      "newPathFor": "New path for {{path}}",
+      "enterPath": "Enter a path, like hooks/helper.ts.",
+      "pathExists": "A file with this path already exists.",
+      "maxFiles": "A plugin holds at most {{max}} files here.",
+      "deleteFile": "Delete file",
+      "deleteTitle": "Delete “{{path}}”?",
+      "deleteDescription": "The file leaves the plugin when you save.",
+      "renameFile": "Rename file",
+      "discardTitle": "Discard unsaved changes?",
+      "discardDescription": "What you changed in “{{title}}” since the last save is lost when you close it.",
+      "keepEditing": "Keep editing",
+      "discard": "Discard"
+    },
+    "title": "Plugin",
+    "add": "Add plugin",
+    "emptyBody": "Install one from GitHub, the featured list or Godmode's gallery with +.",
+    "loadFailed": "Couldn't load plugins",
+    "notFound": "Plugin not found",
+    "maybeDeleted": "It may have been deleted.",
+    "state": {
+      "on": "On",
+      "off": "Off",
+      "review": "Needs review",
+      "broken": "Needs fixing"
+    },
+    "refusedRepo": "Claude Code refuses this plugin as it is, so runs don't load it. Update it, or check it again after a Claude Code update.",
+    "refusedCode": "Claude Code refuses this plugin as it is. Runs load it once the problems below are fixed.",
+    "reviewContents": "An agent installed this plugin. It stays off until you looked at what it brings; switching it on is your approval.",
+    "reviewCode": "An agent drafted this plugin. It stays off until you read its code; switching it on is your approval.",
+    "on": "On",
+    "appliesNext": "Changes apply from the next message of each agent.",
+    "switchOffFailed": "Couldn't switch the plugin off",
+    "runsFor": "Runs for",
+    "everyAgent": "Every agent",
+    "onlyThese": "Only these agents",
+    "noAgentYet": "No agent yet: nobody runs this plugin until you pick one.",
+    "everyAgentHint": "Every agent's runs load this plugin, the agents you add later too.",
+    "options": "Options",
+    "code": {
+      "fileTooLarge": "{{path}} is larger than {{kb}} kB.",
+      "filesTooLarge": "Together the files are larger than {{kb}} kB.",
+      "tooLarge": "Too large for a plugin",
+      "saved": "Code saved",
+      "savedUnchecked": "It wasn't checked: Claude Code isn't installed on the computer.",
+      "savedFailed": "Code saved, but the check failed",
+      "savedFailedDescription": "Runs don't load the plugin until it passes.",
+      "saveFailed": "Couldn't save the code",
+      "checkFailed": "Couldn't check the code",
+      "noteBeforeEdit": "Checked before your last edit",
+      "noteDraft": "This draft, not saved yet",
+      "noteSaved": "The saved code",
+      "noteSavedUnchecked": "The saved code; your changes aren't checked yet",
+      "authorWrote": "{{author}} wrote this code",
+      "reviewHint": "Read it through before anything else. Switching the plugin on is your approval: from then on it runs in every turn of the agents it is for.",
+      "noFiles": "This plugin has no files yet.",
+      "file": "File",
+      "lines_one": "{{count}} line",
+      "lines_other": "{{count}} lines",
+      "copyFile": "Copy this file",
+      "editorLabel": "Code of {{path}}",
+      "check": "Check",
+      "save": "Save code",
+      "checking": "Checking with Claude Code…"
+    },
+    "contents": "What it brings",
+    "skills_one": "{{count}} skill",
+    "skills_other": "{{count}} skills",
+    "commands_one": "{{count}} command",
+    "commands_other": "{{count}} commands",
+    "subagents_one": "{{count}} subagent",
+    "subagents_other": "{{count}} subagents",
+    "hooks": "hooks: {{list}}",
+    "mcpServers": "MCP servers: {{list}}",
+    "nothingFound": "Godmode found nothing in it.",
+    "version": "Version",
+    "updateCheckFailedFor": "Couldn't look for updates of {{title}}",
+    "upToDate": "{{title}} is up to date",
+    "updated": "{{title}} updated",
+    "updatedTo": "{{title}} updated to {{version}}",
+    "newVersionNext": "Runs load the new version from the next message.",
+    "checkTitle": "Check",
+    "notCheckedYet": "Not checked yet",
+    "checkPassed": "Claude Code accepts it",
+    "checkFailedState": "Claude Code refuses it",
+    "needsClaude": "Checking needs Claude Code on the computer.",
+    "checkAgain": "Check again",
+    "checkNow": "Check now",
+    "checkFailed": "Couldn't check the plugin",
+    "notChecked": "{{title}} wasn't checked",
+    "noClaudeCode": "Claude Code isn't installed on the computer.",
+    "passed": "{{title}} passed the check",
+    "needsFixing": "{{title}} needs fixing",
+    "uninstall": "Uninstall",
+    "uninstallTitle": "Uninstall {{name}}?",
+    "delete": "Delete plugin",
+    "saveFailed": "Couldn't save “{{title}}”",
+    "anAgent": "An agent",
+    "opts": {
+      "enterNumber": "Enter a number.",
+      "enterMin": "Enter {{min}} or more.",
+      "enterMax": "Enter {{max}} or less.",
+      "needsValue": "This plugin needs a value here.",
+      "addOneEntry": "Add at least one entry.",
+      "saveFailed": "Couldn't save the options",
+      "save": "Save options",
+      "secretHint": "Kept sealed in the vault. Runs that load this plugin are handed the value, where an agent with full access to the computer could read it: use a key made for this plugin.",
+      "resetLabel": "Reset {{title}} to its default",
+      "reset": "Reset",
+      "required": "required",
+      "secretRemoved": "The saved value goes when you save",
+      "secretSaved": "A value is saved, type to replace it",
+      "notSet": "Not set",
+      "range": "{{min}} to {{max}}",
+      "entry": "{{label}}, entry {{n}}",
+      "addEntry": "Add entry",
+      "removeEntry": "Remove entry {{n}}"
+    },
+    "install": {
+      "title": "Install from GitHub",
+      "invalid": "Enter owner/repo, a GitHub link or a clone URL.",
+      "hint": "owner/repo, a GitHub link (also to a folder) or a clone URL. Leave the branch empty for the default branch.",
+      "repository": "Repository",
+      "ref": "Branch or tag",
+      "enable": "Switch it on after installing",
+      "choices_one": "This repository has {{count}} plugin",
+      "choices_other": "This repository has {{count}} plugins",
+      "warning": "Plugins work with your agents' access, and their hooks and servers start programs on the computer. Install the ones you trust.",
+      "pending": "Downloading and checking…",
+      "install": "Install",
+      "refused": "{{title}} is installed, but Claude Code refuses it",
+      "failed": "Couldn't install {{name}}"
+    },
+    "featured": {
+      "title": "Featured",
+      "loadFailed": "Couldn't load the featured plugins",
+      "needs": "needs {{list}}",
+      "install": "Install",
+      "confirmTitle": "Install {{title}}?"
+    },
+    "gallery": {
+      "title": "Made by Godmode",
+      "footer": "Small guardrail, privacy and workflow plugins that run inside every turn. Read the code of any of them after adding it.",
+      "loadFailed": "Couldn't load the gallery",
+      "add": "Add",
+      "added": "Added",
+      "addFailed": "Couldn't add the plugin"
+    },
+    "categories": {
+      "guardrails": "Guardrails",
+      "privacy": "Privacy",
+      "insight": "Insight",
+      "workflow": "Workflow"
+    },
+    "codeTitle": "Code"
+  }
+}

@@ -22,6 +22,18 @@ function kept(query: Query): boolean {
   return !(scope === "conversations" && kind === "list" && search);
 }
 
+/** A webhook's secret URL stays in memory: this file is plain text, and the URL shows only after Face ID. */
+function withoutSecrets(state: DehydratedState): DehydratedState {
+  return {
+    ...state,
+    queries: state.queries.map((q) =>
+      q.queryKey[0] === "routines" && Array.isArray(q.state.data)
+        ? { ...q, state: { ...q.state, data: (q.state.data as Record<string, unknown>[]).map((r) => (r.webhookPath ? { ...r, webhookPath: null } : r)) } }
+        : q,
+    ),
+  };
+}
+
 /** Before the first screen: what the last session saw, when it was this pairing's. */
 export async function restoreQueries(deviceId: string): Promise<void> {
   try {
@@ -42,7 +54,7 @@ export function persistQueries(deviceId: string): () => void {
     if (timer) clearTimeout(timer);
     timer = null;
     try {
-      file().writeSync(JSON.stringify({ v: VERSION, device: deviceId, at: Date.now(), state: dehydrate(queryClient, { shouldDehydrateQuery: kept }) }));
+      file().writeSync(JSON.stringify({ v: VERSION, device: deviceId, at: Date.now(), state: withoutSecrets(dehydrate(queryClient, { shouldDehydrateQuery: kept })) }));
     } catch {
       /* the next change tries again */
     }

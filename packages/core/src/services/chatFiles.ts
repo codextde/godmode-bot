@@ -5,10 +5,22 @@
  */
 import { closeSync, constants, fstatSync, openSync, readFileSync, readSync, realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { basename, dirname, extname, isAbsolute, join, resolve } from "node:path";
+import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { Agent, ChatFile } from "@godmode/shared";
-import { MARKDOWN_NAME, MAX_CHAT_FILE_REFS, MAX_CHAT_MARKDOWN_BYTES, MAX_CHAT_TEXT_BYTES, MAX_TASK_ATTACHMENT_BYTES, chatImageUrl, chatMarkdownUrl, chatTextUrl, isPreviewableText } from "@godmode/shared";
+import type { Agent, ChatFile, ChatFiles } from "@godmode/shared";
+import {
+  MARKDOWN_NAME,
+  MAX_CHAT_FILE_REFS,
+  MAX_CHAT_MARKDOWN_BYTES,
+  MAX_CHAT_PDF_BYTES,
+  MAX_CHAT_TEXT_BYTES,
+  MAX_TASK_ATTACHMENT_BYTES,
+  chatImageUrl,
+  chatMarkdownUrl,
+  chatPdfUrl,
+  chatTextUrl,
+  isPreviewableText,
+} from "@godmode/shared";
 import { getAgent } from "../agents/service";
 import { get } from "../db";
 import { sniffType } from "../integrations/apiToolRequest";
@@ -19,6 +31,7 @@ import { chatSourcePaths } from "./projects";
 type Kind = ChatFile["kind"];
 
 const IMAGE_NAME = /\.(?:png|jpe?g|gif|webp|avif|bmp)$/i;
+const PDF_NAME = /\.pdf$/i;
 
 /** Where the relative paths of a chat start: its folder, the agent's repository (and its `workspace/`), the workspace's folders. */
 function chatFolders(conversationId: string): string[] {
@@ -64,11 +77,13 @@ function kindOf(path: string): Kind | null {
 }
 
 /** The file or folder `path` names: as it is when absolute, else in the first of the folders that has it. */
-function locate(path: string, folders: string[]): { path: string; kind: Kind } | null {
+function locate(path: string, folders: string[], allowed?: (path: string) => boolean): { path: string; kind: Kind } | null {
   // `src/app.ts:42` points into a file.
   const plain = path.replace(/(?::\d+){1,2}$/, "");
   for (const name of plain === path ? [path] : [path, plain]) {
     for (const candidate of isAbsolute(name) ? [name] : folders.map((f) => join(f, name))) {
+      // Never looked at, so that an answer can't tell whether it is there.
+      if (allowed && !allowed(resolve(candidate))) continue;
       const kind = kindOf(candidate);
       if (kind) return { path: resolve(candidate), kind };
     }
@@ -89,6 +104,25 @@ function openImage(path: string, withData: boolean): { mime: string; version: nu
     const mime = sniffType(head.subarray(0, readSync(fd, head, 0, head.length, 0)));
     if (!mime || !SHOWN_IMAGE.test(mime)) return null;
     return { mime, version: stat.mtimeMs, data: withData ? readFileSync(fd) : null };
+  } catch {
+    return null;
+  } finally {
+    if (fd !== null) closeSync(fd);
+  }
+}
+
+/** A PDF a phone can open, by its name and its first bytes. */
+function openPdf(path: string, withData: boolean): { version: number; data: Buffer | null } | null {
+  if (!PDF_NAME.test(path) || kindOf(path) !== "file") return null;
+  let fd: number | null = null;
+  try {
+    if (!PDF_NAME.test(realpathSync(path))) return null;
+    fd = openSync(path, constants.O_RDONLY | (constants.O_NONBLOCK ?? 0));
+    const stat = fstatSync(fd);
+    if (!stat.isFile() || stat.size === 0 || stat.size > MAX_CHAT_PDF_BYTES) return null;
+    const head = Buffer.alloc(8);
+    if (sniffType(head.subarray(0, readSync(fd, head, 0, head.length, 0))) !== "application/pdf") return null;
+    return { version: stat.mtimeMs, data: withData ? readFileSync(fd) : null };
   } catch {
     return null;
   } finally {
@@ -139,6 +173,7 @@ function describe(ref: string, found: { path: string; kind: Kind }): ChatFile {
   const image = found.kind === "file" && IMAGE_NAME.test(found.path) ? openImage(found.path, false) : null;
   const markdown = found.kind === "file" ? openMarkdown(found.path, false) : null;
   const text = found.kind === "file" && !image && !markdown ? openText(found.path, false) : null;
+  const pdf = found.kind === "file" ? openPdf(found.path, false) : null;
   return {
     ref,
     ...found,
@@ -146,11 +181,12 @@ function describe(ref: string, found: { path: string; kind: Kind }): ChatFile {
     image: image && chatImageUrl(found.path, image.version),
     markdown: markdown && chatMarkdownUrl(found.path, markdown.version),
     ...(text ? { text: chatTextUrl(found.path, text.version) } : {}),
+    ...(pdf ? { pdf: chatPdfUrl(found.path, pdf.version) } : {}),
   };
 }
 
 /** The references of one message that exist, in their order. */
-function resolveMessage(refs: string[], folders: string[]): ChatFile[] {
+function resolveMessage(refs: string[], folders: string[], allowed?: (path: string) => boolean): ChatFile[] {
   const found = new Map<string, ChatFile>();
   // Folders the message itself points at, the latest first.
   let near: string[] = [];
@@ -160,7 +196,7 @@ function resolveMessage(refs: string[], folders: string[]): ChatFile[] {
     if (!path) continue;
     // A bare name most likely lies in the folder named just before it; a longer path starts where the agent works.
     const name = !isAbsolute(path) && !/[\\/]/.test(path.replace(/[\\/]+$/, ""));
-    const hit = locate(path, name ? [...near, ...folders] : [...folders, ...near]);
+    const hit = locate(path, name ? [...near, ...folders] : [...folders, ...near], allowed);
     if (!hit) {
       if (!isAbsolute(path)) later.push([ref, path]);
       continue;
@@ -171,16 +207,45 @@ function resolveMessage(refs: string[], folders: string[]): ChatFile[] {
   }
   // "`01.png` and `02.png` are in `workspace/shots/`": the folder came after its files.
   for (const [ref, path] of later) {
-    const hit = locate(path, near);
+    const hit = locate(path, near, allowed);
     if (hit) found.set(ref, describe(ref, hit));
   }
   return [...new Set(refs)].flatMap((ref) => found.get(ref) ?? []);
 }
 
 /** For every message of a chat (its references as a list), the files and folders that exist. */
-export function resolveChatFiles(conversationId: string, messages: string[][]): ChatFile[][] {
+export function resolveChatFiles(conversationId: string, messages: string[][], opts: { onlyAgentFolder?: boolean } = {}): ChatFile[][] {
   const folders = chatFolders(conversationId);
-  return messages.map((refs) => resolveMessage(refs, folders));
+  const allowed = opts.onlyAgentFolder ? insideAgentFolder(conversationId) : undefined;
+  return messages.map((refs) => resolveMessage(refs, folders, allowed));
+}
+
+function chatAgent(conversationId: string): { agentId: string | null; repo: string | null } {
+  const agentId = get<{ agent_id: string }>("SELECT agent_id FROM conversations WHERE id = ?", conversationId)?.agent_id ?? null;
+  return { agentId, repo: agentId ? (get<{ repo_path: string }>("SELECT repo_path FROM agents WHERE id = ?", agentId)?.repo_path ?? null) : null };
+}
+
+function insideAgentFolder(conversationId: string): (path: string) => boolean {
+  const { repo } = chatAgent(conversationId);
+  if (!repo) return () => false;
+  const roots = [resolve(repo)];
+  try {
+    roots.push(realpathSync.native(repo));
+  } catch {
+    /* no folder yet */
+  }
+  return (path) => roots.some((root) => path === root || path.startsWith(root + sep));
+}
+
+/** For a phone: the chat's agent and where its files lie in the agent's folder, which is where a phone opens them. */
+export function chatFilesForPhone(conversationId: string, files: ChatFile[][]): Required<Pick<ChatFiles, "agentId">> & Pick<ChatFiles, "files"> {
+  const { agentId, repo } = chatAgent(conversationId);
+  if (!agentId || !repo) return { agentId: null, files };
+  const inRepo = (f: ChatFile): ChatFile => {
+    const rel = relative(repo, f.path);
+    return f.remote || rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel) ? f : { ...f, agentPath: rel.split(sep).join("/") };
+  };
+  return { agentId, files: files.map((list) => list.map(inRepo)) };
 }
 
 function absolute(input: string): string {
@@ -201,6 +266,13 @@ export function readChatMarkdown(input: string): string {
   const file = openMarkdown(absolute(input), true);
   if (file?.text == null) throw notFound("Markdown file");
   return file.text;
+}
+
+/** A PDF on this computer, for a phone that opens what a chat names. Anything else stays unread. */
+export function readChatPdf(input: string): Buffer {
+  const file = openPdf(absolute(input), true);
+  if (!file?.data) throw notFound("PDF");
+  return file.data;
 }
 
 export function readChatText(input: string): string {

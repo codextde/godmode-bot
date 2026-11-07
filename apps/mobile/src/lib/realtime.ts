@@ -3,6 +3,7 @@ import type { InvalidateQueryFilters } from "@tanstack/react-query";
 import { browserView, type Agent, type AgentQuestion, type ClientEvent, type EntityName, type ServerEvent, type Task, type TaskEvent, type Vm } from "@godmode/shared";
 import { answeringBase, api, ApiError, forget, reachableBase, retryAddresses } from "./api";
 import { noteQueue, upsertMessage } from "./chat-cache";
+import { noteChatMove } from "./chat-moves";
 import { setQueue } from "./composer";
 import { withPending } from "./pending-queue";
 import { useLive } from "./live";
@@ -26,6 +27,9 @@ const refusedSockets = new Set<string>();
 /** Computers the link was moved to whose socket failed: not moved to again on its own before this time. */
 const moveRefused = new Map<string, number>();
 const MOVE_REFUSED_MS = 3 * 60_000;
+const PING_MS = 25_000;
+/** Silent this long despite the pings: the link is gone, even if the socket still says it is open. */
+const SILENT_MS = 40_000;
 /** Counts moves, so a connect that started before one doesn't open the link where it was. */
 let moves = 0;
 /** The computer the last move went to, until its socket opened or failed. */
@@ -64,6 +68,8 @@ const ENTITY_KEYS: Partial<Record<EntityName, readonly (readonly unknown[])[]>> 
   composio: [["integrations"]],
   mods: [["plugins"]],
   "ssh-servers": [["ssh-servers"]],
+  // The computer gave this phone full access or took it away (or renamed it).
+  mobile: [qk.me],
 };
 
 function sendEvent(event: ClientEvent) {
@@ -293,6 +299,9 @@ function handle(event: ServerEvent) {
       // Into the cached chat as it is; a fetch on its way gets it too (see chat-cache), so nothing is fetched again.
       upsertMessage(event.message);
       break;
+    case "chat.move":
+      noteChatMove(event.conversationId, event.move);
+      break;
     case "queue.updated":
       setQueue(event.conversationId, () => withPending(event.conversationId, event.queue));
       noteQueue(event.conversationId, event.queue);
@@ -371,10 +380,12 @@ function handle(event: ServerEvent) {
     case "question.created":
     case "question.updated": {
       const q = event.question;
-      // The lists are of open questions: a settled one leaves at once.
-      queryClient.setQueriesData<AgentQuestion[]>({ queryKey: qk.questions }, (list) => {
-        if (!Array.isArray(list) || !list.some((x) => x.id === q.id)) return list;
-        return q.status === "open" ? list.map((x) => (x.id === q.id ? q : x)) : list.filter((x) => x.id !== q.id);
+      // The list of open questions: a new one joins and a settled one leaves at once.
+      queryClient.setQueryData<AgentQuestion[]>(qk.questions, (list) => {
+        if (!Array.isArray(list)) return list;
+        if (q.status !== "open") return list.filter((x) => x.id !== q.id);
+        if (list.some((x) => x.id === q.id)) return list.map((x) => (x.id === q.id ? q : x));
+        return event.type === "question.created" ? [q, ...list] : list;
       });
       refreshSoon({ queryKey: qk.questions });
       refreshSoon({ queryKey: qk.bootstrap });
@@ -456,8 +467,10 @@ async function connect() {
   );
   socket = ws;
   let opened = false;
+  let heardAt = Date.now();
   ws.onopen = () => {
     opened = true;
+    heardAt = Date.now();
     refusedSockets.clear();
     attempt = 0;
     // Another computer of the group than before: what it has may differ.
@@ -477,10 +490,21 @@ async function connect() {
     // window). Not on the first connect to the same computer: every screen has just fetched its own.
     if (wasOpen || moved) void queryClient.invalidateQueries();
     wasOpen = true;
-    pingTimer = setInterval(() => sendEvent({ type: "ping" }), 25_000);
+    pingTimer = setInterval(() => {
+      if (Date.now() - heardAt < SILENT_MS) return sendEvent({ type: "ping" });
+      // The computer slept or the network changed without the socket noticing: no close event comes, and no more events.
+      socket = null;
+      socketComputer = null;
+      clearTimers();
+      ws.close();
+      forget(base);
+      useLive.getState().setStatus("offline");
+      scheduleReconnect();
+    }, PING_MS);
     awayTimer = setInterval(() => void checkPreferred(instanceId), 30_000);
   };
   ws.onmessage = (msg) => {
+    heardAt = Date.now();
     try {
       handle(JSON.parse(String(msg.data)) as ServerEvent);
     } catch {
@@ -497,7 +521,8 @@ async function connect() {
     useLive.getState().setStatus("offline");
     if (e.code === 4003) {
       const current = useSession.getState().connection;
-      if (!current || removedBy(current, instanceId)) return void useSession.getState().disconnect("removed");
+      // Only for this socket's own key: the phone may have paired again (with this computer too) or unpaired meanwhile.
+      if (!current || removedBy(current, instanceId)) return void useSession.getState().refused(connection.token);
       // Another computer of the group: the paired one says whether the phone was removed.
       forget(base, true);
     }

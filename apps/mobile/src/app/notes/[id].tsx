@@ -8,6 +8,7 @@ import { useTranslation } from "react-i18next";
 import { formatBytes, type AgentFileEntry } from "@godmode/shared";
 import { NOTES_DIR, failureText, nameOf } from "@/components/agent-actions";
 import { HeaderActions } from "@/components/header-actions";
+import { useRevealLocked } from "@/components/this-phone-access";
 import { Icon } from "@/components/icon";
 import { Button, EmptyState, ErrorState, Hairline, SkeletonRows, T, tap } from "@/components/ui";
 import { api, ApiError } from "@/lib/api";
@@ -40,6 +41,7 @@ export default function Notes() {
     [list.data],
   );
   const newNote = () => router.push({ pathname: "/note", params: { agentId: id, dir } });
+  const locked = useRevealLocked(agent);
 
   const renderItem: ListRenderItem<AgentFileEntry> = useCallback(
     ({ item, index }) => (
@@ -54,7 +56,7 @@ export default function Notes() {
   return (
     <>
       <Stack.Title>{dir === NOTES_DIR ? t("notes.title") : nameOf(dir)}</Stack.Title>
-      <HeaderActions actions={[{ icon: "plus", label: t("notes.new"), onPress: newNote }]} />
+      {locked ? null : <HeaderActions actions={[{ icon: "plus", label: t("notes.new"), onPress: newNote }]} />}
       <FlashList
         data={list.isLoading ? [] : entries}
         keyExtractor={(e) => e.path}
@@ -74,7 +76,7 @@ export default function Notes() {
               icon="note"
               title={t("notes.emptyTitle")}
               body={t("notes.emptyBody", { name: agent?.name ?? t("common:words.agent") })}
-              action={<Button title={t("notes.new")} icon="plus" variant="secondary" onPress={newNote} />}
+              action={locked ? undefined : <Button title={t("notes.new")} icon="plus" variant="secondary" onPress={newNote} />}
             />
           )
         }

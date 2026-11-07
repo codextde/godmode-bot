@@ -20,7 +20,23 @@ export interface MobileDevice {
   lastAddress: string | null;
   /** The app is connected right now. */
   online: boolean;
+  /**
+   * Full access: the phone may do everything the desktop app does (see secrets, change security settings, …).
+   * Only switched on from the computer itself; false for phones paired before it existed.
+   */
+  fullAccess: boolean;
+  /** The phone gets push notifications (it registered a push token; the token itself never leaves the computer). */
+  push: boolean;
 }
+
+/** POST /api/mobile/me/push: the phone's Expo push token. */
+export interface MobilePushInput {
+  token: string;
+  platform: MobilePlatform;
+}
+
+/** What an Expo push token looks like ("ExponentPushToken[…]"). */
+export const EXPO_PUSH_TOKEN = /^Expo(nent)?PushToken\[[A-Za-z0-9_-]{8,200}\]$/;
 
 export interface TailscaleStatus {
   /** Tailscale was found on this computer. */
@@ -101,6 +117,8 @@ export interface MobilePairResult {
 export interface MobileSession {
   device: MobileDevice;
   instance: MobileInstance;
+  /** This phone has full access (same as `device.fullAccess`). */
+  fullAccess: boolean;
   /**
    * Where phones reach this computer now, best first: Tailscale addresses, then the Godmode Cloud gateway
    * (`https://<cloud>/gw/<deviceId>`) while the computer is linked with phone access on. Older cores omit it.

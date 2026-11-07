@@ -26,14 +26,12 @@ import { api, errorText } from "@/lib/api";
 import { useAgents } from "@/lib/hooks";
 import { useLive } from "@/lib/live";
 import { qk, queryClient } from "@/lib/query";
-import { radius, space, useColors } from "@/lib/theme";
-import { useWorkspace } from "@/lib/workspace";
-import { currentLanguage, t as translate, uses12Hour } from "@/lib/i18n";
+import { radius, space, textScale, useColors } from "@/lib/theme";
+import { useWorkspace, scopeLabel } from "@/lib/workspace";
+import { currentLanguage, uses12Hour } from "@/lib/i18n";
 import { templateText } from "@/lib/templates";
 
 type Kind = "workspace" | "project" | "agent";
-
-const ICON: Record<Kind, string> = { workspace: "🚀", project: "📁", agent: "" };
 
 const GLOBAL = "";
 
@@ -44,7 +42,7 @@ export default function New() {
   const kind: Kind = params.kind === "project" || params.kind === "agent" ? params.kind : "workspace";
   const copy = { title: t(`new.${kind}.title`), name: t(`new.${kind}.name`), context: t(`new.${kind}.context`), placeholder: t(`new.${kind}.placeholder`) };
   const { workspaces } = useWorkspace();
-  const [icon, setIcon] = useState(ICON[kind]);
+  const [icon, setIcon] = useState("");
   const [picking, setPicking] = useState(false);
   const [name, setName] = useState("");
   const [role, setRole] = useState("");
@@ -139,7 +137,7 @@ export default function New() {
 
       {kind === "project" && parent ? (
         <T variant="subhead" muted>
-          {t("new.inWorkspace", { icon: parent.icon || "🗂️", name: parent.name })}
+          {t("new.inWorkspace", { name: scopeLabel(parent) })}
         </T>
       ) : null}
 
@@ -155,7 +153,7 @@ export default function New() {
               }}
               style={[styles.tile, { backgroundColor: c.sunken, borderColor: picking ? c.brand : "transparent" }]}
             >
-              <T style={{ fontSize: 22 }}>{icon}</T>
+              {icon ? <T style={{ fontSize: 22 }}>{icon}</T> : <Icon name={kind === "project" ? "folder" : "layers"} size={20} color={c.textMuted} />}
             </Pressable>
           ) : null}
           <TextInput
@@ -215,7 +213,7 @@ export default function New() {
           <View style={styles.chips}>
             <Chip active={!workspaceId} label={t("new.everyWorkspace")} onPress={() => setWorkspaceId(GLOBAL)} />
             {workspaces.map((w) => (
-              <Chip key={w.id} active={w.id === workspaceId} label={`${w.icon || "🗂️"} ${w.name}`} onPress={() => setWorkspaceId(w.id)} />
+              <Chip key={w.id} active={w.id === workspaceId} label={scopeLabel(w)} onPress={() => setWorkspaceId(w.id)} />
             ))}
           </View>
           <T variant="footnote" muted>
@@ -266,9 +264,9 @@ const wordStarts = (query: string) =>
     .filter(Boolean)
     .map((term) => new RegExp(`(^|[^a-z0-9])${escape(term)}`, "i"));
 
-const searchText = (t: AgentTemplate) => {
+const searchText = (t: AgentTemplate, title: (category: AgentTemplate["category"]) => string) => {
   const shown = templateText(t);
-  return [t.name, t.role, t.description, AGENT_TEMPLATE_CATEGORY_LABELS[t.category], ...(t.covers ?? []), shown.name, shown.role, shown.description, translate(`settings:new.categoryTitles.${t.category}`), ...(shown.covers ?? [])].join(" ");
+  return [t.name, t.role, t.description, AGENT_TEMPLATE_CATEGORY_LABELS[t.category], ...(t.covers ?? []), shown.name, shown.role, shown.description, title(t.category), ...(shown.covers ?? [])].join(" ");
 };
 
 const inFilter = (t: AgentTemplate, f: Filter) => f === "all" || (f === "all-in-one" ? !!t.covers?.length : t.category === f);
@@ -276,12 +274,15 @@ const inFilter = (t: AgentTemplate, f: Filter) => f === "all" || (f === "all-in-
 /** Every role a company has, by department, searchable: one agent per job, or one all-in-one agent per department. */
 function TemplatePicker({ onPick, workspaceId }: { onPick: (template: AgentTemplate | null) => void; workspaceId: string | null }) {
   const c = useColors();
-  const { t, i18n } = useTranslation(["settings", "common", "agents"]);
+  const { t } = useTranslation(["settings", "common", "agents"]);
   const templates = useQuery({ queryKey: ["agent-templates"], queryFn: api.agents.templates, staleTime: 60 * 60_000 });
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
   const terms = useMemo(() => wordStarts(query), [query]);
-  const found = useMemo(() => (templates.data ?? []).filter((x) => terms.every((re) => re.test(searchText(x)))), [templates.data, terms, i18n.language]);
+  const found = useMemo(() => {
+    const title = (category: AgentTemplate["category"]) => t(`new.categoryTitles.${category}`);
+    return (templates.data ?? []).filter((x) => terms.every((re) => re.test(searchText(x, title))));
+  }, [templates.data, terms, t]);
   const shown = found.filter((x) => inFilter(x, filter));
   const chips = (["all", "all-in-one", ...AGENT_TEMPLATE_CATEGORIES] as Filter[]).filter((f) => f === "all" || f === filter || found.some((x) => inFilter(x, f)));
 
@@ -500,7 +501,7 @@ function Chip({ active, label, onPress }: { active: boolean; label: string; onPr
       }}
       style={[styles.chip, { backgroundColor: active ? c.primary : c.sunken }]}
     >
-      <T variant="subhead" color={active ? c.onPrimary : c.text} style={{ fontWeight: "600" }} numberOfLines={1}>
+      <T variant="subhead" color={active ? c.onPrimary : c.text} style={{ fontWeight: "600" }} numberOfLines={1} maxScale={textScale.control}>
         {label}
       </T>
     </Pressable>

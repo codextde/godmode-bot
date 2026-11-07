@@ -2,7 +2,9 @@ import { useMutation } from "@tanstack/react-query";
 import { router, Stack } from "expo-router";
 import { Alert, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
+import { CloseButton } from "@/components/close-button";
 import { Group, LinkRow, Tile } from "@/components/form";
+import { NeedsFullAccess, useFullAccess } from "@/components/full-access";
 import { Icon, type IconName } from "@/components/icon";
 import { Button, Card, EmptyState, ErrorState, Row, Skeleton, T } from "@/components/ui";
 import { ApiError, errorText } from "@/lib/api";
@@ -12,10 +14,14 @@ import { usePullRefresh } from "@/lib/use-pull-refresh";
 import { isOutdated, useCards, useLogins, useMacPassword, usePasskeys, useSshKeys, useTotp, useVaultStatus, vaultApi, vk } from "@/lib/vault";
 import { alpha, space, useColors } from "@/lib/theme";
 
-/** The vault at a glance: locked or not, what's in it. Secrets never reach the phone; it can only lock the vault. */
+/**
+ * The vault at a glance: locked or not, what's in it. A limited phone can only lock it; with full access it unlocks it
+ * with the Godmode password too and reaches the API keys and this Mac's password.
+ */
 export default function Passwords() {
   const c = useColors();
   const { t } = useTranslation(["vault", "common"]);
+  const { fullAccess } = useFullAccess();
   const status = useVaultStatus();
   const logins = useLogins();
   const totp = useTotp();
@@ -24,7 +30,7 @@ export default function Passwords() {
   const mac = useMacPassword();
   const sshKeys = useSshKeys();
   const settings = useSettings();
-  const pull = usePullRefresh(() => queryClient.invalidateQueries({ queryKey: vk.all }));
+  const pull = usePullRefresh(() => Promise.all([queryClient.invalidateQueries({ queryKey: vk.all }), queryClient.invalidateQueries({ queryKey: qk.me })]));
 
   const lock = useMutation({
     mutationFn: vaultApi.lock,
@@ -57,6 +63,7 @@ export default function Passwords() {
   return (
     <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content} refreshControl={<RefreshControl {...pull} />}>
       <Stack.Screen options={{ title: t("index.title") }} />
+      <CloseButton />
 
       {status.isError && !vault ? (
         <ErrorState title={t("index.loadFailed")} error={errorText(status.error)} onRetry={() => void status.refetch()} />
@@ -70,9 +77,11 @@ export default function Passwords() {
               {vault ? (
                 <>
                   <T variant="headline">{!vault.initialized ? t("index.notSetUp") : vault.unlocked ? t("index.unlocked") : t("index.locked")}</T>
-                  <T variant="footnote" muted>
-                    {!vault.initialized ? t("index.notSetUpDetail") : vault.unlocked ? t("index.unlockedDetail") : t("index.lockedDetail")}
-                  </T>
+                  {!vault.initialized || (!vault.unlocked && !fullAccess) ? (
+                    <T variant="footnote" muted>
+                      {!vault.initialized ? t("index.notSetUpDetail") : t("index.lockedDetail")}
+                    </T>
+                  ) : null}
                 </>
               ) : (
                 <>
@@ -83,6 +92,9 @@ export default function Passwords() {
             </View>
           </Row>
           {vault?.unlocked ? <Button title={t("index.lockNow")} icon="lock" variant="outline" loading={lock.isPending} onPress={confirmLock} /> : null}
+          {vault?.initialized && !vault.unlocked && fullAccess ? (
+            <Button title={t("index.unlock")} icon="lockOpen" onPress={() => router.push({ pathname: "/vault/passphrase", params: { mode: "unlock" } })} />
+          ) : null}
         </Card>
       )}
 
@@ -95,14 +107,26 @@ export default function Passwords() {
 
       <Group>
         {mac.data?.supported ? (
-          <InfoRow icon="laptop" label={t("index.macPassword")} value={mac.data.saved ? t("index.saved") : t("index.notSaved")} />
+          fullAccess ? (
+            <LinkRow
+              icon="laptop"
+              title={t("index.macPassword")}
+              value={mac.data.saved ? t("index.saved") : t("index.notSaved")}
+              onPress={() => router.push({ pathname: "/vault/key-edit", params: { kind: "mac" } })}
+            />
+          ) : (
+            <InfoRow icon="laptop" label={t("index.macPassword")} value={mac.data.saved ? t("index.saved") : t("index.notSaved")} />
+          )
         ) : null}
+        {fullAccess ? <LinkRow icon="code" title={t("index.apiKeys")} onPress={() => router.push("/settings/vault/api-keys")} /> : null}
         {sshOff ? (
           <InfoRow icon="sshKey" label={t("index.sshKeys")} value={t("common:status.off")} />
         ) : (
           <LinkRow icon="sshKey" title={t("index.sshKeys")} value={sshKeys.data ? String(sshKeys.data.keys.length) : undefined} onPress={() => router.push("/settings/vault/ssh-keys")} />
         )}
       </Group>
+
+      {fullAccess === false ? <NeedsFullAccess /> : null}
     </ScrollView>
   );
 }

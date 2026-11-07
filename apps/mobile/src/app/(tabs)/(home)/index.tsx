@@ -1,5 +1,4 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { format } from "date-fns";
 import { router, Stack } from "expo-router";
 import { memo, useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
@@ -19,7 +18,6 @@ import { openTask } from "@/components/task-row";
 import { Card, LiveDot, Row, SkeletonRows, T, tap } from "@/components/ui";
 import { WorkspaceChip } from "@/components/workspace-chip";
 import { api, errorText } from "@/lib/api";
-import { dateLocale } from "@/lib/i18n";
 import { trackAway } from "@/lib/away";
 import { greeting, pickAgent, SUGGESTIONS, type Need } from "@/lib/desktop-parity";
 import { chatListQuery, useAgents } from "@/lib/hooks";
@@ -31,7 +29,7 @@ import { isLive, useLiveScreens } from "@/lib/screens";
 import { confirmHideSuggestions, useSuggestions } from "@/lib/suggestions";
 import { usePullRefresh } from "@/lib/use-pull-refresh";
 import { chatProject, inProject, useProjectIndex, useWorkspace, useWorkspaceRuns } from "@/lib/workspace";
-import { radius, space, useColors } from "@/lib/theme";
+import { radius, space, textScale, useColors } from "@/lib/theme";
 
 const NEEDS_SHOWN = 5;
 const RECENT_SHOWN = 6;
@@ -106,20 +104,9 @@ export default function Home() {
       </Pressable>
 
       <View style={styles.hero}>
-        <View style={[styles.pill, { backgroundColor: c.surface, borderColor: c.border }]}>
-          <LiveDot size={6} />
-          <T variant="caption" muted>
-            {format(now, t("home.datePattern"), { locale: dateLocale() })}
-            {enabled.length > 0 ? ` · ${t("home.agentsReady", { count: enabled.length })}` : ""}
-          </T>
-        </View>
         <T variant="largeTitle" style={styles.greeting}>
           {greeting(now)}
           {userName ? `, ${userName}` : ""}.
-          <T variant="largeTitle" color={c.textFaint} style={styles.greeting}>
-            {"\n"}
-            {t("home.prompt")}
-          </T>
         </T>
       </View>
 
@@ -128,7 +115,7 @@ export default function Home() {
       <Pressable accessibilityRole="button" onPress={() => ask()}>
         <Glass interactive style={styles.ask} fallback={c.surface}>
           <Icon name="sparkles" size={18} color={c.textMuted} />
-          <T variant="body" muted numberOfLines={1} style={{ flex: 1 }}>
+          <T variant="body" muted numberOfLines={1} maxScale={textScale.control} style={{ flex: 1 }}>
             {agent ? t("home.askAgent", { name: agent.name }) : t("home.ask")}
           </T>
           <View style={[styles.askSend, { backgroundColor: c.primary }]}>
@@ -138,33 +125,27 @@ export default function Home() {
       </Pressable>
 
       {hideSuggestions ? null : (
-        <View style={styles.suggestions}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.suggestions} contentContainerStyle={styles.suggestionRow}>
           {SUGGESTIONS.map((s) => (
             <Pressable
               key={s.text}
               accessibilityRole="button"
+              accessibilityActions={[{ name: "hide", label: t("home.hideSuggestions") }]}
+              onAccessibilityAction={confirmHideSuggestions}
               onPress={() => ask(s.text)}
+              onLongPress={() => {
+                tap();
+                confirmHideSuggestions();
+              }}
               style={({ pressed }) => [styles.suggestion, { backgroundColor: c.surface, borderColor: c.border, opacity: pressed ? 0.6 : 1 }]}
             >
               <Icon name={s.icon} size={13} color={c.textMuted} />
-              <T variant="footnote" muted numberOfLines={1} style={{ flexShrink: 1 }}>
+              <T variant="footnote" muted numberOfLines={1} maxScale={textScale.control} style={{ flexShrink: 1 }}>
                 {s.text}
               </T>
             </Pressable>
           ))}
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={t("home.hideSuggestions")}
-            hitSlop={8}
-            onPress={() => {
-              tap();
-              confirmHideSuggestions();
-            }}
-            style={({ pressed }) => [styles.suggestion, { borderColor: "transparent", opacity: pressed ? 0.6 : 1 }]}
-          >
-            <Icon name="close" size={12} weight="semibold" color={c.textFaint} />
-          </Pressable>
-        </View>
+        </ScrollView>
       )}
 
       {status === "offline" && (
@@ -235,7 +216,7 @@ function NeedsYou({ vaultLocked }: { vaultLocked: boolean }) {
         title={t("home.needs.title")}
         count={total}
         tone="warning"
-        action={more ? (elsewhere > 0 ? t("home.needs.moreElsewhere", { count: elsewhere }) : t("home.needs.allInInbox", { count: items.length })) : undefined}
+        action={more ? (elsewhere > 0 ? t("home.needs.moreElsewhere", { count: elsewhere }) : t("home.inbox")) : undefined}
         onAction={() => router.push("/inbox")}
       />
       <Card>
@@ -374,7 +355,7 @@ function Head({
       </T>
       {count ? (
         <View style={[styles.count, tone === "warning" ? { backgroundColor: c.warningSoft } : { backgroundColor: c.surface, borderColor: c.border, borderWidth: StyleSheet.hairlineWidth }]}>
-          <T variant="caption" color={tone === "warning" ? c.warning : c.text} style={styles.countText}>
+          <T variant="caption" maxScale={textScale.control} color={tone === "warning" ? c.warning : c.text} style={styles.countText}>
             {count}
           </T>
         </View>
@@ -386,7 +367,7 @@ function Head({
       ) : null}
       {action && onAction ? (
         <Pressable hitSlop={10} onPress={onAction} style={{ marginLeft: "auto", flexShrink: 1 }}>
-          <T variant="footnote" muted numberOfLines={1} style={{ fontWeight: "600" }}>
+          <T variant="footnote" muted numberOfLines={1} maxScale={textScale.control} style={{ fontWeight: "600" }}>
             {action}
           </T>
         </Pressable>
@@ -525,18 +506,6 @@ const styles = StyleSheet.create({
   hero: {
     gap: space.md,
     paddingHorizontal: 4,
-    paddingTop: space.sm,
-  },
-  pill: {
-    flexDirection: "row",
-    alignItems: "center",
-    alignSelf: "flex-start",
-    gap: 6,
-    paddingVertical: 4,
-    paddingLeft: 9,
-    paddingRight: 11,
-    borderRadius: radius.pill,
-    borderWidth: StyleSheet.hairlineWidth,
   },
   greeting: {
     fontSize: 30,
@@ -559,16 +528,19 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   suggestions: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: space.sm,
+    flexGrow: 0,
+    marginHorizontal: -space.lg,
     marginTop: -space.xs,
+  },
+  suggestionRow: {
+    gap: space.sm,
+    paddingHorizontal: space.lg,
   },
   suggestion: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    maxWidth: "100%",
+    maxWidth: 300,
     paddingVertical: 7,
     paddingHorizontal: 11,
     borderRadius: radius.sm,

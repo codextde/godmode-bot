@@ -44,6 +44,7 @@ export function openNotificationLink(link: string | null): boolean {
   else if (section === "my-tasks") router.push(task ? { pathname: "/human-task/[id]", params: { id: decode(task) } } : "/my-tasks");
   else if (section === "calls") router.push(call ? { pathname: "/call/[id]", params: { id: decode(call) } } : "/calls");
   else if (section === "automations") router.push("/automations");
+  else if (section === "artifacts" && id) router.push({ pathname: "/artifact/[id]", params: { id: decode(id) } });
   else return false;
   return true;
 }

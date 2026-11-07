@@ -388,7 +388,7 @@ export function createConversation(
  * A new chat that goes on with the setup of `fromId` — its agent, folder, VM, browser, workspace, project, servers,
  * phones, instructions, model, shared screen and secret access — but none of its conversation.
  */
-export function createContinuation(fromId: string, title: string): Conversation {
+export function createContinuation(fromId: string, title: string, opts: { fillOnly?: boolean } = {}): Conversation {
   const c = requireConversationRow(fromId);
   const fresh = createConversation({
     agentId: c.agent_id,
@@ -401,7 +401,7 @@ export function createContinuation(fromId: string, title: string): Conversation 
     sshServerIds: parseServerIds(c.ssh_server_ids),
     androidDeviceIds: parseDeviceIds(c.android_device_ids),
     instructions: c.instructions,
-    fillOnly: c.secret_access === "fill",
+    fillOnly: c.secret_access === "fill" || opts.fillOnly,
     model: c.model,
     effort: c.effort,
     ultracode: c.ultracode == null ? null : bool(c.ultracode),
@@ -430,6 +430,16 @@ export function chatFillOnly(conversationId: string): boolean {
   // A chat on GLM sends what it reads to Z.ai: raw secrets stay out of it.
   if (!row || row.secret_access === "fill" || modelProvider(row.model) === "zai") return true;
   return !!projectOfChat(conversationId, { workspaceId: row.workspace_id, projectId: row.project_id })?.fillOnly;
+}
+
+/** From now on the chat gets no raw secrets: a phone without full access wrote in it or its instructions. */
+export function markChatFillOnly(conversationId: string): void {
+  sql("UPDATE conversations SET secret_access = 'fill' WHERE id = ?", conversationId);
+}
+
+/** The run gets no raw secrets whatever its chat may read: a phone without full access wrote what started it. */
+export function runFillOnly(runId: string): boolean {
+  return !!runId && get<{ fill_only: number }>("SELECT fill_only FROM runs WHERE id = ?", runId)?.fill_only === 1;
 }
 
 /**
@@ -1070,7 +1080,7 @@ export function promptWithFiles(prompt: string, agent: Agent, attachments: Attac
 type RemoteSend = (
   conversationId: string,
   runnerId: string,
-  input: { content: string; prompt?: string; marker?: MessageBlock[]; trigger?: RunTrigger },
+  input: { content: string; prompt?: string; marker?: MessageBlock[]; trigger?: RunTrigger; fillOnly?: boolean },
 ) => Promise<SendMessageResult>;
 
 /** Turns in a chat that works on another computer start there (remote/devices.ts sets it). */
@@ -1099,12 +1109,17 @@ export async function sendMessage(
     source?: MessageSource;
     /** Written in a chat by someone other than the human this Godmode works for (an approved messenger contact). */
     fromOther?: boolean;
+    /** Its run gets no raw secrets, whatever the chat may read: a phone without full access wrote it. */
+    fillOnly?: boolean;
   },
 ): Promise<SendMessageResult> {
   const { conv, agent } = messageTarget(conversationId, input.trigger);
   if (conv.runner_id && remoteSend && !input.attachments?.length && !input.files?.length) {
-    return remoteSend(conversationId, conv.runner_id, { content: input.content ?? "", prompt: input.prompt, marker: input.marker, trigger: input.trigger });
+    const fillOnly = input.fillOnly ? { fillOnly: true } : {};
+    return remoteSend(conversationId, conv.runner_id, { content: input.content ?? "", prompt: input.prompt, marker: input.marker, trigger: input.trigger, ...fillOnly });
   }
+  // Later runs resume the same Claude session, which holds what the phone wrote: the chat stays fill-only for good.
+  if (input.fillOnly) markChatFillOnly(conversationId);
   // Before anything is stored: a refused run leaves no message or upload behind.
   requireLicense();
   const content = (input.content ?? "").trim();
@@ -1129,6 +1144,7 @@ export async function sendMessage(
       voice: input.voice ?? false,
       userMessageId: message.id,
       runId: input.runId,
+      fillOnly: input.fillOnly,
     });
   } catch (err) {
     sql("DELETE FROM messages WHERE id = ?", message.id);
@@ -1208,6 +1224,8 @@ export async function startChat(
     androidDeviceIds?: string[];
     instructions?: string;
     private?: boolean;
+    /** No raw secrets in the chat (`createConversation`). */
+    fillOnly?: boolean;
   } & ModelChoice,
 ): Promise<StartChatResult> {
   requireLicense();
@@ -1234,6 +1252,7 @@ export async function startChat(
     effort: input.effort,
     ultracode: input.ultracode,
     private: input.private,
+    fillOnly: input.fillOnly,
   });
   if (input.computerTarget) {
     update("conversations", conversation.id, { computer_target: JSON.stringify(parseComputerTarget(input.computerTarget)) });

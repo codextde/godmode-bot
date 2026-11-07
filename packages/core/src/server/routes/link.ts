@@ -252,7 +252,13 @@ export function registerLinkRoutes(app: Hono): void {
   app.post("/api/link/conversations/:id/send", async (c) => {
     const input = await body(
       c,
-      z.object({ content: z.string().max(200_000), prompt: z.string().max(400_000).optional(), marker: z.array(z.record(z.string(), z.unknown())).max(20).optional(), trigger: z.string().optional() }),
+      z.object({
+        content: z.string().max(200_000),
+        prompt: z.string().max(400_000).optional(),
+        marker: z.array(z.record(z.string(), z.unknown())).max(20).optional(),
+        trigger: z.string().optional(),
+        fillOnly: z.boolean().optional(),
+      }),
     );
     const id = c.req.param("id");
     const row = get<{ runner_id: string | null }>("SELECT runner_id FROM conversations WHERE id = ?", id);
@@ -265,6 +271,7 @@ export function registerLinkRoutes(app: Hono): void {
       ...(input.prompt ? { prompt: input.prompt } : {}),
       ...(input.marker?.length ? { marker: input.marker as unknown as MessageBlock[] } : {}),
       trigger,
+      ...(input.fillOnly ? { fillOnly: true } : {}),
     });
     return c.json({ ...result, conversation: getConversationSummary(id) });
   });

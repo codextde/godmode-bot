@@ -1,6 +1,6 @@
 import * as Haptics from "expo-haptics";
 import { router, useLocalSearchParams } from "expo-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { parsePairingLink } from "@godmode/shared";
@@ -21,8 +21,16 @@ export default function Pair() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const c = useColors();
+  const expiresAt = payload ? payload.exp * 1000 : 0;
+  const [now, setNow] = useState(Date.now);
+  useEffect(() => {
+    const left = expiresAt - Date.now();
+    if (left <= 0) return;
+    const timer = setTimeout(() => setNow(Date.now()), left + 50);
+    return () => clearTimeout(timer);
+  }, [expiresAt]);
 
-  const close = () => (router.canGoBack() ? router.back() : router.replace("/"));
+  const close = () => (router.canGoBack() ? router.back() : router.replace(current ? "/" : "/welcome"));
 
   const connect = async () => {
     if (!payload) return;
@@ -56,7 +64,7 @@ export default function Pair() {
     );
   }
 
-  const expired = payload.exp * 1000 < Date.now();
+  const expired = expiresAt < now;
   const switching = current && current.instance.id !== payload.id;
   const routes = [
     { label: "Tailscale", url: payload.urls.find((u) => !isGatewayUrl(u) && u.startsWith("http:")) },

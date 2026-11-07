@@ -1,0 +1,513 @@
+{
+  "loadFailed": "Integrationen konnten nicht geladen werden",
+  "discard": {
+    "title": "Änderungen verwerfen?",
+    "keep": "Weiter bearbeiten",
+    "discard": "Verwerfen"
+  },
+  "fields": {
+    "name": "Name",
+    "description": "Beschreibung"
+  },
+  "errors": {
+    "title": "Bitte zuerst prüfen",
+    "nameMissing": "Gib dem Server einen Namen.",
+    "nameInvalid": "Nutze im Namen Buchstaben, Ziffern, „-“, „_“ oder „.“ (keine Leerzeichen).",
+    "commandMissing": "Welches Programm soll Godmode starten?",
+    "urlProtocol": "Nutze eine http(s)-URL.",
+    "urlInvalid": "Gib eine vollständige URL ein, z. B. https://example.com/mcp",
+    "envNeedsName": "Jede Umgebungsvariable braucht einen Namen.",
+    "headerNeedsName": "Jeder Header braucht einen Namen.",
+    "envInvalid": "„{{key}}“ ist kein gültiger Name für eine Umgebungsvariable.",
+    "headerInvalid": "„{{key}}“ ist kein gültiger Header-Name.",
+    "duplicate": "„{{key}}“ steht doppelt in der Liste.",
+    "toolName": "Gib dem Tool einen Namen.",
+    "apiKey": "Das sieht nicht nach einem vollständigen Schlüssel aus. Prüf, was du eingefügt hast.",
+    "baseUrlProtocol": "Nutze eine https://-Adresse.",
+    "baseUrlQuery": "Lass ?query und #fragment in der Adresse weg.",
+    "baseUrlInvalid": "Gib die vollständige Adresse ein, z. B. https://api.example.com",
+    "baseUrlMissing": "Wohin gehen die Anfragen? z. B. https://api.example.com",
+    "headerName": "Header-Namen haben keine Leerzeichen, z. B. x-api-key.",
+    "queryName": "Gib einen Parameternamen ein, z. B. key oder api_key.",
+    "envVar": "Buchstaben, Ziffern und _, endet auf _KEY, _TOKEN oder _SECRET, z. B. GEMINI_API_KEY.",
+    "docsUrl": "Gib einen vollständigen Link zur Dokumentation ein, z. B. https://docs.example.com",
+    "testPath": "Die Testanfrage braucht die API-Adresse."
+  },
+  "transports": {
+    "stdio": {
+      "label": "Lokaler Befehl"
+    },
+    "http": {
+      "label": "HTTP"
+    },
+    "sse": {
+      "label": "SSE"
+    }
+  },
+  "scope": {
+    "title": "Verfügbar für",
+    "global": "Alle Agenten",
+    "globalHint": "In jedem Workspace",
+    "workspace": "Ein Workspace",
+    "workspaceHint": "Nur seine Agenten",
+    "agent": "Ein Agent",
+    "agentHint": "Nur dieser Agent",
+    "which": "Workspace",
+    "whichAgent": "Agent"
+  },
+  "secrets": {
+    "name": "Name",
+    "value": "Wert",
+    "newValue": "Neuer Wert",
+    "stored": "Verschlüsselt gespeichert",
+    "keep": "Gespeicherten Wert behalten",
+    "replace": "{{key}} ersetzen",
+    "removeNamed": "{{key}} entfernen",
+    "remove": "Zeile entfernen"
+  },
+  "list": {
+    "switch": "{{name}} ein- oder ausschalten",
+    "switchFailed": "Konnte nicht umgeschaltet werden"
+  },
+  "mcp": {
+    "add": "MCP-Server hinzufügen",
+    "addTitle": "Neuer MCP-Server",
+    "notFound": "Diesen Server gibt es nicht mehr",
+    "saveFailed": "MCP-Server konnte nicht gespeichert werden",
+    "deleteTitle": "{{name}} löschen?",
+    "deleteBody": "Agenten verlieren seine Tools ab ihrem nächsten Lauf.",
+    "deleteFailed": "Server konnte nicht gelöscht werden",
+    "delete": "Server löschen",
+    "namePlaceholder": "linear",
+    "descriptionPlaceholder": "Optional",
+    "transport": "Transport",
+    "command": "Befehl",
+    "arguments": "Argumente",
+    "argumentsHint": "Mit Leerzeichen trennen; Argumente mit Leerzeichen in Anführungszeichen setzen.",
+    "argumentCount_one": "{{count}} Argument.",
+    "argumentCount_other": "{{count}} Argumente.",
+    "envVars": "Umgebungsvariablen",
+    "headers": "Header",
+    "headerValuePlaceholder": "z. B. Bearer <token>",
+    "addVariable": "Variable hinzufügen",
+    "addHeader": "Header hinzufügen",
+    "secretsHint": "Werte werden verschlüsselt im Tresor gespeichert und nie wieder angezeigt; du kannst sie nur ersetzen.",
+    "enabled": "Aktiviert",
+    "test": "Verbindung testen",
+    "saveAndTest": "Speichern und testen",
+    "connecting": "Wird verbunden…",
+    "connected_one": "Verbunden · {{count}} Tool",
+    "connected_other": "Verbunden · {{count}} Tools",
+    "noTools": "Der Server ist gestartet, hat aber keine Tools gemeldet.",
+    "testFailed": "Der Server hat nicht richtig geantwortet",
+    "unknownError": "Unbekannter Fehler",
+    "managedFooter": "Über Composio eingerichtet. Seine Apps werden in Composio verwaltet."
+  },
+  "api": {
+    "add": "API-Tool hinzufügen",
+    "addTitle": "Neues API-Tool",
+    "notFound": "Dieses Tool gibt es nicht mehr",
+    "saveFailed": "Tool konnte nicht gespeichert werden",
+    "grantTitle": "Am Computer bestätigen",
+    "grantBody": "Damit geht der gespeicherte Schlüssel an eine neue Stelle. Füg den Schlüssel erneut ein, um das hier zu ändern, oder ändere es in Godmode auf deinem Computer.",
+    "deleteTitle": "{{name}} löschen?",
+    "deleteBody": "Sein Schlüssel wird mitgelöscht. Agenten können es nicht mehr nutzen.",
+    "deleteFailed": "Tool konnte nicht gelöscht werden",
+    "delete": "Tool löschen",
+    "enabled": "Aktiviert",
+    "whatItIs": "Was es ist",
+    "namePlaceholder": "Nano Banana",
+    "useFor": "Wofür Agenten es nutzen können",
+    "useForPlaceholder": "z. B. Produktfotos erstellen und Bilder bearbeiten.",
+    "key": "API-Schlüssel",
+    "keyPlaceholder": "API-Schlüssel einfügen",
+    "keySavedPlaceholder": "Gespeichert. Neuen Schlüssel einfügen, um ihn zu ersetzen",
+    "encrypted": "Verschlüsselt im Tresor und wird nie wieder angezeigt.",
+    "keyWillBeRemoved": "Der Schlüssel wird beim Speichern entfernt.",
+    "keepKey": "Gespeicherten Schlüssel behalten",
+    "removeKey": "Schlüssel entfernen",
+    "whereKeyGoes": "Wohin der Schlüssel geht",
+    "address": "API-Adresse",
+    "addressHint": "Godmode schickt den Schlüssel nur an Adressen unter dieser.",
+    "insecure": "Über http:// wird der Schlüssel unverschlüsselt übertragen: nur für einen lokalen Server okay.",
+    "bearer": "Bearer",
+    "header": "Header",
+    "query": "Query",
+    "headerName": "Header-Name",
+    "prefix": "Präfix",
+    "paramName": "Parameter",
+    "preview": "Gesendet als",
+    "howToUse": "So wird es genutzt",
+    "docs": "Dokumentation",
+    "docsPlaceholder": "Endpunkte, eine Beispielanfrage, Modellnamen, Limits.",
+    "docsLink": "Link zur Dokumentation",
+    "advanced": "Erweitert",
+    "envTitle": "Auch als Umgebungsvariable",
+    "envHint": "Für Skripte, SDKs und Kommandozeilen-Tools. Agenten können den Schlüssel dann lesen; in Chats und Logs bleibt er maskiert.",
+    "variable": "Variable",
+    "testRequest": "Testanfrage",
+    "test": "Schlüssel testen",
+    "testing": "Wird getestet…",
+    "keyWorks": "Der Schlüssel funktioniert",
+    "testFailed": "Test fehlgeschlagen",
+    "grantReason": "Schlüssel von {{name}} an eine neue Stelle senden"
+  },
+  "presets": {
+    "custom": "Andere API",
+    "customTagline": "Dein Schlüssel, ihre Adresse und Doku",
+    "getKeyAt": "Schlüssel auf {{site}} holen",
+    "gemini": {
+      "tagline": "Bilder mit Google Gemini",
+      "description": "Bilder erstellen und bearbeiten mit Nano Banana (Googles Gemini-Bildmodelle): Illustrationen, Produktfotos, Fotobearbeitung, Bilder mit Text."
+    },
+    "openai": {
+      "tagline": "GPT Image, GPT, Sprache",
+      "description": "Bilder mit GPT Image (erstellen und bearbeiten), dazu OpenAIs GPT-Modelle für Text und Bildverständnis, Sprachausgabe und Transkription."
+    },
+    "elevenlabs": {
+      "tagline": "Stimmen und Soundeffekte",
+      "description": "Natürlich klingende Sprache in vielen Stimmen und Sprachen, Soundeffekte aus einer Beschreibung und Spracherkennung."
+    },
+    "replicate": {
+      "tagline": "Tausende offene Modelle",
+      "description": "Offene Modelle für Bilder (FLUX), Video, Audio, Hochskalieren und Hintergrundentfernung."
+    },
+    "perplexity": {
+      "tagline": "Websuche mit Quellen",
+      "description": "Aktuelle Antworten aus dem Web mit Quellenangaben: Recherche, News, Faktenchecks."
+    }
+  },
+  "plugins": {
+    "onTitle": "{{name}} einschalten?",
+    "onBody": "Sein Code läuft in den Sitzungen deiner Agenten auf deinem Computer.",
+    "on": "Einschalten",
+    "onFailed": "Plugin konnte nicht eingeschaltet werden",
+    "deleteTitle": "{{name}} löschen?",
+    "deleteBody": "Agenten laden es nicht mehr.",
+    "deleteFailed": "Plugin konnte nicht gelöscht werden",
+    "update": "Auf {{version}} aktualisieren",
+    "updateFailed": "Plugin konnte nicht aktualisiert werden",
+    "updateBadge": "Update",
+    "checkUpdates": "Nach Updates suchen",
+    "checkFailed": "Konnte nicht nach Updates suchen"
+  },
+  "pluginAdmin": {
+    "ability": {
+      "tools": {
+        "label": "Sieht und ändert Tool-Aufrufe",
+        "detail": "Es kann einen Tool-Aufruf blockieren, seine Eingabe umschreiben oder auf sein Ergebnis reagieren."
+      },
+      "prompts": {
+        "label": "Liest und ändert Prompts",
+        "detail": "Es sieht, was an den Agenten geht, und kann es ändern, auch den System-Prompt."
+      },
+      "transcript": {
+        "label": "Bearbeitet, was der Chat behält",
+        "detail": "Es kann Nachrichten und Tool-Ergebnisse umschreiben, bevor das Modell sie liest."
+      },
+      "turns": {
+        "label": "Verfolgt die Schritte des Agenten",
+        "detail": "Es erfährt, wenn ein Durchgang beginnt, einen Schritt macht und endet."
+      },
+      "notes": {
+        "label": "Schreibt Hinweise in den Chat",
+        "detail": "Seine Logzeilen, Toasts und Statusmeldungen erscheinen im Chat als Hinweise des Plugins."
+      },
+      "panes": {
+        "label": "Zeichnet Bereiche und Leisten",
+        "detail": "Sie erscheinen im Terminal und in der Desktop-App von Claude Code, nicht in den Chats von Godmode."
+      },
+      "model": {
+        "label": "Ruft das Modell auf",
+        "detail": "Es kann Claude eigene Fragen stellen, das kostet Tokens."
+      },
+      "store": {
+        "label": "Merkt sich Dinge zwischen Chats",
+        "detail": "Es behält eigene Werte über Sitzungen hinweg."
+      },
+      "files_read": {
+        "label": "Liest Dateien auf diesem Computer",
+        "detail": "Es kann jede Datei lesen, die der Lauf des Agenten lesen kann."
+      },
+      "files_write": {
+        "label": "Schreibt Dateien auf diesem Computer",
+        "detail": "Es kann Dateien anlegen und überschreiben."
+      },
+      "process": {
+        "label": "Startet Programme auf diesem Computer",
+        "detail": "Es kann eigene Befehle starten, außerhalb der Tools des Agenten."
+      },
+      "network": {
+        "label": "Spricht mit dem Internet",
+        "detail": "Es kann Anfragen an jeden Server senden."
+      },
+      "env": {
+        "label": "Liest Umgebungsvariablen",
+        "detail": "Darin können API-Schlüssel stehen."
+      },
+      "programs": {
+        "label": "Startet eigene Programme",
+        "detail": "Es bringt Befehls-Hooks, Server, Monitore oder Skripte mit, die Claude Code auf diesem Computer ausführt."
+      }
+    },
+    "abilities": {
+      "skills_one": "Fügt {{count}} Skill hinzu",
+      "skills_other": "Fügt {{count}} Skills hinzu",
+      "skillsDetail": "Anleitungen, die der Agent lädt, wenn eine Aufgabe sie braucht oder du sie nennst.",
+      "subagents_one": "Fügt {{count}} Subagenten hinzu",
+      "subagents_other": "Fügt {{count}} Subagenten hinzu",
+      "subagentsDetail": "Spezialisten, an die der Agent Teile seiner Arbeit abgeben kann.",
+      "commands_one": "Fügt {{count}} Slash-Befehl hinzu",
+      "commands_other": "Fügt {{count}} Slash-Befehle hinzu",
+      "commandsDetail": "Prompts, die du oder der Agent mit /name startet.",
+      "hooks_one": "Führt bei {{count}} Ereignis Befehle aus",
+      "hooks_other": "Führt bei {{count}} Ereignissen Befehle aus",
+      "hooksDetail": "Shell-Befehle auf diesem Computer bei {{events}}.",
+      "hooksDetailMore": "Shell-Befehle auf diesem Computer bei {{events}} und mehr.",
+      "mcpServers_one": "Startet {{count}} MCP-Server",
+      "mcpServers_other": "Startet {{count}} MCP-Server",
+      "mcpServersDetail": "Programme auf diesem Computer, die dem Agenten eigene Tools geben."
+    },
+    "hook": {
+      "tool_call": "Jeder Tool-Aufruf",
+      "tool_check": "Berechtigungsprüfungen",
+      "tool_describe": "Tool-Beschreibungen",
+      "prompt_submit": "Prompts",
+      "prompt_compose": "Der System-Prompt",
+      "prompt_context": "Prompt-Kontext",
+      "session_start": "Sitzungsstart",
+      "session_end": "Sitzungsende",
+      "session_append": "Chatzeilen",
+      "session_compact": "Komprimierung",
+      "turn_start": "Beginn eines Durchgangs",
+      "turn_step": "Modellanfragen",
+      "turn_complete": "Ende eines Durchgangs",
+      "ui_render": "Zeichnen",
+      "command_run": "Slash-Befehle",
+      "toolCalls": "{{tool}}-Aufrufe"
+    },
+    "icons": {
+      "puzzle": "Puzzleteil",
+      "shield": "Schild",
+      "fileLock": "Gesperrte Datei",
+      "terminal": "Terminal",
+      "eyeOff": "Versteckt",
+      "gauge": "Tacho",
+      "timer": "Timer",
+      "gitBranch": "Git-Branch",
+      "scroll": "Schriftrolle",
+      "bell": "Glocke",
+      "filter": "Filter",
+      "wand": "Zauberstab",
+      "video": "Video",
+      "layers": "Ebenen",
+      "sparkles": "Funkeln",
+      "bot": "Roboter"
+    },
+    "whatItCanDo": "Was es kann",
+    "reachesOutside": "Wirkt über das Gespräch hinaus",
+    "hooksInto": "Hängt sich ein in",
+    "nothingHooked": "Noch nichts. Es hängt sich nicht in Claude Code ein.",
+    "notCheckedReadCode": "Noch nicht geprüft. Bis Claude Code es geprüft hat, lies den Code, um zu sehen, was dieses Plugin tut.",
+    "noHooks": "Keine Hooks.",
+    "hooksUnknown": "Unbekannt, bis Claude Code das Plugin prüft.",
+    "noHooksYet": "Noch keine Hooks.",
+    "nothingFoundContents": "Godmode hat nichts gefunden.",
+    "titleLabel": "Titel",
+    "descriptionLabel": "Beschreibung",
+    "descriptionPlaceholder": "Was dieses Plugin tut, in ein oder zwei Sätzen.",
+    "iconLabel": "Symbol",
+    "edit": "Bearbeiten",
+    "editFailed": "Das Plugin ließ sich nicht speichern",
+    "newPlugin": {
+      "title": "Neues Plugin",
+      "placeholder": ".env-Dateien schützen",
+      "pluginName": "Plugin-Name",
+      "create": "Plugin erstellen",
+      "createFailed": "Das Plugin ließ sich nicht erstellen"
+    },
+    "importFolder": {
+      "title": "Plugin-Ordner importieren",
+      "use": "Importieren",
+      "busy": "Wird importiert…",
+      "failed": "Der Ordner ließ sich nicht importieren"
+    },
+    "contentsView": {
+      "version": "Version",
+      "commit": "Commit",
+      "files": "Dateien",
+      "everySession": "Jede Sitzung",
+      "skills": "Skills",
+      "subagents": "Subagenten",
+      "commands": "Befehle",
+      "hooks": "Hooks",
+      "mcpServers": "MCP-Server",
+      "nothingFound": "Godmode hat darin keine Skills, Subagenten, Befehle, Hooks oder MCP-Server gefunden.",
+      "unknown": "Was es mitbringt, ist noch unbekannt. Such nach Updates, um es neu einzulesen.",
+      "manifestAndHooks": "Manifest und Hooks",
+      "browseGitHub": "Alle Dateien auf GitHub ansehen",
+      "showFewer": "Weniger anzeigen",
+      "showAll": "Alle {{n}} anzeigen"
+    },
+    "codeFiles": {
+      "staleTitle": "Der gespeicherte Code hat sich geändert, während du bearbeitet hast",
+      "staleHint": "Beim Speichern wird er durch deine Version ersetzt.",
+      "loadSaved": "Stattdessen gespeicherten Code laden",
+      "newFile": "Neue Datei",
+      "newFilePath": "Pfad der neuen Datei",
+      "newPathFor": "Neuer Pfad für {{path}}",
+      "enterPath": "Gib einen Pfad ein, z. B. hooks/helper.ts.",
+      "pathExists": "Eine Datei mit diesem Pfad gibt es schon.",
+      "maxFiles": "Ein Plugin enthält hier höchstens {{max}} Dateien.",
+      "deleteFile": "Datei löschen",
+      "deleteTitle": "„{{path}}“ löschen?",
+      "deleteDescription": "Die Datei wird beim Speichern aus dem Plugin entfernt.",
+      "renameFile": "Datei umbenennen",
+      "discardTitle": "Ungespeicherte Änderungen verwerfen?",
+      "discardDescription": "Was du seit dem letzten Speichern an „{{title}}“ geändert hast, geht beim Schließen verloren.",
+      "keepEditing": "Weiter bearbeiten",
+      "discard": "Verwerfen"
+    },
+    "title": "Plugin",
+    "add": "Plugin hinzufügen",
+    "emptyBody": "Installier eins von GitHub, aus den Empfehlungen oder aus der Godmode-Galerie mit +.",
+    "loadFailed": "Plugins konnten nicht geladen werden",
+    "notFound": "Plugin nicht gefunden",
+    "maybeDeleted": "Es wurde vielleicht gelöscht.",
+    "state": {
+      "on": "An",
+      "off": "Aus",
+      "review": "Prüfen",
+      "broken": "Fehlerhaft"
+    },
+    "refusedRepo": "Claude Code lehnt dieses Plugin in dieser Form ab, Läufe laden es nicht. Aktualisiere es oder prüf es nach einem Claude-Code-Update erneut.",
+    "refusedCode": "Claude Code lehnt dieses Plugin in dieser Form ab. Läufe laden es erst, wenn die Probleme unten behoben sind.",
+    "reviewContents": "Ein Agent hat dieses Plugin installiert. Es bleibt aus, bis du dir angesehen hast, was es mitbringt; mit dem Einschalten gibst du es frei.",
+    "reviewCode": "Ein Agent hat dieses Plugin entworfen. Es bleibt aus, bis du seinen Code gelesen hast; mit dem Einschalten gibst du es frei.",
+    "on": "An",
+    "appliesNext": "Änderungen gelten ab der nächsten Nachricht jedes Agenten.",
+    "switchOffFailed": "Plugin konnte nicht ausgeschaltet werden",
+    "runsFor": "Läuft für",
+    "everyAgent": "Jeden Agenten",
+    "onlyThese": "Nur diese Agenten",
+    "noAgentYet": "Noch kein Agent: Niemand nutzt dieses Plugin, bis du einen auswählst.",
+    "everyAgentHint": "Die Läufe jedes Agenten laden dieses Plugin, auch von Agenten, die du später hinzufügst.",
+    "options": "Optionen",
+    "code": {
+      "fileTooLarge": "{{path}} ist größer als {{kb}} kB.",
+      "filesTooLarge": "Zusammen sind die Dateien größer als {{kb}} kB.",
+      "tooLarge": "Zu groß für ein Plugin",
+      "saved": "Code gespeichert",
+      "savedUnchecked": "Nicht geprüft: Claude Code ist auf dem Computer nicht installiert.",
+      "savedFailed": "Code gespeichert, aber die Prüfung ist fehlgeschlagen",
+      "savedFailedDescription": "Läufe laden das Plugin erst, wenn es die Prüfung besteht.",
+      "saveFailed": "Code konnte nicht gespeichert werden",
+      "checkFailed": "Code konnte nicht geprüft werden",
+      "noteBeforeEdit": "Vor deiner letzten Änderung geprüft",
+      "noteDraft": "Dieser Entwurf, noch nicht gespeichert",
+      "noteSaved": "Der gespeicherte Code",
+      "noteSavedUnchecked": "Der gespeicherte Code; deine Änderungen sind noch nicht geprüft",
+      "authorWrote": "{{author}} hat diesen Code geschrieben",
+      "reviewHint": "Lies ihn zuerst durch. Mit dem Einschalten gibst du das Plugin frei: Ab dann läuft es in jedem Zug der Agenten, für die es gedacht ist.",
+      "noFiles": "Dieses Plugin hat noch keine Dateien.",
+      "file": "Datei",
+      "lines_one": "{{count}} Zeile",
+      "lines_other": "{{count}} Zeilen",
+      "copyFile": "Diese Datei kopieren",
+      "editorLabel": "Code von {{path}}",
+      "check": "Prüfen",
+      "save": "Code speichern",
+      "checking": "Wird mit Claude Code geprüft…"
+    },
+    "contents": "Was es mitbringt",
+    "skills_one": "{{count}} Skill",
+    "skills_other": "{{count}} Skills",
+    "commands_one": "{{count}} Befehl",
+    "commands_other": "{{count}} Befehle",
+    "subagents_one": "{{count}} Subagent",
+    "subagents_other": "{{count}} Subagenten",
+    "hooks": "Hooks: {{list}}",
+    "mcpServers": "MCP-Server: {{list}}",
+    "nothingFound": "Godmode hat darin nichts gefunden.",
+    "version": "Version",
+    "updateCheckFailedFor": "Updates für {{title}} konnten nicht gesucht werden",
+    "upToDate": "{{title}} ist aktuell",
+    "updated": "{{title}} aktualisiert",
+    "updatedTo": "{{title}} auf {{version}} aktualisiert",
+    "newVersionNext": "Läufe laden die neue Version ab der nächsten Nachricht.",
+    "checkTitle": "Prüfung",
+    "notCheckedYet": "Noch nicht geprüft",
+    "checkPassed": "Claude Code akzeptiert es",
+    "checkFailedState": "Claude Code lehnt es ab",
+    "needsClaude": "Für die Prüfung braucht es Claude Code auf dem Computer.",
+    "checkAgain": "Erneut prüfen",
+    "checkNow": "Jetzt prüfen",
+    "checkFailed": "Plugin konnte nicht geprüft werden",
+    "notChecked": "{{title}} wurde nicht geprüft",
+    "noClaudeCode": "Claude Code ist auf dem Computer nicht installiert.",
+    "passed": "{{title}} hat die Prüfung bestanden",
+    "needsFixing": "{{title}} muss repariert werden",
+    "uninstall": "Deinstallieren",
+    "uninstallTitle": "{{name}} deinstallieren?",
+    "delete": "Plugin löschen",
+    "saveFailed": "„{{title}}“ konnte nicht gespeichert werden",
+    "anAgent": "Ein Agent",
+    "opts": {
+      "enterNumber": "Gib eine Zahl ein.",
+      "enterMin": "Gib {{min}} oder mehr ein.",
+      "enterMax": "Gib {{max}} oder weniger ein.",
+      "needsValue": "Dieses Plugin braucht hier einen Wert.",
+      "addOneEntry": "Füg mindestens einen Eintrag hinzu.",
+      "saveFailed": "Optionen konnten nicht gespeichert werden",
+      "save": "Optionen speichern",
+      "secretHint": "Sicher im Tresor verwahrt. Läufe, die dieses Plugin laden, bekommen den Wert, wo ein Agent mit vollem Zugriff auf den Computer ihn lesen könnte: Nutze einen Schlüssel nur für dieses Plugin.",
+      "resetLabel": "{{title}} auf Standard zurücksetzen",
+      "reset": "Zurücksetzen",
+      "required": "Pflichtfeld",
+      "secretRemoved": "Der gespeicherte Wert wird beim Speichern entfernt",
+      "secretSaved": "Ein Wert ist gespeichert, tippe, um ihn zu ersetzen",
+      "notSet": "Nicht gesetzt",
+      "range": "{{min}} bis {{max}}",
+      "entry": "{{label}}, Eintrag {{n}}",
+      "addEntry": "Eintrag hinzufügen",
+      "removeEntry": "Eintrag {{n}} entfernen"
+    },
+    "install": {
+      "title": "Von GitHub installieren",
+      "invalid": "Gib owner/repo, einen GitHub-Link oder eine Clone-URL ein.",
+      "hint": "owner/repo, ein GitHub-Link (auch auf einen Ordner) oder eine Clone-URL. Ohne Branch gilt der Standard-Branch.",
+      "repository": "Repository",
+      "ref": "Branch oder Tag",
+      "enable": "Nach der Installation einschalten",
+      "choices_one": "Dieses Repository enthält {{count}} Plugin",
+      "choices_other": "Dieses Repository enthält {{count}} Plugins",
+      "warning": "Plugins arbeiten mit den Zugriffsrechten deiner Agenten, und ihre Hooks und Server starten Programme auf dem Computer. Installiere nur, was du für vertrauenswürdig hältst.",
+      "pending": "Wird heruntergeladen und geprüft…",
+      "install": "Installieren",
+      "refused": "{{title}} ist installiert, aber Claude Code lehnt es ab",
+      "failed": "{{name}} konnte nicht installiert werden"
+    },
+    "featured": {
+      "title": "Empfohlen",
+      "loadFailed": "Die empfohlenen Plugins konnten nicht geladen werden",
+      "needs": "braucht {{list}}",
+      "install": "Installieren",
+      "confirmTitle": "{{title}} installieren?"
+    },
+    "gallery": {
+      "title": "Von Godmode",
+      "footer": "Kleine Plugins für Leitplanken, Datenschutz und Workflows, die in jedem Zug laufen. Lies den Code jedes Plugins nach dem Hinzufügen.",
+      "loadFailed": "Die Galerie konnte nicht geladen werden",
+      "add": "Hinzufügen",
+      "added": "Hinzugefügt",
+      "addFailed": "Plugin konnte nicht hinzugefügt werden"
+    },
+    "categories": {
+      "guardrails": "Leitplanken",
+      "privacy": "Datenschutz",
+      "insight": "Einblick",
+      "workflow": "Workflow"
+    },
+    "codeTitle": "Code"
+  }
+}

@@ -429,12 +429,18 @@ export function markCredentialUsed(id: string): void {
   if (run("UPDATE credentials SET last_used_at = ? WHERE id = ?", now(), id).changes > 0) bus.changed("credentials");
 }
 
-const PASSWORD_SETS = ["abcdefghijkmnpqrstuvwxyz", "ABCDEFGHJKLMNPQRSTUVWXYZ", "23456789", "!@#$%^&*()-_=+[]{};:,.?/~"];
+const LETTER_SETS = ["abcdefghijkmnpqrstuvwxyz", "ABCDEFGHJKLMNPQRSTUVWXYZ"];
+const DIGIT_SET = "23456789";
+const SYMBOL_SET = "!@#$%^&*()-_=+[]{};:,.?/~";
 
-/** A strong random password with every character kind (no look-alikes), for an account an agent signs up for. */
-export function generatePassword(length = 24): string {
-  const pool = PASSWORD_SETS.join("");
-  const chars = PASSWORD_SETS.map((set) => set[randomInt(set.length)]!);
+/**
+ * A strong random password with every character kind asked for (no look-alikes): for an account an agent signs up for,
+ * or the vault's password generator.
+ */
+export function generatePassword(length = 24, opts: { numbers?: boolean; symbols?: boolean } = {}): string {
+  const sets = [...LETTER_SETS, ...(opts.numbers === false ? [] : [DIGIT_SET]), ...(opts.symbols === false ? [] : [SYMBOL_SET])];
+  const pool = sets.join("");
+  const chars = sets.map((set) => set[randomInt(set.length)]!);
   while (chars.length < length) chars.push(pool[randomInt(pool.length)]!);
   for (let i = chars.length - 1; i > 0; i--) {
     const j = randomInt(i + 1);

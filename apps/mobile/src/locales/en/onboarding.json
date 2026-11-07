@@ -1,6 +1,5 @@
 {
   "welcome": {
-    "eyebrow": "Godmode for {{platform}}",
     "title": "Your AI coworkers, in your pocket.",
     "intro": "This app controls the Godmode running on your computer. Pair it once with the code on your computer's screen.",
     "removed": "This phone was removed on your computer. Scan a new code to connect again.",

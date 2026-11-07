@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { MessageBlock } from "@godmode/shared";
-import { agentAnswerOf, appHref, cardKindOf, delegationOf, formatIban, handoffChatOf, parsePayment, quoteOf, tableCsv, tableMarkdown } from "./chat-blocks";
+import { agentAnswerOf, appHref, cardKindOf, delegationOf, epcPayload, formatIban, handoffChatOf, parsePayment, quoteOf, tableCsv, tableMarkdown } from "./chat-blocks";
 
 type ToolUse = Extract<MessageBlock, { type: "tool_use" }>;
 const tool = (name: string, result?: string, isError?: boolean): ToolUse => ({ type: "tool_use", id: "t1", name, input: {}, result, isError });
@@ -62,6 +62,7 @@ describe("chat blocks", () => {
   test("payments are checked like the desktop's", () => {
     const ok = parsePayment("Empfänger: Bäckerei Maier\nIBAN: DE89 3704 0044 0532 0130 00\nBetrag: 1.234,50\nVerwendungszweck: Invoice 42");
     expect(ok).toEqual({ ok: true, payment: { name: "Bäckerei Maier", iban: "DE89370400440532013000", bic: "", amount: 1234.5, purpose: "Invoice 42", reference: "" } });
+    if (ok.ok) expect(epcPayload(ok.payment)).toBe("BCD\n002\n1\nSCT\n\nBäckerei Maier\nDE89370400440532013000\nEUR1234.50\n\n\nInvoice 42");
     expect(parsePayment("Name: X\nIBAN: DE00 0000")).toEqual({ ok: false, error: "iban" });
     expect(parsePayment("IBAN: DE89370400440532013000")).toEqual({ ok: false, error: "name" });
     expect(parsePayment("Name: X\nIBAN: DE89370400440532013000\nAmount: abc")).toEqual({ ok: false, error: "amount" });

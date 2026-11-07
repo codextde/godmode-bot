@@ -1,20 +1,27 @@
 import { FlashList, type ListRenderItem } from "@shopify/flash-list";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { format, isToday } from "date-fns";
-import { Stack } from "expo-router";
+import { File, Paths } from "expo-file-system";
+import { router, Stack } from "expo-router";
 import { memo, useCallback, useDeferredValue, useState } from "react";
-import { Pressable, RefreshControl, ScrollView, StyleSheet, TextInput, View } from "react-native";
+import { Alert, Pressable, RefreshControl, ScrollView, Share, StyleSheet, TextInput, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import type { LogEntry, LogLevel, LogOverview } from "@godmode/shared";
+import { useFullAccess } from "@/components/admin";
 import { CloseButton } from "@/components/close-button";
 import { FilterChips } from "@/components/filter-chips";
-import { Group } from "@/components/form";
+import { Group, LinkRow } from "@/components/form";
 import { Icon } from "@/components/icon";
 import { QueryState } from "@/components/settings-state";
 import { InfoRow, ago } from "@/components/status-rows";
 import { EmptyState, ErrorState, Hairline, Row, SkeletonRows, T, tap, toneColors, type Tone } from "@/components/ui";
 import { errorText } from "@/lib/api";
+import { useAgents } from "@/lib/hooks";
 import { dateLocale, intlLocale } from "@/lib/i18n";
+import { programsApi } from "@/lib/programs";
+import { queryClient } from "@/lib/query";
+import { saveOrShareFile } from "@/lib/save-file";
+import { useSettings } from "@/lib/setup";
 import { settingsApi, sq } from "@/lib/settings-api";
 import { usePullRefresh } from "@/lib/use-pull-refresh";
 import { radius, space, useColors } from "@/lib/theme";
@@ -24,7 +31,10 @@ type Level = "all" | LogLevel;
 const LIMIT = 200;
 const TONE = { debug: "neutral", info: "sky", warn: "warning", error: "danger" } as const satisfies Record<LogLevel, Tone>;
 
-/** Settings → Logs: Godmode's diagnostic log on the computer, read-only (secrets are masked before it is written). */
+/**
+ * Settings → Logs: Godmode's diagnostic log on the computer (secrets are masked before it is written). A full-access
+ * phone also shares it, hands it to an agent to fix in code, and deletes it.
+ */
 export default function Logs() {
   const { t } = useTranslation("settings");
   const overview = useQuery({ queryKey: sq.logOverview, queryFn: settingsApi.logs.overview });
@@ -46,6 +56,7 @@ export default function Logs() {
 
 function Entries({ overview, refetchOverview }: { overview: LogOverview; refetchOverview: () => Promise<unknown> }) {
   const { t } = useTranslation("settings");
+  const admin = useFullAccess().fullAccess === true;
   const c = useColors();
   const [level, setLevel] = useState<Level>("all");
   const [search, setSearch] = useState("");
@@ -75,12 +86,14 @@ function Entries({ overview, refetchOverview }: { overview: LogOverview; refetch
 
   const header = (
     <View style={styles.header}>
-      <Group footer={t("logs.masked")}>
+      <Group>
         <InfoRow icon="doc" label={t("logs.entries")} value={count(overview.entries)} />
         <InfoRow icon="warning" label={t("logs.warnings")} value={count(overview.counts.warn)} tone={overview.counts.warn ? "warning" : undefined} />
         <InfoRow icon="octagon" label={t("logs.errors")} value={count(overview.counts.error)} tone={overview.counts.error ? "danger" : undefined} />
         {overview.lastTs ? <InfoRow icon="clock" label={t("logs.lastEntry")} value={ago(overview.lastTs)} /> : null}
       </Group>
+
+      {admin ? <LogActions empty={overview.entries === 0} /> : null}
 
       {overview.issues.length ? (
         <Group title={t("logs.issues")}>
@@ -162,6 +175,103 @@ function Entries({ overview, refetchOverview }: { overview: LogOverview; refetch
         }
       />
     </>
+  );
+}
+
+/** What the desktop does with the log: share it (for a chat with Claude), file a fix in Godmode's code, delete it. */
+function LogActions({ empty }: { empty: boolean }) {
+  const { t } = useTranslation(["programs", "common", "admin"]);
+  const repair = useSettings().data?.selfRepair;
+  const { data: agents } = useAgents();
+  const [busy, setBusy] = useState<"share" | "full" | "fix" | "delete" | null>(null);
+  const agent = agents?.find((a) => a.id === repair?.agentId) ?? agents?.find((a) => a.isDefault);
+  const who = agent?.name ?? t("logs.anAgent");
+
+  const run = async (what: "share" | "full" | "fix" | "delete", job: () => Promise<void>, failed: string) => {
+    setBusy(what);
+    try {
+      await job();
+    } catch (err) {
+      Alert.alert(failed, errorText(err));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const share = (full = false) =>
+    run(
+      full ? "full" : "share",
+      async () => {
+        const text = await programsApi.logs.report(full);
+        if (!full) {
+          await Share.share({ message: text, title: "godmode-log.md" });
+          return;
+        }
+        // The full report has no size cap: it goes as a file, not as message text.
+        const file = new File(Paths.cache, "godmode-log-full.md");
+        if (file.exists) file.delete();
+        file.create();
+        await file.write(text);
+        await saveOrShareFile(file, "text/markdown");
+      },
+      t("logs.shareFailed"),
+    );
+
+  const file = (note?: string) =>
+    run(
+      "fix",
+      async () => {
+        const { task, skipped } = await programsApi.logs.fix({ note: note?.trim() || undefined });
+        if (!task) return Alert.alert(t("logs.nothingNew"), skipped ?? undefined);
+        const merge = repair?.autoMerge ?? true;
+        Alert.alert(t("logs.filed", { number: task.number }), merge ? t("logs.filedMerge", { branch: task.baseBranch || repair?.baseBranch || "main" }) : t("logs.filedReview"), [
+          { text: t("common:actions.done"), style: "cancel" },
+          { text: t("logs.openTask"), onPress: () => router.push(`/task/${task.id}`) },
+        ]);
+      },
+      t("logs.fixFailed"),
+    );
+
+  const fix = () => {
+    if (process.env.EXPO_OS === "ios") {
+      Alert.prompt(t("logs.fix"), t("logs.fixBody", { who }), [
+        { text: t("common:actions.cancel"), style: "cancel" },
+        { text: t("logs.fixConfirm"), onPress: (note?: string) => void file(note) },
+      ]);
+      return;
+    }
+    Alert.alert(t("logs.fix"), t("logs.fixBodyPlain", { who }), [
+      { text: t("common:actions.cancel"), style: "cancel" },
+      { text: t("logs.fixConfirm"), onPress: () => void file() },
+    ]);
+  };
+
+  const remove = () =>
+    Alert.alert(t("logs.deleteTitle"), t("logs.deleteBody"), [
+      { text: t("common:actions.cancel"), style: "cancel" },
+      {
+        text: t("logs.delete"),
+        style: "destructive",
+        onPress: () =>
+          void run(
+            "delete",
+            async () => {
+              await programsApi.logs.clear();
+              await queryClient.invalidateQueries({ queryKey: sq.logOverview });
+            },
+            t("logs.deleteFailed"),
+          ),
+      },
+    ]);
+
+  const pending = (what: typeof busy) => (busy === what ? t("common:status.loading") : undefined);
+  return (
+    <Group title={t("logs.title")}>
+      <LinkRow icon="share" title={t("logs.share")} value={pending("share")} chevron={false} onPress={() => !busy && !empty && void share()} />
+      <LinkRow icon="doc" title={t("admin:logsExtra.shareFull")} value={pending("full")} chevron={false} onPress={() => !busy && !empty && void share(true)} />
+      <LinkRow icon="wrench" title={t("logs.fix")} value={pending("fix")} chevron={false} onPress={() => !busy && !empty && fix()} />
+      <LinkRow icon="trash" tone="danger" title={t("logs.delete")} value={pending("delete")} chevron={false} onPress={() => !busy && !empty && remove()} />
+    </Group>
   );
 }
 
