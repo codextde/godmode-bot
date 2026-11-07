@@ -2,13 +2,14 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus } from "expo-audio";
 import { Stack } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { Alert, ScrollView, StyleSheet } from "react-native";
+import { Alert, StyleSheet } from "react-native";
 import { useTranslation } from "react-i18next";
 import { formatBytes, HEX_MODELS, type SttProvider, type TtsProvider, type VoiceSettings } from "@godmode/shared";
 import { isRefused, useFullAccess } from "@/components/admin";
 import { CloseButton } from "@/components/close-button";
 import { FieldRow, Group, PickerRow, SegmentRow, StepperRow, SwitchRow } from "@/components/form";
 import { ActionPill, ToolRow } from "@/components/program-parts";
+import { SettingsScroll } from "@/components/settings-scroll";
 import { QueryState } from "@/components/settings-state";
 import { ActionRow, TextRow } from "@/components/tool-form";
 import { patchAnySettings } from "@/lib/admin";
@@ -18,7 +19,7 @@ import { pk, programsApi } from "@/lib/programs";
 import { queryClient } from "@/lib/query";
 import { patchSettings, useSettings } from "@/lib/setup";
 import { space } from "@/lib/theme";
-import { speak, type Speech } from "@/lib/voice-mode";
+import { phoneVoices, pickedPhoneVoice, pickPhoneVoice, speak, type Speech } from "@/lib/voice-mode";
 import { speakSample } from "@/lib/voice-test";
 
 const LANGUAGES = ["en-US", "en-GB", "de-DE", "fr-FR", "es-ES", "it-IT", "nl-NL", "pt-BR", "ja-JP"] as const;
@@ -34,7 +35,7 @@ export default function Voice() {
   const admin = useFullAccess().fullAccess === true;
 
   return (
-    <ScrollView contentInsetAdjustmentBehavior="automatic" keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets contentContainerStyle={styles.content}>
+    <SettingsScroll contentInsetAdjustmentBehavior="automatic" keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets contentContainerStyle={styles.content}>
       <Stack.Screen options={{ title: t("voice.title") }} />
       <CloseButton />
       <QueryState query={settings} icon="waveform" errorTitle={t("voice.loadFailed")}>
@@ -83,6 +84,7 @@ export default function Voice() {
                 {v.ttsProvider === "browser" ? (
                   <StepperRow icon="gauge" title={t("voice.tts.rate")} value={v.rate} min={RATES[0]} max={RATES[RATES.length - 1]} steps={RATES} format={(n) => `${n}×`} onChange={(rate) => save({ rate })} />
                 ) : null}
+                {v.ttsProvider === "browser" ? <PhoneVoiceRow language={v.language} /> : null}
                 {v.ttsProvider === "openai" ? (
                   <FieldRow label={t("voice.openai.ttsModel")} value={v.ttsModel} placeholder="gpt-4o-mini-tts" maxLength={200} onCommit={(ttsModel) => save({ ttsModel: ttsModel.trim() })} />
                 ) : null}
@@ -118,7 +120,38 @@ export default function Voice() {
           );
         }}
       </QueryState>
-    </ScrollView>
+    </SettingsScroll>
+  );
+}
+
+/** Which of this phone's voices reads aloud; kept on the phone, since every phone has its own. */
+function PhoneVoiceRow({ language }: { language: string }) {
+  const { t } = useTranslation("settings");
+  const [voices, setVoices] = useState<Awaited<ReturnType<typeof phoneVoices>>>([]);
+  const [picked, setPicked] = useState("");
+  useEffect(() => {
+    let live = true;
+    void Promise.all([phoneVoices(language), pickedPhoneVoice()]).then(([all, id]) => {
+      if (!live) return;
+      setVoices(all);
+      setPicked(id ?? "");
+    });
+    return () => {
+      live = false;
+    };
+  }, [language]);
+  if (!voices.length) return null;
+  return (
+    <PickerRow
+      icon="speaker"
+      title={t("voice.tts.phoneVoice")}
+      value={voices.some((v) => v.id === picked) ? picked : ""}
+      options={[{ value: "", label: t("voice.tts.automatic") }, ...voices.map((v) => ({ value: v.id, label: v.name, detail: languageName(v.language) }))]}
+      onChange={(id) => {
+        setPicked(id);
+        void pickPhoneVoice(id);
+      }}
+    />
   );
 }
 

@@ -144,9 +144,6 @@ export default function GoalSheet() {
             )}
           </Pressable>
         </Row>
-        <T variant="footnote" muted style={{ textAlign: "center" }}>
-          {t("goal.intro")}
-        </T>
       </View>
 
       <View>

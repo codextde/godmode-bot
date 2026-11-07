@@ -4,10 +4,12 @@ import { router, useNavigation } from "expo-router";
 import { Alert } from "react-native";
 import { useTranslation } from "react-i18next";
 import type { Agent } from "@godmode/shared";
+import { useFullAccess } from "./full-access";
 import type { HeaderMenuItem } from "./header-actions";
 import { useArchive } from "@/lib/archive";
 import { api, ApiError, errorText, updateDesktopMessage } from "@/lib/api";
 import { qk, queryClient } from "@/lib/query";
+import { isCancelled, withGrant } from "@/lib/secrets";
 
 /** Only the notes: everything the phone opens of an agent's folder stays under memory/. */
 export const NOTES_DIR = "memory";
@@ -38,11 +40,13 @@ const refresh = () => {
 
 /**
  * The desktop's agent actions, for the agent screen's menu: run it once, pause or continue all its work, change its look,
- * copy it (one that reads secrets in plain text is copied on the computer) and delete it (never the built-in agent).
+ * copy it (one that reads secrets in plain text takes full access and the vault password) and delete it (never the built-in agent).
  */
 export function useAgentMenu(agent: Agent, { working, paused }: { working: boolean; paused: boolean }): HeaderMenuItem[] {
   const { t } = useTranslation(["agents", "common", "archive"]);
   const done = () => void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  const reveals = agent.permissions?.secretAccess === "reveal";
+  const fullAccess = useFullAccess().fullAccess === true;
   const pause = useMutation({
     mutationFn: () => api.agents.pause(agent.id),
     onSuccess: () => {
@@ -66,14 +70,16 @@ export function useAgentMenu(agent: Agent, { working, paused }: { working: boole
     },
   });
   const duplicate = useMutation({
-    mutationFn: () => api.agents.duplicate(agent.id),
+    mutationFn: () => (reveals ? withGrant((grant) => api.agents.duplicate(agent.id, grant)) : api.agents.duplicate(agent.id)),
     onSuccess: (copy) => {
       done();
       queryClient.setQueryData<Agent[]>(qk.agents, (old) => (old ? [...old, copy] : old));
       void queryClient.invalidateQueries({ queryKey: qk.agents });
       router.push({ pathname: "/settings/agent/[id]", params: { id: copy.id } });
     },
-    onError: (err) => Alert.alert(t("actions.duplicateFailed", { name: agent.name }), failureText(err)),
+    onError: (err) => {
+      if (!isCancelled(err)) Alert.alert(t("actions.duplicateFailed", { name: agent.name }), failureText(err));
+    },
   });
   const remove = useMutation({
     mutationFn: () => api.agents.remove(agent.id),
@@ -99,7 +105,7 @@ export function useAgentMenu(agent: Agent, { working, paused }: { working: boole
   if (working) items.push({ icon: "pause", title: t("actions.pauseAll"), onPress: () => !pause.isPending && pause.mutate() });
   if (paused) items.push({ icon: "play", title: t("actions.continueAll"), onPress: () => !resume.isPending && resume.mutate() });
   items.push({ icon: "palette", title: t("actions.look"), onPress: () => router.push({ pathname: "/settings/look/[id]", params: { id: agent.id } }) });
-  if (!agent.isDefault && agent.permissions?.secretAccess !== "reveal") {
+  if (!agent.isDefault && (!reveals || fullAccess)) {
     items.push({ icon: "copy", title: t("actions.duplicate"), onPress: () => !duplicate.isPending && duplicate.mutate() });
   }
   if (!agent.isDefault && !agent.archived) items.push({ icon: "archive", title: t("archive:archive"), onPress: () => archive({ kind: "agent", id: agent.id, name: agent.name }) });

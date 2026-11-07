@@ -7,11 +7,13 @@ import type { McpServer, McpServerInput, McpTransport } from "@godmode/shared";
 import { AdminQueryState, FullAccessGate } from "@/components/admin";
 import { Group, Segmented, SwitchRow } from "@/components/form";
 import { HeaderActions } from "@/components/header-actions";
+import { useMcpPresetRows } from "@/components/mcp-presets";
 import { InfoRow } from "@/components/status-rows";
 import { ActionRow, SecretRowEditor, TestResult, TextRow, useScopeRows, type Scope } from "@/components/tool-form";
 import { EmptyState } from "@/components/ui";
 import { errorText } from "@/lib/api";
 import { useMcpServers } from "@/lib/integrations";
+import { mcpPresetById, type McpPreset } from "@/lib/mcp-presets";
 import {
   ENV_KEY_PATTERN,
   formatArgs,
@@ -56,10 +58,22 @@ const fromServer = (s: McpServer | null): Form => ({
   enabled: s?.enabled ?? true,
 });
 
+/** The form as a quick-add server fills it in; anything still missing is the human's to add. */
+const fromPreset = (p: McpPreset, description: string): Form => ({
+  ...fromServer(null),
+  name: p.name,
+  description,
+  transport: p.transport,
+  command: p.command ?? "",
+  args: p.args ? formatArgs(p.args) : "",
+  url: p.url ?? "",
+  headers: (p.headerKeys ?? []).map((key) => newRow(key)),
+});
+
 /** Settings → Integrations → an MCP server: added, edited, tested and deleted like on the desktop (full access only). */
 export default function McpServerScreen() {
   const { t } = useTranslation("tools");
-  const { id } = useLocalSearchParams<{ id?: string }>();
+  const { id, preset } = useLocalSearchParams<{ id?: string; preset?: string }>();
   const servers = useMcpServers();
   const current = id ? servers.data?.find((s) => s.id === id) : undefined;
   return (
@@ -70,7 +84,7 @@ export default function McpServerScreen() {
       automaticallyAdjustKeyboardInsets
       contentContainerStyle={styles.content}
     >
-      <Stack.Screen options={{ title: id ? (current?.name ?? "") : t("mcp.addTitle"), headerLargeTitleEnabled: false }} />
+      <Stack.Screen options={{ title: id ? (current?.name ?? "") : mcpPresetById(preset)?.name ?? t("mcp.addTitle"), headerLargeTitleEnabled: false }} />
       <FullAccessGate>
         {id ? (
           <AdminQueryState query={servers} errorTitle={t("loadFailed")}>
@@ -80,18 +94,26 @@ export default function McpServerScreen() {
               return server.source === "composio" ? <Managed server={server} /> : <McpForm key={server.id} server={server} />;
             }}
           </AdminQueryState>
+        ) : preset ? (
+          <McpForm key={preset} server={null} preset={mcpPresetById(preset)} />
         ) : (
-          <McpForm server={null} />
+          <McpPresetPicker />
         )}
       </FullAccessGate>
     </ScrollView>
   );
 }
 
-function McpForm({ server }: { server: McpServer | null }) {
+function McpPresetPicker() {
+  const { t } = useTranslation("tools");
+  const rows = useMcpPresetRows({ replace: true });
+  return <Group title={t("mcp.quickAdd")}>{rows}</Group>;
+}
+
+function McpForm({ server, preset }: { server: McpServer | null; preset?: McpPreset }) {
   const { t } = useTranslation(["tools", "common"]);
   const navigation = useNavigation();
-  const [start] = useState(() => fromServer(server));
+  const [start] = useState(() => (preset ? fromPreset(preset, t(preset.description)) : fromServer(server)));
   const [form, setForm] = useState<Form>(start);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -221,10 +243,10 @@ function McpForm({ server }: { server: McpServer | null }) {
 
   return (
     <>
-      {server ? null : <Stack.Screen options={{ title: savedId ? base.name : t("mcp.addTitle") }} />}
+      {server ? null : <Stack.Screen options={{ title: savedId ? base.name : (preset?.name ?? t("mcp.addTitle")) }} />}
       {dirty || !savedId ? <HeaderActions actions={[{ icon: "check", label: t("common:actions.save"), prominent: true, onPress: () => void saveAndClose() }]} /> : null}
 
-      <Group>
+      <Group footer={preset?.note && !savedId ? t(preset.note) : undefined}>
         <TextRow label={t("fields.name")} value={form.name} onChange={(v) => set("name", v)} placeholder={t("mcp.namePlaceholder")} mono />
         <TextRow label={t("fields.description")} value={form.description} onChange={(v) => set("description", v)} placeholder={t("mcp.descriptionPlaceholder")} />
       </Group>

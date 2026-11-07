@@ -534,6 +534,15 @@ export function messageImage(conversationId: string, messageId: string, toolUseI
   return { data: new Uint8Array(data), mime: imageMime(data) };
 }
 
+/** One tool call of a message as stored, its output in full; a screenshot stays its own request. */
+export function messageToolCall(conversationId: string, messageId: string, toolUseId: string): Extract<MessageBlock, { type: "tool_use" }> {
+  const row = get<MessageRow>("SELECT * FROM messages WHERE id = ? AND conversation_id = ?", messageId, conversationId);
+  const message = row ? toMessage(row) : null;
+  const block = message && liteMessage({ ...message, blocks: wholeBlocks(messageId, message.blocks) }, false).blocks.find((b) => b.type === "tool_use" && b.id === toolUseId);
+  if (block?.type !== "tool_use") throw notFound("Tool call");
+  return block;
+}
+
 export function chatAttachmentImage(conversationId: string, path: string): { data: Uint8Array; mime: string } {
   const agent = getAgent(requireConversationRow(conversationId).agent_id);
   const { abs, rel } = resolveRepoPath(agent.repoPath, path);

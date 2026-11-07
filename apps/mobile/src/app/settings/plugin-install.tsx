@@ -2,14 +2,16 @@ import { router, Stack } from "expo-router";
 import { useState } from "react";
 import { ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
-import { githubRepoOf, type Mod, type ModCatalogEntry, type ModInstallInput, type ModTemplate } from "@godmode/shared";
+import { githubRepoOf, MOD_CATEGORIES, type Mod, type ModCatalogEntry, type ModCategory, type ModInstallInput, type ModTemplate } from "@godmode/shared";
 import { CloseButton } from "@/components/close-button";
 import { NeedsFullAccessScreen } from "@/components/full-access";
 import { FullAccessGate, isRefused } from "@/components/admin";
+import { useLeaveSettings } from "@/components/agent-actions";
+import { FilterChips } from "@/components/filter-chips";
 import { ChoiceRow, Group, LinkRow, SwitchRow } from "@/components/form";
 import { Icon } from "@/components/icon";
 import { ActionRow, TextRow } from "@/components/tool-form";
-import { Badge, ErrorState, SkeletonRows, T, tap } from "@/components/ui";
+import { Badge, ErrorState, SectionTitle, SkeletonRows, T, tap } from "@/components/ui";
 import { errorText } from "@/lib/api";
 import { pickFolder } from "@/lib/folder-pick";
 import { usePlugins } from "@/lib/integrations";
@@ -35,6 +37,7 @@ const open = (mod: Mod) => router.replace({ pathname: "/settings/plugin", params
 
 function AddPlugin() {
   const { t } = useTranslation(["tools", "common", "components"]);
+  const leave = useLeaveSettings();
   const mods = usePlugins();
   const catalog = usePluginCatalog();
   const templates = usePluginTemplates();
@@ -45,7 +48,11 @@ function AddPlugin() {
   const [choices, setChoices] = useState<PickPlugin["plugins"] | null>(null);
   const [plugin, setPlugin] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
+  const [category, setCategory] = useState<ModCategory | "all">("all");
   const installed = mods.data ?? [];
+  const gallery = templates.data ?? [];
+  const categories = MOD_CATEGORIES.filter((id) => gallery.some((x) => x.category === id));
+  const visible = category === "all" ? gallery : gallery.filter((x) => x.category === category);
 
   const trimmed = source.trim();
   const repo = githubRepoOf(trimmed);
@@ -112,6 +119,7 @@ function AddPlugin() {
     ]);
   const fromCatalog = (entry: ModCatalogEntry) => installed.find((m) => m.source?.repo.toLowerCase() === entry.repo.toLowerCase());
   const fromTemplate = (template: ModTemplate) => installed.find((m) => m.templateId === template.id);
+  const preview = (kind: "featured" | "template", id: string) => router.push({ pathname: "/settings/plugin-preview", params: { kind, id } });
 
   return (
     <ScrollView
@@ -123,6 +131,7 @@ function AddPlugin() {
     >
       <Group>
         <LinkRow icon="plus" title={t("pluginAdmin.newPlugin.title")} onPress={() => router.push("/settings/plugin-new")} />
+        <LinkRow icon="wand" title={t("pluginAdmin.askGodmode")} onPress={() => leave(() => router.push({ pathname: "/compose", params: { prompt: t("pluginAdmin.askPrompt") } }))} />
         <LinkRow icon="folder" title={t("pluginAdmin.importFolder.title")} value={busy === "folder" ? t("pluginAdmin.importFolder.busy") : undefined} onPress={() => void importFolder()} />
       </Group>
 
@@ -168,71 +177,105 @@ function AddPlugin() {
                 detail={[entry.description, `${entry.repo}${entry.requires.length ? ` · ${t("pluginAdmin.featured.needs", { list: entry.requires.join(", ") })}` : ""}`].join("\n")}
                 state={mod ? "added" : busy === entry.id ? "busy" : "add"}
                 action={t("pluginAdmin.featured.install")}
-                onPress={() => (mod ? open(mod) : confirmInstall(entry))}
+                onOpen={() => preview("featured", entry.id)}
+                onPress={() => confirmInstall(entry)}
               />
             );
           })
         )}
       </Group>
 
-      <Group title={t("pluginAdmin.gallery.title")} footer={t("pluginAdmin.gallery.footer")}>
-        {templates.isLoading ? (
-          <SkeletonRows count={3} avatar={30} />
-        ) : templates.isError ? (
-          <ErrorState title={t("pluginAdmin.gallery.loadFailed")} error={errorText(templates.error)} onRetry={() => void templates.refetch()} />
-        ) : (
-          (templates.data ?? []).map((template) => {
-            const mod = fromTemplate(template);
-            return (
-              <AddRow
-                key={template.id}
-                title={template.title}
-                detail={`${t(`pluginAdmin.categories.${template.category}`)} · ${template.description}`}
-                state={mod ? "added" : busy === template.id ? "busy" : "add"}
-                action={t("pluginAdmin.gallery.add")}
-                onPress={() => (mod ? open(mod) : void add(template))}
-              />
-            );
-          })
-        )}
-      </Group>
+      <View>
+        <SectionTitle title={t("pluginAdmin.gallery.title")} />
+        {categories.length > 1 ? (
+          <View style={styles.chips}>
+            <FilterChips
+              bleed={space.lg}
+              value={category}
+              onChange={setCategory}
+              filters={[{ id: "all" as const, label: t("pluginAdmin.gallery.allCategories") }, ...categories.map((id) => ({ id, label: t(`pluginAdmin.categories.${id}`) }))]}
+            />
+          </View>
+        ) : null}
+        <Group footer={t("pluginAdmin.gallery.footer")}>
+          {templates.isLoading ? (
+            <SkeletonRows count={3} avatar={30} />
+          ) : templates.isError ? (
+            <ErrorState title={t("pluginAdmin.gallery.loadFailed")} error={errorText(templates.error)} onRetry={() => void templates.refetch()} />
+          ) : !visible.length ? (
+            <T variant="subhead" muted style={styles.empty}>
+              {t("pluginAdmin.gallery.empty")}
+            </T>
+          ) : (
+            visible.map((template) => {
+              const mod = fromTemplate(template);
+              return (
+                <AddRow
+                  key={template.id}
+                  title={template.title}
+                  detail={`${t(`pluginAdmin.categories.${template.category}`)} · ${template.description}`}
+                  state={mod ? "added" : busy === template.id ? "busy" : "add"}
+                  action={t("pluginAdmin.gallery.add")}
+                  onOpen={() => preview("template", template.id)}
+                  onPress={() => void add(template)}
+                />
+              );
+            })
+          )}
+        </Group>
+      </View>
     </ScrollView>
   );
 }
 
-/** One plugin to add. Only the button adds it (it runs in every agent's turns); a plugin already here opens from anywhere in its row. */
-function AddRow({ title, detail, state, action, onPress }: { title: string; detail: string; state: "add" | "added" | "busy"; action: string; onPress: () => void }) {
+/** One plugin to add. A tap reads it first; only the button adds it (it runs in every agent's turns). */
+function AddRow({ title, detail, state, action, onOpen, onPress }: { title: string; detail: string; state: "add" | "added" | "busy"; action: string; onOpen: () => void; onPress: () => void }) {
   const c = useColors();
   const { t } = useTranslation("tools");
-  const press = () => {
-    tap();
-    onPress();
-  };
   return (
-    <Pressable accessibilityRole={state === "added" ? "button" : undefined} disabled={state !== "added"} onPress={press} style={({ pressed }) => [styles.row, pressed && { backgroundColor: c.sunken }]}>
-      <View style={[styles.tile, { backgroundColor: c.sunken }]}>
-        <Icon name="puzzle" size={15} color={c.text} />
-      </View>
-      <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-        <T variant="callout" style={{ fontWeight: "500" }} numberOfLines={1}>
-          {title}
-        </T>
-        <T variant="footnote" muted numberOfLines={3}>
-          {detail}
-        </T>
-      </View>
+    <View style={styles.row}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={t("pluginAdmin.featured.open", { title })}
+        onPress={() => {
+          tap();
+          onOpen();
+        }}
+        style={({ pressed }) => [styles.rowMain, pressed && { opacity: 0.6 }]}
+      >
+        <View style={[styles.tile, { backgroundColor: c.sunken }]}>
+          <Icon name="puzzle" size={15} color={c.text} />
+        </View>
+        <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+          <T variant="callout" style={{ fontWeight: "500" }} numberOfLines={1}>
+            {title}
+          </T>
+          <T variant="footnote" muted numberOfLines={3}>
+            {detail}
+          </T>
+        </View>
+      </Pressable>
       {state === "busy" ? (
         <ActivityIndicator size="small" color={c.textMuted} />
       ) : state === "added" ? (
         <Badge label={t("pluginAdmin.gallery.added")} tone="success" />
       ) : (
-        <Pressable accessibilityRole="button" accessibilityLabel={`${action}: ${title}`} hitSlop={6} onPress={press} style={({ pressed }) => [styles.pill, { backgroundColor: c.sunken, opacity: pressed ? 0.6 : 1 }]}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`${action}: ${title}`}
+          hitSlop={6}
+          onPress={() => {
+            tap();
+            onPress();
+          }}
+          style={({ pressed }) => [styles.pill, { backgroundColor: c.sunken, opacity: pressed ? 0.6 : 1 }]}
+        >
           <T variant="footnote" style={{ fontWeight: "600" }}>
             {action}
           </T>
         </Pressable>
       )}
-    </Pressable>
+    </View>
   );
 }
 
@@ -249,6 +292,19 @@ const styles = StyleSheet.create({
     minHeight: 56,
     paddingHorizontal: space.lg,
     paddingVertical: 10,
+  },
+  rowMain: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+  },
+  chips: {
+    marginBottom: space.sm,
+  },
+  empty: {
+    padding: space.lg,
   },
   tile: {
     width: 30,

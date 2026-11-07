@@ -6,6 +6,7 @@ import { ActivityIndicator, Alert, Pressable, StyleSheet, TextInput, View, type 
 import { useTranslation } from "react-i18next";
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import Svg, { Circle } from "react-native-svg";
+import { useMenuSheet } from "./header-actions";
 import { Icon, sfSymbol, type IconName } from "./icon";
 import { Row, T, tap } from "./ui";
 import { fonts, radius, space, textScale, useColors } from "@/lib/theme";
@@ -321,10 +322,10 @@ export interface MenuItem {
   destructive?: boolean;
 }
 
-/** "…" with a row's actions: the system menu on iOS, a dialog on Android. */
+/** "…" with a row's actions: the system menu on iOS, a sheet on Android. */
 export function RowMenu({ label, items }: { label: string; items: MenuItem[] }) {
   const c = useColors();
-  const { t } = useTranslation("common");
+  const menu = useMenuSheet();
   if (!items.length) return null;
   if (process.env.EXPO_OS === "ios") {
     return (
@@ -341,20 +342,18 @@ export function RowMenu({ label, items }: { label: string; items: MenuItem[] }) 
     );
   }
   return (
+    <>
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
       hitSlop={8}
-      onPress={() =>
-        Alert.alert(label, undefined, [
-          ...items.map((item) => ({ text: item.label, style: item.destructive ? ("destructive" as const) : ("default" as const), onPress: item.onPress })),
-          { text: t("actions.cancel"), style: "cancel" as const },
-        ])
-      }
+      onPress={() => menu.show(items.map((item) => ({ icon: item.icon, title: item.label, destructive: item.destructive, onPress: item.onPress })), label)}
       style={styles.menuHost}
     >
       <Icon name="more" size={17} color={c.textMuted} />
     </Pressable>
+    {menu.sheet}
+    </>
   );
 }
 

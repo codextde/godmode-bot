@@ -318,6 +318,7 @@
     "title": "While you were away · {{duration}}",
     "close": "Close the summary",
     "openActivity": "Opens the activity",
+    "nothing": "Nothing new while you were away",
     "whoWorked": "Who worked"
   },
   "cronBuilder": {
@@ -327,7 +328,8 @@
       "weekdays": "Every weekday",
       "weekly": "Every week",
       "monthly": "Every month",
-      "custom": "Custom (cron)"
+      "custom": "Custom (cron)",
+      "several": "Several times a day"
     },
     "examples": {
       "every15Minutes": "every 15 min",
@@ -346,7 +348,34 @@
     "cronLabel": "Cron expression",
     "randomStart": "Random start time",
     "randomStartHint": "Starts at a different moment every time, like a coworker who doesn't clock in on the dot.",
-    "startWithin": "Start within"
+    "startWithin": "Start within",
+    "timing": "Timing",
+    "randomTimes": "Random times",
+    "fixedInterval": "Fixed interval",
+    "runsPerDay": "Runs per day",
+    "times_one": "{{count}} time",
+    "times_other": "{{count}} times",
+    "every": "Every",
+    "hours_one": "{{count}} hour",
+    "hours_other": "{{count}} hours",
+    "between": "Between",
+    "from": "From",
+    "and": "and",
+    "until": "Until",
+    "timeline": {
+      "random_one": "One run at a random moment in the block — a new moment every day.",
+      "random_other": "One run at a random moment in each of the {{count}} blocks — a new moment every day.",
+      "interval_one": "{{count}} run a day: {{times}}",
+      "interval_other": "{{count}} runs a day: {{times}}",
+      "intervalMore_one": "{{count}} run a day: {{times}} and {{more}} more",
+      "intervalMore_other": "{{count}} runs a day: {{times}} and {{more}} more"
+    },
+    "problems": {
+      "pickDay": "Pick at least one day",
+      "endAfterStart": "The end time must be after the start time",
+      "tooManyRuns": "{{times}} runs need at least {{minutes}} between start and end",
+      "onlyOneRun": "Only one run fits — make the range longer than {{hours}} h"
+    }
   },
   "routineRow": {
     "triggers": {
@@ -363,15 +392,15 @@
     "webhookCalled": "When its webhook is called",
     "toggleFailed": "Couldn't change the automation",
     "runFailed": "Couldn't run it",
-    "lastRun": "last run {{ago}}",
-    "lastRunFailed": "last run failed {{ago}}",
+    "failedLine": "Last run failed {{ago}}",
     "runningNow": "Running now",
     "triggerBroken": "The trigger isn't working.",
-    "runNamedNow": "Run {{name}} now",
     "turnOff": "Turn off {{name}}",
     "turnOn": "Turn on {{name}}",
     "moreEvents_one": "+ {{count}} more event",
-    "moreEvents_other": "+ {{count}} more events"
+    "moreEvents_other": "+ {{count}} more events",
+    "waiting_one": "{{count}} waiting",
+    "waiting_other": "{{count}} waiting"
   },
   "followupRow": {
     "anyMoment": "any moment",
@@ -384,6 +413,7 @@
       "nextMonday": "Next Monday",
       "inAWeek": "In a week"
     },
+    "pickTime": "Pick date and time",
     "title": "Follow-ups",
     "aChat": "A chat",
     "continueFailed": "Couldn't continue now",
@@ -815,7 +845,38 @@
     "changesSince_one": "{{count}} change since the beat before",
     "changesSince_other": "{{count}} changes since the beat before",
     "beatCount_one": "{{count}} beat",
-    "beatCount_other": "{{count}} beats"
+    "beatCount_other": "{{count}} beats",
+    "board": {
+      "working": "Working",
+      "waiting": "Waiting",
+      "waitingOnYou": "Waiting on you",
+      "blocked": "Blocked"
+    },
+    "why": {
+      "stalled": "Stalled",
+      "unstarted": "Not started yet",
+      "retry": "Failed — trying again",
+      "default": "Woke on it"
+    },
+    "changesSinceWork_one": "{{count}} change since it last worked on it",
+    "changesSinceWork_other": "{{count}} changes since it last worked on it",
+    "openChat": "Open chat",
+    "watchdog": {
+      "title": "Watchdog",
+      "setUp": "Set up",
+      "kind": {
+        "stalled": "Stalled",
+        "looping": "Going in circles"
+      },
+      "action": {
+        "retry": "Tried again",
+        "escalated": "Escalated to you"
+      },
+      "ticket": "Ticket",
+      "emptyOn": "No interventions — every run kept moving.",
+      "off": "Off — runs aren't supervised.",
+      "loadFailed": "Couldn't load the watchdog: {{error}}"
+    }
   },
   "ui": {
     "unassigned": "Unassigned",
@@ -830,6 +891,8 @@
     "useEmoji": "Use {{emoji}}"
   },
   "composer": {
+    "pastedAsFile": "Pasted text attached as a file ({{size}})",
+    "pasteInline": "Paste as text",
     "message": "Message",
     "chatFileFailed": "Couldn't open the chat file",
     "addMessage": "Add a message",
@@ -889,10 +952,24 @@
     "moreCharacters_other": "({{count}} more characters)"
   },
   "message": {
+    "quoteSelection": "Quote selection",
+    "quoteAll": "Quote all",
+    "nothingToQuote": "Nothing to quote here",
+    "moreOnReply": "More",
+    "quotePart": "Quote a part",
+    "runTokens": "{{input}} in · {{output}} out · {{cached}} cached",
+    "runLoading": "Loading run details",
+    "runFailed": "Couldn't load run details",
+    "runTurns_one": "{{count}} turn",
+    "runTurns_other": "{{count}} turns",
     "source": {
       "automation": "Automation",
       "delegation": "From another agent",
       "task": "Board ticket",
+      "taskN": "Board ticket #{{n}}",
+      "openTicket": "Open ticket",
+      "automationNamed": "Automation: {{name}}",
+      "openAutomation": "Open automation",
       "offer": "Offer you took up",
       "handoff": "Brief from an earlier chat"
     },
@@ -1045,5 +1122,32 @@
   },
   "attachmentPictures": {
     "enlarge": "Show {{name}} larger"
+  },
+  "claudeSignedOut": {
+    "keyRefused": "Claude refused your Anthropic API key.",
+    "keyRefusedHint": "Your agents can't work until it works again.",
+    "signingIn": "Signing in to Claude…",
+    "failed": "The sign-in didn't finish.",
+    "signedOut": "Claude is signed out.",
+    "signInAgainHint": "Your agents can't work until you sign in again.",
+    "checkKey": "Check the key",
+    "signInAgain": "Sign in again",
+    "showSteps": "Show steps",
+    "onComputer": "Your agents can't work until you sign in again on your computer.",
+    "details": "Details"
+  },
+  "licenseNotice": {
+    "needed": "Godmode on your computer needs a license",
+    "ending": {
+      "today": "From tomorrow, Godmode on your computer needs a license.",
+      "tomorrow": "From the day after tomorrow, Godmode on your computer needs a license.",
+      "inDays_one": "In {{count}} day, Godmode on your computer needs a license.",
+      "inDays_other": "In {{count}} days, Godmode on your computer needs a license."
+    },
+    "pastDue": "Check the license in Godmode on your computer.",
+    "unverified": "Godmode on your computer couldn't check its license yet. It keeps working until {{date}}.",
+    "dateFormat": "MMMM d",
+    "viewLicence": "View license",
+    "dismiss": "Dismiss for today"
   }
 }

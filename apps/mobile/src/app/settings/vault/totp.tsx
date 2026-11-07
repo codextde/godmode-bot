@@ -9,6 +9,7 @@ import { ListRow, ReadonlyList } from "@/components/readonly-list";
 import { confirmDelete, CountdownRing, RowMenu } from "@/components/secret-parts";
 import { TotpAutoLink, useLinkSuggestions } from "@/components/totp-autolink";
 import { Badge, Row, T, tap } from "@/components/ui";
+import { ScopeBadge, ScopeChips, useVaultScope } from "@/components/vault-scope";
 import { errorText } from "@/lib/api";
 import { useNow } from "@/lib/hooks";
 import { copySecret, formatCode, maskedCode, useLiveCodes, useRevealed, type LiveCode } from "@/lib/secrets";
@@ -27,6 +28,8 @@ export default function TwoFactor() {
   const { fullAccess } = useFullAccess();
   const list = useTotp();
   const logins = useLogins();
+  const scope = useVaultScope();
+  const { filter } = scope;
   const [search, setSearch] = useState("");
   const shown = useRevealed<true>(SHOW_MS);
   const live = useLiveCodes(!!fullAccess && !!shown.value);
@@ -34,9 +37,9 @@ export default function TwoFactor() {
   const suggestions = useLinkSuggestions(list.data, logins.data, !!fullAccess);
   const items = useMemo(() => {
     const q = search.trim().toLowerCase();
-    const all = list.data ?? [];
+    const all = filter(list.data ?? []);
     return q ? all.filter((e) => `${e.issuer} ${e.accountName}`.toLowerCase().includes(q)) : all;
-  }, [list.data, search]);
+  }, [list.data, search, filter]);
 
   const showCodes = async () => {
     if (await confirmWithBiometrics(t("totp.revealAllReason"))) shown.show(true);
@@ -50,6 +53,8 @@ export default function TwoFactor() {
     });
 
   const linkedName = (e: TotpEntry) => (e.credentialId && names.get(e.credentialId) && names.get(e.credentialId) !== e.issuer ? t("totp.linkedTo", { name: names.get(e.credentialId) }) : null);
+  /** "SHA256 · 8 digits · 60 s": only what differs from the usual code. */
+  const unusual = (e: TotpEntry) => [e.algorithm !== "SHA1" ? e.algorithm : null, e.digits !== 6 ? t("otpPreview.digits", { digits: e.digits }) : null, e.period !== 30 ? `${e.period} s` : null].filter(Boolean).join(" · ") || null;
 
   return (
     <>
@@ -68,14 +73,15 @@ export default function TwoFactor() {
         query={list}
         items={items}
         keyOf={(e) => e.id}
-        extraData={[names, fullAccess, shown.value, live.codes]}
+        extraData={[names, fullAccess, shown.value, live.codes, scope.nameOf]}
         search={{ placeholder: t("totp.search"), value: search, onChange: setSearch }}
         icon="shield"
-        emptyTitle={t("totp.emptyTitle")}
+        emptyTitle={scope.filtered ? t("totp.emptyScopeTitle") : t("totp.emptyTitle")}
         failedTitle={t("totp.loadFailed")}
         header={
-          (suggestions.length && !search.trim()) || (shown.value && live.error && !live.codes.size) ? (
+          (scope.active && list.data?.length) || (suggestions.length && !search.trim()) || (shown.value && live.error && !live.codes.size) ? (
             <View style={{ gap: space.md }}>
+              {list.data?.length ? <ScopeChips state={scope} bleed={space.md} /> : null}
               {suggestions.length && !search.trim() ? <TotpAutoLink rows={suggestions} /> : null}
               {shown.value && live.error && !live.codes.size ? (
                 <T variant="footnote" color={c.danger}>
@@ -89,7 +95,8 @@ export default function TwoFactor() {
           fullAccess ? (
             <CodeRow
               entry={e}
-              line={[e.issuer ? e.accountName : null, linkedName(e)].filter(Boolean).join(" · ")}
+              line={[e.issuer ? e.accountName : null, linkedName(e), unusual(e)].filter(Boolean).join(" · ")}
+              scopeName={scope.nameOf(e.workspaceId)}
               code={shown.value ? live.codes.get(e.id) : undefined}
               shown={!!shown.value}
               onShow={() => void showCodes()}
@@ -100,8 +107,13 @@ export default function TwoFactor() {
             <ListRow
               icon="shield"
               title={e.issuer || e.accountName || t("totp.unnamed")}
-              lines={[e.issuer ? e.accountName : null, linkedName(e)]}
-              trailing={e.credentialId ? null : <Badge label={t("totp.notLinked")} dot={false} />}
+              lines={[e.issuer ? e.accountName : null, linkedName(e), unusual(e)]}
+              trailing={
+                <>
+                  <ScopeBadge name={scope.nameOf(e.workspaceId)} global={!e.workspaceId} />
+                  {e.credentialId ? null : <Badge label={t("totp.notLinked")} dot={false} />}
+                </>
+              }
             />
           )
         }
@@ -114,6 +126,7 @@ export default function TwoFactor() {
 const CodeRow = memo(function CodeRow({
   entry,
   line,
+  scopeName,
   code,
   shown,
   onShow,
@@ -122,6 +135,7 @@ const CodeRow = memo(function CodeRow({
 }: {
   entry: TotpEntry;
   line: string;
+  scopeName: string | null;
   code: LiveCode | undefined;
   shown: boolean;
   onShow: () => void;
@@ -167,6 +181,7 @@ const CodeRow = memo(function CodeRow({
         ) : null}
       </View>
       <Row style={{ gap: space.sm }}>
+        <ScopeBadge name={scopeName} global={!entry.workspaceId} />
         {visible ? <CountdownRing remaining={remaining} period={code.period} size={20} /> : null}
         <RowMenu
           label={t("totp.actionsFor", { name })}

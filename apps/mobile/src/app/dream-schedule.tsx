@@ -29,7 +29,8 @@ function Editor({ initial }: { initial: string }) {
   const [cron, setCron] = useState(initial);
   const [busy, setBusy] = useState(false);
   const tidy = cron.trim().replace(/\s+/g, " ");
-  const invalid = !!validateCron(tidy);
+  const [problem, setProblem] = useState<string | null>(null);
+  const invalid = !!validateCron(tidy) || !!problem;
 
   const save = async () => {
     setBusy(true);
@@ -41,7 +42,7 @@ function Editor({ initial }: { initial: string }) {
   return (
     <ScrollView style={{ backgroundColor: c.background }} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
       <SheetHeader title={t("dreaming.title")} action={t("common:actions.save")} ready={!invalid && tidy !== initial.trim().replace(/\s+/g, " ")} busy={busy} onAction={() => void save()} />
-      <CronBuilder value={initial} onChange={setCron} />
+      <CronBuilder value={initial} onChange={setCron} onProblemChange={setProblem} />
     </ScrollView>
   );
 }

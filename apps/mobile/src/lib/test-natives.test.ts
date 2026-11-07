@@ -5,6 +5,8 @@ type Status = { didJustFinish: boolean; error?: string | null };
 
 /** The native side of the phone for `bun test`, and what the code under test did to it. Mocks reach all test files, so they share this one. */
 export const phone = {
+  voices: [] as { identifier: string; name: string; language: string; quality: string }[],
+  spokenWith: null as string | null,
   alerts: [] as { title: string; message?: string; buttons?: Button[] }[],
   sheets: [] as { message?: string; options: string[] }[],
   awake: [] as string[],
@@ -19,6 +21,9 @@ export const phone = {
     phone.awake.length = 0;
     phone.silentMode.length = 0;
     phone.spoken.length = 0;
+    phone.voices = [];
+    phone.spokenWith = null;
+    delete phone.stored["godmode.phoneVoice"];
     phone.played = 0;
   },
 };
@@ -69,10 +74,11 @@ mock.module("expo-secure-store", () => ({
 mock.module("expo-speech", () => ({
   VoiceQuality: { Enhanced: "Enhanced" },
   maxSpeechInputLength: 4000,
-  getAvailableVoicesAsync: async () => [],
+  getAvailableVoicesAsync: async () => phone.voices,
   stop: () => undefined,
-  speak: (text: string, options: { onDone?: () => void }) => {
+  speak: (text: string, options: { voice?: string; onDone?: () => void }) => {
     phone.spoken.push(text);
+    phone.spokenWith = options.voice ?? null;
     options.onDone?.();
   },
 }));
@@ -80,4 +86,5 @@ mock.module("react-native", () => ({
   ActionSheetIOS: { showActionSheetWithOptions: (options: { message?: string; options: string[] }) => void phone.sheets.push(options) },
   Alert: { alert: (title: string, message?: string, buttons?: Button[]) => void phone.alerts.push({ title, message, buttons }) },
   Share: { share: async () => ({ action: "sharedAction" }) },
+  ToastAndroid: { SHORT: 0, show: () => undefined },
 }));

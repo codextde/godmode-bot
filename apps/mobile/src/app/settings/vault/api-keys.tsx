@@ -10,7 +10,7 @@ import { EmptyState, ErrorState, SkeletonRows, T, tap } from "@/components/ui";
 import { errorText } from "@/lib/api";
 import { toolIcon } from "@/lib/api-tool-presets";
 import { whenText } from "@/lib/format";
-import { hostOfUrl } from "@/lib/integrations";
+import { hostOfUrl, toolStatus } from "@/lib/integrations";
 import { queryClient } from "@/lib/query";
 import { usePullRefresh } from "@/lib/use-pull-refresh";
 import { APP_SECRETS, fullVaultApi, secretLabel, useAppSecrets, useVaultApiTools, vk, type AppSecret } from "@/lib/vault";
@@ -72,7 +72,7 @@ export default function ApiKeys() {
   );
 }
 
-function KeyRow({ icon, title, detail, set, onPress, menu, label }: { icon: IconName; title: string; detail: string; set: boolean; onPress: () => void; menu: MenuItem[]; label: string }) {
+function KeyRow({ icon, title, details, set, onPress, menu, label }: { icon: IconName; title: string; details: (string | null)[]; set: boolean; onPress: () => void; menu: MenuItem[]; label: string }) {
   const c = useColors();
   return (
     <Pressable
@@ -89,9 +89,13 @@ function KeyRow({ icon, title, detail, set, onPress, menu, label }: { icon: Icon
         <T variant="callout" numberOfLines={1} style={{ fontWeight: "500" }}>
           {title}
         </T>
-        <T variant="footnote" muted numberOfLines={1}>
-          {detail}
-        </T>
+        {details.map((detail) =>
+          detail ? (
+            <T key={detail} variant="footnote" muted numberOfLines={2}>
+              {detail}
+            </T>
+          ) : null,
+        )}
       </View>
       <RowMenu label={label} items={menu} />
     </Pressable>
@@ -110,7 +114,7 @@ function SecretKeyRow({ secret: s }: { secret: AppSecret }) {
     <KeyRow
       icon={APP_SECRETS[s.key]?.icon ?? "key"}
       title={name}
-      detail={s.set ? (s.updatedAt ? t("apiKeys.updated", { when: whenText(s.updatedAt) }) : t("apiKeys.set")) : t("apiKeys.notSet")}
+      details={[s.set ? (s.updatedAt ? t("apiKeys.updated", { when: whenText(s.updatedAt) }) : t("apiKeys.set")) : t("apiKeys.notSet")]}
       set={s.set}
       onPress={edit}
       label={t("apiKeys.actionsFor", { name })}
@@ -124,6 +128,7 @@ function SecretKeyRow({ secret: s }: { secret: AppSecret }) {
 
 function ToolRow({ tool }: { tool: ApiTool }) {
   const { t } = useTranslation(["vault", "common"]);
+  const { t: integrations } = useTranslation("integrations");
   const edit = () => router.push({ pathname: "/vault/key-edit", params: { kind: "tool", id: tool.id } });
   const test = () =>
     fullVaultApi.testApiTool(tool.id).then(
@@ -140,7 +145,7 @@ function ToolRow({ tool }: { tool: ApiTool }) {
     <KeyRow
       icon={toolIcon(tool.preset)}
       title={tool.name}
-      detail={[host || null, tool.enabled ? null : t("apiKeys.off"), tool.hasKey ? null : t("apiKeys.noKey")].filter(Boolean).join(" · ") || t("apiKeys.set")}
+      details={[[host || null, tool.enabled ? null : t("apiKeys.off")].filter(Boolean).join(" · ") || t("apiKeys.set"), tool.envVar ? `$${tool.envVar}` : null, toolStatus(tool, integrations, true)]}
       set={tool.hasKey}
       onPress={edit}
       label={t("apiKeys.actionsFor", { name: tool.name })}

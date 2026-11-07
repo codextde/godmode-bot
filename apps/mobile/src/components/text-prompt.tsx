@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { Modal, Pressable, StyleSheet, TextInput, View } from "react-native";
+import { Modal, Pressable, StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
+import { ModalTextInput } from "./modal-field";
 import { Button, T } from "./ui";
 import { fonts, radius, space, type, useColors } from "@/lib/theme";
 
@@ -12,6 +13,7 @@ export function TextPrompt({
   placeholder,
   label,
   mono,
+  secure,
   validate,
   onSubmit,
   onClose,
@@ -23,6 +25,8 @@ export function TextPrompt({
   /** The button; Save unless said otherwise. */
   label?: string;
   mono?: boolean;
+  /** A password: hidden, and taken as typed. */
+  secure?: boolean;
   validate?: (text: string) => string | null;
   onSubmit: (text: string) => void;
   onClose: () => void;
@@ -41,7 +45,7 @@ export function TextPrompt({
     }
   }
   const save = () => {
-    const value = text.trim();
+    const value = secure ? text : text.trim();
     const refused = validate?.(value) ?? null;
     if (refused) return setProblem(refused);
     onSubmit(value);
@@ -52,8 +56,7 @@ export function TextPrompt({
       <View style={styles.wrap} pointerEvents="box-none">
         <View style={[styles.dialog, { backgroundColor: c.surface }]} accessibilityViewIsModal>
           <T variant="headline">{title}</T>
-          <TextInput
-            autoFocus
+          <ModalTextInput
             value={text}
             onChangeText={(next) => {
               setText(next);
@@ -62,6 +65,7 @@ export function TextPrompt({
             onSubmitEditing={save}
             returnKeyType="done"
             selectTextOnFocus
+            secureTextEntry={secure}
             placeholder={placeholder}
             placeholderTextColor={c.textFaint}
             autoCapitalize="none"

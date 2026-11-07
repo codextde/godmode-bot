@@ -1,11 +1,15 @@
 import { router } from "expo-router";
 import { memo } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import type { AppNotification, NotificationKind } from "@godmode/shared";
 import { Icon, type IconName } from "./icon";
 import { T } from "./ui";
+import { RowPressable } from "./row-pressable";
 import { shortTime } from "@/lib/format";
+import { licenseText } from "@/lib/license-text";
+import { notificationRoute } from "@/lib/notification-links";
+import { qk, queryClient } from "@/lib/query";
 import { radius, space, useColors, type Colors } from "@/lib/theme";
 
 const KIND: Record<NotificationKind, { icon: IconName; tone: (c: Colors) => { bg: string; fg: string } }> = {
@@ -18,34 +22,11 @@ const KIND: Record<NotificationKind, { icon: IconName; tone: (c: Colors) => { bg
   question: { icon: "warning", tone: (c) => ({ bg: c.warningSoft, fg: c.warning }) },
 };
 
-const param = (query: string, key: string) => new RegExp(`(?:^|&)${key}=([^&]+)`).exec(query)?.[1];
-
-/**
- * Where a notification's desktop link leads on the phone ("/chat/…", "/tasks?task=…", "/calls?call=…"); false when the
- * phone has no such screen (settings, the vault, plugins stay on the computer).
- */
-function decode(value: string): string {
-  try {
-    return decodeURIComponent(value);
-  } catch {
-    return value;
-  }
-}
-
+/** Opens what a notification's desktop link points at; false when the phone has no such screen. */
 export function openNotificationLink(link: string | null): boolean {
-  if (!link) return false;
-  const [path = "", query = ""] = link.split("?");
-  const [, section, id] = path.split("/");
-  const task = param(query, "task");
-  const call = param(query, "call");
-  if (section === "chat" && id) router.push({ pathname: "/chat/[id]", params: { id: decode(id) } });
-  else if (section === "agents" && id) router.push({ pathname: "/agent/[id]", params: { id: decode(id) } });
-  else if (section === "tasks" && task) router.push({ pathname: "/task/[id]", params: { id: decode(task) } });
-  else if (section === "my-tasks") router.push(task ? { pathname: "/human-task/[id]", params: { id: decode(task) } } : "/my-tasks");
-  else if (section === "calls") router.push(call ? { pathname: "/call/[id]", params: { id: decode(call) } } : "/calls");
-  else if (section === "automations") router.push("/automations");
-  else if (section === "artifacts" && id) router.push({ pathname: "/artifact/[id]", params: { id: decode(id) } });
-  else return false;
+  const route = notificationRoute(link, queryClient.getQueryData<{ fullAccess?: boolean }>(qk.me)?.fullAccess === true);
+  if (!route) return false;
+  router.push(route);
   return true;
 }
 
@@ -54,12 +35,13 @@ export const NotificationRow = memo(function NotificationRow({ notification: n, 
   const { t } = useTranslation("components");
   const meta = KIND[n.kind] ?? KIND.info;
   const tone = meta.tone(c);
+  const body = n.link === "/settings/license" ? licenseText(n.body) : n.body;
   return (
-    <Pressable
+    <RowPressable
       accessibilityRole="button"
       accessibilityLabel={n.read ? n.title : t("notificationRow.unread", { title: n.title })}
       onPress={onOpen}
-      style={({ pressed }) => [styles.row, pressed && { backgroundColor: c.sunken }]}
+      style={styles.row}
     >
       <View style={[styles.icon, { backgroundColor: tone.bg }]}>
         <Icon name={meta.icon} size={14} color={tone.fg} />
@@ -74,13 +56,13 @@ export const NotificationRow = memo(function NotificationRow({ notification: n, 
             {shortTime(n.createdAt)}
           </T>
         </View>
-        {n.body ? (
+        {body ? (
           <T variant="footnote" muted numberOfLines={2}>
-            {n.body}
+            {body}
           </T>
         ) : null}
       </View>
-    </Pressable>
+    </RowPressable>
   );
 });
 

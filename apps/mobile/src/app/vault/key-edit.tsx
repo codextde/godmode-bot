@@ -3,10 +3,13 @@ import { router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
 import { Alert, ScrollView, StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
-import type { CaptchaSolver } from "@godmode/shared";
+import type { CaptchaSolver, MacPasswordStatus } from "@godmode/shared";
 import { NeedsFullAccess, useFullAccess } from "@/components/full-access";
+import { Group } from "@/components/form";
+import { Icon } from "@/components/icon";
 import { confirmDelete, FieldCard, InputRow, SheetHeader } from "@/components/secret-parts";
-import { Button, T } from "@/components/ui";
+import { ago, InfoRow } from "@/components/status-rows";
+import { Button, Row, T } from "@/components/ui";
 import { api, errorText, request } from "@/lib/api";
 import { qk, queryClient } from "@/lib/query";
 import { fullVaultApi, secretLabel, useAppSecrets, useMacPassword, useVaultApiTools, vk } from "@/lib/vault";
@@ -96,6 +99,7 @@ export default function KeyEdit() {
           {tooShort ? t("keyEdit.tooShort") : kind === "mac" ? t("keyEdit.macNote") : t("keyEdit.note")}
         </T>
       </View>
+      {kind === "mac" && mac.data?.saved ? <MacUses status={mac.data} /> : null}
       {isSet ? (
         <Button
           title={kind === "mac" ? t("keyEdit.removePassword") : t("keyEdit.removeKey")}
@@ -106,6 +110,36 @@ export default function KeyEdit() {
         />
       ) : null}
     </ScrollView>
+  );
+}
+
+/** When agents last used the Mac password and for what. A computer reached through the cloud may not say what for. */
+function MacUses({ status }: { status: MacPasswordStatus }) {
+  const c = useColors();
+  const { t } = useTranslation("vault");
+  return (
+    <>
+      <Group>
+        <InfoRow label={t("totpEdit.lastUsed")} value={status.lastUsedAt ? ago(status.lastUsedAt) : t("macPassword.neverUsed")} />
+      </Group>
+      {status.recent.length ? (
+        <Group title={t("macPassword.recent")}>
+          {status.recent.map((use) => (
+            <Row key={`${use.at}${use.what}`} style={styles.use}>
+              <Icon name={use.kind === "run" ? "terminal" : "screens"} size={16} color={c.textMuted} />
+              <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+                <T variant={use.kind === "run" ? "mono" : "subhead"} numberOfLines={1}>
+                  {use.kind === "run" ? use.what : t("macPassword.filledDialog", { what: use.what })}
+                </T>
+                <T variant="footnote" color={use.ok ? c.textMuted : c.danger} numberOfLines={1}>
+                  {[use.agent, ago(use.at), use.ok ? null : t("macPassword.failed")].filter(Boolean).join(" · ")}
+                </T>
+              </View>
+            </Row>
+          ))}
+        </Group>
+      ) : null}
+    </>
   );
 }
 
@@ -123,5 +157,10 @@ const styles = StyleSheet.create({
   },
   note: {
     paddingHorizontal: 4,
+  },
+  use: {
+    gap: space.md,
+    paddingHorizontal: space.lg,
+    paddingVertical: 10,
   },
 });

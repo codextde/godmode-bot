@@ -21,9 +21,19 @@ import { Alert } from "react-native";
 import { errorText, request } from "./api";
 import { t } from "./i18n";
 import { queryClient } from "./query";
+import { settingsApi, sq } from "./settings-api";
 
 /** Installs and updates download and build: give them as long as the desktop does. */
 const LONG = 600_000;
+
+/** Checks the computer again (the doctor caches its answer). */
+export async function recheckDoctor() {
+  try {
+    queryClient.setQueryData(sq.doctor, await settingsApi.doctor.get(true));
+  } catch {
+    void queryClient.invalidateQueries({ queryKey: sq.doctor });
+  }
+}
 
 const get = <T>(path: string, minTimeoutMs = 0) => request<T>("GET", path, undefined, minTimeoutMs);
 const post = <T>(path: string, body: unknown = {}, minTimeoutMs = 0) => request<T>("POST", path, body, minTimeoutMs);
@@ -97,14 +107,14 @@ export function lastLines(output: string, count = 4): string {
 
 /**
  * Claude Code's own sign-in on the computer, from the phone: started here, the code from the sign-in page goes back
- * here; `onSignedIn` runs once it went through.
+ * here; `onSignedIn` runs once it went through. `quiet`: a failure shows where this is used, not as an alert.
  */
-export function useClaudeLogin(enabled: boolean, onSignedIn: () => void) {
+export function useClaudeLogin(enabled: boolean, onSignedIn: () => void, { quiet = false }: { quiet?: boolean } = {}) {
   const status = useQuery({
     queryKey: pk.claudeLogin,
     queryFn: programsApi.doctor.login,
     enabled,
-    refetchInterval: (q) => (q.state.data?.state === "waiting" ? 1500 : false),
+    refetchInterval: (q) => (q.state.data?.state === "waiting" ? 1500 : q.state.data?.signedOut ? 30_000 : false),
   });
   const set = (next: ClaudeLoginStatus) =>
     queryClient.setQueryData<ClaudeLoginStatus>(pk.claudeLogin, (old) => (old?.state === "waiting" && next.state === "waiting" && old.url && !next.url ? { ...next, url: old.url } : next));
@@ -129,9 +139,9 @@ export function useClaudeLogin(enabled: boolean, onSignedIn: () => void) {
   const message = status.data?.message;
   useEffect(() => {
     if (prev.current === "waiting" && state === "done") onSignedIn();
-    if (prev.current === "waiting" && state === "failed") Alert.alert(t("programs:signIn.failed"), message ?? undefined);
+    if (prev.current === "waiting" && state === "failed" && !quiet) Alert.alert(t("programs:signIn.failed"), message ?? undefined);
     prev.current = state;
-  }, [state, message, onSignedIn]);
+  }, [state, message, onSignedIn, quiet]);
 
   return { status: status.data, waiting: state === "waiting", start, cancel, submit, send };
 }

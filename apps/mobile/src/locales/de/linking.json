@@ -3,7 +3,6 @@
   "share": "Teilen",
   "onPrimary": "Ändern kannst du das auf {{name}}.",
   "devices": {
-    "aloneBody": "Nutze Godmode auf mehreren Computern wie auf einem.",
     "add": "Computer hinzufügen",
     "addShort": "Hinzufügen",
     "join": "Mit Einladung beitreten",
@@ -131,10 +130,7 @@
     "revokedHint": "Dieser Computer wurde in der Cloud entfernt.",
     "openInBrowser": "Im Browser öffnen",
     "inBrowserOff": "Schalte Cloud-Verbindung und Browserzugriff ein, um ihn im Browser zu öffnen.",
-    "accessFooter": "Änderungen gelten sofort.",
-    "linkDetail": "Aus pausiert Browser- und Handyzugriff, ohne zu trennen.",
     "browserDetail": "Wer in deinem Cloud-Konto angemeldet ist, kann hier alles tun, auch Befehle ausführen.",
-    "phonesDetail": "Gekoppelte Handys erreichen diesen Computer über die Cloud, wenn Tailscale fehlt.",
     "secretsDetail": "Auch den Tresor entsperren und gespeicherte Passwörter und Schlüssel im Browser sehen.",
     "secretsTitle": "Geheimnisse über die Cloud erlauben?",
     "secretsBody": "Wer in deinem Cloud-Konto angemeldet ist, und wer diese Cloud betreibt, könnte den Tresor entsperren und deine Passwörter und Schlüssel sehen.",
@@ -146,22 +142,6 @@
     "unlinkBody": "Browser und Handys erreichen ihn nicht mehr über Godmode Cloud, und die Cloud vergisst ihn. Du kannst ihn später wieder verknüpfen.",
     "unlink": "Trennen",
     "unlinkFailed": "Trennen fehlgeschlagen"
-  },
-  "billing": {
-    "title": "Abo",
-    "renewsOn": "Verlängert sich am {{date}}.",
-    "endsOn": "Endet am {{date}}.",
-    "cancelPlan": "Abo kündigen",
-    "cancelTitle": "Abo kündigen?",
-    "cancelUntil": "Alles funktioniert bis zum {{date}}. Bis dahin kannst du es fortsetzen.",
-    "cancelPeriod": "Alles funktioniert bis zum Ende des Zeitraums. Bis dahin kannst du es fortsetzen.",
-    "keep": "Behalten",
-    "cancel": "Abo kündigen",
-    "resume": "Abo fortsetzen",
-    "resumeTitle": "Abo fortsetzen?",
-    "resumeOn": "Es verlängert sich wie bisher am {{date}}.",
-    "cancelFailed": "Abo konnte nicht gekündigt werden",
-    "resumeFailed": "Abo konnte nicht fortgesetzt werden"
   },
   "connect": {
     "title": "App verbinden",

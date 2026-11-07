@@ -110,6 +110,8 @@ const ROUTES: [method: string, path: RegExp][] = [
   ["GET", new RegExp(`^/api/conversations/${ID}$`)],
   ["GET", new RegExp(`^/api/conversations/${ID}/messages$`)],
   ["GET", new RegExp(`^/api/conversations/${ID}/messages/${ID}/images/${ID}$`)],
+  // One tool call in full: what the chat itself answers without `lite`.
+  ["GET", new RegExp(`^/api/conversations/${ID}/messages/${ID}/tools/${ID}$`)],
   // Pictures the human attached to a chat: only images from the agent's workspace/uploads (the core checks the path).
   ["GET", new RegExp(`^/api/conversations/${ID}/attachment$`)],
   // Which paths a chat names exist: answered only for the folder of its agent (mobile/views.ts phoneChatFiles).
@@ -359,7 +361,7 @@ const BODIES: [method: string, path: RegExp, keys: string[]][] = [
   ["PATCH", new RegExp(`^/api/conversations/${ID}/queue/${ID}$`), ["content"]],
   ["POST", /^\/api\/chat$/, ["agentId", "content", "attachments", "workspaceId", "projectId", "model", "effort", "ultracode", "private", "browserProfileId", "instructions"]],
   // A task's repository and branch are picked on the computer: the phone never points an agent at another repository.
-  ["POST", /^\/api\/tasks$/, ["workspaceId", "projectId", "title", "description", "type", "status", "agentId"]],
+  ["POST", /^\/api\/tasks$/, ["workspaceId", "projectId", "title", "description", "type", "status", "agentId", "parentId"]],
   ["PATCH", new RegExp(`^/api/tasks/${ID}$`), ["title", "description", "status", "agentId", "archived", "projectId", "priority", "dueDate", "labels", "goalId", "waitsFor", "blockedReason"]],
   ["POST", /^\/api\/tasks\/archive$/, ["ids", "archived"]],
   ["POST", new RegExp(`^/api/tasks/${ID}/messages$`), ["content", "attachments"]],

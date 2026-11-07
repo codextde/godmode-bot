@@ -1,11 +1,12 @@
 import { Link, router } from "expo-router";
-import { useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { View } from "react-native";
 import { useTranslation } from "react-i18next";
 import type { Agent } from "@godmode/shared";
 import { useFullAccess } from "./full-access";
-import { MenuSheet, type HeaderMenuItem } from "./header-actions";
+import { useMenuSheet, type HeaderMenuItem } from "./header-actions";
 import { sfSymbol } from "./icon";
+import { tap } from "./ui";
 import { useAgents } from "@/lib/hooks";
 import { moveAgent, teamOf } from "@/lib/manage";
 import { useWorkspace, scopeLabel } from "@/lib/workspace";
@@ -20,7 +21,7 @@ export function AgentMoveMenu({ agent, children }: { agent: Agent; children: (on
   const { data: all = [] } = useAgents();
   const { workspaces } = useWorkspace();
   const fullAccess = useFullAccess().fullAccess === true;
-  const [sheet, setSheet] = useState<"root" | "lead" | "workspace" | null>(null);
+  const menu = useMenuSheet();
   if (agent.isDefault || !fullAccess) return <>{children()}</>;
 
   const team = new Set(teamOf(agent, all).map((a) => a.id));
@@ -42,19 +43,32 @@ export function AgentMoveMenu({ agent, children }: { agent: Agent; children: (on
   };
 
   if (process.env.EXPO_OS !== "ios") {
-    const items: HeaderMenuItem[] =
-      sheet === "lead"
-        ? [...(builtin ? [{ icon: "agents" as const, title: builtin.name, onPress: () => reportTo(null) }] : []), ...leads.map((a) => ({ icon: "person" as const, title: a.name, onPress: () => reportTo(a) }))]
-        : sheet === "workspace"
-          ? [{ icon: "globe" as const, title: t("agent.global"), onPress: () => moveTo(null) }, ...workspaces.filter((w) => !w.archivedAt).map((w) => ({ icon: "layers" as const, title: w.name, onPress: () => moveTo(w.id) }))]
-          : [
-              { icon: "orgChart", title: t("move.reportsTo"), onPress: () => setTimeout(() => setSheet("lead"), 250) },
-              { icon: "layers", title: t("move.moveTo"), onPress: () => setTimeout(() => setSheet("workspace"), 250) },
-            ];
+    const lead: HeaderMenuItem[] = [
+      ...(builtin ? [{ icon: "agents" as const, title: builtin.name, detail: t("agent.builtIn"), selected: !agent.reportsTo, onPress: () => reportTo(null) }] : []),
+      ...leads.map((a) => ({
+        icon: "person" as const,
+        title: a.name,
+        detail: [a.role, a.workspaceId !== agent.workspaceId ? wsName(a.workspaceId) : ""].filter(Boolean).join(" · ") || undefined,
+        selected: agent.reportsTo === a.id,
+        onPress: () => reportTo(a),
+      })),
+    ];
+    const workspace: HeaderMenuItem[] = [
+      { icon: "globe", title: t("agent.global"), selected: !agent.workspaceId, onPress: () => moveTo(null) },
+      ...workspaces.filter((w) => !w.archivedAt).map((w) => ({ icon: "layers" as const, title: scopeLabel(w), selected: agent.workspaceId === w.id, onPress: () => moveTo(w.id) })),
+    ];
+    const root: HeaderMenuItem[] = [
+      { icon: "orgChart", title: t("move.reportsTo"), onPress: () => setTimeout(() => menu.show(lead, t("move.reportsTo")), 250) },
+      { icon: "layers", title: t("move.moveTo"), onPress: () => setTimeout(() => menu.show(workspace, t("move.moveTo")), 250) },
+      { icon: "settings", title: t("move.settings"), onPress: () => router.push({ pathname: "/settings/agent/[id]", params: { id: agent.id } }) },
+    ];
     return (
       <>
-        {children(() => setSheet("root"))}
-        <MenuSheet items={items} open={!!sheet} onClose={() => setSheet(null)} />
+        {children(() => {
+          tap();
+          menu.show(root, agent.name);
+        })}
+        {menu.sheet}
       </>
     );
   }

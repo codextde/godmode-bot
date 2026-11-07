@@ -12,14 +12,15 @@ export type LiveScreen =
   /** `conversationId`: that chat's own tab (chats browse in parallel, each in its tabs). */
   | { kind: "browser"; key: string; id: string; conversationId: string | null; title: string; running: boolean }
   | { kind: "vm"; key: string; id: string; title: string; vm: Vm }
-  | { kind: "share"; key: string; view: string; title: string; conversationId: string }
+  /** `ended`: the shared window, tab or display is no more (the chat still names it). */
+  | { kind: "share"; key: string; view: string; title: string; conversationId: string; ended?: boolean }
   /** An Android phone agents work on: watched from here, and controlled while a chat uses it. */
   | { kind: "android"; key: string; id: string; title: string; device: AndroidDevice };
 
 export function screenHref(screen: LiveScreen) {
   const params =
     screen.kind === "share"
-      ? { kind: screen.kind, id: screen.view, title: screen.title }
+      ? { kind: screen.kind, id: screen.view, title: screen.title, chat: screen.conversationId }
       : screen.kind === "browser"
         ? { kind: screen.kind, id: screen.id, title: screen.title, chat: screen.conversationId ?? "" }
         : { kind: screen.kind, id: screen.id, title: screen.title };
@@ -32,12 +33,15 @@ export function useLiveScreens() {
   const conversations = useQuery(chatListQuery(null));
   // An older Godmode has no phones for the app: no retry, no error.
   const phones = useQuery({ queryKey: qk.androidDevices, queryFn: api.android.devices, retry: false });
+  const endedKeys = useLive((s) => Object.keys(s.goneScreens).sort().join("\n"));
 
   const screens = useMemo(() => {
+    const ended = new Set(endedKeys.split("\n"));
     const out: LiveScreen[] = [];
     for (const c of shared(conversations.data)) {
       const view = computerView(c.computerTarget!);
-      if (!out.some((s) => s.key === `computer:${view}`)) out.push({ kind: "share", key: `computer:${view}`, view, title: computerTargetLabel(c.computerTarget!), conversationId: c.id });
+      const key = `computer:${view}`;
+      if (!out.some((s) => s.key === key)) out.push({ kind: "share", key, view, title: computerTargetLabel(c.computerTarget!), conversationId: c.id, ended: ended.has(key) });
     }
     for (const p of profiles.data ?? []) {
       const chats = p.running ? p.chats : [];
@@ -47,7 +51,7 @@ export function useLiveScreens() {
     for (const vm of vms.data ?? []) out.push({ kind: "vm", key: `vm:${vm.id}`, id: vm.id, title: vm.name, vm });
     for (const device of phones.data ?? []) out.push({ kind: "android", key: `android:${device.id}`, id: device.id, title: device.name, device });
     return out.sort((a, b) => rank(b) - rank(a));
-  }, [profiles.data, vms.data, conversations.data, phones.data]);
+  }, [profiles.data, vms.data, conversations.data, phones.data, endedKeys]);
 
   return {
     screens,
@@ -71,9 +75,9 @@ function rank(s: LiveScreen): number {
   return s.vm.state === "running" ? 2.5 : s.vm.state === "starting" ? 1 : 0.5;
 }
 
-/** On screen right now: a shared screen, a running browser or VM, a phone an agent is working on. */
+/** On screen right now: a shared screen still there, a running browser or VM, a phone an agent is working on. */
 export function isLive(s: LiveScreen): boolean {
-  if (s.kind === "share") return true;
+  if (s.kind === "share") return !s.ended;
   if (s.kind === "browser") return s.running;
   if (s.kind === "android") return s.device.state === "connected" && s.device.busy;
   return s.vm.state === "running";

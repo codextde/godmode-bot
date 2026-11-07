@@ -54,24 +54,21 @@ export function DescribeAutomation({ open = false }: { open?: boolean }) {
 
   return (
     <View style={[styles.card, { backgroundColor: c.surface, borderColor: focused ? c.borderStrong : c.border, boxShadow: c.shadowCard }]}>
-      <Row style={{ gap: 6 }}>
-        <Icon name="sparkles" size={13} color={c.textMuted} />
-        <T variant="footnote" muted style={{ fontWeight: "600" }}>
-          {t("describe.title")}
-        </T>
+      <Row style={{ gap: space.sm, alignItems: "flex-start" }}>
+        <Icon name="sparkles" size={15} color={c.textMuted} style={styles.lead} />
+        <TextInput
+          accessibilityLabel={t("describe.title")}
+          value={text}
+          onChangeText={setText}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          placeholder={t("describe.placeholder")}
+          placeholderTextColor={c.textFaint}
+          multiline
+          maxLength={2000}
+          style={[styles.input, { color: c.text }]}
+        />
       </Row>
-      <TextInput
-        accessibilityLabel={t("describe.title")}
-        value={text}
-        onChangeText={setText}
-        onFocus={() => setFocused(true)}
-        onBlur={() => setFocused(false)}
-        placeholder={t("describe.placeholder")}
-        placeholderTextColor={c.textFaint}
-        multiline
-        maxLength={2000}
-        style={[styles.input, { color: c.text }]}
-      />
       {examples ? (
         <Animated.View entering={FadeIn.duration(160)} exiting={FadeOut.duration(120)}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="always" contentContainerStyle={{ gap: 6 }} style={{ marginHorizontal: -space.md }}>
@@ -123,12 +120,16 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
   },
   input: {
+    flex: 1,
     fontSize: 16,
     lineHeight: 21,
-    minHeight: 44,
+    minHeight: 30,
     maxHeight: 140,
     paddingVertical: 4,
     textAlignVertical: "top",
+  },
+  lead: {
+    marginTop: 7,
   },
   example: {
     flexDirection: "row",

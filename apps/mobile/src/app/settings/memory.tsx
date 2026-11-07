@@ -1,12 +1,13 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { router, Stack } from "expo-router";
-import { Alert, ScrollView, StyleSheet } from "react-native";
+import { Alert, StyleSheet } from "react-native";
 import { useTranslation } from "react-i18next";
 import { findModel, type Settings } from "@godmode/shared";
 import { useFullAccess } from "@/components/admin";
 import { CloseButton } from "@/components/close-button";
 import { ChoiceRow, Group, LinkRow, PickerRow, StepperRow, SwitchRow } from "@/components/form";
 import { ActionPill, ToolRow, reportInstall } from "@/components/program-parts";
+import { SettingsScroll } from "@/components/settings-scroll";
 import { FormSkeleton } from "@/components/settings-state";
 import { ErrorState } from "@/components/ui";
 import { patchAnySettings } from "@/lib/admin";
@@ -60,7 +61,7 @@ export default function Memory() {
   ];
 
   return (
-    <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content}>
+    <SettingsScroll contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content}>
       <Stack.Screen options={{ title: t("overview.links.memory") }} />
       <CloseButton />
       {!s || !m || !d ? (
@@ -147,7 +148,7 @@ export default function Memory() {
           </Group>
         </>
       )}
-    </ScrollView>
+    </SettingsScroll>
   );
 }
 
@@ -166,7 +167,7 @@ function Backend({ backend }: { backend: Settings["memory"]["backend"] }) {
   const missing = backend === "claude-mem" && dep && !dep.ok;
   return (
     <Group title={t("memory.title")} footer={missing ? t("memory.claudeMemMissing") : undefined}>
-      <ChoiceRow icon="doc" title={t("memory.files")} detail={t("memory.filesDetail")} selected={backend === "files"} onPress={() => void patchAnySettings({ memory: { backend: "files" } })} />
+      <ChoiceRow icon="doc" title={t("memory.files")} selected={backend === "files"} onPress={() => void patchAnySettings({ memory: { backend: "files" } })} />
       <ChoiceRow icon="brain" title={t("memory.claudeMem")} detail={t("memory.claudeMemDetail")} selected={backend === "claude-mem"} onPress={() => void patchAnySettings({ memory: { backend: "claude-mem" } })} />
       {missing ? (
         <ToolRow

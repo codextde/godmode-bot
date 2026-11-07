@@ -1,11 +1,12 @@
 import { router, Stack } from "expo-router";
-import { ScrollView, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { MAX_INSTRUCTIONS_LENGTH } from "@godmode/shared";
 import { CharacterAvatar } from "@/components/character";
 import { CloseButton } from "@/components/close-button";
 import { useFullAccess } from "@/components/full-access";
 import { Group, LinkRow, TextEditor, Tile } from "@/components/form";
+import { SettingsScroll } from "@/components/settings-scroll";
 import { SectionTitle, T } from "@/components/ui";
 import { useAgents } from "@/lib/hooks";
 import { t } from "@/lib/i18n";
@@ -30,7 +31,7 @@ export default function Instructions() {
   const { data: agents } = useAgents();
 
   return (
-    <ScrollView
+    <SettingsScroll
       contentInsetAdjustmentBehavior="automatic"
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode="interactive"
@@ -108,7 +109,7 @@ export default function Instructions() {
         </Group>
       ) : null}
 
-    </ScrollView>
+    </SettingsScroll>
   );
 }
 

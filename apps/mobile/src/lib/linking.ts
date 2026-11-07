@@ -1,5 +1,4 @@
 import type {
-  CloudBilling,
   CloudSettings,
   CloudStatus,
   ConnectorCreated,
@@ -44,8 +43,6 @@ export const linkingApi = {
     link: (url: string) => request<CloudStatus>("POST", "/api/cloud/link", { url }, 30_000),
     /** Cancels a pending link, or unlinks. */
     unlink: () => request<CloudStatus>("DELETE", "/api/cloud/link", undefined, 30_000),
-    cancel: () => request<CloudBilling>("POST", "/api/cloud/billing/cancel", {}, 30_000),
-    resume: () => request<CloudBilling>("POST", "/api/cloud/billing/resume", {}, 30_000),
   },
 
   connectors: {

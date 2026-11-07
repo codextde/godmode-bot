@@ -45,7 +45,6 @@ export default function Workspaces() {
         <EmptyState
           icon="layers"
           title={t("workspaces.none.title")}
-          body={t("workspaces.none.body")}
           action={<Button title={t("workspaces.create")} icon="plus" onPress={create} />}
         />
       )}

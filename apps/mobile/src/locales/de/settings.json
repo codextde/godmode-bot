@@ -39,7 +39,6 @@
       "secondary": "Zweitcomputer"
     },
     "preferences": {
-      "title": "Einstellungen",
       "yourName": "Dein Name",
       "addName": "Namen hinzufügen"
     },
@@ -77,30 +76,29 @@
       "calls": "Anrufe",
       "cleanup": "Aufräumen",
       "health": "Systemzustand",
-      "license": "Lizenz & Abrechnung",
+      "license": "Lizenz",
       "cloud": "Godmode Cloud",
       "devices": "Geräte",
       "connected": "Verbundene Apps",
       "logs": "Logs",
+      "advanced": "Erweitert",
       "about": "Über"
     },
     "team": {
-      "title": "Dein Team",
       "workspaces": "Workspaces",
       "projects_one": "{{count}} Projekt",
       "projects_other": "{{count}} Projekte",
       "noneYet": "Noch keine"
     },
     "privacy": {
-      "title": "Daten & Datenschutz",
       "faceId": "Face ID verlangen",
       "screenLock": "Displaysperre verlangen",
       "security": "Sicherheit",
       "onComputer": "Auf deinem Computer"
     },
     "app": {
-      "title": "App",
       "thisPhone": "Dieses Handy",
+      "name": "Name",
       "version": "Godmode für {{platform}} {{version}}"
     },
     "palette": {
@@ -148,7 +146,6 @@
       "title": "Vorschläge anzeigen"
     },
     "features": {
-      "title": "Funktionen",
       "on_one": "{{count}} an",
       "on_other": "{{count}} an"
     }
@@ -300,7 +297,10 @@
       "title": "Persönlichkeit",
       "tone": "Ton",
       "none": "Kein bestimmter Ton",
-      "custom": "Eigener"
+      "custom": "Eigene…",
+      "customDetail": "Beschreib die Stimme in deinen eigenen Worten",
+      "customLabel": "Eigene Persönlichkeit",
+      "customPlaceholder": "Herzlich und ein bisschen nerdig. Erklärt Dinge mit Essens-Metaphern, antwortet kurz und endet immer mit dem nächsten Schritt."
     },
     "thinking": {
       "title": "Denken",
@@ -310,10 +310,9 @@
     "project": "Projekt",
     "hours": {
       "any": "Jederzeit",
-      "work": "Arbeitszeit, 9 bis 18 Uhr",
-      "day": "Tagsüber, 8 bis 22 Uhr",
-      "night": "Nachts, 22 bis 7 Uhr",
-      "custom": "{{from}} bis {{to}} Uhr"
+      "working": "Arbeitszeit",
+      "from": "Von",
+      "to": "Bis"
     },
     "heartbeat": {
       "every": "Alle",
@@ -332,8 +331,7 @@
     "repositories_other": "{{count}} Repositories",
     "empty": "Leer",
     "none": {
-      "title": "Noch keine Workspaces",
-      "body": "Gib einem Kunden oder Produkt eigene Agenten, Kontext und Repositories."
+      "title": "Noch keine Workspaces"
     }
   },
   "workspace": {
@@ -434,7 +432,6 @@
     "picker": {
       "scratch": "Ganz neu anfangen",
       "hire": "Oder eine Rolle einstellen",
-      "intro": "Ein Agent pro Job oder ein Allrounder, der eine ganze Abteilung führt.",
       "search": "Rollen suchen",
       "searchPlaceholder": "Rollen suchen…",
       "clearSearch": "Suche löschen",
@@ -449,6 +446,8 @@
   },
   "model": {
     "switchFailed": "Modell konnte nicht gewechselt werden",
+    "reload": "Aus Claude Code neu laden",
+    "reloadFailed": "Modelle konnten nicht neu geladen werden",
     "appliesNext": "Gilt ab der nächsten Nachricht in diesem Chat.",
     "forNewChat": "Für den Chat, den du gleich startest.",
     "older": "Ältere Modelle",
@@ -488,7 +487,6 @@
     "edit": "Ziel bearbeiten",
     "new": "Neues Ziel",
     "add": "Hinzufügen",
-    "intro": "Wofür die Arbeit ist. Aufgaben, die ihm dienen, sagen ihrem Agenten, warum.",
     "title": "Ziel",
     "titlePlaceholder": "Die neuen Preise starten",
     "why": "Warum es wichtig ist",
@@ -517,9 +515,7 @@
     "removeDate": "Zieldatum entfernen"
   },
   "pickWorkspace": {
-    "intro": "Chats und Aufgaben, die du auf diesem Handy startest, landen im gewählten Workspace oder Projekt.",
     "all": "Alle Workspaces",
-    "allBody": "Alles, aus jedem Workspace",
     "manage": "Workspaces verwalten",
     "hideProjects": "Projekte von {{name}} ausblenden",
     "showProjects": "Projekte von {{name}} einblenden"
@@ -541,7 +537,6 @@
   },
   "phone": {
     "outdatedTitle": "Godmode auf deinem Computer aktualisieren",
-    "outdatedBody": "Danach kannst du das auch vom Handy aus sehen und ändern.",
     "onComputer": "Auf deinem Computer"
   },
   "health": {
@@ -556,6 +551,7 @@
     "permissions": "Berechtigungen",
     "upkeep": {
       "title": "Automatische Pflege",
+      "link": "Updates & Pflege",
       "autoFix": "Probleme automatisch beheben",
       "autoUpdate": "Tools automatisch aktualisieren",
       "autoCleanup": "Automatisch aufräumen",
@@ -585,7 +581,7 @@
     "status": {
       "active": "Aktiv",
       "trial": "Kostenlose Testphase",
-      "pastDue": "Zahlung fällig",
+      "pastDue": "Am Computer prüfen",
       "grace": "Testphase",
       "unverified": "Noch nicht geprüft",
       "missing": "Keine Lizenz",
@@ -601,18 +597,13 @@
     },
     "statusLabel": "Status",
     "planLabel": "Tarif",
-    "key": "Schlüssel",
-    "freeUntil": "Testphase bis",
-    "trialEnds": "Testphase endet",
-    "trialEndsStops": "Testphase endet, dann Schluss",
-    "renewsOn": "Verlängert sich am",
-    "cancelsOn": "Endet am",
-    "renews": "Verlängert sich",
-    "never": "Nie, sie gehört dir",
     "acceptedUntil": "Akzeptiert bis",
     "keepsWorking": "Funktioniert weiter bis",
     "notEnforced": "Ein eigener Build: Er braucht keine Lizenz.",
-    "onComputer": "Schlüssel oder Abo änderst du in Godmode auf deinem Computer.",
+    "onComputer": "Die Lizenz verwaltest du in Godmode auf deinem Computer.",
+    "checkAgain": "Erneut prüfen",
+    "checked": "Lizenz geprüft",
+    "checkFailed": "Lizenz konnte nicht geprüft werden",
     "usage": {
       "title": "Auf diesem Computer",
       "since": "Seit {{date}}",
@@ -634,21 +625,15 @@
     },
     "cloud": {
       "title": "Godmode Cloud",
-      "price": "Preis",
-      "perMonth": "{{price}} / Monat",
-      "perYear": "{{price}} / Jahr",
-      "renewsOn": "Verlängert sich am",
-      "endsOn": "Endet am",
       "computers": "Computer",
       "relay": "Weitergeleitete Daten diesen Monat",
       "of": "{{used}} von {{limit}}",
-      "allIncluded": "Alles inklusive: In dieser Cloud gibt es nichts zu bezahlen.",
       "sub": {
         "trialing": "Testphase",
         "active": "Aktiv",
-        "pastDue": "Zahlung fällig",
+        "pastDue": "Am Computer prüfen",
         "canceled": "Beendet",
-        "unpaid": "Unbezahlt",
+        "unpaid": "Am Computer prüfen",
         "incomplete": "Unvollständig",
         "expired": "Abgelaufen",
         "paused": "Pausiert"
@@ -724,7 +709,7 @@
     "title": "Verbundene Apps",
     "loadFailed": "Verbundene Apps konnten nicht geladen werden",
     "emptyTitle": "Keine verbundenen Apps",
-    "emptyBody": "Verbinde Claude Code oder eine andere App in Godmode auf deinem Computer, um dein Team aus dem Terminal aufzubauen.",
+    "emptyBody": "Verbinde Claude Code oder eine andere App in Godmode auf deinem Computer.",
     "access": {
       "manage": "Richtet ein und steuert",
       "read": "Nur ansehen"
@@ -736,7 +721,23 @@
     "confirmTitle": "{{name}} entfernen?",
     "confirm": "Ihr Schlüssel funktioniert sofort nicht mehr. Agenten und Automationen, die sie angelegt hat, bleiben.",
     "confirmInstalled": "Ihr Schlüssel funktioniert sofort nicht mehr, und Godmode entfernt sich aus Claude Code. Agenten und Automationen, die sie angelegt hat, bleiben.",
-    "removeFailed": "App konnte nicht entfernt werden"
+    "removeFailed": "App konnte nicht entfernt werden",
+    "tools": {
+      "title": "Was eine verbundene App kann",
+      "description_one": "{{count}} Tool, dieselben, mit denen Godmode dein Team führt. Ein Schlüssel „Nur ansehen“ bekommt die als „Liest nur“ markierten.",
+      "description_other": "{{count}} Tools, dieselben, mit denen Godmode dein Team führt. Ein Schlüssel „Nur ansehen“ bekommt die als „Liest nur“ markierten.",
+      "onlyReads": "Liest nur",
+      "agents": "Agenten",
+      "agentsAbout": "Das Team sehen, Agenten hinzufügen, ihre Aufgabe, Anweisungen und ihr Aussehen ändern.",
+      "automations": "Automationen",
+      "automationsAbout": "Zeitpläne, App-Ereignisse, Bedingungen und Webhooks, die einen Agenten starten.",
+      "tasks": "Aufgaben",
+      "tasksAbout": "Aufgaben anlegen, an Agenten übergeben, Ergebnisse lesen, Feedback geben.",
+      "vms": "Virtuelle Maschinen",
+      "vmsAbout": "VMs anlegen und Agenten darin arbeiten lassen.",
+      "activity": "Aktivität",
+      "activityAbout": "Was jeder Agent getan hat, was fehlgeschlagen ist, welche Logins fehlen."
+    }
   },
   "general": {
     "title": "Allgemein",
@@ -755,7 +756,8 @@
       "cardsLabel": "Karten",
       "compactLabel": "Kompakt",
       "mcpApps": "MCP-App-Ansichten",
-      "readReplies": "Antworten vorlesen"
+      "readReplies": "Antworten vorlesen",
+      "largePaste": "Große Einfügungen als Datei"
     },
     "summaries": {
       "title": "KI-Zusammenfassungen",
@@ -787,7 +789,9 @@
       "title": "Text zu Sprache",
       "rate": "Sprechtempo",
       "voice": "Stimme",
-      "elevenlabsVoice": "Stimmen-ID"
+      "elevenlabsVoice": "Stimmen-ID",
+      "phoneVoice": "Stimme auf diesem Telefon",
+      "automatic": "Automatisch"
     },
     "openai": {
       "sttModel": "Transkriptionsmodell",
@@ -810,65 +814,54 @@
     },
     "quiet": {
       "title": "Ruhezeiten",
-      "on": "Keine Anrufe an dich von {{from}} bis {{to}}. Fragen warten in der App.",
-      "off": "Agenten dürfen dich zu jeder Tageszeit anrufen.",
+      "on": "Fragen warten in der App.",
       "from": "Von",
-      "to": "Bis"
+      "to": "Bis",
+      "fromLabel": "Ruhezeit von",
+      "toLabel": "Ruhezeit bis"
     },
     "greeting": {
       "title": "Begrüßung",
-      "hint": "Das Erste, was Anrufer hören",
       "placeholder": "Hallo, hier ist Studio Berg. Wie kann ich helfen?"
     }
   },
   "features": {
     "title": "Funktionen",
     "loadFailed": "Funktionen konnten nicht geladen werden",
-    "footer": "Integrationen, Plugins, Messaging, Anrufe, Karten, VMs, SSH und Android-Handys schaltest du auf deinem Computer ein.",
+    "footer": "Ausgegraute schaltest du auf deinem Computer ein.",
     "activity": {
-      "title": "Aktivität",
-      "detail": "Jeder Lauf jedes Agenten"
+      "title": "Aktivität"
     },
     "artifacts": {
-      "title": "Artefakte",
-      "detail": "Kleine Apps, die Agenten im Chat bauen"
+      "title": "Artefakte"
     },
     "integrations": {
-      "title": "Integrationen",
-      "detail": "Apps, API-Tools und MCP-Server"
+      "title": "Integrationen"
     },
     "plugins": {
-      "title": "Plugins",
-      "detail": "Claude-Code-Plugins in jedem Lauf"
+      "title": "Plugins"
     },
     "messaging": {
-      "title": "Messaging",
-      "detail": "Bots in Slack, Telegram und Teams"
+      "title": "Messaging"
     },
     "phone": {
       "title": "Anrufe",
-      "detail": "Agenten rufen Leute an, und dich",
       "persona": "Stimme und Grenzen"
     },
     "cards": {
-      "title": "Karten",
-      "detail": "Agenten zahlen mit gespeicherten Karten"
+      "title": "Karten"
     },
     "vm": {
-      "title": "Virtuelle Maschinen",
-      "detail": "macOS-VMs, in denen Agenten arbeiten"
+      "title": "Virtuelle Maschinen"
     },
     "ssh": {
-      "title": "SSH-Server",
-      "detail": "Server, auf denen sich Agenten anmelden"
+      "title": "SSH-Server"
     },
     "sshKeys": {
-      "title": "SSH-Schlüssel",
-      "detail": "Die Verwaltung deiner SSH-Schlüssel"
+      "title": "SSH-Schlüssel"
     },
     "android": {
-      "title": "Android-Handys",
-      "detail": "Mit deinem Computer verbundene Handys"
+      "title": "Android-Handys"
     }
   },
   "logs": {
@@ -892,7 +885,8 @@
     "empty": "Noch nichts protokolliert",
     "noMatch": "Nichts gefunden",
     "latest_one": "Der neueste Eintrag",
-    "latest_other": "Die neuesten {{count}} Einträge"
+    "latest_other": "Die neuesten {{count}} Einträge",
+    "showIssue": "Diese Einträge im Log zeigen"
   },
   "about": {
     "title": "Über Godmode",
@@ -901,7 +895,6 @@
     "name": "Name",
     "version": "Version",
     "platform": "Plattform",
-    "website": "Website",
     "terms": "Lizenzbedingungen",
     "footer": "© Codext GmbH"
   },
@@ -1012,7 +1005,12 @@
       "count_one": "{{count}} Eintrag",
       "count_other": "{{count}} Einträge",
       "kept_one": "{{count}} behalten",
-      "kept_other": "{{count}} behalten"
+      "kept_other": "{{count}} behalten",
+      "review": "Erst prüfen",
+      "showEntries": "Zeigen, was in {{name}} liegt",
+      "hideEntries": "Ausblenden, was in {{name}} liegt",
+      "moreEntries_one": "{{count}} weiteres steht nicht in der Liste",
+      "moreEntries_other": "{{count}} weitere stehen nicht in der Liste"
     },
     "optimize": {
       "title": "Optimieren",
@@ -1036,7 +1034,17 @@
       "dreamingOff": "Träumen ist aus",
       "compress": "Chats werden bei {{pct}} % komprimiert.",
       "compressFull": "Chats werden komprimiert, wenn sie fast voll sind.",
-      "compressOff": "Chats werden nicht von selbst komprimiert."
+      "compressOff": "Chats werden nicht von selbst komprimiert.",
+      "fullest": "Vollste Chats der Woche",
+      "byAgent": "Gedächtnis nach Agent",
+      "notes_one": "{{count}} Notiz",
+      "notes_other": "{{count}} Notizen",
+      "unused_one": "{{count}} ungenutzt",
+      "unused_other": "{{count}} ungenutzt",
+      "unusedLine_one": "{{count}} Notiz 30 Tage ungenutzt",
+      "unusedLine_other": "{{count}} Notizen 30 Tage ungenutzt",
+      "allUsed": "Jede Notiz wird genutzt",
+      "counting": "Zählt seit {{date}}, welche Notizen Aufgaben nutzen"
     },
     "auto": {
       "title": "Automatisches Aufräumen",

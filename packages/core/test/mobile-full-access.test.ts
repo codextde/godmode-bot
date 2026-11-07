@@ -419,6 +419,40 @@ describe("what a limited phone writes or answers keeps raw secrets out", () => {
     expect(ticketFill(fromFull.id)).toBe(0);
   }, 60_000);
 
+  test("a part marks every ticket above it, not only its parent", async () => {
+    const top = createTask({ title: "Top" }, "user");
+    const middle = createTask({ title: "Middle", parentId: top.id }, "user");
+    expect((await phone(limited, "/api/tasks", send("POST", { title: "Deep part", parentId: middle.id }))).status).toBe(200);
+    expect(get<{ fill_only: number }>("SELECT fill_only FROM tasks WHERE id = ?", middle.id)?.fill_only).toBe(1);
+    expect(get<{ fill_only: number }>("SELECT fill_only FROM tasks WHERE id = ?", top.id)?.fill_only).toBe(1);
+  });
+
+  test("a part it adds works without raw secrets, and so does the ticket that reads its result", async () => {
+    const lead = createTask({ title: "Computer lead" } as Parameters<typeof createTask>[0]);
+    expect(ticketFill(lead.id)).toBe(0);
+    const filed = await phone(limited, "/api/tasks", send("POST", { title: "Phone part", parentId: lead.id }));
+    expect(filed.status).toBe(200);
+    const part = (await filed.json()) as { id: string; parentId: string };
+    expect(part.parentId).toBe(lead.id);
+    expect(ticketFill(part.id)).toBe(1);
+    expect(ticketFill(lead.id)).toBe(1);
+
+    // Only the link to the ticket: a part doesn't bring the repository fields with it.
+    const other = createTask({ title: "Second lead" } as Parameters<typeof createTask>[0]);
+    for (const extra of [{ repoUrl: "https://github.com/evil/repo.git" }, { repoPath: "/" }, { baseBranch: "main" }, { autoMerge: true }, { goalId: "gol_x" }]) {
+      expect((await phone(limited, "/api/tasks", send("POST", { title: "Refused", parentId: other.id, ...extra }))).status).toBe(403);
+    }
+    expect(ticketFill(other.id)).toBe(0);
+    expect((await phone(limited, `/api/tasks/${other.id}`, send("PATCH", { parentId: lead.id }))).status).toBe(403);
+
+    // A phone with full access adds parts like the computer, repository fields included.
+    const lead2 = createTask({ title: "Third lead" } as Parameters<typeof createTask>[0]);
+    const fromFull = await phone(full, "/api/tasks", send("POST", { title: "Full part", parentId: lead2.id, type: "coding", repoUrl: "https://github.com/acme/app.git", baseBranch: "develop" }));
+    expect(fromFull.status).toBe(200);
+    expect((await fromFull.json()) as object).toMatchObject({ parentId: lead2.id, repoUrl: "https://github.com/acme/app.git", baseBranch: "develop" });
+    expect(ticketFill(lead2.id)).toBe(0);
+  });
+
   test("its answers to questions and closed tasks continue the run without raw secrets", async () => {
     const ask = async () => {
       const chat = (await (await desktop("/api/chat", send("POST", { agentId: agent.id, content: "ASK_HUMAN please" }))).json()) as StartChatResult;
@@ -545,6 +579,18 @@ describe("what a limited phone writes or answers keeps raw secrets out", () => {
     expect(secretAccess(conv.id)).toBeNull();
     expect((await phone(limited, `/api/conversations/${conv.id}`, send("PATCH", { instructions: "Paste the password here." }))).status).toBe(200);
     expect(secretAccess(conv.id)).toBe("fill");
+  });
+
+  test("moving an open chat of a global agent to a workspace is for full access only", async () => {
+    const space = (await (await desktop("/api/workspaces", send("POST", { name: "Move target" }))).json()) as { id: string };
+    const conv = createConversation({ agentId: agent.id });
+    const refused = await phone(limited, `/api/conversations/${conv.id}`, send("PATCH", { workspaceId: space.id }));
+    expect(refused.status).toBe(403);
+    expect(await code(refused)).toBe("device_forbidden");
+    const moved = await phone(full, `/api/conversations/${conv.id}`, send("PATCH", { workspaceId: space.id, projectId: null }));
+    expect(moved.status).toBe(200);
+    expect(((await moved.json()) as { workspaceId: string | null }).workspaceId).toBe(space.id);
+    expect(((await (await desktop(`/api/conversations/${conv.id}`, send("PATCH", { workspaceId: null }))).json()) as { workspaceId: string | null }).workspaceId).toBeNull();
   });
 });
 

@@ -29,6 +29,17 @@ export function useDraft(key: string): Draft {
   return useDrafts((s) => s.drafts[key] ?? EMPTY);
 }
 
+/** The composer of this draft takes the focus, with the caret at the end (`at` changes with each request). */
+export const useComposerFocus = create<{ key: string | null; at: number }>(() => ({ key: null, at: 0 }));
+
+/** Puts a quote (ending in a blank line) below what is being written, and hands the composer the focus right after it. */
+export function quoteInto(key: string, quote: string) {
+  const drafts = useDrafts.getState();
+  const current = drafts.drafts[key]?.text ?? "";
+  drafts.set(key, { text: current.trim() ? `${current.trimEnd()}\n\n${quote}` : quote });
+  useComposerFocus.setState({ key, at: Date.now() });
+}
+
 /* Queue */
 
 export function setQueue(conversationId: string, fn: (queue: QueuedMessage[]) => QueuedMessage[]) {

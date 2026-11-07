@@ -1,3 +1,4 @@
+import { useQuery } from "@tanstack/react-query";
 import { router, useLocalSearchParams } from "expo-router";
 import { useRef, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
@@ -13,13 +14,16 @@ import {
 } from "@godmode/shared";
 import { AttachmentTray } from "@/components/attachments";
 import { CharacterAvatar } from "@/components/character";
+import { useFullAccess } from "@/components/full-access";
 import { Icon } from "@/components/icon";
 import { ProjectPicker } from "@/components/project-picker";
-import { TYPE_META } from "@/components/task-row";
-import { Button, Skeleton, T, tap } from "@/components/ui";
+import { OTHER_REPO, TaskRepoFields } from "@/components/task-repo-fields";
+import { STATUS_META, TYPE_META } from "@/components/task-row";
+import { Button, ErrorState, Skeleton, T, tap } from "@/components/ui";
 import { WorkspaceChip } from "@/components/workspace-chip";
-import { api, errorText } from "@/lib/api";
+import { api, ApiError, errorText, updateDesktopMessage } from "@/lib/api";
 import { usePendingFiles } from "@/lib/attachments";
+import { workspaceRepos } from "@/lib/desktop-parity";
 import { useAgents } from "@/lib/hooks";
 import { qk, queryClient } from "@/lib/query";
 import { agentsFor, useWorkspace } from "@/lib/workspace";
@@ -27,15 +31,23 @@ import { radius, space, textScale, useColors } from "@/lib/theme";
 
 const NONE = "none";
 
-/** A new task in the picked workspace: with an agent it starts right away, without one it waits in the backlog. */
+/**
+ * A new task in the picked workspace: with an agent it starts right away, without one it waits in the backlog.
+ * `parentId`: a part of that ticket, in its workspace and project.
+ */
 export default function NewTask() {
   const c = useColors();
-  const { t } = useTranslation(["chat", "common"]);
-  const { agentId } = useLocalSearchParams<{ agentId?: string }>();
-  const { id: workspaceId, workspace, projectId: scopeProject } = useWorkspace();
+  const { t } = useTranslation(["chat", "tasks", "common"]);
+  const { agentId, parentId } = useLocalSearchParams<{ agentId?: string; parentId?: string }>();
+  const { id: pickedWorkspace, workspace: pickedPlace, workspaces, projectId: scopeProject } = useWorkspace();
+  const { fullAccess } = useFullAccess();
+  const parentTask = useQuery({ queryKey: qk.task(parentId ?? ""), queryFn: () => api.tasks.get(parentId!), enabled: !!parentId });
+  const parent = parentTask.data;
+  const workspaceId = parentId ? (parent?.workspaceId ?? null) : pickedWorkspace;
+  const workspace = parentId ? workspaces.find((w) => w.id === workspaceId) : pickedPlace;
   // A workspace switched in the sheet takes its own projects: a pick from the old one doesn't carry over.
   const [projectPick, setProjectPick] = useState<{ workspaceId: string | null; projectId: string | null } | null>(null);
-  const chosen = projectPick && projectPick.workspaceId === workspaceId ? projectPick.projectId : scopeProject;
+  const chosen = parent ? parent.projectId : projectPick && projectPick.workspaceId === workspaceId ? projectPick.projectId : scopeProject;
   const projectId = chosen && workspace?.projects?.some((p) => p.id === chosen) ? chosen : null;
   const { data: allAgents, isLoading: agentsLoading } = useAgents();
   const agents = agentsFor(allAgents ?? [], workspaceId).filter((a) => a.enabled);
@@ -43,11 +55,31 @@ export default function NewTask() {
   const [description, setDescription] = useState("");
   const [type, setType] = useState<TaskType>("general");
   const [picked, setPicked] = useState<string | undefined>(agentId);
+  const [parked, setParked] = useState(false);
+  const [repoChoice, setRepoChoice] = useState("");
+  const [repoUrl, setRepoUrl] = useState("");
+  const [baseBranch, setBaseBranch] = useState("");
   const { files, attach, remove } = usePendingFiles();
   const [saving, setSaving] = useState(false);
   const uploads = useRef(new Map<string, TaskAttachment>());
+  // A part goes to its ticket's agent, or waits for someone: it never starts an agent nobody picked.
   const agent =
-    picked === NONE ? undefined : (agents.find((a) => a.id === picked) ?? (projectId ? agents.find((a) => a.projectId === projectId) : undefined) ?? agents[0]);
+    picked === NONE
+      ? undefined
+      : parentId && !picked
+        ? agents.find((a) => a.id === parent?.agentId)
+        : (agents.find((a) => a.id === picked) ?? (projectId ? agents.find((a) => a.projectId === projectId) : undefined) ?? agents[0]);
+  // The repository of a coding ticket is the computer's to give: a limited phone leaves it to the workspace.
+  const repos = workspaceRepos(workspace, projectId);
+  const pickRepo = fullAccess === true && type === "coding";
+  const choice = repos.some((r) => r.id === repoChoice) || (repos.length && repoChoice === OTHER_REPO) ? repoChoice : (repos[0]?.id ?? OTHER_REPO);
+  const repo = repos.find((r) => r.id === choice);
+  const needsRepo = pickRepo && !repo && !repoUrl.trim();
+  const repoInput = () => {
+    if (!pickRepo) return {};
+    if (repo?.kind === "folder") return { repoPath: repo.path, baseBranch: baseBranch.trim() };
+    return { repoUrl: repo?.url ?? repoUrl.trim(), baseBranch: baseBranch.trim() || repo?.branch || "" };
+  };
 
   const create = async () => {
     const name = title.trim();
@@ -68,16 +100,26 @@ export default function NewTask() {
         attachments.push(done);
       }
       const details = [description.trim(), ...attachments.map(taskAttachmentMarkdown)].filter(Boolean).join("\n\n");
-      const task = await api.tasks.create({ workspaceId, ...(projectId ? { projectId } : {}), title: name, description: details || undefined, type, agentId: agent?.id ?? null });
+      const place = parentId ? { parentId } : projectId ? { projectId } : {};
+      const task = await api.tasks.create({ workspaceId, ...place, title: name, description: details || undefined, type, agentId: agent?.id ?? null, ...(agent && parked ? { status: "backlog" as const } : {}), ...repoInput() });
       void queryClient.invalidateQueries({ queryKey: qk.tasks });
       router.dismiss();
-      router.push({ pathname: "/task/[id]", params: { id: task.id } });
+      // A part stays with its ticket, whose list now shows it.
+      if (!parentId) router.push({ pathname: "/task/[id]", params: { id: task.id } });
     } catch (err) {
-      Alert.alert(t("newTask.createFailed"), errorText(err));
+      Alert.alert(t("newTask.createFailed"), err instanceof ApiError && err.code === "device_forbidden" ? updateDesktopMessage() : errorText(err));
     } finally {
       setSaving(false);
     }
   };
+
+  if (parentId && !parent && parentTask.isError) {
+    return (
+      <View style={{ flex: 1, backgroundColor: c.background }}>
+        <ErrorState title={t("tasks:task.openFailed")} error={errorText(parentTask.error)} onRetry={() => void parentTask.refetch()} />
+      </View>
+    );
+  }
 
   return (
     <ScrollView
@@ -88,8 +130,8 @@ export default function NewTask() {
       automaticallyAdjustKeyboardInsets
     >
       <View style={{ gap: space.sm }}>
-        <T variant="title">{t("newTask.title")}</T>
-        <WorkspaceChip />
+        <T variant="title">{parentId ? t("tasks:parts.new", { number: parent?.number ?? "" }) : t("newTask.title")}</T>
+        {parentId ? null : <WorkspaceChip />}
       </View>
 
       <View style={[styles.fields, { backgroundColor: c.surface, borderColor: c.border }]}>
@@ -146,20 +188,24 @@ export default function NewTask() {
             <Chip key={k} active={k === type} onPress={() => setType(k)} label={TYPE_META[k].label} />
           ))}
         </View>
-        {type === "coding" && !workspace ? (
+        {type === "coding" && !workspace && !pickRepo ? (
           <T variant="footnote" muted>
             {t("newTask.codingNeedsWorkspace")}
           </T>
         ) : null}
       </View>
 
-      <ProjectPicker
-        bleed={space.xl}
-        projects={workspace?.projects ?? []}
-        value={projectId}
-        onChange={(picked) => setProjectPick({ workspaceId, projectId: picked })}
-        hint={projectId ? t("newTask.projectHint") : t("newTask.workspaceHint")}
-      />
+      {pickRepo ? <TaskRepoFields repos={repos} choice={choice} url={repoUrl} baseBranch={baseBranch} onChoice={setRepoChoice} onUrl={setRepoUrl} onBaseBranch={setBaseBranch} /> : null}
+
+      {parentId ? null : (
+        <ProjectPicker
+          bleed={space.xl}
+          projects={workspace?.projects ?? []}
+          value={projectId}
+          onChange={(picked) => setProjectPick({ workspaceId, projectId: picked })}
+          hint={projectId ? t("newTask.projectHint") : t("newTask.workspaceHint")}
+        />
+      )}
 
       <View style={{ gap: space.sm }}>
         <T variant="eyebrow" muted>
@@ -173,12 +219,25 @@ export default function NewTask() {
         </View>
       </View>
 
+      {agent ? (
+        <View style={{ gap: space.sm }}>
+          <T variant="eyebrow" muted>
+            {t("newTask.status")}
+          </T>
+          <View style={styles.chips}>
+            {(["todo", "backlog"] as const).map((s) => (
+              <Chip key={s} active={parked === (s === "backlog")} onPress={() => setParked(s === "backlog")} label={STATUS_META[s].label} />
+            ))}
+          </View>
+        </View>
+      ) : null}
+
       <Button
-        title={agent ? t("newTask.startWith", { name: agent.name }) : t("newTask.addToBacklog")}
-        icon={agent ? "play" : "plus"}
+        title={agent && !parked ? t("newTask.startWith", { name: agent.name }) : t("newTask.addToBacklog")}
+        icon={agent && !parked ? "play" : "plus"}
         size="lg"
         loading={saving}
-        disabled={!title.trim()}
+        disabled={!title.trim() || needsRepo || (!!parentId && !parent)}
         onPress={() => void create()}
       />
     </ScrollView>

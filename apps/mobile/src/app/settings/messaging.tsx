@@ -1,5 +1,5 @@
 import { router, Stack } from "expo-router";
-import { Alert, RefreshControl, ScrollView, StyleSheet, Switch, View } from "react-native";
+import { Alert, RefreshControl, StyleSheet, Switch, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { MESSAGING_PROVIDER_LABELS, MESSAGING_PROVIDERS, type MessagingConnection, type MessagingProvider } from "@godmode/shared";
 import { useFullAccess } from "@/components/admin";
@@ -7,6 +7,7 @@ import { CloseButton } from "@/components/close-button";
 import { Group, LinkRow } from "@/components/form";
 import { BotStateBadge, PlatformLogo } from "@/components/messaging-parts";
 import { ListRow, ReadonlyList } from "@/components/readonly-list";
+import { SettingsScroll } from "@/components/settings-scroll";
 import { EmptyState, ErrorState, SkeletonRows, tap } from "@/components/ui";
 import { errorText } from "@/lib/api";
 import { ik, useMessaging } from "@/lib/integrations";
@@ -61,7 +62,7 @@ function MessagingAdmin() {
   const bots = list.data ?? [];
 
   return (
-    <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content} refreshControl={<RefreshControl {...pull} />}>
+    <SettingsScroll contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content} refreshControl={<RefreshControl {...pull} />}>
       <Stack.Screen options={{ title: t("integrations:messaging.title") }} />
       <CloseButton />
       {list.isLoading ? (
@@ -86,7 +87,7 @@ function MessagingAdmin() {
           </Group>
         </View>
       )}
-    </ScrollView>
+    </SettingsScroll>
   );
 }
 

@@ -82,7 +82,10 @@
     "saveError": "Konnte nicht gespeichert werden",
     "reviewSent": "An {{agent}} gesendet",
     "saveFailed": "Konnte nicht gespeichert werden",
-    "renameError": "Konnte nicht umbenannt werden"
+    "renameError": "Konnte nicht umbenannt werden",
+    "downloadHtml": "Als HTML herunterladen",
+    "downloadLeftOut_one": "{{count}} Datei ist nicht im Download",
+    "downloadLeftOut_other": "{{count}} Dateien sind nicht im Download"
   },
   "versions": {
     "title": "Versionen",
@@ -104,5 +107,17 @@
   "renameSheet": {
     "title": "Umbenennen",
     "save": "Speichern"
+  },
+  "tabs": {
+    "label": "Ansicht",
+    "preview": "Vorschau",
+    "files": "Dateien"
+  },
+  "files": {
+    "download": "Herunterladen",
+    "previous": "Zurück",
+    "next": "Weiter",
+    "noPreview": "Für diesen Dateityp gibt es keine Vorschau",
+    "actionError": "Das hat nicht geklappt"
   }
 }

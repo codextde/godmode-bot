@@ -1,15 +1,17 @@
 import { router } from "expo-router";
-import { Pressable, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import type { Agent, Task, TaskBlockedKind, TaskStatus, TaskType } from "@godmode/shared";
 import { isOverdue, isWaiting, waitsForAnswer, waitsForSubtasks, waitsForTickets } from "@godmode/shared";
 import { CharacterAvatar } from "./character";
 import { Icon } from "./icon";
 import { PriorityIcon, StatusIcon } from "./task-glyphs";
+import { RowPressable } from "./row-pressable";
 import { Badge, LiveDot, Row, T, tap, UnassignedAvatar, type Tone } from "./ui";
 import { isWorking } from "@/lib/desktop-parity";
 import { shortTime } from "@/lib/format";
 import { t } from "@/lib/i18n";
+import { blockedReasonText } from "@/lib/license-text";
 import { radius, space, useColors } from "@/lib/theme";
 
 /** The desktop's labels (packages/shared TASK_STATUS_LABELS) and tones (task-meta.tsx). */
@@ -50,7 +52,7 @@ export function TaskStatusBadge({ task }: { task: Task }) {
   return <Badge label={meta.label} tone={meta.tone} icon={<StatusIcon status={task.status} size={12} />} />;
 }
 
-export function TaskRow({ task, agent, workspaceName, projectName }: { task: Task; agent?: Agent; workspaceName?: string; projectName?: string }) {
+export function TaskRow({ task, agent, workspaceName, projectName, onLongPress }: { task: Task; agent?: Agent; workspaceName?: string; projectName?: string; onLongPress?: () => void }) {
   const c = useColors();
   const { t } = useTranslation("components");
   const working = isWorking(task);
@@ -66,7 +68,7 @@ export function TaskRow({ task, agent, workspaceName, projectName }: { task: Tas
           : null;
   const blocked =
     task.status === "blocked" && (task.blockedReason || task.blockedKind)
-      ? [task.blockedKind ? blockedPrefix(task.blockedKind) : "", task.blockedReason ?? (task.blockedKind === "interrupted" ? t("taskRow.restartedMidRun") : "")].filter(Boolean).join(" ")
+      ? [task.blockedKind ? blockedPrefix(task.blockedKind) : "", blockedReasonText(task) ?? (task.blockedKind === "interrupted" ? t("taskRow.restartedMidRun") : "")].filter(Boolean).join(" ")
       : null;
   const extra = [
     task.dueDate ? (isOverdue(task) ? t("taskRow.overdue") : t("taskRow.due", { date: task.dueDate.slice(5) })) : null,
@@ -75,7 +77,7 @@ export function TaskRow({ task, agent, workspaceName, projectName }: { task: Tas
     task.subtasks ? t("taskRow.partsDone", { done: task.subtasks.total - task.subtasks.open, total: task.subtasks.total }) : null,
   ].filter(Boolean);
   return (
-    <Pressable onPress={() => openTask(task.id)} style={({ pressed }) => [styles.row, pressed && { backgroundColor: c.sunken }]}>
+    <RowPressable onPress={() => openTask(task.id)} onLongPress={onLongPress} style={styles.row}>
       {agent ? <CharacterAvatar agent={agent} size={40} running={working} /> : <UnassignedAvatar size={40} />}
       <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
         <Row style={{ gap: space.sm }}>
@@ -116,7 +118,7 @@ export function TaskRow({ task, agent, workspaceName, projectName }: { task: Tas
           </Row>
         ) : null}
       </View>
-    </Pressable>
+    </RowPressable>
   );
 }
 

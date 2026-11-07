@@ -11,6 +11,7 @@ import {
   listMessagePage,
   chatAttachmentImage,
   messageImage,
+  messageToolCall,
   messageWindow,
   windowMessages,
   markChatFillOnly,
@@ -166,6 +167,9 @@ export function registerChatRoutes(app: Hono): void {
     });
   });
 
+  // One tool call in full, for light answers that cut long output.
+  app.get("/api/conversations/:id/messages/:messageId/tools/:toolUseId", (c) => c.json(messageToolCall(c.req.param("id"), c.req.param("messageId"), c.req.param("toolUseId"))));
+
   app.get("/api/conversations/:id/attachment", (c) => {
     const path = c.req.query("path");
     if (!path) throw badRequest("path is required");
@@ -214,6 +218,7 @@ export function registerChatRoutes(app: Hono): void {
         computerTarget: computerTargetSchema.nullable().optional(),
         vmId,
         browserProfileId,
+        workspaceId,
         projectId,
         sshServerIds,
         androidDeviceIds,

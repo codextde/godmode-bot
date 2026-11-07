@@ -1,16 +1,19 @@
 import { router, Stack } from "expo-router";
-import { Alert, RefreshControl, ScrollView, StyleSheet, Switch, View } from "react-native";
+import { Alert, RefreshControl, StyleSheet, Switch, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import type { ApiTool, ComposioConnection, McpServer } from "@godmode/shared";
 import { useFullAccess } from "@/components/admin";
 import { CloseButton } from "@/components/close-button";
 import { Group } from "@/components/form";
 import { ListRow } from "@/components/readonly-list";
+import { SettingsScroll } from "@/components/settings-scroll";
 import { ActionRow } from "@/components/tool-form";
+import { useMcpPresetRows } from "@/components/mcp-presets";
+import { ToolsLinks } from "@/components/tools-links";
 import { Badge, EmptyState, ErrorState, SkeletonRows, tap } from "@/components/ui";
 import { errorText } from "@/lib/api";
 import { toolIcon } from "@/lib/api-tool-presets";
-import { hostOfUrl, useApiTools, useComposioConnections, useComposioStatus, useMcpServers } from "@/lib/integrations";
+import { hostOfUrl, toolStatus, useApiTools, useComposioConnections, useComposioStatus, useMcpServers } from "@/lib/integrations";
 import { queryClient } from "@/lib/query";
 import { setEnabled } from "@/lib/tools-admin";
 import { usePullRefresh } from "@/lib/use-pull-refresh";
@@ -18,8 +21,8 @@ import { isOutdated } from "@/lib/vault";
 import { space, useColors } from "@/lib/theme";
 
 /**
- * What agents connect to: MCP servers, API keys and Composio apps, by name and state. A full-access phone also adds,
- * edits, tests and switches servers and API tools, like the desktop.
+ * What agents connect to: the ways to plugins, messaging and machines, then MCP servers, API keys and Composio apps by
+ * name and state. A full-access phone also adds, edits, tests and switches servers and API tools, like the desktop.
  */
 export default function Integrations() {
   const { t } = useTranslation(["integrations", "tools"]);
@@ -28,6 +31,7 @@ export default function Integrations() {
   const tools = useApiTools();
   const composio = useComposioStatus();
   const connections = useComposioConnections();
+  const quickAdd = useMcpPresetRows();
   const pull = usePullRefresh(() => queryClient.invalidateQueries({ queryKey: ["integrations"] }));
   const loading = mcp.isLoading || tools.isLoading;
   const servers = mcp.data ?? [];
@@ -36,9 +40,10 @@ export default function Integrations() {
   const empty = !servers.length && !keys.length && !apps.length && !composio.data?.configured;
 
   return (
-    <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content} refreshControl={<RefreshControl {...pull} />}>
+    <SettingsScroll contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content} refreshControl={<RefreshControl {...pull} />}>
       <Stack.Screen options={{ title: t("title") }} />
       <CloseButton />
+      <ToolsLinks />
       {loading ? (
         <SkeletonRows count={5} avatar={36} />
       ) : isOutdated(mcp.error) ? (
@@ -54,7 +59,7 @@ export default function Integrations() {
               {servers.map((s) => (
                 <McpRow key={s.id} server={s} admin={admin} />
               ))}
-              {admin ? <ActionRow icon="plus" title={t("tools:mcp.add")} onPress={() => router.push("/settings/mcp-server")} /> : null}
+              {!admin ? null : servers.length ? <ActionRow icon="plus" title={t("tools:mcp.add")} onPress={() => router.push("/settings/mcp-server")} /> : quickAdd}
             </Group>
           ) : null}
           {keys.length || admin ? (
@@ -92,7 +97,7 @@ export default function Integrations() {
           ) : null}
         </View>
       )}
-    </ScrollView>
+    </SettingsScroll>
   );
 }
 
@@ -136,7 +141,8 @@ function ApiToolRow({ tool, admin }: { tool: ApiTool; admin: boolean }) {
       grouped
       icon={toolIcon(tool.preset)}
       title={tool.name}
-      lines={[hostOfUrl(tool.baseUrl) || t("apiTools.noAddress"), tool.hasKey ? null : t("apiTools.noKey")]}
+      lines={[hostOfUrl(tool.baseUrl) || t("apiTools.noAddress"), tool.envVar ? `$${tool.envVar}` : null, toolStatus(tool, t, admin)]}
+      lineLimit={2}
       trailing={admin ? <EnabledSwitch kind="api" id={tool.id} name={tool.name} enabled={tool.enabled} /> : <Badge label={tool.enabled ? t("on") : t("off")} tone={tool.enabled ? "success" : "neutral"} />}
       onPress={admin ? () => router.push({ pathname: "/settings/api-tool", params: { id: tool.id } }) : undefined}
     />

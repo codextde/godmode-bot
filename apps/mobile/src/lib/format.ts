@@ -43,6 +43,15 @@ export function greeting(date = new Date()): string {
   return t("system:greeting.evening");
 }
 
+/** The day a chat's message was written, for the divider above that day's first one. */
+export function dayLabel(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  if (isToday(d)) return t("common:words.today");
+  if (isYesterday(d)) return t("common:words.yesterday");
+  return format(d, isThisYear(d) ? t("chat:thread.dayFormat") : t("chat:thread.dayFormatYear"), { locale: dateLocale() });
+}
+
 export function hostOf(url: unknown): string {
   if (typeof url !== "string" || !url) return "";
   try {

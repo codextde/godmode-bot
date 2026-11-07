@@ -9,13 +9,13 @@ import { CharacterAvatar } from "./character";
 import { Icon, type IconName } from "./icon";
 import { openChat } from "./rows";
 import { openTask } from "./task-row";
-import { Card, Hairline, Row, T, tap } from "./ui";
+import { Card, EmptyState, Hairline, Row, T, tap } from "./ui";
 import { api } from "@/lib/api";
 import { useAwayStore } from "@/lib/away";
 import { useAgents } from "@/lib/hooks";
 import { dateLocale } from "@/lib/i18n";
 import { qk } from "@/lib/query";
-import { space, useColors, type Colors } from "@/lib/theme";
+import { radius, space, useColors, type Colors } from "@/lib/theme";
 
 const ICON: Record<AwayHighlight["kind"], IconName> = { delivered: "tasks", failed: "warning", replied: "chats", automation: "workflow" };
 
@@ -31,36 +31,47 @@ function open(link: string) {
   router.push(link.startsWith("/tasks") ? "/tasks" : "/activity");
 }
 
-/**
- * First thing on Home after the human was away for a while: what the team did meanwhile — who worked,
- * and the few things worth a look. Closed with ×; it doesn't come back until the next time they were away.
- */
-export function AwaySummaryCard() {
-  const c = useColors();
-  const { t } = useTranslation("components");
+/** What the team did while the human was away (the desktop's rule for "away"); nothing while they weren't. */
+function useAwaySummary() {
   const away = useAwayStore((s) => s.away);
-  const dismiss = useAwayStore((s) => s.dismiss);
-  const { byId: agents } = useAgents();
   const { data } = useQuery({
     queryKey: qk.away(away?.since ?? ""),
     queryFn: () => api.away(away!.since, away!.until),
     enabled: !!away,
     staleTime: 60_000,
   });
+  const { t } = useTranslation("components");
   if (!away || !data || (data.finished === 0 && data.delivered === 0)) return null;
   const facts = [
     t("awaySummary.runsFinished", { count: data.finished }),
     data.failed ? t("awaySummary.problems", { count: data.failed }) : null,
     data.delivered ? t("awaySummary.ticketsDelivered", { count: data.delivered }) : null,
   ].filter(Boolean);
-  const now = new Date();
-  const locale = dateLocale();
+  const title = t("awaySummary.title", { duration: formatDistanceStrict(new Date(away.since), new Date(away.until), { locale: dateLocale() }) });
+  return { away, data, facts: facts.join(" · "), title };
+}
 
+/** On Home after the human was away: one line with what happened, opening the whole summary. Closed with ×. */
+export function AwayLine() {
+  const c = useColors();
+  const { t } = useTranslation("components");
+  const summary = useAwaySummary();
+  const dismiss = useAwayStore((s) => s.dismiss);
+  if (!summary) return null;
   return (
-    <Animated.View entering={FadeIn.duration(250)} exiting={FadeOut.duration(150)} style={styles.section}>
-      <Row style={styles.head}>
-        <T variant="eyebrow" muted numberOfLines={1} style={{ flexShrink: 1 }}>
-          {t("awaySummary.title", { duration: formatDistanceStrict(new Date(away.since), new Date(away.until), { locale }) })}
+    <Animated.View entering={FadeIn.duration(250)} exiting={FadeOut.duration(150)}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`${summary.title}. ${summary.facts}`}
+        onPress={() => {
+          tap();
+          router.push("/away");
+        }}
+        style={({ pressed }) => [styles.line, { backgroundColor: pressed ? c.sunken : c.surface, borderColor: c.border }]}
+      >
+        <Icon name="moon" size={14} color={summary.data.failed ? c.danger : c.textMuted} />
+        <T variant="subhead" numberOfLines={1} style={{ flex: 1 }}>
+          {summary.facts}
         </T>
         <Pressable
           accessibilityRole="button"
@@ -72,9 +83,26 @@ export function AwaySummaryCard() {
           }}
           style={({ pressed }) => [styles.close, { opacity: pressed ? 0.5 : 1 }]}
         >
-          <Icon name="close" size={12} color={c.textMuted} weight="semibold" />
+          <Icon name="close" size={11} color={c.textMuted} weight="semibold" />
         </Pressable>
-      </Row>
+      </Pressable>
+    </Animated.View>
+  );
+}
+
+/** The whole summary (the away sheet): who worked, and the few things worth a look. */
+export function AwayDetail() {
+  const c = useColors();
+  const { t } = useTranslation("components");
+  const summary = useAwaySummary();
+  const { byId: agents } = useAgents();
+  if (!summary) return <EmptyState icon="moon" title={t("awaySummary.nothing")} />;
+  const { data } = summary;
+  const now = new Date();
+  const locale = dateLocale();
+  return (
+    <View style={{ gap: space.lg }}>
+      <T variant="title">{summary.title}</T>
       <Card style={{ overflow: "hidden" }}>
         <Pressable
           accessibilityRole="link"
@@ -87,7 +115,7 @@ export function AwaySummaryCard() {
         >
           <Row style={{ gap: space.sm }}>
             <T variant="subhead" style={{ flex: 1, fontWeight: "500" }}>
-              {facts.join(" · ")}
+              {summary.facts}
             </T>
             <Icon name="chevron" size={11} color={c.textFaint} weight="semibold" />
           </Row>
@@ -123,23 +151,25 @@ export function AwaySummaryCard() {
           </View>
         ))}
       </Card>
-    </Animated.View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  section: {
-    marginTop: space.sm,
-  },
-  head: {
+  line: {
+    flexDirection: "row",
+    alignItems: "center",
     gap: space.sm,
-    paddingHorizontal: 4,
-    marginBottom: space.sm,
+    minHeight: 44,
+    paddingLeft: space.lg,
+    paddingRight: space.sm,
+    borderRadius: radius.md,
+    borderCurve: "continuous",
+    borderWidth: StyleSheet.hairlineWidth,
   },
   close: {
-    marginLeft: "auto",
-    width: 22,
-    height: 22,
+    width: 28,
+    height: 28,
     alignItems: "center",
     justifyContent: "center",
   },

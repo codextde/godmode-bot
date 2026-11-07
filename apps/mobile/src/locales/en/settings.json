@@ -39,7 +39,6 @@
       "secondary": "Secondary"
     },
     "preferences": {
-      "title": "Preferences",
       "yourName": "Your name",
       "addName": "Add your name"
     },
@@ -77,30 +76,29 @@
       "calls": "Phone calls",
       "cleanup": "Cleanup",
       "health": "System health",
-      "license": "License & billing",
+      "license": "License",
       "cloud": "Godmode Cloud",
       "devices": "Devices",
       "connected": "Connected apps",
       "logs": "Logs",
+      "advanced": "Advanced",
       "about": "About"
     },
     "team": {
-      "title": "Your team",
       "workspaces": "Workspaces",
       "projects_one": "{{count}} project",
       "projects_other": "{{count}} projects",
       "noneYet": "None yet"
     },
     "privacy": {
-      "title": "Data & privacy",
       "faceId": "Require Face ID",
       "screenLock": "Require screen lock",
       "security": "Security",
       "onComputer": "On your computer"
     },
     "app": {
-      "title": "App",
       "thisPhone": "This phone",
+      "name": "Name",
       "version": "Godmode for {{platform}} {{version}}"
     },
     "palette": {
@@ -148,7 +146,6 @@
       "title": "Show suggestions"
     },
     "features": {
-      "title": "Features",
       "on_one": "{{count}} on",
       "on_other": "{{count}} on"
     }
@@ -300,7 +297,10 @@
       "title": "Personality",
       "tone": "Tone",
       "none": "No particular tone",
-      "custom": "Custom"
+      "custom": "Custom…",
+      "customDetail": "Describe the voice in your own words",
+      "customLabel": "Custom personality",
+      "customPlaceholder": "Warm and a bit nerdy. Explains things with food metaphors, keeps replies short and always ends with the next step."
     },
     "thinking": {
       "title": "Thinking",
@@ -310,10 +310,9 @@
     "project": "Project",
     "hours": {
       "any": "Any time",
-      "work": "Working hours, 9 to 18",
-      "day": "Daytime, 8 to 22",
-      "night": "At night, 22 to 7",
-      "custom": "{{from}} to {{to}}"
+      "working": "Working hours",
+      "from": "From",
+      "to": "To"
     },
     "heartbeat": {
       "every": "Every",
@@ -332,8 +331,7 @@
     "repositories_other": "{{count}} repositories",
     "empty": "Empty",
     "none": {
-      "title": "No workspaces yet",
-      "body": "Give a client or product its own agents, context and repositories."
+      "title": "No workspaces yet"
     }
   },
   "workspace": {
@@ -434,7 +432,6 @@
     "picker": {
       "scratch": "Start from scratch",
       "hire": "Or hire one role",
-      "intro": "One agent per job, or one all-in-one agent that runs a whole department.",
       "search": "Search roles",
       "searchPlaceholder": "Search roles…",
       "clearSearch": "Clear search",
@@ -449,6 +446,8 @@
   },
   "model": {
     "switchFailed": "Couldn't switch the model",
+    "reload": "Reload from Claude Code",
+    "reloadFailed": "Couldn't reload models",
     "appliesNext": "Applies from the next message in this chat.",
     "forNewChat": "For the chat you are about to start.",
     "older": "Older models",
@@ -488,7 +487,6 @@
     "edit": "Edit goal",
     "new": "New goal",
     "add": "Add goal",
-    "intro": "What the work is for. Tickets that serve it tell their agent why.",
     "title": "Goal",
     "titlePlaceholder": "Launch the new pricing",
     "why": "Why it matters",
@@ -517,9 +515,7 @@
     "removeDate": "Remove the target date"
   },
   "pickWorkspace": {
-    "intro": "Chats and tasks you start from this phone go into the workspace or project you pick.",
     "all": "All workspaces",
-    "allBody": "Everything, from every workspace",
     "manage": "Manage workspaces",
     "hideProjects": "Hide projects of {{name}}",
     "showProjects": "Show projects of {{name}}"
@@ -541,7 +537,6 @@
   },
   "phone": {
     "outdatedTitle": "Update Godmode on your computer",
-    "outdatedBody": "Then you can see and change this from your phone too.",
     "onComputer": "On your computer"
   },
   "health": {
@@ -556,6 +551,7 @@
     "permissions": "Permissions",
     "upkeep": {
       "title": "Automatic upkeep",
+      "link": "Updates & upkeep",
       "autoFix": "Fix problems automatically",
       "autoUpdate": "Update tools automatically",
       "autoCleanup": "Clean up automatically",
@@ -585,7 +581,7 @@
     "status": {
       "active": "Active",
       "trial": "Free trial",
-      "pastDue": "Payment due",
+      "pastDue": "Check on your computer",
       "grace": "Free trial",
       "unverified": "Not checked yet",
       "missing": "No license",
@@ -601,18 +597,13 @@
     },
     "statusLabel": "Status",
     "planLabel": "Plan",
-    "key": "Key",
-    "freeUntil": "Free trial until",
-    "trialEnds": "Trial ends",
-    "trialEndsStops": "Trial ends, then stops",
-    "renewsOn": "Renews on",
-    "cancelsOn": "Cancels on",
-    "renews": "Renews",
-    "never": "Never, it's yours",
     "acceptedUntil": "Accepted until",
     "keepsWorking": "Keeps working until",
     "notEnforced": "A build of your own: it doesn't need a license.",
-    "onComputer": "Change the key or the subscription in Godmode on your computer.",
+    "onComputer": "You manage the license in Godmode on your computer.",
+    "checkAgain": "Check again",
+    "checked": "License checked",
+    "checkFailed": "Couldn't check the license",
     "usage": {
       "title": "On this computer",
       "since": "Since {{date}}",
@@ -634,21 +625,15 @@
     },
     "cloud": {
       "title": "Godmode Cloud",
-      "price": "Price",
-      "perMonth": "{{price}} / month",
-      "perYear": "{{price}} / year",
-      "renewsOn": "Renews on",
-      "endsOn": "Ends on",
       "computers": "Computers",
       "relay": "Relay data this month",
       "of": "{{used}} of {{limit}}",
-      "allIncluded": "Everything is included: there is nothing to pay on this cloud.",
       "sub": {
         "trialing": "Trial",
         "active": "Active",
-        "pastDue": "Payment due",
+        "pastDue": "Check on your computer",
         "canceled": "Ended",
-        "unpaid": "Unpaid",
+        "unpaid": "Check on your computer",
         "incomplete": "Incomplete",
         "expired": "Expired",
         "paused": "Paused"
@@ -724,7 +709,7 @@
     "title": "Connected apps",
     "loadFailed": "Couldn't load the connected apps",
     "emptyTitle": "No connected apps",
-    "emptyBody": "Connect Claude Code or another app in Godmode on your computer to build your team from the terminal.",
+    "emptyBody": "Connect Claude Code or another app in Godmode on your computer.",
     "access": {
       "manage": "Sets up and steers",
       "read": "Looks only"
@@ -736,7 +721,23 @@
     "confirmTitle": "Remove {{name}}?",
     "confirm": "Its key stops working right away. Agents and automations it created stay.",
     "confirmInstalled": "Its key stops working right away, and Godmode takes itself out of Claude Code. Agents and automations it created stay.",
-    "removeFailed": "Couldn't remove the app"
+    "removeFailed": "Couldn't remove the app",
+    "tools": {
+      "title": "What a connected app can do",
+      "description_one": "{{count}} tool, the same ones Godmode uses to run your team. A “Look only” key gets the ones marked as read-only.",
+      "description_other": "{{count}} tools, the same ones Godmode uses to run your team. A “Look only” key gets the ones marked as read-only.",
+      "onlyReads": "Read-only",
+      "agents": "Agents",
+      "agentsAbout": "See the team, add agents, change their job, instructions and look.",
+      "automations": "Automations",
+      "automationsAbout": "Schedules, app events, conditions and webhooks that start an agent.",
+      "tasks": "Tasks",
+      "tasksAbout": "File tickets, hand them to agents, read results, send feedback.",
+      "vms": "Virtual machines",
+      "vmsAbout": "Create VMs and put agents to work in them.",
+      "activity": "Activity",
+      "activityAbout": "What every agent did, what failed, which logins are missing."
+    }
   },
   "general": {
     "title": "General",
@@ -755,7 +756,8 @@
       "cardsLabel": "Cards",
       "compactLabel": "Compact",
       "mcpApps": "MCP app views",
-      "readReplies": "Read replies aloud"
+      "readReplies": "Read replies aloud",
+      "largePaste": "Large pastes as a file"
     },
     "summaries": {
       "title": "AI summaries",
@@ -787,7 +789,9 @@
       "title": "Text to speech",
       "rate": "Speaking rate",
       "voice": "Voice",
-      "elevenlabsVoice": "Voice ID"
+      "elevenlabsVoice": "Voice ID",
+      "phoneVoice": "Voice on this phone",
+      "automatic": "Automatic"
     },
     "openai": {
       "sttModel": "Transcription model",
@@ -810,65 +814,54 @@
     },
     "quiet": {
       "title": "Quiet hours",
-      "on": "No calls to you from {{from}} to {{to}}. Questions wait in the app.",
-      "off": "Agents may call you at any time of day.",
+      "on": "Questions wait in the app.",
       "from": "From",
-      "to": "Until"
+      "to": "Until",
+      "fromLabel": "Quiet hours from",
+      "toLabel": "Quiet hours until"
     },
     "greeting": {
       "title": "Greeting",
-      "hint": "The first thing callers hear",
       "placeholder": "Hi, you've reached Studio Berg. How can I help?"
     }
   },
   "features": {
     "title": "Features",
     "loadFailed": "Couldn't load the features",
-    "footer": "Integrations, plugins, messaging, phone calls, cards, VMs, SSH and Android phones are switched on at your computer.",
+    "footer": "Dimmed ones are switched on at your computer.",
     "activity": {
-      "title": "Activity",
-      "detail": "Every run of every agent"
+      "title": "Activity"
     },
     "artifacts": {
-      "title": "Artifacts",
-      "detail": "Small apps agents build in a chat"
+      "title": "Artifacts"
     },
     "integrations": {
-      "title": "Integrations",
-      "detail": "Apps, API tools and MCP servers"
+      "title": "Integrations"
     },
     "plugins": {
-      "title": "Plugins",
-      "detail": "Claude Code plugins in every run"
+      "title": "Plugins"
     },
     "messaging": {
-      "title": "Messaging",
-      "detail": "Bots on Slack, Telegram and Teams"
+      "title": "Messaging"
     },
     "phone": {
       "title": "Phone calls",
-      "detail": "Agents call people, and you",
       "persona": "Voice and limits"
     },
     "cards": {
-      "title": "Cards",
-      "detail": "Agents pay with saved cards"
+      "title": "Cards"
     },
     "vm": {
-      "title": "Virtual machines",
-      "detail": "macOS VMs agents work in"
+      "title": "Virtual machines"
     },
     "ssh": {
-      "title": "SSH servers",
-      "detail": "Servers agents sign in to"
+      "title": "SSH servers"
     },
     "sshKeys": {
-      "title": "SSH keys",
-      "detail": "The SSH key manager"
+      "title": "SSH keys"
     },
     "android": {
-      "title": "Android phones",
-      "detail": "Phones connected to your computer"
+      "title": "Android phones"
     }
   },
   "logs": {
@@ -892,7 +885,8 @@
     "empty": "Nothing logged yet",
     "noMatch": "Nothing matches",
     "latest_one": "The latest entry",
-    "latest_other": "The latest {{count}} entries"
+    "latest_other": "The latest {{count}} entries",
+    "showIssue": "Show these entries in the log"
   },
   "about": {
     "title": "About",
@@ -901,7 +895,6 @@
     "name": "Name",
     "version": "Version",
     "platform": "Platform",
-    "website": "Website",
     "terms": "License terms",
     "footer": "© Codext GmbH"
   },
@@ -1012,7 +1005,12 @@
       "count_one": "{{count}} item",
       "count_other": "{{count}} items",
       "kept_one": "{{count}} kept",
-      "kept_other": "{{count}} kept"
+      "kept_other": "{{count}} kept",
+      "review": "Review first",
+      "showEntries": "Show what's in {{name}}",
+      "hideEntries": "Hide what's in {{name}}",
+      "moreEntries_one": "{{count}} more isn't listed",
+      "moreEntries_other": "{{count}} more aren't listed"
     },
     "optimize": {
       "title": "Optimize",
@@ -1036,7 +1034,17 @@
       "dreamingOff": "Dreaming is off",
       "compress": "Chats compress at {{pct}}%.",
       "compressFull": "Chats compress when nearly full.",
-      "compressOff": "Chats don't compress by themselves."
+      "compressOff": "Chats don't compress by themselves.",
+      "fullest": "Fullest chats this week",
+      "byAgent": "Memory by agent",
+      "notes_one": "{{count}} note",
+      "notes_other": "{{count}} notes",
+      "unused_one": "{{count}} unused",
+      "unused_other": "{{count}} unused",
+      "unusedLine_one": "{{count}} note unused for 30 days",
+      "unusedLine_other": "{{count}} notes unused for 30 days",
+      "allUsed": "Every note in use",
+      "counting": "Counting which notes tasks use since {{date}}"
     },
     "auto": {
       "title": "Automatic cleanup",

@@ -16,7 +16,8 @@
     "changes": "Änderungen",
     "nothingLeft": "Von diesem Traum ist nichts in den Gedächtnisdateien übrig.",
     "noChanges": "Dieser Traum hat keine Gedächtnisdateien geändert.",
-    "otherFiles": "Das Handy zeigt MEMORY.md. Die anderen Gedächtnisdateien, die dieser Traum geändert hat, findest du in Godmode auf deinem Computer."
+    "otherFiles": "Das Handy zeigt MEMORY.md. Die anderen Gedächtnisdateien, die dieser Traum geändert hat, findest du in Godmode auf deinem Computer.",
+    "result": "Ergebnis"
   },
   "file": {
     "new": "Neue Datei",
@@ -25,7 +26,9 @@
     "deletedEmpty": "Leere Datei gelöscht.",
     "onlyNewlineAdded": "Nur der Zeilenumbruch am Dateiende wurde hinzugefügt.",
     "onlyNewlineRemoved": "Nur der Zeilenumbruch am Dateiende wurde entfernt.",
-    "noLineChanges": "Keine Zeilenänderungen."
+    "noLineChanges": "Keine Zeilenänderungen.",
+    "dreamDeleted": "Der Traum hat diese Datei gelöscht.",
+    "emptyFile": "Leere Datei."
   },
   "diff": {
     "showUnchanged_one": "{{count}} unveränderte Zeile anzeigen",

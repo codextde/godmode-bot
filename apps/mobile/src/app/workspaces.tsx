@@ -6,6 +6,7 @@ import type { Workspace } from "@godmode/shared";
 import { Icon } from "@/components/icon";
 import { Card, Hairline, Skeleton, T, tap } from "@/components/ui";
 import { workspaceTint } from "@/components/workspace-color";
+import { RowPressable } from "@/components/row-pressable";
 import { useWorkspace, ownEmoji } from "@/lib/workspace";
 import { radius, space, useColors } from "@/lib/theme";
 
@@ -34,19 +35,13 @@ export default function Workspaces() {
 
   return (
     <ScrollView contentContainerStyle={styles.content} style={{ backgroundColor: c.background }}>
-      <View style={{ gap: 4 }}>
-        <T variant="title">{t("workspace.title")}</T>
-        <T variant="subhead" muted>
-          {t("pickWorkspace.intro")}
-        </T>
-      </View>
+      <T variant="title">{t("workspace.title")}</T>
       <Card style={{ paddingVertical: 4 }}>
         <Choice
           selected={!id}
           onPress={() => pick(null)}
           icon={<Icon name="layers" size={17} color={c.textMuted} />}
           title={t("pickWorkspace.all")}
-          body={t("pickWorkspace.allBody")}
         />
         {loading
           ? [0, 1, 2].map((i) => (
@@ -177,11 +172,11 @@ function Choice({
   const c = useColors();
   return (
     <View style={styles.line}>
-      <Pressable
+      <RowPressable
         accessibilityRole="button"
         accessibilityState={{ selected }}
         onPress={onPress}
-        style={({ pressed }) => [styles.choice, nested && styles.nested, { flex: 1 }, pressed && { backgroundColor: c.sunken }]}
+        style={[styles.choice, nested && styles.nested, { flex: 1 }]}
       >
         {nested && <View style={[styles.guide, { backgroundColor: c.border }]} />}
         <View style={[styles.tile, nested && styles.tileSmall, { backgroundColor: tint ?? c.sunken }]}>{icon}</View>
@@ -196,7 +191,7 @@ function Choice({
           ) : null}
         </View>
         {selected && <Icon name="check" size={16} color={c.brandStrong} weight="bold" />}
-      </Pressable>
+      </RowPressable>
       {trailing ? <View style={{ paddingRight: space.lg }}>{trailing}</View> : null}
     </View>
   );

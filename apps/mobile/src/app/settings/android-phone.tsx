@@ -124,7 +124,7 @@ function Body({ device }: { device: AndroidDevice }) {
 
       {connected ? <PhoneButtons device={device} /> : null}
 
-      <Group footer={t("phone.describeFooter")}>
+      <Group>
         <TextRow label={t("phone.name")} value={name} onChange={setName} maxLength={100} />
         <TextRow label={t("phone.whatFor")} value={description} onChange={setDescription} placeholder={t("phone.whatForPlaceholder")} multiline minHeight={72} maxLength={4000} />
       </Group>

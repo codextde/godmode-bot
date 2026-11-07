@@ -42,10 +42,16 @@
     "binCount": "Recently deleted ({{count}})",
     "dreaming": "{{name}} is dreaming. Changes wait until the dream ends."
   },
+  "reveal": {
+    "action": "Show on computer",
+    "done": "Shown on computer",
+    "failed": "Couldn't show it on the computer"
+  },
   "preview": {
     "share": "Share",
     "shareFailed": "Couldn't share the file",
-    "pdfElsewhere": "Android can't show PDFs in the app. Save it and open it with a PDF app.",
+    "pdfLocked": "This PDF has a password. Save it and open it with a PDF app.",
+    "pdfFailed": "Couldn't show this PDF. Save it and open it with a PDF app.",
     "loadFailed": "Couldn't open the file",
     "empty": "This file is empty",
     "clipped": "Showing the beginning. The whole file is on your computer.",

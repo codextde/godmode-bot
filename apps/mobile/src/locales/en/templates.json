@@ -600,7 +600,7 @@
     "it-administrator": {
       "name": "IT Administrator",
       "role": "IT administrator",
-      "description": "Runs the company's IT: accounts and access, Google Workspace or Microsoft 365, devices, licences and backups."
+      "description": "Runs the company's IT: accounts and access, Google Workspace or Microsoft 365, devices, licenses and backups."
     },
     "it-helpdesk": {
       "name": "IT Helpdesk",
@@ -674,7 +674,7 @@
         "warehouse and logistics",
         "quality management and certifications",
         "project management",
-        "process management and organisation",
+        "process management and organization",
         "office management"
       ],
       "routine": "Operations check"

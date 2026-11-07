@@ -1,11 +1,11 @@
 import { Stack } from "expo-router";
 import { useState } from "react";
-import { Modal, Pressable, StyleSheet, View } from "react-native";
+import { Modal, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Icon, sfSymbol, type IconName } from "./icon";
 import { Hairline, T, tap } from "./ui";
-import { radius, space, useColors } from "@/lib/theme";
+import { alpha, radius, space, useColors } from "@/lib/theme";
 
 export interface HeaderAction {
   icon: IconName;
@@ -20,6 +20,10 @@ export interface HeaderMenuItem {
   title: string;
   onPress: () => void;
   destructive?: boolean;
+  /** Android's sheet: a line below the title. */
+  detail?: string;
+  /** Android's sheet: carries a check. */
+  selected?: boolean;
 }
 
 /**
@@ -58,15 +62,27 @@ export function HeaderActions({ actions = [], menu = [], placement = "right" }: 
       </Stack.Toolbar>
     );
   }
+  const ripple = { color: alpha(c.text, 0.12), borderless: true, radius: 20 };
   const render = () => (
     <View style={{ flexDirection: "row", gap: 4 }}>
       {actions.map((a) => (
-        <Pressable key={a.label} accessibilityRole="button" accessibilityLabel={a.label} hitSlop={8} onPress={a.onPress} style={{ padding: 8 }}>
+        <Pressable
+          key={a.label}
+          accessibilityRole="button"
+          accessibilityLabel={a.label}
+          android_ripple={ripple}
+          hitSlop={8}
+          onPress={() => {
+            tap();
+            a.onPress();
+          }}
+          style={{ padding: 8 }}
+        >
           <Icon name={a.icon} size={22} color={a.tint ?? c.text} />
         </Pressable>
       ))}
       {menu.length > 0 && (
-        <Pressable accessibilityRole="button" accessibilityLabel={t("headerActions.more")} hitSlop={8} onPress={() => setOpen(true)} style={{ padding: 8 }}>
+        <Pressable accessibilityRole="button" accessibilityLabel={t("headerActions.more")} android_ripple={ripple} hitSlop={8} onPress={() => setOpen(true)} style={{ padding: 8 }}>
           <Icon name="more" size={22} color={c.text} />
         </Pressable>
       )}
@@ -80,8 +96,21 @@ export function HeaderActions({ actions = [], menu = [], placement = "right" }: 
   );
 }
 
-/** A short list of actions from the bottom of the screen. */
-export function MenuSheet({ items, open, onClose }: { items: HeaderMenuItem[]; open: boolean; onClose: () => void }) {
+/** Opens `MenuSheet` from anywhere in a screen: Android's long-press menus, and lists that don't fit an alert's three buttons. */
+export function useMenuSheet() {
+  const [menu, setMenu] = useState<{ items: HeaderMenuItem[]; title?: string; body?: string }>({ items: [] });
+  const [open, setOpen] = useState(false);
+  return {
+    show: (items: HeaderMenuItem[], title?: string, body?: string) => {
+      setMenu({ items, title, body });
+      setOpen(true);
+    },
+    sheet: <MenuSheet {...menu} open={open} onClose={() => setOpen(false)} />,
+  };
+}
+
+/** A list of actions from the bottom of the screen; long ones scroll. */
+export function MenuSheet({ items, title, body, open, onClose }: { items: HeaderMenuItem[]; title?: string; body?: string; open: boolean; onClose: () => void }) {
   const c = useColors();
   const { t } = useTranslation("common");
   const insets = useSafeAreaInsets();
@@ -89,26 +118,49 @@ export function MenuSheet({ items, open, onClose }: { items: HeaderMenuItem[]; o
     <Modal visible={open} transparent animationType="fade" statusBarTranslucent onRequestClose={onClose}>
       <Pressable accessibilityLabel={t("actions.close")} onPress={onClose} style={[StyleSheet.absoluteFill, { backgroundColor: c.scrim }]} />
       <View style={[styles.sheet, { backgroundColor: c.surface, paddingBottom: Math.max(insets.bottom, space.md) }]} accessibilityViewIsModal>
-        {items.map((m, i) => (
-          <View key={m.title}>
-            {i > 0 && <Hairline inset={52} />}
-            <Pressable
-              accessibilityRole="button"
-              android_ripple={{ color: c.sunken }}
-              onPress={() => {
-                onClose();
-                tap();
-                m.onPress();
-              }}
-              style={styles.item}
-            >
-              <Icon name={m.icon} size={19} color={m.destructive ? c.danger : c.textMuted} />
-              <T variant="body" color={m.destructive ? c.danger : c.text}>
-                {m.title}
+        {title ? (
+          <View style={styles.heading}>
+            <T variant="headline" numberOfLines={2}>
+              {title}
+            </T>
+            {body ? (
+              <T variant="footnote" muted>
+                {body}
               </T>
-            </Pressable>
+            ) : null}
           </View>
-        ))}
+        ) : null}
+        <ScrollView bounces={false}>
+          {items.map((m, i) => (
+            <View key={`${m.title}-${i}`}>
+              {i > 0 && <Hairline inset={52} />}
+              <Pressable
+                accessibilityRole="button"
+                accessibilityState={m.selected === undefined ? undefined : { selected: m.selected }}
+                android_ripple={{ color: c.sunken }}
+                onPress={() => {
+                  onClose();
+                  tap();
+                  m.onPress();
+                }}
+                style={styles.item}
+              >
+                <Icon name={m.icon} size={19} color={m.destructive ? c.danger : c.textMuted} />
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <T variant="body" numberOfLines={1} color={m.destructive ? c.danger : c.text}>
+                    {m.title}
+                  </T>
+                  {m.detail ? (
+                    <T variant="footnote" muted numberOfLines={1}>
+                      {m.detail}
+                    </T>
+                  ) : null}
+                </View>
+                {m.selected ? <Icon name="check" size={16} color={c.brandStrong} weight="bold" /> : null}
+              </Pressable>
+            </View>
+          ))}
+        </ScrollView>
       </View>
     </Modal>
   );
@@ -120,9 +172,16 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
+    maxHeight: "75%",
     paddingTop: space.sm,
     borderTopLeftRadius: radius.xl,
     borderTopRightRadius: radius.xl,
+  },
+  heading: {
+    gap: space.xs,
+    paddingHorizontal: space.lg,
+    paddingTop: space.sm,
+    paddingBottom: space.md,
   },
   item: {
     flexDirection: "row",

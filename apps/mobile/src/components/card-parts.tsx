@@ -5,16 +5,20 @@ import { memo } from "react";
 import { ActivityIndicator, Alert, Pressable, StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { cardLabel, formatMoney, type CardPurchase, type CardPurchasePatch, type PaymentCard, type PurchaseStatus } from "@godmode/shared";
+import { CharacterAvatar } from "./character";
+import { Tile } from "./form";
 import { confirmWithBiometrics } from "./full-access";
 import { Icon } from "./icon";
 import { openChat } from "./rows";
 import { RowMenu, type MenuItem } from "./secret-parts";
 import { Badge, Card, Row, T, tap, type Tone } from "./ui";
+import { ScopeBadge } from "./vault-scope";
 import { api, errorText } from "@/lib/api";
 import { shortTime } from "@/lib/format";
+import { useAgents } from "@/lib/hooks";
 import { qk, queryClient } from "@/lib/query";
 import { isCancelled, withConfirmedGrant } from "@/lib/secrets";
-import { fullVaultApi, vk } from "@/lib/vault";
+import { fullVaultApi, isCardExpired, vk } from "@/lib/vault";
 import { radius, space, useColors } from "@/lib/theme";
 
 const STATUS_TONE: Record<PurchaseStatus, Tone> = {
@@ -28,7 +32,7 @@ const STATUS_TONE: Record<PurchaseStatus, Tone> = {
 };
 
 /** A card as its owner knows it: name, brand and last four digits, frozen or not, and this month's spending. */
-export function CardSummary({ card, onPress }: { card: PaymentCard; onPress?: () => void }) {
+export function CardSummary({ card, scopeName, onPress }: { card: PaymentCard; scopeName?: string | null; onPress?: () => void }) {
   const c = useColors();
   const { t } = useTranslation("vault");
   const limit = card.limitMonthly;
@@ -47,15 +51,19 @@ export function CardSummary({ card, onPress }: { card: PaymentCard; onPress?: ()
             {cardLabel(card)}
           </T>
         </View>
+        {isCardExpired(card) ? <Badge label={t("cards.expired")} tone="danger" dot={false} /> : null}
         {card.frozen ? <Badge label={t("cards.frozen")} tone="sky" dot={false} /> : null}
         {onPress ? <Icon name="chevron" size={12} color={c.textFaint} weight="semibold" /> : null}
       </Row>
       <View style={{ gap: 6 }}>
-        <T variant="footnote" muted style={{ fontVariant: ["tabular-nums"] }}>
-          {limit
-            ? t("cards.spentOf", { spent: formatMoney(card.spentThisMonth, card.currency), limit: formatMoney(limit, card.currency) })
-            : t("cards.spentNoLimit", { spent: formatMoney(card.spentThisMonth, card.currency) })}
-        </T>
+        <Row style={{ gap: space.sm }}>
+          <T variant="footnote" muted style={{ flex: 1, fontVariant: ["tabular-nums"] }}>
+            {limit
+              ? t("cards.spentOf", { spent: formatMoney(card.spentThisMonth, card.currency), limit: formatMoney(limit, card.currency) })
+              : t("cards.spentNoLimit", { spent: formatMoney(card.spentThisMonth, card.currency) })}
+          </T>
+          <ScopeBadge name={scopeName ?? null} global={!card.workspaceId} />
+        </Row>
         {limit ? (
           <View style={[styles.track, { backgroundColor: c.sunken }]}>
             <View style={[styles.fill, { width: `${Math.round(share * 100)}%`, backgroundColor: share >= 1 ? c.danger : c.brand }]} />
@@ -79,9 +87,11 @@ function statusOf(p: CardPurchase, t: TFunction<"vault">): { label: string; tone
  * A purchase an agent made or asked to make. `actions` (a phone with full access): approve or decline one that waits,
  * mark it paid or not charged, end a subscription or count it again, open the chat, like the desktop's ledger.
  */
-export const PurchaseRow = memo(function PurchaseRow({ purchase: p, card, actions }: { purchase: CardPurchase; card?: PaymentCard; actions?: boolean }) {
+export const PurchaseRow = memo(function PurchaseRow({ purchase: p, cardText, actions }: { purchase: CardPurchase; cardText?: string; actions?: boolean }) {
   const c = useColors();
   const { t } = useTranslation("vault");
+  const { byId } = useAgents();
+  const agent = p.agentId ? byId.get(p.agentId) : undefined;
   const status = statusOf(p, t);
   const title = p.merchant || p.site || t("purchaseActions.purchase");
   const subscription = p.recurrence !== "once";
@@ -129,17 +139,24 @@ export const PurchaseRow = memo(function PurchaseRow({ purchase: p, card, action
   };
   const waiting = actions && p.status === "pending" && !!p.questionId;
   const recurrence = p.recurrence !== "once" ? `${t(`purchases.recurrence.${p.recurrence}`)}${p.endedAt ? ` · ${t("purchaseActions.ended")}` : ""}` : null;
+  const detail = [cardText, p.site && p.site !== title ? p.site : null, recurrence, p.description].filter(Boolean).join(" · ");
 
   return (
     <View style={styles.purchase}>
       <Row style={{ gap: space.md }}>
+        {agent ? <CharacterAvatar agent={agent} size={30} /> : <Tile icon="agents" tint={c.textMuted} />}
         <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
           <T variant="callout" numberOfLines={1} style={{ fontWeight: "500" }}>
             {title}
           </T>
           <T variant="footnote" muted numberOfLines={1}>
-            {[p.description, card ? `•••• ${card.last4}` : null, recurrence, shortTime(p.createdAt)].filter(Boolean).join(" · ")}
+            {[agent?.name ?? t("purchases.deletedAgent"), shortTime(p.createdAt)].join(" · ")}
           </T>
+          {detail ? (
+            <T variant="footnote" muted numberOfLines={1}>
+              {detail}
+            </T>
+          ) : null}
         </View>
         <View style={{ alignItems: "flex-end", gap: 4 }}>
           <T variant="callout" color={p.endedAt || status.tone === "neutral" ? c.textMuted : c.text} style={{ fontVariant: ["tabular-nums"] }}>

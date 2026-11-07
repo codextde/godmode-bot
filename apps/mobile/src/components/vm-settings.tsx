@@ -24,7 +24,7 @@ export function useVmAccessRows(vm: VmSettings | undefined) {
   };
   return [
     <SwitchRow key="isolate" icon="shield" title={t("vmSettings.isolate")} detail={t("vmSettings.isolateDetail")} disabled={!vm.enabled} value={vm.isolateHostShell} onChange={(isolateHostShell) => void patchAnySettings({ vm: { isolateHostShell } })} />,
-    <SwitchRow key="fill" icon="key" title={t("vmSettings.fill")} detail={t("vmSettings.fillDetail")} disabled={!vm.enabled} value={vm.vaultFill} onChange={setVaultFill} />,
+    <SwitchRow key="fill" icon="key" title={t("vmSettings.fill")} disabled={!vm.enabled} value={vm.vaultFill} onChange={setVaultFill} />,
     <LinkRow key="manage" icon="vm" title={t("vms.title")} onPress={() => router.push("/settings/vms")} />,
   ];
 }

@@ -34,7 +34,8 @@
     "emptyTitle": "No logins yet",
     "loadFailed": "Couldn't load logins",
     "noUsername": "No username",
-    "twoFactor": "2FA"
+    "twoFactor": "2FA",
+    "emptyScopeTitle": "No logins in this scope"
   },
   "totp": {
     "title": "2FA codes",
@@ -52,7 +53,8 @@
     "copied": "Copied",
     "locked": "The vault is locked.",
     "codesFailed": "Couldn't load the codes.",
-    "actionsFor": "Actions for {{name}}"
+    "actionsFor": "Actions for {{name}}",
+    "emptyScopeTitle": "No 2FA codes in this scope"
   },
   "passkeys": {
     "title": "Passkeys",
@@ -62,7 +64,11 @@
     "deleteTitle": "Delete the passkey for {{site}}?",
     "deleteBody": "Agents can't sign in with it anymore. The site still lists it until you remove it there too.",
     "deleteFailed": "Couldn't delete the passkey",
-    "actionsFor": "Actions for {{site}}"
+    "actionsFor": "Actions for {{site}}",
+    "emptyScopeTitle": "No passkeys in this scope",
+    "created": "Created {{when}}",
+    "createdBy": "Created {{when}} by {{agent}}",
+    "profile": "{{name}} profile"
   },
   "sshKeys": {
     "off": "SSH keys are turned off",
@@ -94,7 +100,12 @@
     "bitsTitle": "Key size",
     "nameTaken": "There already is a key with this name.",
     "nameInvalid": "Letters, digits and . _ @ + - only.",
-    "passphraseTitle": "Passphrase for {{name}}"
+    "passphraseTitle": "Passphrase for {{name}}",
+    "search": "Search keys",
+    "agentLoaded_one": "ssh-agent · {{count}} loaded",
+    "agentLoaded_other": "ssh-agent · {{count}} loaded",
+    "agentOff": "ssh-agent isn't running",
+    "publicOnly": "Public only"
   },
   "cards": {
     "title": "Cards",
@@ -115,7 +126,9 @@
     "allAgents": "All agents",
     "noAgents": "None",
     "sites": "Sites",
-    "anySite": "Any site"
+    "anySite": "Any site",
+    "emptyScopeTitle": "No cards in this scope",
+    "expired": "Expired"
   },
   "purchases": {
     "title": "Purchases",
@@ -132,7 +145,12 @@
       "failed": "Failed",
       "expired": "Expired",
       "cancelled": "Cancelled"
-    }
+    },
+    "all": "All purchases",
+    "allCards": "All cards",
+    "removedCard": "Removed card",
+    "deletedAgent": "Deleted agent",
+    "loadFailed": "Couldn't load purchases"
   },
   "generator": {
     "generate": "Generate password",
@@ -238,14 +256,12 @@
     "key": "Setup key",
     "qr": "QR code",
     "links": "Links",
-    "found_one": "{{count}} code found",
-    "found_other": "{{count}} codes found",
     "none": "No otpauth:// links found.",
     "paste": "Paste",
     "added_one": "{{count}} code added",
     "added_other": "{{count}} codes added",
-    "skipped_one": "{{count}} wasn't added:",
-    "skipped_other": "{{count}} weren't added:"
+    "skipped_one": "{{count}} wasn't added",
+    "skipped_other": "{{count}} weren't added"
   },
   "purchaseActions": {
     "purchase": "Purchase",
@@ -364,7 +380,17 @@
     "delete": "Delete 2FA code",
     "deleteTitle": "Delete the 2FA code for {{name}}?",
     "deleteBody": "Agents can't finish two-factor sign-in for it anymore. To add it back you need the QR code again.",
-    "deleteFailed": "Couldn't delete the 2FA code"
+    "deleteFailed": "Couldn't delete the 2FA code",
+    "advanced": "Advanced",
+    "withDefault": "{{value}} (default)",
+    "algorithm": "Algorithm",
+    "digits": "Digits",
+    "period": "Period",
+    "added": "Added",
+    "lastUsed": "Last used",
+    "type": "Type",
+    "typeTotp": "Time-based (TOTP)",
+    "never": "Never"
   },
   "card": {
     "show": "Show card details",
@@ -412,7 +438,9 @@
     "askAbove": "Above",
     "askNever": "Never",
     "saveFailed": "Couldn't save the card",
-    "updateFailed": "Couldn't save the changes"
+    "updateFailed": "Couldn't save the changes",
+    "cvcSaved": "Saved",
+    "removedOnSave": "Removed on save"
   },
   "apiKeys": {
     "title": "API keys",
@@ -455,5 +483,60 @@
     "removePassword": "Remove password",
     "macRemoveBody": "Agents can't answer password prompts on this Mac anymore.",
     "saveFailed": "Couldn't save {{name}}"
+  },
+  "scope": {
+    "all": "All scopes",
+    "globalOnly": "Global only",
+    "global": "Global",
+    "workspace": "Workspace"
+  },
+  "otpPreview": {
+    "ready": "Ready to import",
+    "accounts_one": "{{count}} account",
+    "accounts_other": "{{count}} accounts",
+    "incomplete_one": "This Google Authenticator export has {{size}} QR codes — {{count}} is still missing. Add the remaining screenshots to import every account.",
+    "incomplete_other": "This Google Authenticator export has {{size}} QR codes — {{count}} are still missing. Add the remaining screenshots to import every account.",
+    "remove": "Remove {{name}}",
+    "removeExport": "Remove this export",
+    "googleExport": "Google Authenticator export",
+    "qrPart": "QR {{index}} of {{total}}",
+    "invalidSecret": "Invalid secret",
+    "hotpHint": "Counter-based codes may not be supported",
+    "hotp": "Counter (HOTP)",
+    "digits": "{{digits}} digits"
+  },
+  "totpImport": {
+    "nothing": "Nothing was imported",
+    "unknownCode": "Unknown code"
+  },
+  "linkPicker": {
+    "bestMatches": "Best matches",
+    "suggested": "Suggested",
+    "otherMatches": "Other matches",
+    "matches_one": "{{count, number}} match",
+    "matches_other": "{{count, number}} matches",
+    "moreMatches_one": "{{count, number}} more match. Keep typing to narrow it down.",
+    "moreMatches_other": "{{count, number}} more matches. Keep typing to narrow it down.",
+    "login": {
+      "loading": "Loading logins…",
+      "empty": "No login matches “{{query}}”.",
+      "all": "All logins",
+      "more_one": "{{count, number}} more login. Keep typing to narrow it down.",
+      "more_other": "{{count, number}} more logins. Keep typing to narrow it down."
+    },
+    "code": {
+      "loading": "Loading 2FA codes…",
+      "empty": "No 2FA code matches “{{query}}”.",
+      "all": "All 2FA codes",
+      "more_one": "{{count, number}} more 2FA code. Keep typing to narrow it down.",
+      "more_other": "{{count, number}} more 2FA codes. Keep typing to narrow it down."
+    }
+  },
+  "macPassword": {
+    "lastUsed": "Last used {{when}}",
+    "neverUsed": "Not used yet",
+    "recent": "Recent uses",
+    "filledDialog": "Filled a dialog in {{what}}",
+    "failed": "failed"
   }
 }

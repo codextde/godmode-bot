@@ -1,10 +1,11 @@
 import { router } from "expo-router";
 import { memo } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import type { Agent, Run, RunStatus, RunTrigger } from "@godmode/shared";
 import { CharacterAvatar } from "./character";
 import { Badge, Row, T, tap, type Tone } from "./ui";
+import { RowPressable } from "./row-pressable";
 import { activityText, shortTime } from "@/lib/format";
 import { t } from "@/lib/i18n";
 import { useRunActivity } from "@/lib/live";
@@ -113,7 +114,7 @@ export const RunRow = memo(function RunRow({ run, agent }: { run: Run; agent?: A
   const error = run.status === "failed" ? firstLine(run.error, 200) : "";
 
   return (
-    <Pressable onPress={() => openRun(run.id)} style={({ pressed }) => [styles.row, pressed && { backgroundColor: c.sunken }]}>
+    <RowPressable onPress={() => openRun(run.id)} style={styles.row}>
       <CharacterAvatar agent={agent} size={40} running={run.status === "running"} />
       <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
         <Row style={{ gap: space.sm }}>
@@ -135,7 +136,7 @@ export const RunRow = memo(function RunRow({ run, agent }: { run: Run; agent?: A
           </T>
         ) : null}
       </View>
-    </Pressable>
+    </RowPressable>
   );
 });
 

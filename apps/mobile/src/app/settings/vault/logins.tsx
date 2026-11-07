@@ -6,6 +6,8 @@ import { useFullAccess } from "@/components/full-access";
 import { HeaderActions } from "@/components/header-actions";
 import { ListRow, ReadonlyList } from "@/components/readonly-list";
 import { Badge } from "@/components/ui";
+import { ScopeBadge, ScopeChips, useVaultScope } from "@/components/vault-scope";
+import { space } from "@/lib/theme";
 import { loginHost, useLogins } from "@/lib/vault";
 
 /**
@@ -16,12 +18,14 @@ export default function Logins() {
   const { t } = useTranslation("vault");
   const { fullAccess } = useFullAccess();
   const list = useLogins();
+  const scope = useVaultScope();
+  const { filter } = scope;
   const [search, setSearch] = useState("");
   const items = useMemo(() => {
     const q = search.trim().toLowerCase();
-    const all = list.data ?? [];
+    const all = filter(list.data ?? []);
     return q ? all.filter((c) => [c.name, c.username, c.url, ...c.domains].join(" ").toLowerCase().includes(q)) : all;
-  }, [list.data, search]);
+  }, [list.data, search, filter]);
 
   return (
     <>
@@ -36,17 +40,23 @@ export default function Logins() {
         query={list}
         items={items}
         keyOf={(c) => c.id}
-        extraData={fullAccess}
+        extraData={[fullAccess, scope.nameOf]}
         search={{ placeholder: t("logins.search"), value: search, onChange: setSearch }}
         icon="key"
-        emptyTitle={t("logins.emptyTitle")}
+        emptyTitle={scope.filtered ? t("logins.emptyScopeTitle") : t("logins.emptyTitle")}
         failedTitle={t("logins.loadFailed")}
+        header={list.data?.length ? <ScopeChips state={scope} bleed={space.md} /> : undefined}
         renderRow={(c) => (
           <ListRow
             icon="key"
             title={c.name}
             lines={[[c.username, loginHost(c)].filter(Boolean).join(" · ") || t("logins.noUsername")]}
-            trailing={c.totpId ? <Badge label={t("logins.twoFactor")} tone="success" dot={false} /> : null}
+            trailing={
+              <>
+                <ScopeBadge name={scope.nameOf(c.workspaceId)} global={!c.workspaceId} />
+                {c.totpId ? <Badge label={t("logins.twoFactor")} tone="success" dot={false} /> : null}
+              </>
+            }
             onPress={fullAccess ? () => router.push({ pathname: "/settings/vault/login/[id]", params: { id: c.id } }) : undefined}
           />
         )}

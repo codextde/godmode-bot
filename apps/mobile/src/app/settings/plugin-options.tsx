@@ -9,8 +9,10 @@ import { FullAccessGate, isRefused } from "@/components/admin";
 import { Group, PickerRow } from "@/components/form";
 import { HeaderActions } from "@/components/header-actions";
 import { Icon } from "@/components/icon";
+import { IconButton } from "@/components/secret-parts";
 import { ErrorState, LoadingState, Row, T, tap } from "@/components/ui";
 import { errorText } from "@/lib/api";
+import { pickFolder } from "@/lib/folder-pick";
 import { usePlugins } from "@/lib/integrations";
 import { pluginsAdmin, putPlugin } from "@/lib/plugins-admin";
 import { fonts, radius, space, useColors } from "@/lib/theme";
@@ -179,7 +181,7 @@ function OptionsForm({ mod }: { mod: Mod }) {
           control = <PickerRow title={o.title} value={value} options={[...(value && !o.choices.includes(value) ? [value] : []), ...o.choices].map((x) => ({ value: x, label: x }))} onChange={(v) => set(o, v)} />;
         } else {
           control = (
-            <View style={styles.field}>
+            <View style={[styles.field, o.type === "directory" && styles.folderField]}>
               <TextInput
                 accessibilityLabel={o.title}
                 value={value}
@@ -205,8 +207,19 @@ function OptionsForm({ mod }: { mod: Mod }) {
                 autoCapitalize="none"
                 autoCorrect={false}
                 spellCheck={false}
-                style={[styles.input, { color: c.text, backgroundColor: c.sunken, borderColor: shownError ? c.danger : "transparent", fontFamily: o.type === "file" || o.type === "directory" ? fonts.mono : fonts.regular }]}
+                style={[styles.input, o.type === "directory" && { flex: 1 }, { color: c.text, backgroundColor: c.sunken, borderColor: shownError ? c.danger : "transparent", fontFamily: o.type === "file" || o.type === "directory" ? fonts.mono : fonts.regular }]}
               />
+              {o.type === "directory" ? (
+                <IconButton
+                  icon="folder"
+                  label={t("pluginAdmin.opts.browse")}
+                  onPress={() =>
+                    void pickFolder({ title: o.title, action: t("pluginAdmin.opts.useFolder"), start: value || undefined }).then((path) => {
+                      if (path) set(o, path);
+                    })
+                  }
+                />
+              ) : null}
             </View>
           );
         }
@@ -284,6 +297,11 @@ const styles = StyleSheet.create({
   field: {
     paddingHorizontal: space.lg,
     paddingVertical: 10,
+  },
+  folderField: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.sm,
   },
   input: {
     fontSize: 15,

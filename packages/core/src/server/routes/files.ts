@@ -3,7 +3,7 @@ import type { ChatFiles } from "@godmode/shared";
 import { MAX_CHAT_FILE_REFS } from "@godmode/shared";
 import { chatFilesForPhone, readChatImage, readChatMarkdown, readChatPdf, readChatText, resolveChatFiles, revealInFileManager } from "../../services/chatFiles";
 import { HttpError, badRequest } from "../../util";
-import { isLimitedPhone, isLocalRequest, isPhoneRequest } from "../auth";
+import { isLimitedPhone, isLocalRequest, isPhoneRequest, requestDevice } from "../auth";
 import { body, z } from "../validate";
 
 const refs = z.array(z.string().max(1024)).max(MAX_CHAT_FILE_REFS);
@@ -62,10 +62,11 @@ export function registerFileRoutes(app: Hono): void {
     });
   });
 
-  // The file manager opens on the core's machine: no use, and nobody's business, from anywhere else.
+  // The file manager opens on the core's machine: for the app on it and a phone with full access there, nobody else's
+  // business. Through the cloud gateway that phone stays refused too (cloud/scope.ts).
   app.post("/api/files/reveal", async (c) => {
     const { path } = await body(c, z.object({ path: z.string().min(1).max(4096) }));
-    if (!isLocalRequest(c)) throw new HttpError(403, "Files can only be shown on the computer Godmode runs on", "not_local");
+    if (!isLocalRequest(c) && !requestDevice(c)?.fullAccess) throw new HttpError(403, "Files can only be shown on the computer Godmode runs on", "not_local");
     revealInFileManager(path);
     return c.json({ ok: true as const });
   });

@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { Icon } from "./icon";
 import { phoneTimezone } from "./routine-row";
 import { Hairline, T, tap } from "./ui";
+import { RowPressable } from "./row-pressable";
 import { space, type, radius, useColors } from "@/lib/theme";
 import { allTimezones, timezoneOffset } from "@/lib/timezones";
 
@@ -15,14 +16,14 @@ export function TimezoneRow({ title, value, onChange }: { title: string; value: 
   const [open, setOpen] = useState(false);
   return (
     <>
-      <Pressable
+      <RowPressable
         accessibilityRole="button"
         accessibilityLabel={`${title}: ${shown(value)}`}
         onPress={() => {
           tap();
           setOpen(true);
         }}
-        style={({ pressed }) => [styles.row, pressed && { backgroundColor: c.sunken }]}
+        style={styles.row}
       >
         <Icon name="globe" size={16} color={c.textMuted} />
         <T variant="callout" style={{ fontWeight: "500" }}>
@@ -32,7 +33,7 @@ export function TimezoneRow({ title, value, onChange }: { title: string; value: 
           {`${shown(value)} ${timezoneOffset(value)}`.trim()}
         </T>
         <Icon name="chevron" size={11} color={c.textFaint} weight="semibold" />
-      </Pressable>
+      </RowPressable>
       {open ? (
         <TimezoneSheet
           title={title}
@@ -101,14 +102,14 @@ function TimezoneSheet({ title, value, onPick, onClose }: { title: string; value
             </T>
           }
           renderItem={({ item }) => (
-            <Pressable
+            <RowPressable
               accessibilityRole="radio"
               accessibilityState={{ checked: item === value }}
               onPress={() => {
                 tap();
                 onPick(item);
               }}
-              style={({ pressed }) => [styles.zone, pressed && { backgroundColor: c.sunken }]}
+              style={styles.zone}
             >
               <T variant="body" numberOfLines={1} style={{ flex: 1 }}>
                 {shown(item)}
@@ -117,7 +118,7 @@ function TimezoneSheet({ title, value, onPick, onClose }: { title: string; value
                 {timezoneOffset(item)}
               </T>
               <View style={styles.check}>{item === value ? <Icon name="check" size={14} color={c.brandStrong} weight="bold" /> : null}</View>
-            </Pressable>
+            </RowPressable>
           )}
         />
       </View>

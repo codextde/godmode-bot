@@ -318,6 +318,7 @@
     "title": "Während du weg warst · {{duration}}",
     "close": "Zusammenfassung schließen",
     "openActivity": "Öffnet die Aktivität",
+    "nothing": "Nichts Neues, während du weg warst",
     "whoWorked": "Wer gearbeitet hat"
   },
   "cronBuilder": {
@@ -327,7 +328,8 @@
       "weekdays": "Werktags",
       "weekly": "Jede Woche",
       "monthly": "Jeden Monat",
-      "custom": "Eigener (Cron)"
+      "custom": "Eigener (Cron)",
+      "several": "Mehrmals am Tag"
     },
     "examples": {
       "every15Minutes": "alle 15 Min.",
@@ -346,7 +348,34 @@
     "cronLabel": "Cron-Ausdruck",
     "randomStart": "Zufällige Startzeit",
     "randomStartHint": "Startet jedes Mal zu einem anderen Zeitpunkt, wie ein Kollege, der nicht auf die Minute genau einstempelt.",
-    "startWithin": "Start innerhalb von"
+    "startWithin": "Start innerhalb von",
+    "timing": "Zeitpunkt",
+    "randomTimes": "Zufällige Zeiten",
+    "fixedInterval": "Fester Abstand",
+    "runsPerDay": "Läufe pro Tag",
+    "times_one": "{{count}}-mal",
+    "times_other": "{{count}}-mal",
+    "every": "Abstand",
+    "hours_one": "{{count}} Stunde",
+    "hours_other": "{{count}} Stunden",
+    "between": "Zwischen",
+    "from": "Von",
+    "and": "und",
+    "until": "Bis",
+    "timeline": {
+      "random_one": "Ein Lauf zu einem zufälligen Zeitpunkt im Block – jeden Tag ein neuer.",
+      "random_other": "Ein Lauf zu einem zufälligen Zeitpunkt in jedem der {{count}} Blöcke – jeden Tag ein neuer.",
+      "interval_one": "{{count}} Lauf am Tag: {{times}}",
+      "interval_other": "{{count}} Läufe am Tag: {{times}}",
+      "intervalMore_one": "{{count}} Lauf am Tag: {{times}} und {{more}} weitere",
+      "intervalMore_other": "{{count}} Läufe am Tag: {{times}} und {{more}} weitere"
+    },
+    "problems": {
+      "pickDay": "Wähle mindestens einen Tag",
+      "endAfterStart": "Die Endzeit muss nach der Startzeit liegen",
+      "tooManyRuns": "{{times}} Läufe brauchen mindestens {{minutes}} zwischen Start und Ende",
+      "onlyOneRun": "Nur ein Lauf passt – mach den Zeitraum länger als {{hours}} h"
+    }
   },
   "routineRow": {
     "triggers": {
@@ -363,15 +392,15 @@
     "webhookCalled": "Wenn sein Webhook aufgerufen wird",
     "toggleFailed": "Automation konnte nicht geändert werden",
     "runFailed": "Konnte nicht ausgeführt werden",
-    "lastRun": "letzter Lauf {{ago}}",
-    "lastRunFailed": "letzter Lauf {{ago}} fehlgeschlagen",
+    "failedLine": "Letzter Lauf {{ago}} fehlgeschlagen",
     "runningNow": "Läuft gerade",
     "triggerBroken": "Der Auslöser funktioniert nicht.",
-    "runNamedNow": "{{name}} jetzt ausführen",
     "turnOff": "{{name}} ausschalten",
     "turnOn": "{{name}} einschalten",
     "moreEvents_one": "+ {{count}} weiteres Ereignis",
-    "moreEvents_other": "+ {{count}} weitere Ereignisse"
+    "moreEvents_other": "+ {{count}} weitere Ereignisse",
+    "waiting_one": "{{count}} wartet",
+    "waiting_other": "{{count}} warten"
   },
   "followupRow": {
     "anyMoment": "jeden Moment",
@@ -384,6 +413,7 @@
       "nextMonday": "Nächsten Montag",
       "inAWeek": "In einer Woche"
     },
+    "pickTime": "Datum und Uhrzeit wählen",
     "title": "Wiedervorlagen",
     "aChat": "Ein Chat",
     "continueFailed": "Konnte nicht fortgesetzt werden",
@@ -815,7 +845,38 @@
     "changesSince_one": "{{count}} Änderung seit dem vorigen Schlag",
     "changesSince_other": "{{count}} Änderungen seit dem vorigen Schlag",
     "beatCount_one": "{{count}} Schlag",
-    "beatCount_other": "{{count}} Schläge"
+    "beatCount_other": "{{count}} Schläge",
+    "board": {
+      "working": "In Arbeit",
+      "waiting": "Wartet",
+      "waitingOnYou": "Wartet auf dich",
+      "blocked": "Blockiert"
+    },
+    "why": {
+      "stalled": "Steckt fest",
+      "unstarted": "Noch nicht begonnen",
+      "retry": "Fehlgeschlagen – neuer Versuch",
+      "default": "Dafür geweckt"
+    },
+    "changesSinceWork_one": "{{count}} Änderung, seit er zuletzt daran gearbeitet hat",
+    "changesSinceWork_other": "{{count}} Änderungen, seit er zuletzt daran gearbeitet hat",
+    "openChat": "Chat öffnen",
+    "watchdog": {
+      "title": "Watchdog",
+      "setUp": "Einrichten",
+      "kind": {
+        "stalled": "Steckt fest",
+        "looping": "Dreht sich im Kreis"
+      },
+      "action": {
+        "retry": "Neu versucht",
+        "escalated": "An dich eskaliert"
+      },
+      "ticket": "Aufgabe",
+      "emptyOn": "Keine Eingriffe – jeder Lauf ist vorangekommen.",
+      "off": "Aus – Läufe werden nicht überwacht.",
+      "loadFailed": "Watchdog konnte nicht geladen werden: {{error}}"
+    }
   },
   "ui": {
     "unassigned": "Nicht zugewiesen",
@@ -830,6 +891,8 @@
     "useEmoji": "{{emoji}} verwenden"
   },
   "composer": {
+    "pastedAsFile": "Eingefügter Text als Datei angehängt ({{size}})",
+    "pasteInline": "Als Text einfügen",
     "message": "Nachricht",
     "chatFileFailed": "Die Chat-Datei ließ sich nicht öffnen",
     "addMessage": "Nachricht hinzufügen",
@@ -889,10 +952,24 @@
     "moreCharacters_other": "({{count}} weitere Zeichen)"
   },
   "message": {
+    "quoteSelection": "Auswahl zitieren",
+    "quoteAll": "Alles zitieren",
+    "nothingToQuote": "Hier gibt es nichts zu zitieren",
+    "moreOnReply": "Mehr",
+    "quotePart": "Teil zitieren",
+    "runTokens": "{{input}} rein · {{output}} raus · {{cached}} gecacht",
+    "runLoading": "Lauf-Details werden geladen",
+    "runFailed": "Lauf-Details konnten nicht geladen werden",
+    "runTurns_one": "{{count}} Runde",
+    "runTurns_other": "{{count}} Runden",
     "source": {
       "automation": "Automation",
       "delegation": "Von einem anderen Agenten",
       "task": "Aufgabe vom Board",
+      "taskN": "Aufgabe #{{n}}",
+      "openTicket": "Aufgabe öffnen",
+      "automationNamed": "Automation: {{name}}",
+      "openAutomation": "Automation öffnen",
       "offer": "Angebot, das du angenommen hast",
       "handoff": "Übergabe aus einem früheren Chat"
     },
@@ -1045,5 +1122,32 @@
   },
   "attachmentPictures": {
     "enlarge": "{{name}} größer anzeigen"
+  },
+  "claudeSignedOut": {
+    "keyRefused": "Claude hat deinen Anthropic-API-Schlüssel abgelehnt.",
+    "keyRefusedHint": "Deine Agenten können erst wieder arbeiten, wenn er funktioniert.",
+    "signingIn": "Anmeldung bei Claude…",
+    "failed": "Die Anmeldung wurde nicht abgeschlossen.",
+    "signedOut": "Claude ist abgemeldet.",
+    "signInAgainHint": "Deine Agenten können erst wieder arbeiten, wenn du dich neu anmeldest.",
+    "checkKey": "Schlüssel prüfen",
+    "signInAgain": "Neu anmelden",
+    "showSteps": "Schritte zeigen",
+    "onComputer": "Deine Agenten können erst wieder arbeiten, wenn du dich auf deinem Computer neu anmeldest.",
+    "details": "Details"
+  },
+  "licenseNotice": {
+    "needed": "Godmode auf deinem Computer braucht eine Lizenz",
+    "ending": {
+      "today": "Ab morgen braucht Godmode auf deinem Computer eine Lizenz.",
+      "tomorrow": "Ab übermorgen braucht Godmode auf deinem Computer eine Lizenz.",
+      "inDays_one": "In {{count}} Tag braucht Godmode auf deinem Computer eine Lizenz.",
+      "inDays_other": "In {{count}} Tagen braucht Godmode auf deinem Computer eine Lizenz."
+    },
+    "pastDue": "Prüfe die Lizenz in Godmode auf deinem Computer.",
+    "unverified": "Godmode auf deinem Computer konnte seine Lizenz noch nicht prüfen. Es läuft weiter bis {{date}}.",
+    "dateFormat": "d. MMMM",
+    "viewLicence": "Lizenz ansehen",
+    "dismiss": "Für heute ausblenden"
   }
 }

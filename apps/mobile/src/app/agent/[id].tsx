@@ -7,8 +7,9 @@ import { useTranslation } from "react-i18next";
 import { leadOf, presenceLabel, reportsOf, type Agent, type Routine, type TaskStatus } from "@godmode/shared";
 import { useAgentMenu } from "@/components/agent-actions";
 import { AgentHistory, FailedRunBanner } from "@/components/agent-history";
+import { AgentStats } from "@/components/agent-stats";
 import { DreamsCard } from "@/components/dreams-card";
-import { HeartbeatCard } from "@/components/heartbeat-card";
+import { HeartbeatCard, WatchdogCard } from "@/components/heartbeat-card";
 import { Icon } from "@/components/icon";
 import { CharacterAvatar, moodOf, useAgentPresence } from "@/components/character";
 import { HeaderActions } from "@/components/header-actions";
@@ -21,6 +22,7 @@ import { api, errorText } from "@/lib/api";
 import { activityText, whenText } from "@/lib/format";
 import { dateLocale, intlLocale, currentLanguage } from "@/lib/i18n";
 import { chatListQuery, useAgents } from "@/lib/hooks";
+import { blockedReasonText } from "@/lib/license-text";
 import { useLive, useRunCounts } from "@/lib/live";
 import { qk, queryClient } from "@/lib/query";
 import { radius, space, useColors } from "@/lib/theme";
@@ -126,6 +128,8 @@ function AgentView({ agent, team }: { agent: Agent; team: Agent[] }) {
 
       <Plate agent={agent} onSwitchOn={() => toggle.mutate(true)} switching={toggle.isPending} />
 
+      <AgentStats agent={agent} />
+
       <AgentHistory agent={agent} />
 
       <MemoryCard agent={agent} />
@@ -157,6 +161,8 @@ function AgentView({ agent, team }: { agent: Agent; team: Agent[] }) {
       </View>
 
       <HeartbeatCard agent={agent} />
+
+      <WatchdogCard agent={agent} />
 
       <View>
         <SectionTitle title={t("detail.recentChats")} action={chats.data?.length ? t("detail.allChats") : undefined} onAction={() => router.push({ pathname: "/agent-chats/[id]", params: { id: agent.id } })} />
@@ -264,7 +270,7 @@ function Plate({ agent, onSwitchOn, switching }: { agent: Agent; onSwitchOn: () 
                     key={task.id}
                     icon={<Icon name="tasks" size={13} color={c.textMuted} />}
                     title={`#${task.number} ${task.title}`}
-                    detail={task.status === "blocked" && task.blockedReason ? `${STATUS_META[task.status].label} — ${task.blockedReason}` : STATUS_META[task.status].label}
+                    detail={task.status === "blocked" && task.blockedReason ? `${STATUS_META[task.status].label} — ${blockedReasonText(task)}` : STATUS_META[task.status].label}
                     onPress={() => openTask(task.id)}
                   />
                 ))}
@@ -394,6 +400,7 @@ function PlateRow({ icon, title, detail, onPress }: { icon: ReactNode; title: st
 function RoutineRow({ routine }: { routine: Routine }) {
   const c = useColors();
   const { t } = useTranslation(["agents", "common"]);
+  const { t: tc } = useTranslation("components");
   const toggle = useMutation({
     mutationFn: (enabled: boolean) => api.routines.setEnabled(routine.id, enabled),
     onSettled: () => queryClient.invalidateQueries({ queryKey: qk.routines }),
@@ -423,6 +430,11 @@ function RoutineRow({ routine }: { routine: Routine }) {
           {triggerText(routine)}
           {routine.lastStatus === "failed" ? t("routine.lastRunFailed") : ""}
         </T>
+        {routine.pendingEvents > 0 ? (
+          <Row style={{ marginTop: 2 }}>
+            <Badge label={tc("routineRow.waiting", { count: routine.pendingEvents })} tone="warning" dot={false} />
+          </Row>
+        ) : null}
       </View>
       <Pressable
         accessibilityRole="button"

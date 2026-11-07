@@ -6,6 +6,7 @@ import type { AgentQuestion, MissingLogin } from "@godmode/shared";
 import { Icon } from "./icon";
 import { openChat } from "./rows";
 import { Card, EmptyState, ErrorState, Hairline, SkeletonRows, T, tap } from "./ui";
+import { RowPressable } from "./row-pressable";
 import { api, errorText } from "@/lib/api";
 import { shortTime } from "@/lib/format";
 import { useAgents } from "@/lib/hooks";
@@ -116,7 +117,7 @@ function QuestionRow({ question }: { question: AgentQuestion }) {
   const { byId } = useAgents();
   const agent = byId.get(question.agentId);
   return (
-    <Pressable accessibilityRole="button" onPress={() => openChat(question.conversationId)} style={({ pressed }) => [styles.row, pressed && { backgroundColor: c.sunken }]}>
+    <RowPressable accessibilityRole="button" onPress={() => openChat(question.conversationId)} style={styles.row}>
       <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
         <T variant="subhead" style={{ fontWeight: "600" }} numberOfLines={2}>
           {question.title}
@@ -130,7 +131,7 @@ function QuestionRow({ question }: { question: AgentQuestion }) {
       <T variant="caption" color={c.textFaint}>
         {shortTime(question.answer?.at ?? question.updatedAt)}
       </T>
-    </Pressable>
+    </RowPressable>
   );
 }
 

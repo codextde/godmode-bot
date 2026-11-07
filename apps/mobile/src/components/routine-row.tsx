@@ -1,12 +1,14 @@
 import { formatDistanceToNowStrict } from "date-fns";
-import { router } from "expo-router";
+import { Link, router } from "expo-router";
 import { memo, useState } from "react";
-import { ActivityIndicator, Alert, Pressable, StyleSheet, Switch, View } from "react-native";
+import { Alert, StyleSheet, Switch, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { cronToHuman, scheduleToHuman, type Agent, type Routine, type RoutineTriggerType } from "@godmode/shared";
 import { CharacterAvatar } from "./character";
-import { Icon } from "./icon";
+import { useMenuSheet, type HeaderMenuItem } from "./header-actions";
+import { sfSymbol } from "./icon";
 import { T, tap } from "./ui";
+import { RowPressable } from "./row-pressable";
 import { api, errorText } from "@/lib/api";
 import { whenText } from "@/lib/format";
 import { currentLanguage, dateLocale, t, uses12Hour } from "@/lib/i18n";
@@ -94,81 +96,113 @@ export function runRoutine(routine: Routine): Promise<void> {
     .finally(refreshRoutines);
 }
 
-/** One automation in a list: whose it is, what starts it, a switch and Run now. Tapping it opens the automation. */
+/**
+ * One automation in a list: its name, one line (what starts it, or what needs a look) and its switch. Tapping it opens
+ * the automation; Run now is in its long-press menu and on its page.
+ */
 export const RoutineRow = memo(function RoutineRow({ routine, agent, working }: { routine: Routine; agent?: Agent; working?: boolean }) {
   const c = useColors();
   const { t } = useTranslation("components");
+  const menu = useMenuSheet();
   const [starting, setStarting] = useState(false);
   const failed = routine.lastStatus === "failed";
-  const ago = routine.lastRunAt ? formatDistanceToNowStrict(new Date(routine.lastRunAt), { addSuffix: true, locale: dateLocale() }) : null;
-  const last = ago ? (failed ? t("routineRow.lastRunFailed", { ago }) : t("routineRow.lastRun", { ago })) : null;
   const broken = routine.enabled && routine.triggerStatus?.state === "error";
-  const canRun = routine.enabled && !working && !starting;
+  const runnable = routine.enabled && !working && !starting;
+  const ago = routine.lastRunAt ? formatDistanceToNowStrict(new Date(routine.lastRunAt), { addSuffix: true, locale: dateLocale() }) : null;
+  const [line, tone] =
+    working || starting
+      ? [t("routineRow.runningNow"), c.brandStrong]
+      : broken
+        ? [routine.triggerStatus.message ?? t("routineRow.triggerBroken"), c.danger]
+        : failed && ago
+          ? [t("routineRow.failedLine", { ago }), c.danger]
+          : [[routine.pendingEvents > 0 ? t("routineRow.waiting", { count: routine.pendingEvents }) : null, triggerText(routine, false)].filter(Boolean).join(" · "), undefined];
+  const href = { pathname: "/automation/[id]" as const, params: { id: routine.id } };
+  const run = () => {
+    if (!runnable) return;
+    setStarting(true);
+    void runRoutine(routine).finally(() => setStarting(false));
+  };
+  const actions: HeaderMenuItem[] = runnable ? [{ icon: "play", title: runLabel(routine.trigger.type), onPress: run }] : [];
+  const label = [routine.name, agent?.name, line].filter(Boolean).join(", ");
 
-  return (
-    <Pressable
-      onPress={() => {
-        tap();
-        router.push({ pathname: "/automation/[id]", params: { id: routine.id } });
-      }}
-      style={({ pressed }) => [styles.row, pressed && { backgroundColor: c.sunken }]}
-    >
+  const main = (
+    <>
       <CharacterAvatar agent={agent} size={40} running={working} />
       <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
         <T variant="headline" numberOfLines={1} style={{ fontSize: 16 }}>
           {routine.name}
         </T>
-        <T variant="footnote" muted numberOfLines={2}>
-          {agent ? `${agent.name} · ` : ""}
-          {working ? (
-            <T variant="footnote" color={c.brandStrong} style={{ fontWeight: "600" }}>
-              {t("routineRow.runningNow")}
-            </T>
-          ) : (
-            triggerText(routine)
-          )}
-          {last ? " · " : ""}
-          {last && failed ? (
-            <T variant="footnote" color={c.danger}>
-              {last}
-            </T>
-          ) : (
-            last
-          )}
+        <T variant="footnote" muted={!tone} color={tone} numberOfLines={1}>
+          {line}
         </T>
-        {broken ? (
-          <T variant="footnote" color={c.danger} numberOfLines={2}>
-            {routine.triggerStatus.message ?? t("routineRow.triggerBroken")}
-          </T>
-        ) : null}
       </View>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={t("routineRow.runNamedNow", { name: routine.name })}
-        accessibilityState={{ disabled: !canRun, busy: starting }}
-        hitSlop={6}
-        // Not `disabled`: a press on it must not fall through to the row and open the automation.
-        onPress={() => {
-          if (!canRun) return;
-          setStarting(true);
-          void runRoutine(routine).finally(() => setStarting(false));
-        }}
-        style={({ pressed }) => [styles.runNow, { backgroundColor: c.sunken, opacity: starting ? 1 : !canRun ? 0.4 : pressed ? 0.6 : 1 }]}
-      >
-        {starting ? <ActivityIndicator size="small" color={c.textMuted} /> : <Icon name="play" size={12} color={c.text} />}
-      </Pressable>
-      <Switch
-        accessibilityLabel={routine.enabled ? t("routineRow.turnOff", { name: routine.name }) : t("routineRow.turnOn", { name: routine.name })}
-        value={routine.enabled}
-        onValueChange={(enabled) => setRoutineEnabled(routine, enabled)}
-        trackColor={{ true: c.brand, false: c.sunken }}
-        style={{ alignSelf: "center" }}
-      />
-    </Pressable>
+    </>
+  );
+  const toggle = (
+    <Switch
+      accessibilityLabel={routine.enabled ? t("routineRow.turnOff", { name: routine.name }) : t("routineRow.turnOn", { name: routine.name })}
+      value={routine.enabled}
+      onValueChange={(enabled) => setRoutineEnabled(routine, enabled)}
+      trackColor={{ true: c.brand, false: c.sunken }}
+      style={{ alignSelf: "center" }}
+    />
+  );
+
+  const row = (onLongPress?: () => void, withSwitch = true) => (
+    <RowPressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      onPress={() => {
+        tap();
+        router.push(href);
+      }}
+      onLongPress={onLongPress}
+      style={[styles.row, !withSwitch && styles.lead]}
+    >
+      {main}
+      {withSwitch ? toggle : null}
+    </RowPressable>
+  );
+  if (!actions.length) return row();
+  if (process.env.EXPO_OS !== "ios") {
+    return (
+      <>
+        {row(() => {
+          tap();
+          menu.show(actions, routine.name);
+        })}
+        {menu.sheet}
+      </>
+    );
+  }
+  // The system's menu on a long press; the switch stays outside it, so a tap on it only flips it.
+  return (
+    <View style={styles.split}>
+      <Link href={href} asChild>
+        <Link.Trigger>
+          <View style={{ flex: 1 }}>{row(undefined, false)}</View>
+        </Link.Trigger>
+        <Link.Menu>
+          {actions.map((a) => (
+            <Link.MenuAction key={a.title} title={a.title} icon={sfSymbol(a.icon)} onPress={a.onPress} />
+          ))}
+        </Link.Menu>
+      </Link>
+      {toggle}
+    </View>
   );
 });
 
 const styles = StyleSheet.create({
+  split: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingRight: space.lg,
+  },
+  lead: {
+    paddingRight: space.md,
+  },
   row: {
     flexDirection: "row",
     alignItems: "center",
@@ -177,12 +211,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.lg,
     borderRadius: radius.md,
     borderCurve: "continuous",
-  },
-  runNow: {
-    width: 34,
-    height: 34,
-    borderRadius: radius.pill,
-    alignItems: "center",
-    justifyContent: "center",
   },
 });

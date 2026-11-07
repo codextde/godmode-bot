@@ -24,7 +24,9 @@ import { BLOCKED_TITLE, dueLabel, formatWork, isWorking, PRIORITY_LABEL, taskRep
 import { activityText, hostOf } from "@/lib/format";
 import { useAgents } from "@/lib/hooks";
 import { dateLocale } from "@/lib/i18n";
+import { blockedReasonText } from "@/lib/license-text";
 import { qk, queryClient } from "@/lib/query";
+import { columnOf, MOVE_ICON, moveTask, taskMoves } from "@/lib/task-order";
 import { agentsFor, useWorkspace, scopeLabel } from "@/lib/workspace";
 import { radius, space, useColors } from "@/lib/theme";
 
@@ -104,6 +106,10 @@ export default function TaskScreen() {
     },
     onError: (err) => Alert.alert(tr("manage.prFailed"), failure(err)),
   });
+
+  // Its column, for moving it up or down there like on the board.
+  const workspaceId = (task.data ?? seed)?.workspaceId;
+  const board = useQuery({ queryKey: qk.taskList(workspaceId ?? null), queryFn: () => api.tasks.list({ workspaceId: workspaceId ?? null }), enabled: workspaceId !== undefined && fullAccess === true });
 
   const gone = task.error instanceof ApiError && task.error.status === 404;
   const t = task.data ?? (gone ? undefined : seed);
@@ -198,6 +204,10 @@ export default function TaskScreen() {
     else if (idle) menu.push({ icon: "branch", title: tr("manage.push"), onPress: () => push.mutate() });
   }
   if (github && idle && (!pr || pr.state === "closed")) menu.push({ icon: "pullRequest", title: tr("manage.createPr"), onPress: () => pullRequest.mutate() });
+  if (!t.archivedAt && fullAccess === true) {
+    const column = columnOf(board.data ?? [], t);
+    for (const m of taskMoves(column, t.id)) menu.push({ icon: MOVE_ICON[m], title: tr(`order.${m}`), onPress: () => void moveTask(t, m, column) });
+  }
   if (!t.archivedAt && t.status !== "blocked" && t.status !== "done" && t.status !== "cancelled") menu.push({ icon: "octagon", title: tr("manage.block"), onPress: () => edit(true) });
   if (!t.archivedAt) menu.push({ icon: "archive", title: tr("task.archive"), onPress: () => archive(true) });
   if (!t.archivedAt && t.status !== "done" && t.status !== "cancelled") menu.push({ icon: "close", title: tr("task.cancelTask"), destructive: true, onPress: () => move("cancelled") });
@@ -309,7 +319,7 @@ export default function TaskScreen() {
                 {BLOCKED_TITLE[t.blockedKind](agent?.name ?? tr("task.theAgent"))}
               </T>
             ) : null}
-            {t.blockedReason ? <T variant="subhead">{t.blockedReason}</T> : null}
+            {t.blockedReason ? <T variant="subhead">{blockedReasonText(t)}</T> : null}
             {t.blockedKind === "publish" ? (
               <T variant="footnote" muted>
                 {tr("task.publishFailed")}
@@ -694,11 +704,18 @@ function Parts({ task, workspaceId }: { task: Task; workspaceId: string | null }
   const board = useQuery({ queryKey: qk.taskList(workspaceId), queryFn: () => api.tasks.list({ workspaceId }), enabled: !!task.subtasks || !!task.parentId });
   const parts = useMemo(() => (board.data ?? []).filter((p) => p.parentId === task.id).sort((a, b) => a.number - b.number), [board.data, task.id]);
   const parentTitle = useMemo(() => (task.parentId ? board.data?.find((p) => p.id === task.parentId)?.title : undefined), [board.data, task.parentId]);
-  if (!task.parentId && !task.subtasks) return null;
+  // Where the core would refuse a part: 3 levels deep, 20 parts, or a ticket that won't wait for it (delivered or settled).
+  const closed = task.status === "done" || task.status === "cancelled" || !!task.archivedAt;
+  let depth = 1;
+  for (let up = task.parentId; up && depth < 4; depth++) up = board.data?.find((p) => p.id === up)?.parentId ?? null;
+  const canAdd = !closed && task.status !== "in_review" && depth < 3 && (task.subtasks?.total ?? 0) < 20;
+  if (!task.parentId && !task.subtasks && !canAdd) return null;
   const open = (id: string) => {
     tap();
     router.push({ pathname: "/task/[id]", params: { id } });
   };
+  const add = () => router.push({ pathname: "/new-task", params: { parentId: task.id } });
+  const archived = (task.subtasks?.total ?? 0) - parts.length;
   return (
     <View style={{ gap: space.sm }}>
       {task.parentId ? (
@@ -715,9 +732,14 @@ function Parts({ task, workspaceId }: { task: Task; workspaceId: string | null }
           <Icon name="chevron" size={13} color={c.textFaint} />
         </Card>
       ) : null}
+      {canAdd && !task.subtasks ? <SectionTitle title={t("parts.title")} action={t("parts.add")} onAction={add} /> : null}
       {task.subtasks ? (
         <View>
-          <SectionTitle title={t("task.partsTitle", { done: task.subtasks.total - task.subtasks.open, total: task.subtasks.total })} />
+          <SectionTitle
+            title={t("task.partsTitle", { done: task.subtasks.total - task.subtasks.open, total: task.subtasks.total })}
+            action={canAdd ? t("parts.add") : undefined}
+            onAction={canAdd ? add : undefined}
+          />
           <Card style={{ paddingVertical: 4 }}>
             {!parts.length && board.isPending ? (
               <View style={styles.partsLoading} accessibilityRole="progressbar" accessibilityLabel={t("task.loadingParts")}>
@@ -747,6 +769,11 @@ function Parts({ task, workspaceId }: { task: Task; workspaceId: string | null }
               </Pressable>
             ))}
           </Card>
+          {board.data && archived > 0 ? (
+            <T variant="footnote" muted style={{ paddingHorizontal: 4, paddingTop: space.sm }}>
+              {t("parts.archived", { count: archived })}
+            </T>
+          ) : null}
         </View>
       ) : null}
     </View>
@@ -757,7 +784,7 @@ const styles = StyleSheet.create({
   props: { paddingVertical: 6, paddingHorizontal: space.lg },
   prop: { alignItems: "flex-start", gap: space.md, paddingVertical: 7 },
   propLabel: { width: 84, paddingTop: 1 },
-  part: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 10 },
+  part: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 10, paddingHorizontal: space.lg },
   partsLoading: { gap: space.md, paddingVertical: space.md, paddingHorizontal: space.lg },
   stale: {
     flexDirection: "row",
