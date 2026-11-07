@@ -204,7 +204,7 @@ describe("push notifications", () => {
   test("a licence notice reaches a phone without any way to buy", () => {
     const n: AppNotification = { id: "ntf_2", kind: "warning", title: "Godmode needs an active licence", body: "Automation couldn't start. Subscribe or add your licence key.", link: "/settings/license", read: false, createdAt: new Date().toISOString() };
     const [m] = pushMessages(n, [{ platform: "ios", token: IOS_TOKEN }], 0);
-    expect(m!.title).toBe("Godmode on your computer needs a licence");
+    expect(m!.title).toBe("Godmode on your computer needs a license");
     expect(m!.body).toBe("");
     expect(m!.data.url).toBe("/settings/license");
   });

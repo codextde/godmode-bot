@@ -10,7 +10,7 @@
   },
   "describe": {
     "title": "Describe what to automate",
-    "placeholder": "When a new email with an invoice arrives, save the PDF to Drive and log it in my sheet",
+    "placeholder": "Describe what to automate…",
     "submit": "Set it up",
     "unreachable": "Couldn't reach Godmode",
     "prompt": "Set up an automation: {{text}}",

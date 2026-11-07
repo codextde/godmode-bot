@@ -601,6 +601,9 @@
     "keepsWorking": "Funktioniert weiter bis",
     "notEnforced": "Ein eigener Build: Er braucht keine Lizenz.",
     "onComputer": "Die Lizenz verwaltest du in Godmode auf deinem Computer.",
+    "checkAgain": "Erneut prüfen",
+    "checked": "Lizenz geprüft",
+    "checkFailed": "Lizenz konnte nicht geprüft werden",
     "usage": {
       "title": "Auf diesem Computer",
       "since": "Seit {{date}}",

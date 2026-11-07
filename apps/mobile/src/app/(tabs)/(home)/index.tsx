@@ -5,7 +5,7 @@ import { ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, StyleS
 import { useTranslation } from "react-i18next";
 import type { AgentQuestion } from "@godmode/shared";
 import Animated, { FadeIn, LinearTransition } from "react-native-reanimated";
-import { AwaySummaryCard } from "@/components/away-summary";
+import { AwayLine } from "@/components/away-summary";
 import { ClaudeSignedOutBanner } from "@/components/claude-signed-out";
 import { LicenseNotice } from "@/components/license-notice";
 import { OffersCard } from "@/components/offers-card";
@@ -67,6 +67,9 @@ export default function Home() {
 
   const enabled = (allAgents ?? []).filter((a) => a.enabled);
   const agent = pickAgent(enabled);
+  // Example prompts only until the first chat: after that the composer is the way in (they stay in New chat).
+  const { id: workspaceId } = useWorkspace();
+  const firstChat = useQuery(chatListQuery(workspaceId)).data?.length === 0;
   const userName = boot.data?.settings.general.userName?.trim();
   const vaultLocked = !!boot.data && boot.data.vault.initialized && !boot.data.vault.unlocked;
   const now = new Date();
@@ -126,7 +129,7 @@ export default function Home() {
         </Glass>
       </Pressable>
 
-      {hideSuggestions ? null : (
+      {hideSuggestions || !firstChat ? null : (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.suggestions} contentContainerStyle={styles.suggestionRow}>
           {SUGGESTIONS.map((s) => (
             <Pressable
@@ -166,7 +169,7 @@ export default function Home() {
 
       <ClaudeSignedOutBanner />
       <LicenseNotice />
-      <AwaySummaryCard />
+      <AwayLine />
       <OffersCard />
       <NeedsYou vaultLocked={vaultLocked} />
       <WorkingNow />

@@ -112,7 +112,7 @@ function needsYouCount(): number | undefined {
 export function pushText(n: AppNotification): { title: string; body: string } {
   if (privateChat(n.link)) return { title: n.kind === "question" ? "Someone in a private chat needs you" : "News in a private chat", body: "" };
   // The licence notice names ways to buy, for the desktop; a store app must not show that (the phone maps it in its inbox).
-  if (n.link === "/settings/license") return { title: "Godmode on your computer needs a licence", body: "" };
+  if (n.link === "/settings/license") return { title: "Godmode on your computer needs a license", body: "" };
   const clean = (s: string, max: number) => truncate(maskKnownSecrets(s.replace(/\s+/g, " ").trim()), max);
   return { title: clean(n.title, TITLE_MAX) || "Godmode", body: clean(n.body, BODY_MAX) };
 }

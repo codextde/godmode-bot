@@ -45,11 +45,11 @@ class ComputerLiveView {
     return 1000 / (cheap ? fps : Math.min(fps, 2));
   }
 
-  private emitError(message: string) {
+  private emitError(message: string, code?: string) {
     // Repeat an unchanged error at most every 5 s.
     if (this.lastError && this.lastError.message === message && Date.now() - this.lastError.at < 5000) return;
     this.lastError = { message, at: Date.now() };
-    bus.emit({ type: "computer.frame", view: this.view, data: "", mime: "image/jpeg", width: 0, height: 0, label: this.label, error: message });
+    bus.emit({ type: "computer.frame", view: this.view, data: "", mime: "image/jpeg", width: 0, height: 0, label: this.label, error: message, ...(code ? { code } : {}) });
   }
 
   private async run() {
@@ -69,7 +69,7 @@ class ComputerLiveView {
           bus.emit({ type: "computer.frame", view: this.view, data: cap.data, mime: cap.mime, width: cap.width, height: cap.height, label: cap.label });
         } catch (err) {
           if (this.stopped) break;
-          this.emitError(errorMessage(err));
+          this.emitError(errorMessage(err), err instanceof EngineError ? err.code : undefined);
           // Missing permissions or a closed window won't fix themselves within a frame.
           wait = err instanceof EngineError && (err.code === "gone" || err.code === "permission" || err.code === "unsupported") ? 3000 : 1000;
         }

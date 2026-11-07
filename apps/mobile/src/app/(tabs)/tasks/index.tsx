@@ -2,14 +2,15 @@ import { FlashList, type ListRenderItem } from "@shopify/flash-list";
 import { useQuery } from "@tanstack/react-query";
 import { Link, router, Stack, useLocalSearchParams } from "expo-router";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
-import { Alert, Pressable, RefreshControl, StyleSheet, View } from "react-native";
+import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { isOverdue, localDay, TASK_PRIORITIES, TASK_STATUSES, type Agent, type Task, type TaskStatus } from "@godmode/shared";
 import { FilterToolbar } from "@/components/filter-toolbar";
-import { FilterChips } from "@/components/filter-chips";
+import { useFullAccess } from "@/components/full-access";
+import { ActiveFilterChip } from "@/components/filter-chips";
 import { GoalsStrip } from "@/components/goals-strip";
 import { STATUS_META, TaskRow } from "@/components/task-row";
-import { Icon, type IconName } from "@/components/icon";
+import { Icon, sfSymbol, type IconName } from "@/components/icon";
 import { useMenuSheet } from "@/components/header-actions";
 import { Button, EmptyState, ErrorState, Hairline, SectionTitle, SkeletonRows, T, tap } from "@/components/ui";
 import { WorkspaceChip } from "@/components/workspace-chip";
@@ -18,6 +19,7 @@ import { PRIORITY_LABEL } from "@/lib/desktop-parity";
 import { useAgents, useOpenHumanTasks } from "@/lib/hooks";
 import { t } from "@/lib/i18n";
 import { qk, queryClient } from "@/lib/query";
+import { columnOf, MOVE_ICON, moveTask, taskMoves, type TaskMove } from "@/lib/task-order";
 import { usePullRefresh } from "@/lib/use-pull-refresh";
 import { tasksInProject, useProjectIndex, useWorkspace } from "@/lib/workspace";
 import { radius, space, textScale, useColors } from "@/lib/theme";
@@ -58,6 +60,8 @@ export default function Tasks() {
   const mine = useOpenHumanTasks();
   const tasks = useQuery({ queryKey: qk.taskList(workspaceId), queryFn: () => api.tasks.list({ workspaceId }) });
   const { byId: agents } = useAgents();
+  // Ordering within a column: a full-access phone, like the desktop's drag (limited phones keep today's rules).
+  const canMove = useFullAccess().fullAccess === true;
   const names = useMemo(() => new Map(workspaces.map((w) => [w.id, w.name])), [workspaces]);
   const goals = useQuery({ queryKey: qk.goals(workspaceId), queryFn: () => api.goals.list(workspaceId) });
   const pull = usePullRefresh(() => Promise.all([tasks.refetch(), mine.refetch(), goals.refetch()]));
@@ -120,7 +124,22 @@ export default function Tasks() {
   }, [board, view]);
   const forYou = mine.data ?? [];
   const activeGoals = (goals.data ?? []).filter((g) => g.status === "active").length;
-  const activeCount = ACTIVE.reduce((n, s) => n + (counts.get(s) ?? 0), 0);
+  const viewOptions = [
+    { value: "active", label: t("tasks.filterActive") },
+    { value: "all", label: t("common:words.all") },
+    ...TASK_STATUSES.map((s) => ({ value: s, label: STATUS_META[s].label })),
+  ];
+  const priorityOptions = [{ value: ALL, label: t("tasks:list.anyPriority") }, ...TASK_PRIORITIES.map((p) => ({ value: p, label: PRIORITY_LABEL[p] }))];
+  const dueOptions = (["all", "overdue", "week", "none"] as const).map((d) => ({ value: d, label: d === ALL ? t("tasks:list.anyDue") : t(`tasks:list.${d}`) }));
+  const optionLabel = (options: { value: string; label: string }[], value: string) => options.find((o) => o.value === value)?.label ?? value;
+  // What the header's filter menu narrowed the board to, each with a way off, on the one line above the board.
+  const picked = [
+    view !== "active" && { key: "view", label: optionLabel(viewOptions, view), count: view === "all" ? board.length : (counts.get(view) ?? 0), clear: () => setView("active") },
+    agent !== ALL && { key: "agent", label: optionLabel(filterOptions.agents, agent), clear: () => setAgent(ALL) },
+    priority !== ALL && { key: "priority", label: optionLabel(priorityOptions, priority), clear: () => setPriority(ALL) },
+    due !== ALL && { key: "due", label: optionLabel(dueOptions, due), clear: () => setDue(ALL) },
+    label !== ALL && { key: "label", label, clear: () => setLabel(ALL) },
+  ].filter((f): f is { key: string; label: string; count?: number; clear: () => void } => !!f);
 
   const renderItem: ListRenderItem<Item> = useCallback(
     ({ item, index }) => {
@@ -133,10 +152,11 @@ export default function Tasks() {
           workspaceName={workspaceId ? undefined : names.get(t.workspaceId ?? "")}
           projectName={projectId || !t.projectId ? undefined : projects.get(t.projectId)?.project.name}
           divided={items[index - 1]?.kind === "task"}
+          board={canMove ? board : undefined}
         />
       );
     },
-    [agents, workspaceId, names, projectId, projects, items, board],
+    [agents, workspaceId, names, projectId, projects, items, board, canMove],
   );
 
   return (
@@ -149,23 +169,10 @@ export default function Tasks() {
           { icon: "plus", label: t("home.newTask"), onPress: newTask },
         ]}
         filters={[
+          { id: "view", title: t("tasks:list.status"), icon: "tasks", value: view, options: viewOptions, onChange: (v) => setView(v as Shown) },
           { id: "agent", title: t("tasks:list.agent"), icon: "agents", value: agent, options: filterOptions.agents, onChange: setAgent },
-          {
-            id: "priority",
-            title: t("tasks:list.priority"),
-            icon: "flag",
-            value: priority,
-            options: [{ value: ALL, label: t("tasks:list.anyPriority") }, ...TASK_PRIORITIES.map((p) => ({ value: p, label: PRIORITY_LABEL[p] }))],
-            onChange: setPriority,
-          },
-          {
-            id: "due",
-            title: t("tasks:list.due"),
-            icon: "calendar",
-            value: due,
-            options: (["all", "overdue", "week", "none"] as const).map((d) => ({ value: d, label: d === ALL ? t("tasks:list.anyDue") : t(`tasks:list.${d}`) })),
-            onChange: (v) => setDue(v as Due),
-          },
+          { id: "priority", title: t("tasks:list.priority"), icon: "flag", value: priority, options: priorityOptions, onChange: setPriority },
+          { id: "due", title: t("tasks:list.due"), icon: "calendar", value: due, options: dueOptions, onChange: (v) => setDue(v as Due) },
           { id: "label", title: t("tasks:list.label"), icon: "tag", value: label, options: filterOptions.labels, onChange: setLabel },
         ]}
         menu={[
@@ -182,25 +189,16 @@ export default function Tasks() {
         contentContainerStyle={{ paddingHorizontal: space.sm, paddingBottom: 140 }}
         refreshControl={<RefreshControl {...pull} />}
         ListHeaderComponent={
-          <View style={{ paddingHorizontal: space.sm, paddingTop: space.sm, gap: space.lg }}>
-            <View style={styles.top}>
+          <View style={{ paddingHorizontal: space.sm, paddingVertical: space.sm, gap: space.lg }}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -space.lg }} contentContainerStyle={styles.top}>
               <WorkspaceChip />
+              {picked.map((f) => (
+                <ActiveFilterChip key={f.key} label={f.label} count={f.count} onClear={f.clear} />
+              ))}
               {forYou.length > 0 && <TopPill icon="person" label={t("tasks.myTasks")} count={forYou.length} onPress={() => router.push("/my-tasks")} />}
               {activeGoals > 0 && <TopPill icon="flag" label={t("tasks.goals")} count={activeGoals} open={goalsOpen} onPress={() => setGoalsOpen((v) => !v)} />}
-            </View>
+            </ScrollView>
             {goalsOpen && <GoalsStrip workspaceId={workspaceId} bleed={space.lg} />}
-            {onBoard.length > 0 && (
-              <FilterChips
-                bleed={space.lg}
-                value={view}
-                onChange={setView}
-                filters={[
-                  { id: "active", label: t("tasks.filterActive"), count: activeCount },
-                  { id: "all", label: t("common:words.all"), count: board.length },
-                  ...TASK_STATUSES.map((s) => ({ id: s, label: STATUS_META[s].label, count: counts.get(s) ?? 0 })),
-                ]}
-              />
-            )}
           </View>
         }
         ListEmptyComponent={
@@ -292,22 +290,29 @@ function archiveTask(id: string) {
     .finally(() => void queryClient.invalidateQueries({ queryKey: qk.tasks }));
 }
 
-/** Long press: archive the task (off the board, restorable on the computer). */
+
+/** Long press: move it within its column (as the list shows it), or archive it (off the board, restorable on the computer). */
 const TaskItem = memo(function TaskItem({
   task,
   agent,
   workspaceName,
   projectName,
   divided,
+  board,
 }: {
   task: Task;
   agent?: Agent;
   workspaceName?: string;
   projectName?: string;
   divided: boolean;
+  /** The board as shown, when this phone may move tickets within their column. */
+  board?: Task[];
 }) {
-  const { t } = useTranslation("tabs");
+  const { t } = useTranslation(["tabs", "tasks"]);
   const menu = useMenuSheet();
+  const column = useMemo(() => (board ? columnOf(board, task) : []), [board, task]);
+  const moves = useMemo(() => taskMoves(column, task.id), [column, task.id]);
+  const move = (m: TaskMove) => void moveTask(task, m, column);
   const confirmArchive = () => {
     if (task.status !== "in_progress") return archiveTask(task.id);
     Alert.alert(t("tasks.stopDialog.title"), t("tasks.stopDialog.body", { name: agent?.name ?? t("tasks.stopDialog.theAgent") }), [
@@ -327,7 +332,13 @@ const TaskItem = memo(function TaskItem({
       <>
         {row(() => {
           tap();
-          menu.show([{ icon: "archive", title: t("chats.menu.archive"), onPress: confirmArchive }], task.title);
+          menu.show(
+            [
+              ...moves.map((m) => ({ icon: MOVE_ICON[m], title: t(`tasks:order.${m}`), onPress: () => move(m) })),
+              { icon: "archive", title: t("chats.menu.archive"), onPress: confirmArchive },
+            ],
+            task.title,
+          );
         })}
         {menu.sheet}
       </>
@@ -340,6 +351,9 @@ const TaskItem = memo(function TaskItem({
       </Link.Trigger>
       <Link.Preview />
       <Link.Menu>
+        {moves.map((m) => (
+          <Link.MenuAction key={m} title={t(`tasks:order.${m}`)} icon={sfSymbol(MOVE_ICON[m])} onPress={() => move(m)} />
+        ))}
         <Link.MenuAction title={t("chats.menu.archive")} icon="archivebox" onPress={confirmArchive} />
       </Link.Menu>
     </Link>
@@ -349,9 +363,9 @@ const TaskItem = memo(function TaskItem({
 const styles = StyleSheet.create({
   top: {
     flexDirection: "row",
-    flexWrap: "wrap",
     alignItems: "center",
     gap: space.sm,
+    paddingHorizontal: space.lg,
   },
   pill: {
     flexDirection: "row",

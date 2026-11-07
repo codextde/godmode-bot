@@ -28,6 +28,8 @@ export interface Frame {
   title: string;
   url?: string;
   error?: string;
+  /** The computer's code for `error`; "gone": the shared window, tab or display is no more. */
+  code?: string;
   at: number;
 }
 
@@ -46,6 +48,8 @@ interface LiveState {
   labels: Record<string, string>;
   drafts: Record<string, Draft>;
   frames: Record<string, Frame>;
+  /** Shared windows, tabs and displays the computer said are gone ("computer:<view>"); kept after their last picture is dropped. */
+  goneScreens: Record<string, true>;
   setStatus: (status: LinkStatus, offlineReason?: string | null) => void;
   setComputer: (computer: string | null) => void;
   setPreferredAway: (away: boolean) => void;
@@ -69,6 +73,7 @@ export const useLive = create<LiveState>((set, get) => ({
   labels: {},
   drafts: {},
   frames: {},
+  goneScreens: {},
   setStatus: (status, offlineReason = null) => set({ status, offlineReason }),
   setComputer: (computer) => set({ computer }),
   setPreferredAway: (preferredAway) => set({ preferredAway }),
@@ -102,7 +107,14 @@ export const useLive = create<LiveState>((set, get) => ({
     set((s) => ({ drafts: { ...s.drafts, [event.conversationId]: { runId: event.runId, messageId: event.messageId, ...next } } }));
     return true;
   },
-  frame: (key, frame) => set((s) => ({ frames: { ...s.frames, [key]: frame } })),
+  frame: (key, frame) =>
+    set((s) => {
+      const frames = { ...s.frames, [key]: frame };
+      const gone = !frame.data && frame.code === "gone";
+      if (gone === !!s.goneScreens[key]) return { frames };
+      const { [key]: _back, ...rest } = s.goneScreens;
+      return { frames, goneScreens: gone ? { ...rest, [key]: true } : rest };
+    }),
   dropFrame: (key) =>
     set((s) => {
       const { [key]: _gone, ...frames } = s.frames;

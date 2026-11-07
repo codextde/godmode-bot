@@ -131,7 +131,7 @@
     "days_other": "{{count}} days",
     "vault": {
       "title": "Vault",
-      "open": "Vault",
+      "open": "Passwords",
       "unlocked": "Unlocked",
       "locked": "Locked",
       "passphrase": "Change Godmode password",

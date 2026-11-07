@@ -7,7 +7,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Button, EmptyState, LoadingState, T, tap } from "@/components/ui";
 import { fetchConversation } from "@/lib/chat-cache";
 import { quoteOf } from "@/lib/chat-blocks";
-import { useDrafts } from "@/lib/composer";
+import { quoteInto } from "@/lib/composer";
 import { qk } from "@/lib/query";
 import { fonts, space, useColors } from "@/lib/theme";
 
@@ -27,11 +27,8 @@ export default function ReplyTextSheet() {
 
   const quote = () => {
     tap();
-    const drafts = useDrafts.getState();
-    const current = drafts.drafts[conversationId]?.text ?? "";
-    const block = quoteOf(picked || text);
-    drafts.set(conversationId, { text: current.trim() ? `${current.trimEnd()}\n\n${block}` : block });
     router.back();
+    quoteInto(conversationId, quoteOf(picked || text));
   };
 
   if (!text) {

@@ -27,7 +27,7 @@ import { MenuSheet, type HeaderMenuItem } from "./header-actions";
 import { Row, T, tap } from "./ui";
 import { api, errorText } from "@/lib/api";
 import { cardKindOf, quoteOf, type CardKind } from "@/lib/chat-blocks";
-import { useDrafts } from "@/lib/composer";
+import { quoteInto } from "@/lib/composer";
 import { toolLabel } from "@/lib/format";
 import { useChatPrefs, useLightAnimations } from "@/lib/chat-prefs";
 import { useNow } from "@/lib/hooks";
@@ -323,10 +323,7 @@ function QuoteReply({ text, conversationId }: { text: string; conversationId: st
       accessibilityLabel={quoted ? t("message.quoted") : t("message.quoteReply")}
       hitSlop={10}
       onPress={() => {
-        const drafts = useDrafts.getState();
-        const current = drafts.drafts[conversationId]?.text ?? "";
-        const quote = quoteOf(text);
-        drafts.set(conversationId, { text: current.trim() ? `${current.trimEnd()}\n\n${quote}` : quote });
+        quoteInto(conversationId, quoteOf(text));
         tap();
         flash();
       }}

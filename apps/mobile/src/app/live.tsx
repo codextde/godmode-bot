@@ -1,14 +1,14 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Image } from "expo-image";
-import { router, useLocalSearchParams } from "expo-router";
+import { router, useIsFocused, useLocalSearchParams } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, TextInput, useWindowDimensions, View, type GestureResponderEvent } from "react-native";
 import { KeyboardStickyView, useKeyboardState } from "react-native-keyboard-controller";
 import Animated, { FadeIn, FadeOut, ZoomIn } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { browserView, type AndroidInputEvent, type AndroidKey, type ComputerInputEvent } from "@godmode/shared";
+import { browserView, computerTargetLabel, computerView, type AndroidInputEvent, type AndroidKey, type ComputerInputEvent } from "@godmode/shared";
 import { PHONE_BUTTONS } from "@/components/android-parts";
 import { AndroidTouchSurface } from "@/components/android-touch";
 import { useFullAccess } from "@/components/full-access";
@@ -18,6 +18,7 @@ import { frameUri, phoneState, vmState } from "@/components/screen-tile";
 import { Button, GlassIconButton, SMOKE, LiveDot, T, tap } from "@/components/ui";
 import { ZoomView } from "@/components/zoom-view";
 import { api, errorText, type BrowserInput } from "@/lib/api";
+import { fetchConversation } from "@/lib/chat-cache";
 import { hostOf } from "@/lib/format";
 import { useNow } from "@/lib/hooks";
 import { useLive, type Frame } from "@/lib/live";
@@ -80,7 +81,7 @@ export default function Live() {
     params.kind === "browser"
       ? { kind: "browser", key: `browser:${browserView(params.id, chat)}`, id: params.id, conversationId: chat, title: params.title ?? t("live.browser"), running: profile?.running ?? true }
       : params.kind === "share"
-        ? { kind: "share", key: `computer:${params.id}`, view: params.id, title: params.title ?? t("live.sharedScreen"), conversationId: "" }
+        ? { kind: "share", key: `computer:${params.id}`, view: params.id, title: params.title ?? t("live.sharedScreen"), conversationId: chat ?? "" }
         : null;
   const phones = useQuery({ queryKey: qk.androidDevices, queryFn: api.android.devices, enabled: params.kind === "android", retry: false });
   const phone = params.kind === "android" ? (phones.data?.find((d) => d.id === params.id) ?? null) : null;
@@ -92,7 +93,19 @@ export default function Live() {
     params.kind === "vm" ? shot.data : params.kind === "android" ? phoneShot.data : profile?.running === false ? undefined : stream;
   const uri = frameUri(frame);
   const online = useLive((s) => s.status === "online");
-  const fresh = !!frame && (params.kind === "browser" ? online : now - frame.at < 8000);
+  const fresh = !!uri && !!frame && (params.kind === "browser" ? online : now - frame.at < 8000);
+  // The shared window, tab or display is gone: say so, and offer the chat's share sheet (a full-access phone).
+  const gone = useLive((s) => !!s.goneScreens[`computer:${params.id}`]);
+  const ended = params.kind === "share" && gone && !uri;
+  const conversation = useQuery({ queryKey: qk.conversation(chat ?? ""), queryFn: () => fetchConversation(chat!), enabled: params.kind === "share" && !!chat });
+  const sharedNow = params.kind === "share" ? conversation.data?.computerTarget : undefined;
+  const focused = useIsFocused();
+  // Shared again (here or on the computer): watch what the chat shares now, once the share sheet is closed.
+  useEffect(() => {
+    if (!sharedNow || !focused) return;
+    const view = computerView(sharedNow);
+    if (view !== params.id) router.setParams({ id: view, title: computerTargetLabel(sharedNow) });
+  }, [sharedNow, params.id, focused]);
   const [control, setControl] = useState(false);
   const [buttons, setButtons] = useState(false);
   const [typing, setTyping] = useState(false);
@@ -236,7 +249,9 @@ export default function Live() {
         ? phone
           ? phoneState(phone)
           : t("live.androidPhone")
-      : frame?.error
+      : ended
+        ? t("live.ended.status")
+        : frame?.error
         ? frame.error
         : params.kind === "browser"
           ? profile?.running === false
@@ -282,7 +297,23 @@ export default function Live() {
           </Pressable>
         ) : (
           <View style={{ alignItems: "center", gap: 14, paddingHorizontal: 40 }}>
-            {params.kind === "vm" && vm && vm.state !== "running" ? (
+            {ended ? (
+              <>
+                <Icon name="display" size={34} color={DIM} />
+                <T variant="headline" color={WHITE} style={{ textAlign: "center" }}>
+                  {t(params.id.startsWith("tab:") ? "live.ended.tab" : params.id.startsWith("window:") ? "live.ended.window" : "live.ended.screen")}
+                </T>
+                {admin && chat && conversation.data && !conversation.data.archived ? (
+                  <Button
+                    title={t("live.ended.shareAgain")}
+                    icon="display"
+                    variant="glass"
+                    dark
+                    onPress={() => router.push({ pathname: "/chat-screen", params: { conversationId: chat } })}
+                  />
+                ) : null}
+              </>
+            ) : params.kind === "vm" && vm && vm.state !== "running" ? (
               <>
                 <Icon name="vm" size={34} color={DIM} />
                 <T variant="headline" color={WHITE}>

@@ -117,6 +117,8 @@ export type ServerEvent =
       label: string;
       /** Why no picture could be taken (missing permission, window closed, …). */
       error?: string;
+      /** The engine's code for `error`; "gone" = the shared window, tab or display is no more. */
+      code?: string;
     }
   | {
       /** An agent acted on a shared view (drawn as a ripple in the live view). x/y in frame coordinates, 0–1. */

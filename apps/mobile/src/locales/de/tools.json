@@ -186,6 +186,7 @@
     "update": "Auf {{version}} aktualisieren",
     "updateFailed": "Plugin konnte nicht aktualisiert werden",
     "updateBadge": "Update",
+    "updateAvailable": "Update verfügbar",
     "checkUpdates": "Nach Updates suchen",
     "checkFailed": "Konnte nicht nach Updates suchen"
   },

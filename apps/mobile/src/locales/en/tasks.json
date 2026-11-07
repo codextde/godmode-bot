@@ -1,4 +1,10 @@
 {
+  "order": {
+    "top": "Move to top",
+    "up": "Move up",
+    "down": "Move down",
+    "failed": "Couldn't move the task"
+  },
   "task": {
     "title": "Task",
     "notFound": "Task not found",
@@ -107,6 +113,7 @@
   },
   "list": {
     "search": "Search tasks",
+    "status": "Status",
     "agent": "Agent",
     "allAgents": "All agents",
     "unassigned": "Unassigned",

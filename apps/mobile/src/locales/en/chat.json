@@ -56,6 +56,13 @@
     "startBrowser": "Start browser",
     "waitingBrowser": "Waiting for the browser. It shows up here as soon as an agent uses it.",
     "waitingPicture": "Waiting for the picture…",
+    "ended": {
+      "status": "Ended",
+      "window": "The window was closed",
+      "tab": "The tab was closed",
+      "screen": "The screen isn't connected anymore",
+      "shareAgain": "Share again"
+    },
     "typePlaceholder": "Type into the screen",
     "enter": "Enter",
     "inControl": "You're in control",

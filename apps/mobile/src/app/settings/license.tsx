@@ -1,16 +1,20 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { Stack } from "expo-router";
-import { RefreshControl, StyleSheet } from "react-native";
+import { Alert, RefreshControl, StyleSheet } from "react-native";
 import { useTranslation } from "react-i18next";
 import { formatBytes, type CloudBilling, type CloudSubscriptionStatus, type LicensePlan, type LicenseState, type LicenseStatus } from "@godmode/shared";
 import { CloseButton } from "@/components/close-button";
+import { useFullAccess } from "@/components/full-access";
 import { Group } from "@/components/form";
 import { SettingsScroll } from "@/components/settings-scroll";
 import { QueryState } from "@/components/settings-state";
+import { showToast } from "@/components/toast";
+import { ActionRow } from "@/components/tool-form";
 import { InfoRow } from "@/components/status-rows";
 import { hours, UsageCard } from "@/components/usage-chart";
 import type { Tone } from "@/components/ui";
+import { errorText } from "@/lib/api";
 import { dateLocale, intlLocale } from "@/lib/i18n";
 import { licenseStateText } from "@/lib/license-text";
 import { queryClient } from "@/lib/query";
@@ -51,7 +55,7 @@ const SUBSCRIPTION = {
 const day = (iso: string) => format(new Date(iso), "PP", { locale: dateLocale() });
 const count = (n: number) => n.toLocaleString(intlLocale());
 
-/** Settings → Licence: plain status only, no way to buy, pay or enter a key (store rules). All of that is on the computer. */
+/** Settings → License: plain status (and Check again with full access), no way to buy, pay or enter a key (store rules). All of that is on the computer. */
 export default function License() {
   const { t } = useTranslation(["settings", "common"]);
   const license = useQuery({ queryKey: sq.license, queryFn: settingsApi.license.get });
@@ -93,6 +97,16 @@ export default function License() {
 
 function LicenseGroup({ state: s }: { state: LicenseState }) {
   const { t } = useTranslation("settings");
+  // Asking the licence server again is the computer's call: a full-access phone does it like the desktop.
+  const admin = useFullAccess().fullAccess === true;
+  const check = useMutation({
+    mutationFn: settingsApi.license.refresh,
+    onSuccess: (next) => {
+      queryClient.setQueryData(sq.license, next);
+      showToast(t("license.checked"));
+    },
+    onError: (err) => Alert.alert(t("license.checkFailed"), errorText(err)),
+  });
   const status = STATUS[s.status];
   const keepsWorking = s.graceEndsAt && (s.status === "invalid" || s.status === "expired") && new Date(s.graceEndsAt) > new Date() ? s.graceEndsAt : null;
   const footer = [s.enforced ? licenseStateText(s) : t("license.notEnforced"), t("license.onComputer")].filter(Boolean).join("\n\n");
@@ -103,6 +117,7 @@ function LicenseGroup({ state: s }: { state: LicenseState }) {
       {s.plan ? <InfoRow icon="tag" label={t("license.planLabel")} value={t(PLAN[s.plan])} /> : null}
       {s.status === "unverified" && s.unverifiedUntil ? <InfoRow icon="calendar" label={t("license.acceptedUntil")} value={day(s.unverifiedUntil)} /> : null}
       {keepsWorking ? <InfoRow icon="calendar" label={t("license.keepsWorking")} value={day(keepsWorking)} /> : null}
+      {admin ? <ActionRow icon="refresh" title={t("license.checkAgain")} busy={check.isPending} onPress={() => check.mutate()} /> : null}
     </Group>
   );
 }

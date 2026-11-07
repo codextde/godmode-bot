@@ -1,4 +1,10 @@
 {
+  "order": {
+    "top": "Ganz nach oben",
+    "up": "Nach oben",
+    "down": "Nach unten",
+    "failed": "Aufgabe konnte nicht verschoben werden"
+  },
   "task": {
     "title": "Aufgabe",
     "notFound": "Aufgabe nicht gefunden",
@@ -107,6 +113,7 @@
   },
   "list": {
     "search": "Aufgaben suchen",
+    "status": "Status",
     "agent": "Agent",
     "allAgents": "Alle Agenten",
     "unassigned": "Nicht zugewiesen",

@@ -10,7 +10,7 @@
   },
   "describe": {
     "title": "Beschreib, was automatisiert werden soll",
-    "placeholder": "Wenn eine neue E-Mail mit Rechnung kommt, speichere die PDF in Drive und trag sie in meine Tabelle ein",
+    "placeholder": "Beschreib, was automatisiert werden soll …",
     "submit": "Einrichten",
     "unreachable": "Godmode ist nicht erreichbar",
     "prompt": "Richte eine Automation ein: {{text}}",

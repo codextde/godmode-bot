@@ -372,6 +372,7 @@ function handle(event: ServerEvent) {
         height: event.height,
         title: event.label,
         error: event.error,
+        code: event.code,
         at: Date.now(),
       });
       break;

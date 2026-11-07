@@ -56,6 +56,13 @@
     "startBrowser": "Browser starten",
     "waitingBrowser": "Warte auf den Browser. Er erscheint hier, sobald ein Agent ihn nutzt.",
     "waitingPicture": "Warte auf das Bild…",
+    "ended": {
+      "status": "Beendet",
+      "window": "Das Fenster wurde geschlossen",
+      "tab": "Der Tab wurde geschlossen",
+      "screen": "Der Bildschirm ist nicht mehr verbunden",
+      "shareAgain": "Wieder teilen"
+    },
     "typePlaceholder": "In den Bildschirm tippen",
     "enter": "Enter",
     "inControl": "Du steuerst",

@@ -3,7 +3,7 @@ import "./test-natives.test";
 
 const { blockedReasonText, cloudText, licenseStateText, licenseText, sellsSomething } = await import("./license-text");
 
-const NEUTRAL = /^Godmode on your computer needs a licence\.$/;
+const NEUTRAL = /^Godmode on your computer needs a license\.$/;
 const state = (status: string, message: string | null) => ({ status, message }) as Parameters<typeof licenseStateText>[0];
 
 describe("sellsSomething", () => {
@@ -45,7 +45,7 @@ describe("licence texts on a phone", () => {
   test("each state keeps a line that fits it, with no way to buy", () => {
     expect(licenseStateText(state("expired", "Your trial has ended. Subscribe to keep your agents working."))).toMatch(NEUTRAL);
     expect(licenseStateText(state("invalid", "This licence key isn't valid. Check it for typos, or subscribe to get one."))).toMatch(NEUTRAL);
-    expect(licenseStateText(state("past_due", "The last payment didn't go through. Update your payment method to keep Godmode working."))).toBe("Check the licence in Godmode on your computer.");
+    expect(licenseStateText(state("past_due", "The last payment didn't go through. Update your payment method to keep Godmode working."))).toBe("Check the license in Godmode on your computer.");
     expect(licenseStateText(state("grace", "Free until Nov 7. Then pick a plan to keep your agents working."))).toBeNull();
     expect(licenseStateText(state("unverified", "Your key couldn't be checked yet."))).toBe("Your key couldn't be checked yet.");
     expect(licenseStateText(state("active", null))).toBeNull();

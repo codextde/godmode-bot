@@ -17,7 +17,7 @@ import { errorText } from "@/lib/api";
 import { addFiles, canScanDocuments, chooseCameraMode, formatBytes, fromPasted, MAX_FILES, pastedTextFile, pickFrom, type FileSource, type PendingFile } from "@/lib/attachments";
 import { isChatFile, openChatFile, openChatImport } from "@/lib/chat-extras";
 import { useChatPrefs } from "@/lib/chat-prefs";
-import { findCommand, rankCommands, useDraft, useDrafts, useSlashCommands } from "@/lib/composer";
+import { findCommand, rankCommands, useComposerFocus, useDraft, useDrafts, useSlashCommands } from "@/lib/composer";
 import { fitsInMessage, largePaste } from "@/lib/large-paste";
 import { fonts, radius, space, textScale, type, useColors } from "@/lib/theme";
 import { addPasteListener, setPasteActive } from "../../modules/paste-input";
@@ -101,6 +101,21 @@ export function Composer({
   const [pastedAs, setPastedAs] = useState<{ id: string; text: string; size: number } | null>(null);
   const { fullAccess } = useFullAccess();
   const commands = useSlashCommands(agentId);
+  // A quote went in from outside the field: a new field measures all its lines, then the caret goes below the quote.
+  const focusAt = useComposerFocus((s) => (s.key === draftKey ? s.at : 0));
+  const focusedAt = useRef(focusAt);
+  const [field, setField] = useState(0);
+  useEffect(() => {
+    if (!focusAt || focusAt === focusedAt.current) return;
+    focusedAt.current = focusAt;
+    setField((n) => n + 1);
+    const timer = setTimeout(() => {
+      const end = (useDrafts.getState().drafts[draftKey]?.text ?? "").length;
+      input.current?.focus();
+      input.current?.setSelection(end, end);
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [focusAt, draftKey]);
 
   useImperativeHandle(ref, () => ({
     focus: () => input.current?.focus(),
@@ -268,6 +283,7 @@ export function Composer({
         ) : null}
         {hint ? <SlashHint command={hint} /> : null}
         <TextInput
+          key={field}
           ref={input}
           value={text}
           onChangeText={onChange}

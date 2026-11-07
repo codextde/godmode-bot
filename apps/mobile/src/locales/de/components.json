@@ -318,6 +318,7 @@
     "title": "Während du weg warst · {{duration}}",
     "close": "Zusammenfassung schließen",
     "openActivity": "Öffnet die Aktivität",
+    "nothing": "Nichts Neues, während du weg warst",
     "whoWorked": "Wer gearbeitet hat"
   },
   "cronBuilder": {
@@ -391,11 +392,9 @@
     "webhookCalled": "Wenn sein Webhook aufgerufen wird",
     "toggleFailed": "Automation konnte nicht geändert werden",
     "runFailed": "Konnte nicht ausgeführt werden",
-    "lastRun": "letzter Lauf {{ago}}",
-    "lastRunFailed": "letzter Lauf {{ago}} fehlgeschlagen",
+    "failedLine": "Letzter Lauf {{ago}} fehlgeschlagen",
     "runningNow": "Läuft gerade",
     "triggerBroken": "Der Auslöser funktioniert nicht.",
-    "runNamedNow": "{{name}} jetzt ausführen",
     "turnOff": "{{name}} ausschalten",
     "turnOn": "{{name}} einschalten",
     "moreEvents_one": "+ {{count}} weiteres Ereignis",

@@ -73,6 +73,7 @@ const ICONS = {
   sparkles: ["sparkles", "smart_toy"],
   down: ["chevron.down", "expand_more"],
   up: ["chevron.up", "expand_less"],
+  toTop: ["arrow.up.to.line", "vertical_align_top"],
   wifi: ["wifi.slash", "wifi_off"],
   pin: ["pin.fill", "push_pin"],
   phone: ["iphone", "smartphone"],

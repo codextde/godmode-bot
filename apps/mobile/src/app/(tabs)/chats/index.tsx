@@ -5,6 +5,7 @@ import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, Pressable, RefreshControl, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import type { Agent, Conversation, Project } from "@godmode/shared";
+import { ActiveFilterChip } from "@/components/filter-chips";
 import { FilterToolbar } from "@/components/filter-toolbar";
 import { useFullAccess } from "@/components/full-access";
 import { ConversationRow } from "@/components/rows";
@@ -191,7 +192,7 @@ export default function Chats() {
           <View style={{ paddingHorizontal: space.sm, paddingVertical: space.sm, gap: space.sm }}>
             <Row style={{ gap: space.sm, marginBottom: space.xs }}>
               <WorkspaceChip />
-              {tab !== "all" && <StatusChip label={t(`chats.filter.${tab}.label`)} count={tab === "running" || tab === "scheduled" ? counts[tab] : 0} onClear={() => setTab("all")} />}
+              {tab !== "all" && <ActiveFilterChip label={t(`chats.filter.${tab}.label`)} count={tab === "running" || tab === "scheduled" ? counts[tab] : 0} onClear={() => setTab("all")} />}
               {unread.length > 0 && <MarkRead onPress={markRead} />}
             </Row>
             {q ? <SearchEverywhere query={q} /> : null}
@@ -251,38 +252,6 @@ function SearchEverywhere({ query }: { query: string }) {
         {t("search.everywhere", { query })}
       </T>
       <Icon name="chevron" size={12} color={c.textMuted} />
-    </Pressable>
-  );
-}
-
-/** The status the list is narrowed to (picked in the header's filter menu); tap to show every chat again. */
-function StatusChip({ label, count, onClear }: { label: string; count: number; onClear: () => void }) {
-  const c = useColors();
-  const { t } = useTranslation("components");
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={`${label}. ${t("filterToolbar.clear")}`}
-      hitSlop={6}
-      onPress={() => {
-        tap();
-        onClear();
-      }}
-      style={({ pressed }) => ({
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 6,
-        height: 32,
-        paddingHorizontal: 12,
-        borderRadius: radius.pill,
-        backgroundColor: c.brandSoft,
-        opacity: pressed ? 0.7 : 1,
-      })}
-    >
-      <T variant="subhead" color={c.brandStrong} style={{ fontWeight: "600" }} numberOfLines={1}>
-        {count > 0 ? `${label} ${count}` : label}
-      </T>
-      <Icon name="close" size={10} color={c.brandStrong} weight="bold" />
     </Pressable>
   );
 }

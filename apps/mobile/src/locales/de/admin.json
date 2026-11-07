@@ -131,7 +131,7 @@
     "days_other": "{{count}} Tage",
     "vault": {
       "title": "Tresor",
-      "open": "Tresor",
+      "open": "Passwörter",
       "unlocked": "Entsperrt",
       "locked": "Gesperrt",
       "passphrase": "Godmode-Passwort ändern",

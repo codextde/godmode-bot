@@ -187,8 +187,8 @@
     "customModel": "Custom model id"
   },
   "api": {
-    "license": "Godmode on your computer needs a licence.",
-    "licenseCheck": "Check the licence in Godmode on your computer.",
+    "license": "Godmode on your computer needs a license.",
+    "licenseCheck": "Check the license in Godmode on your computer.",
     "cloudLimit": "Godmode Cloud isn't available for this computer right now.",
     "updateDesktop": "Update Godmode on your computer to do this from your phone.",
     "offline": "Can't reach your computer. Check that it's awake and connected to Tailscale or Godmode Cloud.",

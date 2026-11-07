@@ -157,6 +157,7 @@ export default function RootLayout() {
                 <Stack.Screen name="reply-text" options={{ presentation: "formSheet", sheetAllowedDetents: [0.75, 1], sheetGrabberVisible: true, headerShown: false }} />
                 <Stack.Screen name="chat-screen" options={{ presentation: "formSheet", sheetAllowedDetents: [0.75, 1], sheetGrabberVisible: true, headerShown: false }} />
                 <Stack.Screen name="followup-time" options={{ presentation: "formSheet", sheetAllowedDetents: [0.38, 1], sheetGrabberVisible: true, headerShown: false }} />
+                <Stack.Screen name="away" options={{ presentation: "formSheet", sheetAllowedDetents: [0.6, 1], sheetGrabberVisible: true, headerShown: false }} />
                 <Stack.Screen name="workspaces" options={{ presentation: "formSheet", sheetAllowedDetents: [0.5, 1], sheetGrabberVisible: true, headerShown: false }} />
                 <Stack.Screen name="automation/[id]" options={{ headerTransparent: process.env.EXPO_OS === "ios", title: "" }} />
                 <Stack.Screen name="automation-edit" options={{ presentation: "formSheet", sheetAllowedDetents: [1], sheetGrabberVisible: true, headerShown: false, ...androidForm }} />

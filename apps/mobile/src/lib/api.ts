@@ -704,7 +704,7 @@ export const api = {
       id: string,
       input: { title?: string; description?: string; status?: TaskStatus; agentId?: string | null; archived?: boolean; projectId?: string | null } & Pick<
         import("@godmode/shared").TaskPatch,
-        "priority" | "dueDate" | "labels" | "goalId" | "waitsFor" | "blockedReason" | "type" | "repoUrl" | "baseBranch" | "autoMerge"
+        "beforeId" | "priority" | "dueDate" | "labels" | "goalId" | "waitsFor" | "blockedReason" | "type" | "repoUrl" | "baseBranch" | "autoMerge"
       >,
     ) => patch<Task>(`/api/tasks/${id}`, input),
     /** Off the board, never deleted. */

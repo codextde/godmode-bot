@@ -600,7 +600,10 @@
     "acceptedUntil": "Accepted until",
     "keepsWorking": "Keeps working until",
     "notEnforced": "A build of your own: it doesn't need a license.",
-    "onComputer": "You manage the licence in Godmode on your computer.",
+    "onComputer": "You manage the license in Godmode on your computer.",
+    "checkAgain": "Check again",
+    "checked": "License checked",
+    "checkFailed": "Couldn't check the license",
     "usage": {
       "title": "On this computer",
       "since": "Since {{date}}",

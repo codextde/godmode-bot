@@ -318,6 +318,7 @@
     "title": "While you were away · {{duration}}",
     "close": "Close the summary",
     "openActivity": "Opens the activity",
+    "nothing": "Nothing new while you were away",
     "whoWorked": "Who worked"
   },
   "cronBuilder": {
@@ -391,11 +392,9 @@
     "webhookCalled": "When its webhook is called",
     "toggleFailed": "Couldn't change the automation",
     "runFailed": "Couldn't run it",
-    "lastRun": "last run {{ago}}",
-    "lastRunFailed": "last run failed {{ago}}",
+    "failedLine": "Last run failed {{ago}}",
     "runningNow": "Running now",
     "triggerBroken": "The trigger isn't working.",
-    "runNamedNow": "Run {{name}} now",
     "turnOff": "Turn off {{name}}",
     "turnOn": "Turn on {{name}}",
     "moreEvents_one": "+ {{count}} more event",
@@ -1138,17 +1137,17 @@
     "details": "Details"
   },
   "licenseNotice": {
-    "needed": "Godmode on your computer needs a licence",
+    "needed": "Godmode on your computer needs a license",
     "ending": {
-      "today": "From tomorrow, Godmode on your computer needs a licence.",
-      "tomorrow": "From the day after tomorrow, Godmode on your computer needs a licence.",
-      "inDays_one": "In {{count}} day, Godmode on your computer needs a licence.",
-      "inDays_other": "In {{count}} days, Godmode on your computer needs a licence."
+      "today": "From tomorrow, Godmode on your computer needs a license.",
+      "tomorrow": "From the day after tomorrow, Godmode on your computer needs a license.",
+      "inDays_one": "In {{count}} day, Godmode on your computer needs a license.",
+      "inDays_other": "In {{count}} days, Godmode on your computer needs a license."
     },
-    "pastDue": "Check the licence in Godmode on your computer.",
-    "unverified": "Godmode on your computer couldn't check its licence yet. It keeps working until {{date}}.",
+    "pastDue": "Check the license in Godmode on your computer.",
+    "unverified": "Godmode on your computer couldn't check its license yet. It keeps working until {{date}}.",
     "dateFormat": "MMMM d",
-    "viewLicence": "View licence",
+    "viewLicence": "View license",
     "dismiss": "Dismiss for today"
   }
 }

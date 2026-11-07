@@ -186,6 +186,7 @@
     "update": "Update to {{version}}",
     "updateFailed": "Couldn't update the plugin",
     "updateBadge": "Update",
+    "updateAvailable": "Update available",
     "checkUpdates": "Check for updates",
     "checkFailed": "Couldn't check for updates"
   },
@@ -498,7 +499,7 @@
       "needsOnComputer": "Needs on this computer",
       "missingHint": "The plugin tells the agent when something is missing; the agent can install it for you.",
       "warning": "Godmode downloads it from GitHub and checks it with Claude Code before it runs. It works with your agents' access and starts programs of its own on this computer.",
-      "warningLicense": "Godmode downloads it from GitHub and checks it with Claude Code before it runs. It works with your agents' access and starts programs of its own on this computer · {{license}} licence.",
+      "warningLicense": "Godmode downloads it from GitHub and checks it with Claude Code before it runs. It works with your agents' access and starts programs of its own on this computer · {{license}} license.",
       "viewOnGitHub": "View on GitHub",
       "installPlugin": "Install plugin",
       "open": "Details of {{title}}"
