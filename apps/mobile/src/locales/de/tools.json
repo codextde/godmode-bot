@@ -47,11 +47,8 @@
   "scope": {
     "title": "Verfügbar für",
     "global": "Alle Agenten",
-    "globalHint": "In jedem Workspace",
     "workspace": "Ein Workspace",
-    "workspaceHint": "Nur seine Agenten",
     "agent": "Ein Agent",
-    "agentHint": "Nur dieser Agent",
     "which": "Workspace",
     "whichAgent": "Agent"
   },
@@ -91,7 +88,7 @@
     "headerValuePlaceholder": "z. B. Bearer <token>",
     "addVariable": "Variable hinzufügen",
     "addHeader": "Header hinzufügen",
-    "secretsHint": "Werte werden verschlüsselt im Tresor gespeichert und nie wieder angezeigt; du kannst sie nur ersetzen.",
+    "secretsHint": "Verschlüsselt im Tresor und nie wieder angezeigt.",
     "enabled": "Aktiviert",
     "test": "Verbindung testen",
     "saveAndTest": "Speichern und testen",
@@ -101,7 +98,9 @@
     "noTools": "Der Server ist gestartet, hat aber keine Tools gemeldet.",
     "testFailed": "Der Server hat nicht richtig geantwortet",
     "unknownError": "Unbekannter Fehler",
-    "managedFooter": "Über Composio eingerichtet. Seine Apps werden in Composio verwaltet."
+    "managedFooter": "Wird in Composio verwaltet.",
+    "quickAdd": "Schnell hinzufügen",
+    "customServer": "Eigener Server"
   },
   "api": {
     "add": "API-Tool hinzufügen",
@@ -154,7 +153,6 @@
   },
   "presets": {
     "custom": "Andere API",
-    "customTagline": "Dein Schlüssel, ihre Adresse und Doku",
     "getKeyAt": "Schlüssel auf {{site}} holen",
     "gemini": {
       "tagline": "Bilder mit Google Gemini",
@@ -391,7 +389,6 @@
     "everyAgent": "Jeden Agenten",
     "onlyThese": "Nur diese Agenten",
     "noAgentYet": "Noch kein Agent: Niemand nutzt dieses Plugin, bis du einen auswählst.",
-    "everyAgentHint": "Die Läufe jedes Agenten laden dieses Plugin, auch von Agenten, die du später hinzufügst.",
     "options": "Optionen",
     "code": {
       "fileTooLarge": "{{path}} ist größer als {{kb}} kB.",
@@ -470,7 +467,9 @@
       "range": "{{min}} bis {{max}}",
       "entry": "{{label}}, Eintrag {{n}}",
       "addEntry": "Eintrag hinzufügen",
-      "removeEntry": "Eintrag {{n}} entfernen"
+      "removeEntry": "Eintrag {{n}} entfernen",
+      "browse": "Durchsuchen",
+      "useFolder": "Ordner verwenden"
     },
     "install": {
       "title": "Von GitHub installieren",
@@ -492,15 +491,36 @@
       "loadFailed": "Die empfohlenen Plugins konnten nicht geladen werden",
       "needs": "braucht {{list}}",
       "install": "Installieren",
-      "confirmTitle": "{{title}} installieren?"
+      "confirmTitle": "{{title}} installieren?",
+      "byAuthor": "von {{author}}",
+      "whatItDoes": "Was es tut",
+      "tryInChat": "Probier es im Chat aus",
+      "needsOnComputer": "Braucht auf diesem Computer",
+      "missingHint": "Das Plugin sagt dem Agenten, wenn etwas fehlt; der Agent kann es für dich installieren.",
+      "warning": "Godmode lädt es von GitHub herunter und prüft es mit Claude Code, bevor es läuft. Es arbeitet mit den Zugriffsrechten deiner Agenten und startet eigene Programme auf diesem Computer.",
+      "warningLicense": "Godmode lädt es von GitHub herunter und prüft es mit Claude Code, bevor es läuft. Es arbeitet mit den Zugriffsrechten deiner Agenten und startet eigene Programme auf diesem Computer · Lizenz {{license}}.",
+      "viewOnGitHub": "Auf GitHub ansehen",
+      "installPlugin": "Plugin installieren",
+      "open": "Details zu {{title}}"
     },
     "gallery": {
       "title": "Von Godmode",
-      "footer": "Kleine Plugins für Leitplanken, Datenschutz und Workflows, die in jedem Zug laufen. Lies den Code jedes Plugins nach dem Hinzufügen.",
+      "footer": "Lies den Code jedes Plugins, bevor du es hinzufügst.",
       "loadFailed": "Die Galerie konnte nicht geladen werden",
       "add": "Hinzufügen",
       "added": "Hinzugefügt",
-      "addFailed": "Plugin konnte nicht hinzugefügt werden"
+      "addFailed": "Plugin konnte nicht hinzugefügt werden",
+      "empty": "In dieser Godmode-Version ist die Galerie leer.",
+      "secretOption": "Ein Geheimnis, das du nach dem Hinzufügen eingibst.",
+      "default": "Standard: {{value}}",
+      "noDefault": "Kein Standardwert.",
+      "alreadyAdded": "Du hast dieses Plugin schon hinzugefügt.",
+      "setAfterAdding": "Optionen und für wen es läuft, legst du nach dem Hinzufügen fest.",
+      "addPlugin": "Plugin hinzufügen",
+      "code": "Code",
+      "options": "Optionen",
+      "file": "Datei",
+      "allCategories": "Alle"
     },
     "categories": {
       "guardrails": "Leitplanken",
@@ -508,6 +528,59 @@
       "insight": "Einblick",
       "workflow": "Workflow"
     },
-    "codeTitle": "Code"
+    "codeTitle": "Code",
+    "askGodmode": "Godmode schreiben lassen",
+    "askPrompt": "Schreib ein Claude-Code-Plugin für Godmode, das ",
+    "origin": {
+      "installedBy": "Installiert von {{name}}",
+      "installedByAgent": "Von einem Agenten installiert",
+      "installedFromGitHub": "Von GitHub installiert",
+      "installedFromRepo": "Aus seinem Repository installiert",
+      "template": "Von Godmode",
+      "imported": "Importiert",
+      "draftedBy": "Entworfen von {{name}}",
+      "draftedByAgent": "Von einem Agenten entworfen",
+      "yours": "Von dir geschrieben"
+    },
+    "originAdded": "{{origin}} · hinzugefügt am {{date}}",
+    "copyName": "Plugin-Namen kopieren",
+    "searchAgents": "Agenten suchen…",
+    "noAgents": "Keine Agenten gefunden.",
+    "openProblem": "{{where}} öffnen",
+    "lineN": "Zeile {{line}}",
+    "versionPanel": {
+      "followsRef": "Folgt „{{ref}}“ von {{repo}}.",
+      "followsRefFolder": "Folgt „{{ref}}“ von {{repo}}, Ordner {{path}}.",
+      "followsDefault": "Folgt dem Standard-Branch von {{repo}}.",
+      "followsDefaultFolder": "Folgt dem Standard-Branch von {{repo}}, Ordner {{path}}.",
+      "installedAgo": "Installiert {{ago}}",
+      "whatChanged": "Änderungen ansehen",
+      "viewRepo": "Repository ansehen",
+      "viewCommit": "Commit ansehen",
+      "updateReady": "Update bereit",
+      "upToDateLooked": "Aktuell · geprüft {{ago}}",
+      "notLookedYet": "Noch nicht nach Updates gesucht.",
+      "checkError": "Updates konnten nicht gesucht werden: {{error}}"
+    },
+    "open": "Öffnen"
+  },
+  "mcpPresets": {
+    "filesystem": {
+      "description": "Dateien in freigegebenen Ordnern lesen und schreiben",
+      "note": "Ersetze das letzte Argument durch den absoluten Pfad der Ordner, auf die Agenten zugreifen dürfen."
+    },
+    "github": {
+      "description": "Offizieller Remote-MCP-Server von GitHub",
+      "note": "Setz den Authorization-Header auf „Bearer <persönliches Zugriffstoken>“."
+    },
+    "playwright": {
+      "description": "Browser-Automatisierung mit Microsoft Playwright"
+    },
+    "fetch": {
+      "description": "Webseiten abrufen und in Markdown umwandeln"
+    },
+    "context7": {
+      "description": "Aktuelle Bibliotheksdokus für Coding-Agenten"
+    }
   }
 }

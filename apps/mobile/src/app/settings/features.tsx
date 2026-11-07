@@ -1,11 +1,12 @@
 import { router, Stack } from "expo-router";
-import { ScrollView, StyleSheet } from "react-native";
+import { StyleSheet } from "react-native";
 import { useTranslation } from "react-i18next";
 import { findModel, type Settings } from "@godmode/shared";
 import { useFullAccess } from "@/components/admin";
 import { CloseButton } from "@/components/close-button";
 import { Group, LinkRow, PickerRow, SwitchRow } from "@/components/form";
 import type { IconName } from "@/components/icon";
+import { SettingsScroll } from "@/components/settings-scroll";
 import { QueryState } from "@/components/settings-state";
 import { patchAnySettings } from "@/lib/admin";
 import type { SettingsPatch } from "@/lib/api";
@@ -40,7 +41,7 @@ export default function Features() {
   const models = (useModelCatalog().data?.models ?? []).filter((m) => !m.provider);
 
   return (
-    <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content}>
+    <SettingsScroll contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content}>
       <Stack.Screen options={{ title: t("features.title") }} />
       <CloseButton />
       <QueryState query={settings} icon="puzzle" errorTitle={t("features.loadFailed")}>
@@ -55,7 +56,6 @@ export default function Features() {
                   key={id}
                   icon={icon}
                   title={t(`features.${id}.title`)}
-                  detail={t(`features.${id}.detail`)}
                   value={on}
                   disabled={!on && !phone && !fullAccess}
                   onChange={(enabled) => void patchSettings({ [id]: { enabled } } as SettingsPatch)}
@@ -80,7 +80,7 @@ export default function Features() {
           </Group>
         )}
       </QueryState>
-    </ScrollView>
+    </SettingsScroll>
   );
 }
 

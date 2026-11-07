@@ -16,7 +16,8 @@
     "changes": "Changes",
     "nothingLeft": "Nothing from this dream is left in the memory files.",
     "noChanges": "This dream didn't change any memory files.",
-    "otherFiles": "The phone shows MEMORY.md. The other memory files this dream changed are in Godmode on your computer."
+    "otherFiles": "The phone shows MEMORY.md. The other memory files this dream changed are in Godmode on your computer.",
+    "result": "Result"
   },
   "file": {
     "new": "New file",
@@ -25,7 +26,9 @@
     "deletedEmpty": "Deleted an empty file.",
     "onlyNewlineAdded": "Only the newline at the end of the file was added.",
     "onlyNewlineRemoved": "Only the newline at the end of the file was removed.",
-    "noLineChanges": "No line changes."
+    "noLineChanges": "No line changes.",
+    "dreamDeleted": "The dream deleted this file.",
+    "emptyFile": "Empty file."
   },
   "diff": {
     "showUnchanged_one": "Show {{count}} unchanged line",

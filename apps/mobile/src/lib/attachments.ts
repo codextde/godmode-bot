@@ -1,11 +1,12 @@
 import { CameraView } from "expo-camera";
 import * as DocumentPicker from "expo-document-picker";
-import { File } from "expo-file-system";
+import { File, Paths } from "expo-file-system";
 import * as ImagePicker from "expo-image-picker";
 import { useState } from "react";
 import { ActionSheetIOS, Alert, Linking } from "react-native";
 import { MAX_TASK_ATTACHMENT_BYTES, type SendMessageInput } from "@godmode/shared";
 import { intlLocale, t } from "./i18n";
+import { utf8Size } from "./large-paste";
 import type { PastedFile } from "../../modules/paste-input";
 
 /** A file picked on the phone, not sent yet. */
@@ -61,6 +62,18 @@ export function formatBytes(n: number): string {
 }
 
 export const isImage = (mime: string) => mime.startsWith("image/");
+
+/** The pasted text as a .txt the message takes along. */
+export function pastedTextFile(text: string): PendingFile {
+  const d = new Date();
+  const p = (n: number) => String(n).padStart(2, "0");
+  const name = `pasted-${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}.txt`;
+  const id = nextId();
+  const file = new File(Paths.cache, `${id}-${name}`);
+  file.create({ overwrite: true });
+  file.write(text);
+  return { id, uri: file.uri, name, mime: "text/plain", size: utf8Size(text) };
+}
 
 /** Keeps what fits next to the files already there and says what was left out. */
 export function addFiles(current: PendingFile[], picked: PendingFile[]): PendingFile[] {

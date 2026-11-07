@@ -12,6 +12,7 @@ export function TextPrompt({
   placeholder,
   label,
   mono,
+  secure,
   validate,
   onSubmit,
   onClose,
@@ -23,6 +24,8 @@ export function TextPrompt({
   /** The button; Save unless said otherwise. */
   label?: string;
   mono?: boolean;
+  /** A password: hidden, and taken as typed. */
+  secure?: boolean;
   validate?: (text: string) => string | null;
   onSubmit: (text: string) => void;
   onClose: () => void;
@@ -41,7 +44,7 @@ export function TextPrompt({
     }
   }
   const save = () => {
-    const value = text.trim();
+    const value = secure ? text : text.trim();
     const refused = validate?.(value) ?? null;
     if (refused) return setProblem(refused);
     onSubmit(value);
@@ -62,6 +65,7 @@ export function TextPrompt({
             onSubmitEditing={save}
             returnKeyType="done"
             selectTextOnFocus
+            secureTextEntry={secure}
             placeholder={placeholder}
             placeholderTextColor={c.textFaint}
             autoCapitalize="none"

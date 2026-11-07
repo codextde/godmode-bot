@@ -1,24 +1,27 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Image } from "expo-image";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { useHeaderHeight } from "expo-router/react-navigation";
 import { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Alert, FlatList, Linking, Modal, Pressable, StyleSheet, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, FlatList, Modal, Pressable, StyleSheet, TextInput, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { KeyboardAvoidingView, useKeyboardState } from "react-native-keyboard-controller";
 import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { Artifact, ArtifactVersion } from "@godmode/shared";
+import { ArtifactFilesGrid } from "@/components/artifact-files";
 import { ArtifactFrame } from "@/components/artifact-frame";
 import { Glass } from "@/components/glass";
 import { HeaderActions } from "@/components/header-actions";
 import { Icon } from "@/components/icon";
-import { Button, EmptyState, ErrorState, GlassIconButton, Hairline, Row, T, tap } from "@/components/ui";
+import { SegmentedTabs } from "@/components/segmented-tabs";
+import { Button, EmptyState, ErrorState, Hairline, Row, T, tap } from "@/components/ui";
+import { forgetLocalCopies } from "@/lib/agent-files";
 import { ApiError, api, errorText } from "@/lib/api";
+import { saveArtifactHtml } from "@/lib/artifact-files";
 import { shortTime } from "@/lib/format";
 import { useRunningChats } from "@/lib/live";
 import { qk, queryClient } from "@/lib/query";
-import { radius, space, useColors } from "@/lib/theme";
+import { radius, space, useColors, useIsDark } from "@/lib/theme";
 
 type Request = { kind: "ask"; text: string } | { kind: "refresh" };
 type Sheet = "versions" | "rename" | "refresh" | null;
@@ -43,7 +46,9 @@ export default function ArtifactScreen() {
   const [sheet, setSheet] = useState<Sheet>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
-  const [image, setImage] = useState<string | null>(null);
+  const [tab, setTab] = useState<"preview" | "files">("preview");
+  const [slot] = useState(() => Math.random().toString(36).slice(2, 10));
+  const dark = useIsDark();
   const statusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const say = (text: string) => {
@@ -52,6 +57,7 @@ export default function ArtifactScreen() {
     statusTimer.current = setTimeout(() => setStatus(null), 4000);
   };
   useEffect(() => () => void (statusTimer.current && clearTimeout(statusTimer.current)), []);
+  useEffect(() => () => forgetLocalCopies(slot), [slot]);
 
   const refetch = () => void queryClient.invalidateQueries({ queryKey: qk.artifacts });
   const message = useMutation({
@@ -85,6 +91,14 @@ export default function ArtifactScreen() {
       say(a.version === artifact?.version ? t("versions.sameVersion", { version }) : t("versions.restored", { version: a.version }));
     },
     onError: (err) => Alert.alert(t("versions.restoreError"), errorText(err)),
+  });
+
+  const download = useMutation({
+    mutationFn: () => saveArtifactHtml(artifact!, old.data?.html ?? artifact!.html, dark ? "dark" : "light", slot),
+    onSuccess: (left) => {
+      if (left) say(t("view.downloadLeftOut", { count: left }));
+    },
+    onError: (err) => Alert.alert(t("files.actionError"), errorText(err)),
   });
 
   const ask = (request: Request) => {
@@ -136,6 +150,9 @@ export default function ArtifactScreen() {
   const shown: Pick<Artifact, "html" | "data" | "files" | "filesBase" | "title"> = artifact;
   const html = viewing !== null ? old.data?.html : undefined;
   const placeholder = busy ? t("view.busyPlaceholder", { agent }) : t("view.placeholder", { agent });
+  const hasFiles = artifact.files.length > 0;
+  const shownTab = hasFiles ? tab : "preview";
+  const openFile = (name: string) => router.push({ pathname: "/artifact-file", params: { id, name } });
 
   return (
     <View style={[styles.fill, { backgroundColor: c.background }]}>
@@ -157,10 +174,24 @@ export default function ArtifactScreen() {
           { icon: "history", title: t("view.versions"), onPress: () => setSheet("versions") },
           { icon: "pencil", title: t("view.rename"), onPress: () => setSheet("rename") },
           { icon: "refresh", title: t("view.howItRefreshes"), onPress: () => setSheet("refresh") },
+          { icon: "download", title: t("view.downloadHtml"), onPress: () => !download.isPending && download.mutate() },
           { icon: "trash", title: t("view.delete"), onPress: remove, destructive: true },
         ]}
       />
       <KeyboardAvoidingView behavior="translate-with-padding" keyboardVerticalOffset={keyboardOffset} style={styles.fill}>
+        {hasFiles ? (
+          <View style={styles.tabs}>
+            <SegmentedTabs
+              label={t("tabs.label")}
+              value={shownTab}
+              onChange={setTab}
+              tabs={[
+                { value: "preview", label: t("tabs.preview") },
+                { value: "files", label: t("tabs.files"), count: artifact.files.length },
+              ]}
+            />
+          </View>
+        ) : null}
         {viewing !== null ? (
           <Row style={[styles.versionBar, { backgroundColor: c.sunken }]}>
             <T variant="subhead" style={{ flex: 1, fontWeight: "600" }}>
@@ -174,7 +205,9 @@ export default function ArtifactScreen() {
             <Button title={t("versions.restore")} size="md" variant="primary" loading={restore.isPending} onPress={() => restore.mutate(viewing)} style={{ height: 34 }} />
           </Row>
         ) : null}
-        {viewing !== null && !html ? (
+        {shownTab === "files" ? (
+          <ArtifactFilesGrid artifact={artifact} refreshing={query.isRefetching} onRefresh={() => void query.refetch()} onOpen={openFile} />
+        ) : viewing !== null && !html ? (
           <View style={[styles.fill, { alignItems: "center", justifyContent: "center" }]}>
             <ActivityIndicator color={c.textMuted} />
           </View>
@@ -192,11 +225,8 @@ export default function ArtifactScreen() {
             onError={setFailure}
             onSaveError={(m) => Alert.alert(t("view.saveError"), m)}
             onReviewDone={() => reviewDone.mutate()}
-            onViewFile={(name, url) => {
-              const file = artifact.files.find((f) => f.name === name);
-              if (!url) return;
-              if (file?.kind === "image") setImage(url);
-              else void Linking.openURL(url);
+            onViewFile={(name) => {
+              if (artifact.files.some((f) => f.name === name)) openFile(name);
             }}
           />
         )}
@@ -260,14 +290,6 @@ export default function ArtifactScreen() {
         onClose={() => setSheet(null)}
         onSave={(refreshPrompt) => update.mutateAsync({ refreshPrompt }).then(() => true, () => false)}
       />
-      <Modal visible={!!image} transparent animationType="fade" onRequestClose={() => setImage(null)}>
-        <View style={[styles.fill, { backgroundColor: "#000" }]}>
-          {image ? <Image source={{ uri: image }} style={styles.fill} contentFit="contain" transition={150} /> : null}
-          <View style={{ position: "absolute", top: insets.top + space.sm, right: space.lg }}>
-            <GlassIconButton icon="close" label={t("common:actions.close")} dark onPress={() => setImage(null)} />
-          </View>
-        </View>
-      </Modal>
     </View>
   );
 }
@@ -457,6 +479,7 @@ function SheetHeader({ title, onClose, action }: { title: string; onClose: () =>
 
 const styles = StyleSheet.create({
   fill: { flex: 1 },
+  tabs: { paddingHorizontal: space.lg, paddingBottom: space.sm },
   barWrap: { paddingHorizontal: space.md, paddingTop: space.sm, gap: 6 },
   statusRow: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: space.sm },
   bar: { flexDirection: "row", alignItems: "flex-end", gap: space.sm, padding: 6, paddingLeft: space.lg, borderRadius: 24, borderCurve: "continuous" },

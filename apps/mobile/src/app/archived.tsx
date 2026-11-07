@@ -7,6 +7,7 @@ import { useTranslation } from "react-i18next";
 import type { Agent, Conversation, Project } from "@godmode/shared";
 import { FilterChips } from "@/components/filter-chips";
 import { ConversationRow } from "@/components/rows";
+import { useMenuSheet, type HeaderMenuItem } from "@/components/header-actions";
 import { EmptyState, ErrorState, Hairline, SectionTitle, SkeletonRows, T, tap } from "@/components/ui";
 import { api, errorText } from "@/lib/api";
 import { chatDayLabel, continuesAt } from "@/lib/desktop-parity";
@@ -218,13 +219,24 @@ const ArchivedChat = memo(function ArchivedChat({
 }) {
   const c = useColors();
   const { t } = useTranslation(["tasks", "common"]);
-  const row = <ConversationRow conversation={conversation} agent={agent} running={running} project={project} />;
+  const menu = useMenuSheet();
+  const row = (onLongPress?: () => void) => <ConversationRow conversation={conversation} agent={agent} running={running} project={project} onLongPress={onLongPress} />;
   if (process.env.EXPO_OS !== "ios") {
+    const items: HeaderMenuItem[] = [
+      { icon: "unarchive", title: t("archivedChats.unarchive"), onPress: () => unarchiveChat(conversation.id) },
+      { icon: "trash", title: t("common:actions.delete"), destructive: true, onPress: () => deleteChat(conversation.id) },
+    ];
     return (
       <>
         {divided && <Hairline inset={76} />}
+        {menu.sheet}
         <View style={styles.withAction}>
-          <View style={{ flex: 1, minWidth: 0 }}>{row}</View>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            {row(() => {
+              tap();
+              menu.show(items, conversation.title || undefined);
+            })}
+          </View>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={conversation.title ? t("archivedChats.unarchiveA11y", { title: conversation.title }) : t("archivedChats.unarchiveThis")}
@@ -248,7 +260,7 @@ const ArchivedChat = memo(function ArchivedChat({
       <Link.Trigger>
         <View>
           {divided && <Hairline inset={76} />}
-          {row}
+          {row()}
         </View>
       </Link.Trigger>
       <Link.Preview />

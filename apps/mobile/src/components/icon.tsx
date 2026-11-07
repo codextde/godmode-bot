@@ -22,6 +22,8 @@ const ICONS = {
   hand: ["hand.tap.fill", "touch_app"],
   keyboard: ["keyboard", "keyboard"],
   refresh: ["arrow.clockwise", "refresh"],
+  hourglass: ["hourglass", "hourglass_empty"],
+  repeat: ["repeat", "repeat"],
   bolt: ["bolt.fill", "bolt"],
   lock: ["lock.fill", "lock"],
   warning: ["exclamationmark.triangle.fill", "warning"],

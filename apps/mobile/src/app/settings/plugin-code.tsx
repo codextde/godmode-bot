@@ -1,7 +1,7 @@
-import { usePreventRemove } from "expo-router/react-navigation";
+import { useHeaderHeight, usePreventRemove } from "expo-router/react-navigation";
 import { Stack, useLocalSearchParams, useNavigation } from "expo-router";
-import { useMemo, useState } from "react";
-import { Alert, ScrollView, StyleSheet, TextInput, View } from "react-native";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type ScrollViewInstance } from "react-native";
 import { useTranslation } from "react-i18next";
 import { MAX_MOD_FILES, MOD_HOOKS_PATH, MOD_MANIFEST_PATH, modPathProblem, type Mod, type ModCheck } from "@godmode/shared";
 import { CloseButton } from "@/components/close-button";
@@ -10,6 +10,7 @@ import { FullAccessGate, isRefused } from "@/components/admin";
 import { Group, PickerRow } from "@/components/form";
 import { HeaderActions, type HeaderMenuItem } from "@/components/header-actions";
 import { Icon } from "@/components/icon";
+import { problemTarget } from "@/components/plugin-parts";
 import { CopyButton } from "@/components/secret-parts";
 import { TextPrompt } from "@/components/text-prompt";
 import { Button, ErrorState, LoadingState, Row, T, tap } from "@/components/ui";
@@ -37,10 +38,13 @@ function sortedPaths(files: Files): string[] {
   return Object.keys(files).sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
 }
 
+const LINE_HEIGHT = 18;
+/** The row above the text: its path, line count and copy button. */
+const EDITOR_HEAD = 37;
 /** The code of a small plugin (the ones Godmode keeps itself), read and changed like the desktop's code tab; saving checks it again. */
 export default function PluginCode() {
   const { t } = useTranslation("tools");
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, file, line } = useLocalSearchParams<{ id: string; file?: string; line?: string }>();
   const list = usePlugins();
   const mod = list.data?.find((m) => m.id === id);
   return (
@@ -49,7 +53,7 @@ export default function PluginCode() {
       <CloseButton />
       <FullAccessGate locked={<NeedsFullAccessScreen />}>
         {mod && !mod.source ? (
-          <CodeEditor key={mod.id} mod={mod} />
+          <CodeEditor key={mod.id} mod={mod} file={file} line={line ? Number(line) : null} />
         ) : list.isLoading ? (
           <LoadingState />
         ) : (
@@ -60,7 +64,7 @@ export default function PluginCode() {
   );
 }
 
-function CodeEditor({ mod }: { mod: Mod }) {
+function CodeEditor({ mod, file, line }: { mod: Mod; file?: string; line: number | null }) {
   const c = useColors();
   const { t } = useTranslation(["tools", "components", "common"]);
   const { byId } = useAgents();
@@ -70,7 +74,17 @@ function CodeEditor({ mod }: { mod: Mod }) {
   const [result, setResult] = useState<{ check: ModCheck | null; revision: number } | null>(null);
   const [busy, setBusy] = useState<"save" | "check" | null>(null);
   const paths = useMemo(() => sortedPaths(files), [files]);
-  const [picked, setPicked] = useState<string | null>(null);
+  const [picked, setPicked] = useState<string | null>(file ?? null);
+  const [jump, setJump] = useState<{ path: string; line: number } | null>(file && line ? { path: file, line } : null);
+  const scroller = useRef<ScrollViewInstance>(null);
+  const headerHeight = useHeaderHeight();
+  // Where the editor sits in the page, set by layout; a jump waits for it and moves the page once.
+  const place = useRef({ block: 0, editor: 0, laid: false, due: false });
+  // How much text stands above the line, measured: lines wrap, so it can't be counted.
+  const [above, setAbove] = useState(0);
+  useEffect(() => {
+    place.current.due = !!jump;
+  }, [jump]);
   const path = picked && picked in files ? picked : (paths.find((p) => p.endsWith(".ts") || p.endsWith(".js")) ?? paths[0] ?? null);
   const dirty = !sameFiles(files, base);
   // Follows the saved files while nothing is edited (an agent or another window may change them), keeps the edits once there are some.
@@ -165,9 +179,24 @@ function CodeEditor({ mod }: { mod: Mod }) {
   const shown = result ? result.check : mod.check;
   const note = result ? (result.revision !== revision ? t("pluginAdmin.code.noteBeforeEdit") : dirty ? t("pluginAdmin.code.noteDraft") : t("pluginAdmin.code.noteSaved")) : dirty ? t("pluginAdmin.code.noteSavedUnchecked") : t("pluginAdmin.code.noteSaved");
   const text = path ? (files[path] ?? "") : "";
+  const shownLine = jump && jump.path === path ? jump.line : null;
+  const lineY = shownLine === 1 ? 0 : above;
+  const reveal = () => {
+    const at = place.current;
+    if (!at.due || shownLine === null || !at.laid || (shownLine > 1 && !above)) return;
+    at.due = false;
+    const y = at.block + at.editor + EDITOR_HEAD + space.md + lineY - headerHeight - LINE_HEIGHT * 3;
+    scroller.current?.scrollTo({ y: Math.max(y, 0), animated: true });
+  };
+  useEffect(reveal);
+  const jumpTo = (target: { path: string; line: number | null }) => {
+    tap();
+    setPicked(target.path);
+    setJump(target.line ? { path: target.path, line: target.line } : null);
+  };
 
   return (
-    <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive" automaticallyAdjustKeyboardInsets>
+    <ScrollView ref={scroller} contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive" automaticallyAdjustKeyboardInsets>
       <HeaderActions
         actions={[
           ...(busy ? [] : [{ icon: "shield" as const, label: t("pluginAdmin.code.check"), onPress: () => void check() }]),
@@ -225,41 +254,68 @@ function CodeEditor({ mod }: { mod: Mod }) {
           {t("pluginAdmin.code.noFiles")}
         </T>
       ) : (
-        <View style={{ gap: space.sm }}>
+        <View style={{ gap: space.sm }} onLayout={(e) => (place.current.block = e.nativeEvent.layout.y)}>
           {paths.length > 1 ? (
             <Group>
               <PickerRow icon="doc" title={t("pluginAdmin.code.file")} value={path} options={paths.map((p) => ({ value: p, label: p.split("/").pop() ?? p, detail: p }))} onChange={setPicked} />
             </Group>
           ) : null}
-          <View style={[styles.editor, { backgroundColor: c.surface, borderColor: c.border }]}>
+          <View
+            onLayout={(e) => {
+              place.current.editor = e.nativeEvent.layout.y;
+              place.current.laid = true;
+              reveal();
+            }}
+            style={[styles.editor, { backgroundColor: c.surface, borderColor: c.border }]}
+          >
             <Row style={[styles.editorHead, { borderBottomColor: c.border }]}>
               <T variant="caption" style={{ flex: 1, fontFamily: fonts.mono }} numberOfLines={1}>
                 {path}
               </T>
+              {shownLine ? (
+                <T variant="caption" color={c.brandStrong} style={{ fontWeight: "600" }}>
+                  {t("pluginAdmin.lineN", { line: shownLine })}
+                </T>
+              ) : null}
               {files[path] !== base[path] ? <View style={[styles.dot, { backgroundColor: c.textMuted }]} /> : null}
               <T variant="caption" muted>
                 {t("pluginAdmin.code.lines", { count: text.split("\n").length })}
               </T>
               <CopyButton label={t("pluginAdmin.code.copyFile")} copy={() => copyPlain(text)} />
             </Row>
-            <TextInput
-              accessibilityLabel={t("pluginAdmin.code.editorLabel", { path })}
-              value={text}
-              onChangeText={(next) => {
-                setFiles((f) => ({ ...f, [path]: next }));
-                setRevision((r) => r + 1);
-              }}
-              multiline
-              editable={busy !== "save"}
-              scrollEnabled={false}
-              autoCapitalize="none"
-              autoCorrect={false}
-              spellCheck={false}
-              smartInsertDelete={false}
-              textContentType="none"
-              keyboardType="ascii-capable"
-              style={[styles.code, { color: c.text }]}
-            />
+            <View>
+              {shownLine ? <View pointerEvents="none" style={[styles.band, { top: space.md + lineY, backgroundColor: c.brandSoft }]} /> : null}
+              {shownLine && shownLine > 1 ? (
+                <Text
+                  accessibilityElementsHidden
+                  importantForAccessibility="no-hide-descendants"
+                  pointerEvents="none"
+                  onLayout={(e) => setAbove(e.nativeEvent.layout.height)}
+                  style={[styles.code, styles.measure]}
+                >
+                  {text.split("\n").slice(0, shownLine - 1).join("\n")}
+                </Text>
+              ) : null}
+              <TextInput
+                accessibilityLabel={t("pluginAdmin.code.editorLabel", { path })}
+                value={text}
+                onChangeText={(next) => {
+                  setFiles((f) => ({ ...f, [path]: next }));
+                  setRevision((r) => r + 1);
+                  setJump(null);
+                }}
+                multiline
+                editable={busy !== "save"}
+                scrollEnabled={false}
+                autoCapitalize="none"
+                autoCorrect={false}
+                spellCheck={false}
+                smartInsertDelete={false}
+                textContentType="none"
+                keyboardType="ascii-capable"
+                style={[styles.code, { color: c.text }]}
+              />
+            </View>
           </View>
         </View>
       )}
@@ -272,19 +328,23 @@ function CodeEditor({ mod }: { mod: Mod }) {
           </T>
         </Row>
         {shown
-          ? [...shown.errors.map((p) => ({ p, error: true })), ...shown.warnings.map((p) => ({ p, error: false }))].map(({ p, error }, i) => (
-              <Row key={i} style={[styles.row, { alignItems: "flex-start" }]}>
-                <Icon name="warning" size={14} color={error ? c.danger : c.warning} />
-                <View style={{ flex: 1, gap: 2 }}>
-                  <T variant="caption" muted style={{ fontWeight: "600" }}>
-                    {p.where}
-                  </T>
-                  <T variant="footnote" selectable>
-                    {p.message}
-                  </T>
-                </View>
-              </Row>
-            ))
+          ? [...shown.errors.map((p) => ({ p, error: true })), ...shown.warnings.map((p) => ({ p, error: false }))].map(({ p, error }, i) => {
+              const target = problemTarget(p.where, paths);
+              const open = !!target;
+              return (
+                <Pressable key={i} disabled={!open} accessibilityRole={open ? "link" : undefined} onPress={() => target && jumpTo(target)} style={({ pressed }) => [styles.row, { alignItems: "flex-start" }, pressed && { backgroundColor: c.sunken }]}>
+                  <Icon name="warning" size={14} color={error ? c.danger : c.warning} />
+                  <View style={{ flex: 1, gap: 2 }}>
+                    <T variant="caption" muted={!open} color={open ? c.brandStrong : undefined} style={{ fontWeight: "600" }}>
+                      {p.where}
+                    </T>
+                    <T variant="footnote" selectable={!open}>
+                      {p.message}
+                    </T>
+                  </View>
+                </Pressable>
+              );
+            })
           : null}
       </Group>
     </ScrollView>
@@ -327,12 +387,27 @@ const styles = StyleSheet.create({
   code: {
     fontFamily: fonts.mono,
     fontSize: 12.5,
-    lineHeight: 18,
+    lineHeight: LINE_HEIGHT,
     minHeight: 280,
     paddingHorizontal: space.md,
     paddingTop: space.md,
     paddingBottom: space.md,
     textAlignVertical: "top",
+  },
+  band: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    height: LINE_HEIGHT,
+  },
+  measure: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    minHeight: 0,
+    paddingTop: 0,
+    paddingBottom: 0,
+    opacity: 0,
   },
   row: {
     flexDirection: "row",

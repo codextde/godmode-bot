@@ -1,6 +1,6 @@
 import { router, Stack } from "expo-router";
 import { useState } from "react";
-import { ScrollView, StyleSheet } from "react-native";
+import { Linking, Pressable, ScrollView, StyleSheet } from "react-native";
 import { useTranslation } from "react-i18next";
 import { FullAccessGate, isRefused } from "@/components/admin";
 import { Group } from "@/components/form";
@@ -11,6 +11,8 @@ import { errorText } from "@/lib/api";
 import { queryClient } from "@/lib/query";
 import { sq } from "@/lib/settings-api";
 import { space, useColors } from "@/lib/theme";
+
+const SUPPORT_MAIL = "kontakt@codext.de";
 
 /** A licence key for this computer, typed or pasted on the phone. */
 export default function LicenseKey() {
@@ -52,6 +54,14 @@ export default function LicenseKey() {
           <InputRow label={t("license.key")} value={key} onChangeText={setKey} mono autoFocus placeholder="GM-…" onSubmitEditing={() => void save()} />
         </Group>
         <Button title={t("license.save")} icon="key" loading={busy} disabled={!key.trim()} onPress={() => void save()} />
+        <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(`mailto:${SUPPORT_MAIL}?subject=${encodeURIComponent("Lost Godmode licence key")}`).catch(() => undefined)}>
+          <T variant="footnote" muted style={styles.lost}>
+            <T variant="footnote" style={{ fontWeight: "600" }}>
+              {t("licenseExtra.lostKey")}
+            </T>{" "}
+            {t("licenseExtra.lostKeyHint")}
+          </T>
+        </Pressable>
       </FullAccessGate>
     </ScrollView>
   );
@@ -62,5 +72,9 @@ const styles = StyleSheet.create({
     padding: space.lg,
     paddingBottom: 60,
     gap: space.xl,
+  },
+  lost: {
+    textAlign: "center",
+    paddingHorizontal: space.md,
   },
 });

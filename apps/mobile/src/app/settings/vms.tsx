@@ -1,6 +1,6 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { router, Stack } from "expo-router";
-import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
+import { RefreshControl, StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import type { Vm, VmStatus } from "@godmode/shared";
 import { AdminQueryState, FullAccessGate } from "@/components/admin";
@@ -10,6 +10,7 @@ import { HeaderActions } from "@/components/header-actions";
 import { Icon } from "@/components/icon";
 import { ActionPill, reportInstall, ToolRow } from "@/components/program-parts";
 import { ListRow } from "@/components/readonly-list";
+import { SettingsScroll } from "@/components/settings-scroll";
 import { FormSkeleton } from "@/components/settings-state";
 import { VmStateBadge } from "@/components/vm-parts";
 import { Button, EmptyState, ErrorState, LiveDot, T } from "@/components/ui";
@@ -27,7 +28,7 @@ export default function Vms() {
   const status = useQuery({ queryKey: mk.vmStatus, queryFn: machinesApi.vms.status });
   const pull = usePullRefresh(() => Promise.all([status.refetch(), queryClient.invalidateQueries({ queryKey: qk.vms })]));
   return (
-    <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content} refreshControl={<RefreshControl {...pull} />}>
+    <SettingsScroll contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content} refreshControl={<RefreshControl {...pull} />}>
       <Stack.Screen options={{ title: t("vms.title") }} />
       <CloseButton />
       <FullAccessGate skeleton={<FormSkeleton groups={2} rows={3} />}>
@@ -35,7 +36,7 @@ export default function Vms() {
           {(s) => (s.supported ? <List status={s} /> : <EmptyState style={styles.state} icon="vm" title={t("vms.unsupported")} body={s.reason ?? t("vms.unsupportedBody")} />)}
         </AdminQueryState>
       </FullAccessGate>
-    </ScrollView>
+    </SettingsScroll>
   );
 }
 
@@ -69,7 +70,7 @@ function List({ status: s }: { status: VmStatus }) {
 
       {turnedOff ? (
         <Group>
-          <LinkRow icon="power" title={t("vms.turnedOff")} detail={t("vms.turnedOffBody")} onPress={() => router.push("/settings/computer")} />
+          <LinkRow icon="power" title={t("vms.turnedOff")} onPress={() => router.push("/settings/computer")} />
         </Group>
       ) : null}
 
@@ -88,7 +89,7 @@ function List({ status: s }: { status: VmStatus }) {
       ) : list.isError ? (
         <ErrorState title={t("vms.loadFailed")} error={errorText(list.error)} onRetry={() => void list.refetch()} />
       ) : vms.length === 0 ? (
-        <EmptyState style={styles.state} icon="vm" title={t("vms.emptyTitle")} body={t("vms.emptyBody")} action={<Button title={t("vms.new")} icon="plus" onPress={create} />} />
+        <EmptyState style={styles.state} icon="vm" title={t("vms.emptyTitle")} action={<Button title={t("vms.new")} icon="plus" onPress={create} />} />
       ) : (
         <Group footer={footer}>
           {vms.map((vm) => (

@@ -19,7 +19,7 @@ import { CharacterAvatar } from "@/components/character";
 import { Group, PickerRow, Segmented, SegmentRow, SwitchRow } from "@/components/form";
 import { Icon } from "@/components/icon";
 import { NeedsFullAccess, useFullAccess } from "@/components/full-access";
-import { FieldCard, InputRow, SheetHeader } from "@/components/secret-parts";
+import { FieldCard, IconButton, InputRow, SheetHeader } from "@/components/secret-parts";
 import { LoadingState, Row, SectionTitle, T, tap } from "@/components/ui";
 import { api, errorText } from "@/lib/api";
 import { useAgents } from "@/lib/hooks";
@@ -91,6 +91,7 @@ function CardForm({ card }: { card: PaymentCard | null }) {
   const [number, setNumber] = useState("");
   const [expiry, setExpiry] = useState(initialExpiry);
   const [cvc, setCvc] = useState("");
+  const [cvcMode, setCvcMode] = useState<"keep" | "edit" | "remove">(card?.hasCvc ? "keep" : "edit");
   const [holderName, setHolderName] = useState(card?.holderName ?? "");
   const [name, setName] = useState(card?.name ?? "");
   const [billing, setBilling] = useState<CardBilling>(EMPTY_BILLING);
@@ -119,7 +120,8 @@ function CardForm({ card }: { card: PaymentCard | null }) {
 
   const errors = {
     number: replacing && digits && !luhnValid(digits) ? t("cardEdit.numberInvalid") : null,
-    expiry: expiry && (!parsedExpiry ? t("cardEdit.expiryInvalid") : cardExpired({ expMonth: parsedExpiry.month, expYear: parsedExpiry.year }) ? t("cardEdit.expired") : null),
+    // A saved card that has run out can still be edited: only a newly typed date has to be valid.
+    expiry: expiry === initialExpiry ? null : !parsedExpiry ? t("cardEdit.expiryInvalid") : cardExpired({ expMonth: parsedExpiry.month, expYear: parsedExpiry.year }) ? t("cardEdit.expired") : null,
     cvc: cvc && !/^\d{3,4}$/.test(cvc) ? t("cardEdit.cvcInvalid") : null,
     amount: Number.isNaN(limitPer) || Number.isNaN(limitMon) || (approval === "above" && (askMinor === null || Number.isNaN(askMinor))) ? t("cardEdit.amountInvalid") : null,
     agents: agentsMode === "some" && agentIds.length === 0 ? t("cardAgents.pickOne") : null,
@@ -195,7 +197,8 @@ function CardForm({ card }: { card: PaymentCard | null }) {
       // A new card has its own code, or none.
       if (cvc) patch.cvc = cvc;
       else if (card.hasCvc) patch.cvc = "";
-    } else if (cvc) patch.cvc = cvc;
+    } else if (cvcMode === "remove") patch.cvc = "";
+    else if (cvcMode === "edit" && cvc) patch.cvc = cvc;
     if (parsedExpiry && (parsedExpiry.month !== card.expMonth || parsedExpiry.year !== card.expYear)) {
       patch.expMonth = parsedExpiry.month;
       patch.expYear = parsedExpiry.year;
@@ -265,7 +268,46 @@ function CardForm({ card }: { card: PaymentCard | null }) {
             </Row>
           )}
           <InputRow label={t("card.expires")} value={expiry} onChangeText={setExpiry} placeholder={t("cardEdit.expiryPlaceholder")} keyboardType="numbers-and-punctuation" mono maxLength={7} />
-          <InputRow label={t("card.cvc")} value={cvc} onChangeText={setCvc} placeholder={card?.hasCvc && !replacing ? t("loginEdit.unchanged") : t("loginEdit.optional")} keyboardType="number-pad" secure maxLength={4} />
+          {replacing || cvcMode === "edit" ? (
+            <InputRow
+              label={t("card.cvc")}
+              value={cvc}
+              onChangeText={setCvc}
+              placeholder={card?.hasCvc && !replacing ? t("loginEdit.unchanged") : t("loginEdit.optional")}
+              keyboardType="number-pad"
+              secure
+              maxLength={4}
+              trailing={
+                card?.hasCvc && !replacing ? (
+                  <IconButton
+                    icon="close"
+                    label={t("common:actions.cancel")}
+                    onPress={() => {
+                      setCvc("");
+                      setCvcMode("keep");
+                    }}
+                  />
+                ) : undefined
+              }
+            />
+          ) : (
+            <Row style={styles.inlineRow}>
+              <T variant="callout" style={styles.label}>
+                {t("card.cvc")}
+              </T>
+              <T variant="callout" muted numberOfLines={1} style={{ flex: 1 }}>
+                {cvcMode === "keep" ? t("cardEdit.cvcSaved") : t("cardEdit.removedOnSave")}
+              </T>
+              {cvcMode === "keep" ? (
+                <>
+                  <LinkText label={t("cardEdit.replace")} onPress={() => setCvcMode("edit")} />
+                  <LinkText label={t("common:actions.remove")} onPress={() => setCvcMode("remove")} />
+                </>
+              ) : (
+                <LinkText label={t("common:actions.undo")} onPress={() => setCvcMode("keep")} />
+              )}
+            </Row>
+          )}
           <InputRow label={t("card.holder")} value={holderName} onChangeText={setHolderName} placeholder={t("cardEdit.holderPlaceholder")} autoCapitalize="words" />
           <InputRow label={t("cardEdit.label")} value={name} onChangeText={setName} placeholder={last4 ? `${CARD_BRAND_LABELS[brand]} ${last4}` : t("cardEdit.labelPlaceholder")} autoCapitalize="words" maxLength={100} />
         </FieldCard>

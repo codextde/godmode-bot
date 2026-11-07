@@ -10,8 +10,10 @@ import { useFullAccess } from "@/components/full-access";
 import { ConversationRow } from "@/components/rows";
 import { Icon, type IconName } from "@/components/icon";
 import { SegmentedTabs } from "@/components/segmented-tabs";
+import { useMenuSheet, type HeaderMenuItem } from "@/components/header-actions";
 import { EmptyState, ErrorState, Hairline, Row, SectionTitle, SkeletonRows, T, tap } from "@/components/ui";
 import { WorkspaceChip } from "@/components/workspace-chip";
+import { RowPressable } from "@/components/row-pressable";
 import { api, errorText } from "@/lib/api";
 import { chatSource, SOURCES, sourceStats, TABS, useChatFilters, type ChatSource, type RecentTab } from "@/lib/chat-filters";
 import { chatBucket, chatDayLabel, continuesAt } from "@/lib/desktop-parity";
@@ -302,13 +304,13 @@ function ArchivedLink({ ongoing }: { ongoing: number }) {
   const c = useColors();
   const { t } = useTranslation("tabs");
   return (
-    <Pressable
+    <RowPressable
       accessibilityRole="button"
       onPress={() => {
         tap();
         router.push("/archived");
       }}
-      style={({ pressed }) => [{ flexDirection: "row", alignItems: "center", gap: space.sm, marginTop: space.lg, paddingHorizontal: space.md, height: 44, borderRadius: radius.lg, borderCurve: "continuous" }, pressed && { backgroundColor: c.sunken }]}
+      style={{ flexDirection: "row", alignItems: "center", gap: space.sm, marginTop: space.lg, paddingHorizontal: space.md, height: 44, borderRadius: radius.lg, borderCurve: "continuous" }}
     >
       <Icon name="archive" size={15} color={c.textMuted} />
       <T variant="subhead" muted style={{ flex: 1 }}>
@@ -326,7 +328,7 @@ function ArchivedLink({ ongoing }: { ongoing: number }) {
         </View>
       )}
       <Icon name="chevron" size={12} color={c.textMuted} />
-    </Pressable>
+    </RowPressable>
   );
 }
 
@@ -365,6 +367,9 @@ const ChatItem = memo(function ChatItem({
 }) {
   const { t } = useTranslation(["tabs", "common"]);
   const update = { mutate: (patch: { pinned?: boolean; archived?: boolean }) => changeChat(conversation.id, patch) };
+  const menu = useMenuSheet();
+  const markRead = () => void api.conversations.read([conversation.id]).finally(() => void queryClient.invalidateQueries({ queryKey: qk.conversations }));
+  const markUnread = () => void api.conversations.unread([conversation.id]).finally(() => void queryClient.invalidateQueries({ queryKey: qk.conversations }));
   const remove = () =>
     Alert.alert(t("chats.deleteDialog.title"), t("chats.deleteDialog.body"), [
       { text: t("common:actions.cancel"), style: "cancel" },
@@ -379,20 +384,32 @@ const ChatItem = memo(function ChatItem({
       },
     ]);
 
-  const row = <ConversationRow conversation={conversation} agent={agent} from={from} running={running} queued={queued} project={project} />;
-  if (process.env.EXPO_OS !== "ios") return row;
+  const row = (onLongPress?: () => void) => <ConversationRow conversation={conversation} agent={agent} from={from} running={running} queued={queued} project={project} onLongPress={onLongPress} />;
+  if (process.env.EXPO_OS !== "ios") {
+    const items: HeaderMenuItem[] = [
+      conversation.unread ? { icon: "checkAll", title: t("chats.menu.markRead"), onPress: markRead } : { icon: "dot", title: t("chats.menu.markUnread"), onPress: markUnread },
+      { icon: "pin", title: conversation.pinned ? t("chats.menu.unpin") : t("chats.menu.pin"), onPress: () => update.mutate({ pinned: !conversation.pinned }) },
+      { icon: "archive", title: t("chats.menu.archive"), onPress: () => update.mutate({ archived: true }) },
+      { icon: "trash", title: t("common:actions.delete"), destructive: true, onPress: remove },
+    ];
+    return (
+      <>
+        {row(() => {
+          tap();
+          menu.show(items, conversation.title || undefined);
+        })}
+        {menu.sheet}
+      </>
+    );
+  }
   return (
     <Link href={{ pathname: "/chat/[id]", params: { id: conversation.id } }} asChild>
       <Link.Trigger>
-        <View>{row}</View>
+        <View>{row()}</View>
       </Link.Trigger>
       <Link.Preview />
       <Link.Menu>
-        {conversation.unread ? (
-          <Link.MenuAction title={t("chats.menu.markRead")} icon="checkmark.message" onPress={() => void api.conversations.read([conversation.id]).finally(() => void queryClient.invalidateQueries({ queryKey: qk.conversations }))} />
-        ) : (
-          <Link.MenuAction title={t("chats.menu.markUnread")} icon="message.badge" onPress={() => void api.conversations.unread([conversation.id]).finally(() => void queryClient.invalidateQueries({ queryKey: qk.conversations }))} />
-        )}
+        {conversation.unread ? <Link.MenuAction title={t("chats.menu.markRead")} icon="checkmark.message" onPress={markRead} /> : <Link.MenuAction title={t("chats.menu.markUnread")} icon="message.badge" onPress={markUnread} />}
         <Link.MenuAction title={conversation.pinned ? t("chats.menu.unpin") : t("chats.menu.pin")} icon={conversation.pinned ? "pin.slash" : "pin"} onPress={() => update.mutate({ pinned: !conversation.pinned })} />
         <Link.MenuAction title={t("chats.menu.archive")} icon="archivebox" onPress={() => update.mutate({ archived: true })} />
         <Link.MenuAction title={t("common:actions.delete")} icon="trash" destructive onPress={remove} />

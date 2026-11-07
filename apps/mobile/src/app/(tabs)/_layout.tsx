@@ -34,7 +34,12 @@ export default function TabsLayout() {
       minimizeBehavior="onScrollDown"
       backgroundColor={Platform.OS === "android" ? c.surface : undefined}
       indicatorColor={Platform.OS === "android" ? c.sunken : undefined}
-      labelStyle={Platform.OS === "android" ? { selected: { color: c.text } } : undefined}
+      iconColor={Platform.OS === "android" ? { default: c.textMuted, selected: c.text } : undefined}
+      labelStyle={Platform.OS === "android" ? { default: { color: c.textMuted }, selected: { color: c.text } } : undefined}
+      labelVisibilityMode="labeled"
+      rippleColor={Platform.OS === "android" ? c.sunken : undefined}
+      badgeBackgroundColor={Platform.OS === "android" ? c.danger : undefined}
+      badgeTextColor={Platform.OS === "android" ? "#FFFFFF" : undefined}
     >
       {(working || offline) && (
         <NativeTabs.BottomAccessory>

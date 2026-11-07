@@ -50,7 +50,7 @@ export function QueryState<T>({
   const { t } = useTranslation("settings");
   if (query.data !== undefined) return <>{children(query.data)}</>;
   if (query.isLoading || query.isPending) return <>{skeleton ?? <FormSkeleton />}</>;
-  if (isOutdated(query.error)) return <EmptyState icon={icon} title={t("phone.outdatedTitle")} body={t("phone.outdatedBody")} />;
+  if (isOutdated(query.error)) return <EmptyState icon={icon} title={t("phone.outdatedTitle")} />;
   return <ErrorState title={errorTitle} error={errorText(query.error)} onRetry={() => void query.refetch()} />;
 }
 

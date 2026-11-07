@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
 import { router, Stack } from "expo-router";
 import { useState } from "react";
-import { Alert, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
+import { Alert, RefreshControl, StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import type { BrowserSignIns, DeviceGroup, DeviceGroupPatch, GroupDevice, RemoteRunner, RunnerState } from "@godmode/shared";
 import { useFullAccess } from "@/components/admin";
@@ -11,6 +11,8 @@ import { Group, LinkRow, PickerRow, SwitchRow, type Option } from "@/components/
 import { actionFailed } from "@/components/linking-parts";
 import { QueryState } from "@/components/settings-state";
 import { InfoRow, ago } from "@/components/status-rows";
+import { useMenuSheet } from "@/components/header-actions";
+import { SettingsScroll } from "@/components/settings-scroll";
 import { Button, EmptyState, tap, type Tone } from "@/components/ui";
 import { whenText } from "@/lib/format";
 import { t as i18nT } from "@/lib/i18n";
@@ -45,7 +47,7 @@ export default function Devices() {
   const pull = usePullRefresh(() => Promise.all([group.refetch(), fullAccess ? runners.refetch() : null]));
 
   return (
-    <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content} refreshControl={<RefreshControl {...pull} />}>
+    <SettingsScroll contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content} refreshControl={<RefreshControl {...pull} />}>
       <Stack.Screen options={{ title: t("devices.title") }} />
       <CloseButton />
       <QueryState query={group} icon="display" errorTitle={t("devices.loadFailed")}>
@@ -59,7 +61,7 @@ export default function Devices() {
           )
         }
       </QueryState>
-    </ScrollView>
+    </SettingsScroll>
   );
 }
 
@@ -159,7 +161,6 @@ function Manage({ group: g, runners }: { group: DeviceGroup; runners: RemoteRunn
         <EmptyState
           icon="display"
           title={t("settings:devices.aloneTitle")}
-          body={t("devices.aloneBody")}
           action={
             <View style={{ gap: space.sm, alignSelf: "stretch" }}>
               <Button title={t("devices.add")} icon="plus" onPress={() => router.push("/settings/devices-invite")} />
@@ -263,6 +264,7 @@ function handoffTargets(g: DeviceGroup): GroupDevice[] {
 function Handoff({ group: g }: { group: DeviceGroup }) {
   const { t } = useTranslation(["linking", "common"]);
   const [busy, setBusy] = useState(false);
+  const menu = useMenuSheet();
   const self = g.devices.find((d) => d.self);
   const working = self?.activeRuns ?? 0;
   const targets = handoffTargets(g);
@@ -296,22 +298,26 @@ function Handoff({ group: g }: { group: DeviceGroup }) {
       ]);
       return;
     }
+    if (process.env.EXPO_OS === "android") return menu.show(targets.map((to) => ({ icon: "laptop", title: to.name, onPress: () => void run(to) })), t("handoff.pick"), t("handoff.body"));
     Alert.alert(t("handoff.pick"), t("handoff.body"), [...targets.map((to) => ({ text: to.name, onPress: () => void run(to) })), { text: t("common:actions.cancel"), style: "cancel" as const }]);
   };
 
   const footer = working === 0 ? t("handoff.idle") : t("handoff.working", { count: working });
   return (
-    <Group title={t("handoff.title")} footer={footer}>
-      {targets.length ? (
-        <LinkRow
-          icon="handoff"
-          title={busy ? t("handoff.handingOff") : targets.length === 1 ? t("handoff.to", { name: targets[0]!.name }) : t("handoff.pick")}
-          onPress={() => !busy && pick()}
-        />
-      ) : (
-        <InfoRow icon="handoff" label={t("handoff.label")} value={g.role === "secondary" ? t("handoff.primaryAway") : t("handoff.noneOnline")} />
-      )}
-    </Group>
+    <>
+      <Group title={t("handoff.title")} footer={footer}>
+        {targets.length ? (
+          <LinkRow
+            icon="handoff"
+            title={busy ? t("handoff.handingOff") : targets.length === 1 ? t("handoff.to", { name: targets[0]!.name }) : t("handoff.pick")}
+            onPress={() => !busy && pick()}
+          />
+        ) : (
+          <InfoRow icon="handoff" label={t("handoff.label")} value={g.role === "secondary" ? t("handoff.primaryAway") : t("handoff.noneOnline")} />
+        )}
+      </Group>
+      {menu.sheet}
+    </>
   );
 }
 

@@ -68,6 +68,7 @@ const ENTITY_KEYS: Partial<Record<EntityName, readonly (readonly unknown[])[]>> 
   composio: [["integrations"]],
   mods: [["plugins"]],
   "ssh-servers": [["ssh-servers"]],
+  license: [["license"]],
   // The computer gave this phone full access or took it away (or renamed it).
   mobile: [qk.me],
 };
@@ -405,6 +406,10 @@ function handle(event: ServerEvent) {
       break;
     case "entity.changed":
       for (const key of ENTITY_KEYS[event.entity] ?? []) refreshSoon({ queryKey: key });
+      break;
+    case "claude.login":
+      queryClient.setQueryData(["doctor", "claude-login"], event.status);
+      refreshSoon({ queryKey: ["doctor"], exact: true });
       break;
     case "devices.updated":
       // A computer joined, left or can take this phone now: the list of where to go when one is away follows.

@@ -1,22 +1,24 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
-import { Stack } from "expo-router";
+import { router, Stack } from "expo-router";
 import { useState } from "react";
-import { ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
+import { ActivityIndicator, Alert, Pressable, RefreshControl, StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
-import { formatBytes, type CleanupId, type CleanupItem, type CleanupReport, type CleanupRun, type OptimizeReport, type OptimizeRun, type StorageArea } from "@godmode/shared";
+import { formatBytes, type CleanupEntry, type CleanupId, type CleanupItem, type CleanupReport, type CleanupRun, type OptimizeReport, type OptimizeRun, type StorageArea } from "@godmode/shared";
 import { useFullAccess } from "@/components/admin";
+import { useLeaveSettings } from "@/components/agent-actions";
 import { CloseButton } from "@/components/close-button";
-import { Group, SwitchRow } from "@/components/form";
+import { Group, LinkRow, SwitchRow } from "@/components/form";
 import { Icon, type IconName } from "@/components/icon";
+import { SettingsScroll } from "@/components/settings-scroll";
 import { FormSkeleton, QueryState } from "@/components/settings-state";
-import { Button, Card, Row, Skeleton, T, tap, toneColors, type Tone } from "@/components/ui";
+import { Badge, Button, Card, Row, Skeleton, T, tap, toneColors, type Tone } from "@/components/ui";
 import { errorText } from "@/lib/api";
 import { dateLocale, intlLocale, t as translate } from "@/lib/i18n";
 import { queryClient } from "@/lib/query";
 import { settingsApi, sq } from "@/lib/settings-api";
 import { patchSettings, useSettings } from "@/lib/setup";
-import { space, useColors } from "@/lib/theme";
+import { radius, space, useColors } from "@/lib/theme";
 
 const AREA_TONE: Record<StorageArea, Tone> = { agents: "sky", browser: "amber", vms: "violet", repos: "rose", database: "emerald", other: "neutral" };
 
@@ -39,6 +41,8 @@ const ICONS: Record<CleanupId, IconName> = {
 };
 
 const LARGE_CHAT = 250_000;
+/** Notes count as unused after this long, so the count means something only from then on. */
+const UNUSED_MS = 30 * 86_400_000;
 
 const cleanable = (i: CleanupItem) => i.count > 0 && !i.blocked;
 /** The phone cleans what Godmode removes by itself too; the rest needs a look on the computer. */
@@ -83,7 +87,7 @@ export default function Cleanup() {
   const maintenance = settings.data?.maintenance;
 
   return (
-    <ScrollView
+    <SettingsScroll
       contentInsetAdjustmentBehavior="automatic"
       contentContainerStyle={styles.content}
       refreshControl={<RefreshControl refreshing={scanning} onRefresh={() => void rescan()} />}
@@ -104,7 +108,7 @@ export default function Cleanup() {
           </>
         )}
       </QueryState>
-    </ScrollView>
+    </SettingsScroll>
   );
 }
 
@@ -247,66 +251,131 @@ function Items({ report, busy }: { report: CleanupReport; busy: boolean }) {
 function ItemRow({ item, may, selected, busy, onToggle }: { item: CleanupItem; may: boolean; selected: boolean; busy: boolean; onToggle: () => void }) {
   const c = useColors();
   const { t } = useTranslation("settings");
+  const [open, setOpen] = useState(false);
   const kept = item.entries.filter((e) => e.kept).length;
   const amount = [item.count > 0 ? t("cleanup.items.count", { count: item.count }) : null, kept ? t("cleanup.items.kept", { count: kept }) : null].filter(Boolean).join(" · ");
+  const unlisted = item.count + kept - item.entries.length;
   return (
-    <Pressable
-      accessibilityRole="checkbox"
-      accessibilityState={{ checked: selected, disabled: !may }}
-      disabled={!may}
-      onPress={() => {
-        tap();
-        onToggle();
-      }}
-      style={({ pressed }) => [styles.item, pressed && { backgroundColor: c.sunken }]}
-    >
-      <View style={styles.check}>
-        {busy ? (
-          <ActivityIndicator size="small" color={c.textMuted} />
-        ) : may ? (
-          selected ? (
-            <Icon name="checkCircle" size={20} color={c.brandStrong} />
-          ) : (
-            <View style={[styles.circle, { borderColor: c.textFaint }]} />
-          )
-        ) : (
-          <Icon name={ICONS[item.id]} size={16} color={c.textFaint} />
-        )}
+    <View>
+      <View style={styles.item}>
+        <Pressable
+          accessibilityRole="checkbox"
+          accessibilityState={{ checked: selected, disabled: !may }}
+          disabled={!may}
+          onPress={() => {
+            tap();
+            onToggle();
+          }}
+          style={({ pressed }) => [styles.itemMain, pressed && { opacity: 0.6 }]}
+        >
+          <View style={styles.check}>
+            {busy ? (
+              <ActivityIndicator size="small" color={c.textMuted} />
+            ) : may ? (
+              selected ? (
+                <Icon name="checkCircle" size={20} color={c.brandStrong} />
+              ) : (
+                <View style={[styles.circle, { borderColor: c.textFaint }]} />
+              )
+            ) : (
+              <Icon name={ICONS[item.id]} size={16} color={c.textFaint} />
+            )}
+          </View>
+          <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+            <Row style={{ gap: space.sm, flexWrap: "wrap" }}>
+              <T variant="callout" style={{ fontWeight: "500", flexShrink: 1 }} color={may ? c.text : c.textMuted}>
+                {item.name}
+              </T>
+              {!item.recommended ? <Badge label={t("cleanup.items.review")} tone="warning" dot={false} /> : null}
+            </Row>
+            <T variant="footnote" muted numberOfLines={3}>
+              {item.detail}
+            </T>
+            {item.blocked ? (
+              <T variant="footnote" color={c.warning}>
+                {item.blocked}
+              </T>
+            ) : !item.recommended && item.count > 0 && !may ? (
+              <T variant="footnote" muted>
+                {t("phone.onComputer")}
+              </T>
+            ) : null}
+          </View>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t(open ? "cleanup.items.hideEntries" : "cleanup.items.showEntries", { name: item.name })}
+          accessibilityState={{ expanded: open }}
+          disabled={!item.entries.length}
+          hitSlop={6}
+          onPress={() => {
+            tap();
+            setOpen((v) => !v);
+          }}
+          style={({ pressed }) => [styles.amount, pressed && { opacity: 0.6 }]}
+        >
+          <View style={{ alignItems: "flex-end", gap: 1 }}>
+            <T variant="subhead" style={{ fontWeight: "600", fontVariant: ["tabular-nums"] }}>
+              {item.count ? formatBytes(item.bytes) : t("cleanup.items.nothingToRemove")}
+            </T>
+            {amount ? (
+              <T variant="caption" muted>
+                {amount}
+              </T>
+            ) : null}
+          </View>
+          {item.entries.length ? <Icon name={open ? "up" : "down"} size={11} color={c.textFaint} weight="semibold" /> : null}
+        </Pressable>
       </View>
-      <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-        <T variant="callout" style={{ fontWeight: "500" }} color={may ? c.text : c.textMuted}>
-          {item.name}
+      {open ? (
+        <View style={[styles.entries, { backgroundColor: c.sunken }]}>
+          {item.entries.map((e, i) => (
+            <EntryRow key={`${e.path ?? e.name}-${i}`} entry={e} />
+          ))}
+          {unlisted > 0 ? (
+            <T variant="caption" muted style={styles.entry}>
+              {t("cleanup.items.moreEntries", { count: unlisted })}
+            </T>
+          ) : null}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+/** One thing in a cleanup item: its name, how old it is or why it stays, and its size. */
+function EntryRow({ entry: e }: { entry: CleanupEntry }) {
+  const c = useColors();
+  return (
+    <Row style={styles.entry}>
+      <View style={{ flex: 1, minWidth: 0, gap: 1 }}>
+        <T variant="footnote" numberOfLines={2} selectable style={{ fontWeight: "500" }}>
+          {e.name}
         </T>
-        <T variant="footnote" muted numberOfLines={3}>
-          {item.detail}
-        </T>
-        {item.blocked ? (
-          <T variant="footnote" color={c.warning}>
-            {item.blocked}
-          </T>
-        ) : !item.recommended && item.count > 0 && !may ? (
-          <T variant="footnote" muted>
-            {t("phone.onComputer")}
-          </T>
-        ) : null}
-      </View>
-      <View style={{ alignItems: "flex-end", gap: 1 }}>
-        <T variant="subhead" style={{ fontWeight: "600", fontVariant: ["tabular-nums"] }}>
-          {item.count ? formatBytes(item.bytes) : t("cleanup.items.nothingToRemove")}
-        </T>
-        {amount ? (
+        {e.kept ? (
+          <Row style={{ gap: 4 }}>
+            <Icon name="lock" size={11} color={c.warning} />
+            <T variant="caption" color={c.warning} style={{ flexShrink: 1 }}>
+              {e.kept}
+            </T>
+          </Row>
+        ) : e.modifiedAt ? (
           <T variant="caption" muted>
-            {amount}
+            {formatDistanceToNow(new Date(e.modifiedAt), { addSuffix: true, locale: dateLocale() })}
           </T>
         ) : null}
       </View>
-    </Pressable>
+      <T variant="caption" muted style={[{ fontVariant: ["tabular-nums"] }, e.kept ? { textDecorationLine: "line-through" } : null]}>
+        {formatBytes(e.bytes)}
+      </T>
+    </Row>
   );
 }
 
 function Optimize({ report }: { report: OptimizeReport }) {
   const c = useColors();
   const { t } = useTranslation("settings");
+  const leave = useLeaveSettings();
   const run = useMutation({
     mutationFn: settingsApi.optimize.run,
     onSuccess: (result) => {
@@ -317,13 +386,20 @@ function Optimize({ report }: { report: OptimizeReport }) {
     onError: (err) => Alert.alert(t("cleanup.optimize.error"), errorText(err)),
   });
   const { share, over } = report.context;
-  const { agents, target, dreaming, nextDreamAt } = report.memory;
+  const { agents, target, dreaming, nextDreamAt, countingSince } = report.memory;
   const overLimit = agents.filter((a) => a.chars > target).length;
   const dreamingNow = agents.filter((a) => a.dreaming).length;
   const chars = target.toLocaleString(intlLocale());
+  const counted = countingSince ? Date.parse(report.checkedAt) - Date.parse(countingSince) >= UNUSED_MS : false;
+  const unused = agents.reduce((n, a) => n + a.unused, 0);
   const lines: { text: string; warn: boolean }[] = [
     over ? { text: t("cleanup.optimize.over", { count: over, tokens: `${LARGE_CHAT / 1000}k` }), warn: true } : { text: t("cleanup.optimize.within"), warn: false },
     overLimit ? { text: t("cleanup.optimize.overLimit", { count: overLimit, chars }), warn: true } : { text: t("cleanup.optimize.withinLimit", { chars }), warn: false },
+    ...(counted
+      ? [unused ? { text: t("cleanup.optimize.unusedLine", { count: unused }), warn: true } : { text: t("cleanup.optimize.allUsed"), warn: false }]
+      : countingSince
+        ? [{ text: t("cleanup.optimize.counting", { date: new Date(countingSince).toLocaleDateString(intlLocale(), { month: "short", day: "numeric" }) }), warn: false }]
+        : []),
     dreamingNow
       ? { text: t("cleanup.optimize.dreamingNow", { count: dreamingNow }), warn: false }
       : dreaming && nextDreamAt
@@ -343,6 +419,32 @@ function Optimize({ report }: { report: OptimizeReport }) {
           </Row>
         ))}
       </Group>
+      {report.context.largest.length ? (
+        <Group title={t("cleanup.optimize.fullest")}>
+          {report.context.largest.map((chat) => (
+            <LinkRow
+              key={chat.conversationId}
+              title={chat.title}
+              detail={chat.agentName}
+              value={`${Math.round(chat.tokens / 1000)}k`}
+              onPress={() => leave(() => router.push({ pathname: "/chat/[id]", params: { id: chat.conversationId } }))}
+            />
+          ))}
+        </Group>
+      ) : null}
+      {agents.length ? (
+        <Group title={t("cleanup.optimize.byAgent")}>
+          {agents.map((a) => (
+            <LinkRow
+              key={a.agentId}
+              title={a.name}
+              detail={[t("cleanup.optimize.notes", { count: a.notes }), a.unused > 0 ? t("cleanup.optimize.unused", { count: a.unused }) : null].filter(Boolean).join(" · ")}
+              value={`${(a.chars / 1000).toFixed(1)}k`}
+              onPress={() => leave(() => router.push({ pathname: "/memory/[id]", params: { id: a.agentId } }))}
+            />
+          ))}
+        </Group>
+      ) : null}
       <Button
         title={run.isPending ? t("cleanup.optimize.running") : t("cleanup.optimize.now")}
         icon="sparkles"
@@ -404,9 +506,34 @@ const styles = StyleSheet.create({
   item: {
     flexDirection: "row",
     alignItems: "flex-start",
-    gap: space.md,
+    gap: space.sm,
     paddingHorizontal: space.lg,
     paddingVertical: 12,
+  },
+  itemMain: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: space.md,
+  },
+  amount: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    maxWidth: "42%",
+  },
+  entries: {
+    marginHorizontal: space.md,
+    marginBottom: space.md,
+    paddingVertical: 4,
+    borderRadius: radius.md,
+    borderCurve: "continuous",
+  },
+  entry: {
+    gap: space.md,
+    paddingHorizontal: space.md,
+    paddingVertical: 8,
   },
   check: {
     width: 22,

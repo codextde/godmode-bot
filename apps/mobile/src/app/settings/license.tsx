@@ -1,13 +1,14 @@
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { Stack } from "expo-router";
-import { RefreshControl, ScrollView, StyleSheet } from "react-native";
+import { Linking, RefreshControl, StyleSheet } from "react-native";
 import { useTranslation } from "react-i18next";
-import { formatBytes, type CloudBilling, type CloudSubscriptionStatus, type LicensePlan, type LicenseState, type LicenseStatus } from "@godmode/shared";
+import { formatBytes, LICENSE_SITE, type CloudBilling, type CloudSubscriptionStatus, type LicensePlan, type LicenseState, type LicenseStatus } from "@godmode/shared";
 import { useFullAccess } from "@/components/admin";
 import { CloseButton } from "@/components/close-button";
-import { Group } from "@/components/form";
+import { Group, LinkRow } from "@/components/form";
 import { LicenseActions } from "@/components/license-actions";
+import { SettingsScroll } from "@/components/settings-scroll";
 import { QueryState } from "@/components/settings-state";
 import { InfoRow } from "@/components/status-rows";
 import { hours, UsageCard } from "@/components/usage-chart";
@@ -70,7 +71,7 @@ export default function License() {
   const pull = usePullRefresh(() => Promise.all([license.refetch(), usage.refetch(), queryClient.invalidateQueries({ queryKey: ["usage"] }), cloud.refetch(), linked ? billing.refetch() : null]));
 
   return (
-    <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content} refreshControl={<RefreshControl {...pull} />}>
+    <SettingsScroll contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content} refreshControl={<RefreshControl {...pull} />}>
       <Stack.Screen options={{ title: t("license.title") }} />
       <CloseButton />
       <QueryState query={license} icon="key" errorTitle={t("license.loadFailed")}>
@@ -93,10 +94,14 @@ export default function License() {
             <UsageCard />
 
             {billing.data ? <CloudPlanGroup billing={billing.data} /> : null}
+
+            <Group title={t("license.partners.title")} footer={t("license.partners.description")}>
+              <LinkRow icon="gift" title={t("license.partners.open")} chevron={false} onPress={() => void Linking.openURL(`${LICENSE_SITE}/partners?utm_source=app&utm_medium=settings`).catch(() => undefined)} />
+            </Group>
           </>
         )}
       </QueryState>
-    </ScrollView>
+    </SettingsScroll>
   );
 }
 

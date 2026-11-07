@@ -297,7 +297,7 @@ export function forgetLocalCopies(slot?: string) {
 export async function shareFile(file: File, text?: string): Promise<void> {
   if (process.env.EXPO_OS === "ios") await Share.share({ url: file.uri });
   else if (text !== undefined) await Share.share({ message: text, title: file.name });
-  else await saveOrShareFile(file);
+  else await saveOrShareFile(file, /\.pdf$/i.test(file.name) ? "application/pdf" : undefined);
 }
 
 /** The headings of a Markdown text (levels 1 to 3), with their lines; what is in a code fence isn't one. */

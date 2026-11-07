@@ -7,7 +7,7 @@ import type { HeaderAction, HeaderMenuItem } from "./header-actions";
 import { MenuSheet } from "./header-actions";
 import { Icon, sfSymbol, type IconName } from "./icon";
 import { Hairline, T, tap } from "./ui";
-import { radius, space, useColors } from "@/lib/theme";
+import { alpha, radius, space, useColors } from "@/lib/theme";
 
 export interface FilterOption {
   value: string;
@@ -81,20 +81,32 @@ export function FilterToolbar({ actions = [], filters, menu = [] }: { actions?: 
       </Stack.Toolbar>
     );
   }
+  const ripple = { color: alpha(c.text, 0.12), borderless: true, radius: 20 };
   const render = () => (
     <View style={{ flexDirection: "row", gap: 4 }}>
       {shown.length > 0 && (
-        <Pressable accessibilityRole="button" accessibilityLabel={t("filterToolbar.filter")} hitSlop={8} onPress={() => setOpen("filters")} style={{ padding: 8 }}>
+        <Pressable accessibilityRole="button" accessibilityLabel={t("filterToolbar.filter")} android_ripple={ripple} hitSlop={8} onPress={() => setOpen("filters")} style={{ padding: 8 }}>
           <Icon name={active ? "filterOn" : "filter"} size={22} color={active ? c.brandStrong : c.text} />
         </Pressable>
       )}
       {actions.map((a) => (
-        <Pressable key={a.label} accessibilityRole="button" accessibilityLabel={a.label} hitSlop={8} onPress={a.onPress} style={{ padding: 8 }}>
+        <Pressable
+          key={a.label}
+          accessibilityRole="button"
+          accessibilityLabel={a.label}
+          android_ripple={ripple}
+          hitSlop={8}
+          onPress={() => {
+            tap();
+            a.onPress();
+          }}
+          style={{ padding: 8 }}
+        >
           <Icon name={a.icon} size={22} color={a.tint ?? c.text} />
         </Pressable>
       ))}
       {menu.length > 0 && (
-        <Pressable accessibilityRole="button" accessibilityLabel={t("headerActions.more")} hitSlop={8} onPress={() => setOpen("menu")} style={{ padding: 8 }}>
+        <Pressable accessibilityRole="button" accessibilityLabel={t("headerActions.more")} android_ripple={ripple} hitSlop={8} onPress={() => setOpen("menu")} style={{ padding: 8 }}>
           <Icon name="more" size={22} color={c.text} />
         </Pressable>
       )}

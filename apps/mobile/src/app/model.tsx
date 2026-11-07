@@ -1,11 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
 import { useLocalSearchParams } from "expo-router";
 import { useState } from "react";
-import { Alert, Pressable, ScrollView, StyleSheet, Switch, View } from "react-native";
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Switch, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { effortLabel, ULTRACODE_HINT, ULTRACODE_HINT_DE, type ClaudeModel, type ConversationWithMessages, type Effort } from "@godmode/shared";
 import { Icon } from "@/components/icon";
 import { Card, Hairline, T, tap } from "@/components/ui";
+import { RowPressable } from "@/components/row-pressable";
 import { api, errorText, type ModelChoicePatch } from "@/lib/api";
 import { fetchConversation } from "@/lib/chat-cache";
 import { NO_CHOICE, useEffectiveModel, useNewChatChoice, type ModelChoice } from "@/lib/composer";
@@ -34,6 +35,7 @@ export default function ModelSheet() {
     : newChoice;
   const { catalog, base, baseEffort, baseUltracode, anyUltracode, current, effort, ultracode } = useEffectiveModel(agent, choice);
   const [showOlder, setShowOlder] = useState(!current.latest);
+  const [reloading, setReloading] = useState(false);
 
   const models = catalog.data?.models ?? [];
   const listed = models.some((m) => m.id === current.id) ? models : [current, ...models];
@@ -55,6 +57,18 @@ export default function ModelSheet() {
       if (prev) queryClient.setQueryData<ConversationWithMessages>(key, (old) => (old ? { ...old, model: prev.model, effort: prev.effort, ultracode: prev.ultracode } : old));
       Alert.alert(t("model.switchFailed"), errorText(err));
     });
+  };
+
+  // New models show up here without waiting for the computer to look again.
+  const reload = async () => {
+    tap();
+    setReloading(true);
+    try {
+      queryClient.setQueryData(qk.models, await api.models(true));
+    } catch (err) {
+      Alert.alert(t("model.reloadFailed"), errorText(err));
+    }
+    setReloading(false);
   };
 
   const pickModel = (m: ClaudeModel) => change({ model: m.id === base.id ? null : m.id });
@@ -80,14 +94,14 @@ export default function ModelSheet() {
         {older.length > 0 ? (
           <>
             <Hairline inset={space.lg} />
-            <Pressable
+            <RowPressable
               accessibilityRole="button"
               accessibilityState={{ expanded: showOlder }}
               onPress={() => {
                 tap();
                 setShowOlder((v) => !v);
               }}
-              style={({ pressed }) => [styles.older, pressed && { backgroundColor: c.sunken }]}
+              style={styles.older}
             >
               <T variant="subhead" muted style={{ flex: 1 }}>
                 {t("model.older")}
@@ -96,7 +110,7 @@ export default function ModelSheet() {
                 {older.length}
               </T>
               <Icon name="down" size={12} weight="semibold" color={c.textFaint} style={{ transform: [{ rotate: showOlder ? "180deg" : "0deg" }] }} />
-            </Pressable>
+            </RowPressable>
             {showOlder
               ? older.map((m) => (
                   <View key={m.id}>
@@ -142,7 +156,13 @@ export default function ModelSheet() {
             <T variant="headline" style={{ fontSize: 15, flex: 1 }}>
               Ultracode
             </T>
-            <Switch value={ultracode} onValueChange={pickUltracode} accessibilityLabel="Ultracode" />
+            <Switch
+              value={ultracode}
+              onValueChange={pickUltracode}
+              accessibilityLabel="Ultracode"
+              trackColor={process.env.EXPO_OS === "android" ? { true: c.brand, false: c.sunken } : undefined}
+              thumbColor={process.env.EXPO_OS === "android" ? (ultracode ? "#FFFFFF" : c.textFaint) : undefined}
+            />
           </View>
           <T variant="footnote" muted style={{ marginTop: space.sm }}>
             {currentLanguage() === "de" ? ULTRACODE_HINT_DE : ULTRACODE_HINT}
@@ -159,6 +179,17 @@ export default function ModelSheet() {
         <T variant="caption" muted style={{ flex: 1 }} numberOfLines={1}>
           {catalog.data?.source === "claude" ? `Claude Code ${catalog.data.claudeVersion ?? ""}`.trim() : t("model.builtIn")}
         </T>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t("model.reload")}
+          accessibilityState={{ busy: reloading, disabled: reloading }}
+          disabled={reloading}
+          hitSlop={10}
+          onPress={() => void reload()}
+          style={({ pressed }) => [styles.reload, pressed && { opacity: 0.5 }]}
+        >
+          {reloading ? <ActivityIndicator size="small" color={c.textFaint} /> : <Icon name="refresh" size={13} color={c.textMuted} />}
+        </Pressable>
         {overridden ? (
           <Pressable accessibilityRole="button" hitSlop={8} onPress={() => change(NO_CHOICE)}>
             <T variant="footnote" style={{ fontWeight: "600" }}>
@@ -175,11 +206,11 @@ function Option({ model, selected, isDefault, compact, onPress }: { model: Claud
   const c = useColors();
   const { t } = useTranslation("settings");
   return (
-    <Pressable
+    <RowPressable
       accessibilityRole="button"
       accessibilityState={{ selected }}
       onPress={onPress}
-      style={({ pressed }) => [styles.option, { paddingVertical: compact ? 10 : space.md }, pressed && { backgroundColor: c.sunken }]}
+      style={[styles.option, { paddingVertical: compact ? 10 : space.md }]}
     >
       <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
         <View style={styles.optionTitle}>
@@ -201,7 +232,7 @@ function Option({ model, selected, isDefault, compact, onPress }: { model: Claud
         ) : null}
       </View>
       {selected ? <Icon name="check" size={16} color={c.brandStrong} weight="bold" /> : null}
-    </Pressable>
+    </RowPressable>
   );
 }
 
@@ -318,5 +349,11 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
+  },
+  reload: {
+    width: 22,
+    height: 22,
+    alignItems: "center",
+    justifyContent: "center",
   },
 });

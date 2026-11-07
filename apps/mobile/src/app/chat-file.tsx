@@ -4,6 +4,7 @@ import { Stack, useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, useWindowDimensions, View } from "react-native";
 import { useTranslation } from "react-i18next";
+import { revealItem } from "@/components/file-actions";
 import { HeaderActions } from "@/components/header-actions";
 import { Markdown } from "@/components/markdown";
 import { PdfPage } from "@/components/pdf-page";
@@ -11,6 +12,7 @@ import { ErrorState, T } from "@/components/ui";
 import FilePreview from "./settings/files/preview";
 import { forgetLocalCopies, servedCopy, shareFile } from "@/lib/agent-files";
 import { errorText } from "@/lib/api";
+import { FILES_SAVE_TO_FOLDER } from "@/lib/save-file";
 import { fonts, space, useColors } from "@/lib/theme";
 
 const MAX_SHOWN = 200_000;
@@ -25,8 +27,8 @@ export default function ChatFile() {
 
 function ServedFile() {
   const c = useColors();
-  const { t } = useTranslation("files");
-  const { url, kind, name } = useLocalSearchParams<{ url: string; kind: Kind; name: string }>();
+  const { t } = useTranslation(["files", "common"]);
+  const { url, kind, name, computerPath } = useLocalSearchParams<{ url: string; kind: Kind; name: string; computerPath?: string }>();
   const { width, height } = useWindowDimensions();
   const [slot] = useState(() => Math.random().toString(36).slice(2, 10));
   useEffect(() => () => forgetLocalCopies(slot), [slot]);
@@ -47,7 +49,16 @@ function ServedFile() {
   return (
     <>
       <Stack.Screen options={{ title: name, headerLargeTitleEnabled: false }} />
-      <HeaderActions actions={copy.data ? [{ icon: "share", label: t("preview.share"), onPress: () => !share.isPending && share.mutate() }] : []} />
+      <HeaderActions
+        actions={
+          copy.data
+            ? [FILES_SAVE_TO_FOLDER && copy.data.text === null
+                ? { icon: "download", label: t("common:actions.save"), onPress: () => !share.isPending && share.mutate() }
+                : { icon: "share", label: t("preview.share"), onPress: () => !share.isPending && share.mutate() }]
+            : []
+        }
+        menu={computerPath ? [revealItem(computerPath)] : []}
+      />
       {copy.isLoading ? (
         <View style={styles.center}>
           <ActivityIndicator />

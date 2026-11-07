@@ -3,14 +3,15 @@ import { router } from "expo-router";
 import { useState } from "react";
 import { ActivityIndicator, Alert, Switch } from "react-native";
 import { useTranslation } from "react-i18next";
-import type { Mod } from "@godmode/shared";
+import { modState, type Mod } from "@godmode/shared";
 import { useFullAccess } from "@/components/admin";
 import { Group, LinkRow } from "@/components/form";
 import { HeaderActions } from "@/components/header-actions";
 import { ListRow, ReadonlyList } from "@/components/readonly-list";
-import { pluginIcon } from "@/components/plugin-parts";
+import { pluginIcon, pluginOrigin } from "@/components/plugin-parts";
 import { Badge, tap } from "@/components/ui";
 import { errorText } from "@/lib/api";
+import { useAgents } from "@/lib/hooks";
 import { ik, integrationsApi, usePlugins } from "@/lib/integrations";
 import { queryClient } from "@/lib/query";
 import { useSettings } from "@/lib/setup";
@@ -28,6 +29,7 @@ export default function Plugins() {
   const c = useColors();
   const admin = !!useFullAccess().fullAccess;
   const list = usePlugins();
+  const agents = useAgents();
   const settings = useSettings();
   const off = settings.data?.plugins.enabled === false;
   const [busy, setBusy] = useState<string | null>(null);
@@ -90,7 +92,7 @@ export default function Plugins() {
       emptyTitle={t("plugins.emptyTitle")}
       emptyBody={admin ? t("tools:pluginAdmin.emptyBody") : t("plugins.emptyBody")}
       failedTitle={t("plugins.loadFailed")}
-      extraData={`${admin}-${busy}`}
+      extraData={`${admin}-${busy}-${agents.data?.length}`}
       header={
         <>
           {admin ? (
@@ -110,12 +112,14 @@ export default function Plugins() {
       }
       renderRow={(m) => {
         const name = m.title || m.name;
+        const broken = modState(m) === "broken";
+        const fixing = <Badge label={t("tools:pluginAdmin.state.broken")} tone="danger" />;
         const trailing =
           busy === m.id || (busy === "updates" && m.source) ? (
             <ActivityIndicator size="small" color={c.textMuted} />
           ) : admin ? (
             <>
-              {hasUpdate(m) ? <Badge label={t("tools:plugins.updateBadge")} tone="warning" /> : m.needsReview ? <Badge label={t("plugins.draft")} tone="warning" /> : null}
+              {broken ? fixing : hasUpdate(m) ? <Badge label={t("tools:plugins.updateBadge")} tone="warning" /> : m.needsReview ? <Badge label={t("plugins.draft")} tone="warning" /> : null}
               <Switch
                 accessibilityLabel={t("tools:list.switch", { name })}
                 value={m.enabled && !off}
@@ -129,16 +133,21 @@ export default function Plugins() {
               />
             </>
           ) : m.enabled && !off ? (
-            <Switch
-              accessibilityLabel={t("plugins.switchOff", { name })}
-              value
-              onValueChange={(next) => {
-                if (next) return;
-                tap();
-                switchOff.mutate(m);
-              }}
-              trackColor={{ true: c.brand, false: c.sunken }}
-            />
+            <>
+              {broken ? fixing : null}
+              <Switch
+                accessibilityLabel={t("plugins.switchOff", { name })}
+                value
+                onValueChange={(next) => {
+                  if (next) return;
+                  tap();
+                  switchOff.mutate(m);
+                }}
+                trackColor={{ true: c.brand, false: c.sunken }}
+              />
+            </>
+          ) : broken ? (
+            fixing
           ) : (
             <Badge label={m.needsReview ? t("plugins.draft") : t("off")} tone={m.needsReview ? "warning" : "neutral"} />
           );
@@ -147,7 +156,7 @@ export default function Plugins() {
             icon={pluginIcon(m.icon)}
             tint={m.enabled ? c.brandStrong : undefined}
             title={name}
-            lines={[m.description, m.source ? [m.source.repo, m.source.version].filter(Boolean).join(" · ") : null]}
+            lines={[m.description, m.source ? [m.source.repo, m.source.version].filter(Boolean).join(" · ") : pluginOrigin(m, agents.data)]}
             lineLimit={2}
             chevron={false}
             trailing={trailing}

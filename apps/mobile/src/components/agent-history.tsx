@@ -8,6 +8,7 @@ import type { Agent, Run, RunStatus } from "@godmode/shared";
 import { Icon, type IconName } from "./icon";
 import { runStatusLabel, TRIGGER_LABEL } from "./run-row";
 import { Card, Hairline, LiveDot, SectionTitle, SkeletonRows, T, tap } from "./ui";
+import { RowPressable } from "./row-pressable";
 import { api, errorText } from "@/lib/api";
 import { formatWork } from "@/lib/desktop-parity";
 import { activityText } from "@/lib/format";
@@ -147,11 +148,11 @@ const HistoryRow = memo(function HistoryRow({ run }: { run: Run }) {
   const error = status === "failed" ? firstLine(run.error) : "";
 
   return (
-    <Pressable
+    <RowPressable
       accessibilityRole="button"
       accessibilityLabel={t("agentHistory.rowLabel", { status: runStatusLabel(status), snippet })}
       onPress={() => openRun(run.id)}
-      style={({ pressed }) => [styles.row, pressed && { backgroundColor: c.sunken }]}
+      style={styles.row}
     >
       <View style={styles.glyph}>
         <RunGlyph status={status} />
@@ -178,7 +179,7 @@ const HistoryRow = memo(function HistoryRow({ run }: { run: Run }) {
         ) : null}
       </View>
       <Icon name="chevron" size={11} color={c.textFaint} />
-    </Pressable>
+    </RowPressable>
   );
 });
 

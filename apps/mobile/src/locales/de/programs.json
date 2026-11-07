@@ -125,7 +125,6 @@
   "memory": {
     "title": "Gedächtnis-Backend",
     "files": "Markdown-Dateien",
-    "filesDetail": "MEMORY.md und ein memory-Ordner pro Agent",
     "claudeMem": "claude-mem",
     "claudeMemDetail": "Durchsuchbares Langzeitgedächtnis über das Plugin claude-mem",
     "claudeMemMissing": "claude-mem ist noch nicht installiert. Bis dahin nutzen Agenten weiter die MEMORY.md."

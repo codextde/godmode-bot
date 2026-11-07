@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
 import { Stack } from "expo-router";
 import { useState } from "react";
-import { Alert, Linking, RefreshControl, ScrollView, StyleSheet, TextInput, View } from "react-native";
+import { Alert, Linking, RefreshControl, StyleSheet, TextInput, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import type { CloudBilling, CloudLinkState, CloudSettings, CloudStatus } from "@godmode/shared";
 import { useFullAccess } from "@/components/admin";
@@ -10,6 +10,7 @@ import { BillingLinks } from "@/components/billing-links";
 import { CloseButton } from "@/components/close-button";
 import { Group, LinkRow, SwitchRow } from "@/components/form";
 import { actionFailed } from "@/components/linking-parts";
+import { SettingsScroll } from "@/components/settings-scroll";
 import { QueryState } from "@/components/settings-state";
 import { InfoRow, ago } from "@/components/status-rows";
 import { Button, EmptyState, T, tap, type Tone } from "@/components/ui";
@@ -46,7 +47,7 @@ export default function Cloud() {
   const pull = usePullRefresh(status.refetch);
 
   return (
-    <ScrollView
+    <SettingsScroll
       contentInsetAdjustmentBehavior="automatic"
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode="interactive"
@@ -67,7 +68,7 @@ export default function Cloud() {
           )
         }
       </QueryState>
-    </ScrollView>
+    </SettingsScroll>
   );
 }
 
@@ -290,10 +291,10 @@ function ManageLinked({ status: s }: { status: CloudStatus }) {
       ) : null}
 
       {!revoked ? (
-        <Group title={t("settings:cloud.access.title")} footer={t("cloud.accessFooter")}>
-          <SwitchRow icon="link" title={t("settings:cloud.access.link")} detail={t("cloud.linkDetail")} value={s.settings.enabled} onChange={toggle("enabled")} />
+        <Group title={t("settings:cloud.access.title")}>
+          <SwitchRow icon="link" title={t("settings:cloud.access.link")} value={s.settings.enabled} onChange={toggle("enabled")} />
           <SwitchRow icon="globe" title={t("settings:cloud.access.browser")} detail={t("cloud.browserDetail")} value={s.settings.browserAccess} onChange={toggle("browserAccess")} />
-          <SwitchRow icon="phone" title={t("settings:cloud.access.phones")} detail={t("cloud.phonesDetail")} value={s.settings.phoneAccess} onChange={toggle("phoneAccess")} />
+          <SwitchRow icon="phone" title={t("settings:cloud.access.phones")} value={s.settings.phoneAccess} onChange={toggle("phoneAccess")} />
           <SwitchRow icon="lock" title={t("settings:cloud.access.secrets")} detail={t("cloud.secretsDetail")} value={s.settings.allowSecrets} onChange={toggle("allowSecrets")} />
         </Group>
       ) : null}

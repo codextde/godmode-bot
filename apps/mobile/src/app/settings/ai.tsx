@@ -1,10 +1,11 @@
-import { Stack } from "expo-router";
+import { router, Stack } from "expo-router";
 import { useState } from "react";
-import { ActivityIndicator, ScrollView, StyleSheet, View } from "react-native";
+import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { DEFAULT_AUTO_COMPACT_PERCENT, ULTRACODE_HINT, ULTRACODE_HINT_DE, effortForModel, findModel, type Effort } from "@godmode/shared";
 import { CloseButton } from "@/components/close-button";
-import { FieldRow, Group, PickerRow, SegmentRow, StepperRow, SwitchRow } from "@/components/form";
+import { FieldRow, Group, LinkRow, PickerRow, SegmentRow, StepperRow, SwitchRow } from "@/components/form";
+import { SettingsScroll } from "@/components/settings-scroll";
 import { useModelCatalog } from "@/lib/composer";
 import { t, currentLanguage } from "@/lib/i18n";
 import { EFFORT_SHORT, patchSettings, useSettings } from "@/lib/setup";
@@ -56,7 +57,7 @@ export default function ModelAndLimits() {
   const effort = efforts ? (effortForModel(efforts, r.effort) ?? r.effort) : r.effort;
 
   return (
-    <ScrollView
+    <SettingsScroll
       contentInsetAdjustmentBehavior="automatic"
       keyboardShouldPersistTaps="handled"
       automaticallyAdjustKeyboardInsets
@@ -111,6 +112,19 @@ export default function ModelAndLimits() {
             onCommit={(fallbackModel) => fallbackModel.trim() && void patchSettings({ runner: { fallbackModel: fallbackModel.trim() } })}
           />
         ) : null}
+      </Group>
+
+      <Group>
+        <LinkRow icon="personCircle" title={t("overview.links.accounts")} onPress={() => router.push("/settings/accounts")} />
+        <LinkRow icon="text" title={t("overview.links.instructions")} onPress={() => router.push("/settings/instructions")} />
+        <LinkRow icon="brain" title={t("overview.links.memory")} onPress={() => router.push("/settings/memory")} />
+        <LinkRow icon="waveform" title={t("overview.links.voice")} onPress={() => router.push("/settings/voice")} />
+        <LinkRow
+          icon="review"
+          title={t("overview.links.review")}
+          value={s.review.enabled ? t("common:status.on") : t("common:status.off")}
+          onPress={() => router.push("/settings/review")}
+        />
       </Group>
 
       <Group title={t("ai.work.title")}>
@@ -174,7 +188,7 @@ export default function ModelAndLimits() {
           onChange={(loopRepeats) => void patchSettings({ runner: { loopRepeats } })}
         />
       </Group>
-    </ScrollView>
+    </SettingsScroll>
   );
 }
 

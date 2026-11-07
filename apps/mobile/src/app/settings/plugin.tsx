@@ -1,7 +1,7 @@
-import { formatDistanceToNowStrict } from "date-fns";
+import { format, formatDistanceToNow, formatDistanceToNowStrict } from "date-fns";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
-import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
+import { Alert, Linking, Pressable, RefreshControl, ScrollView, StyleSheet, TextInput, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { modState, modUpdateAvailable, type Mod, type ModProblem, type ModScope } from "@godmode/shared";
 import { CloseButton } from "@/components/close-button";
@@ -11,7 +11,8 @@ import { CharacterAvatar } from "@/components/character";
 import { Group, LinkRow, SwitchRow } from "@/components/form";
 import { HeaderActions } from "@/components/header-actions";
 import { Icon } from "@/components/icon";
-import { PluginAbilities, pluginIcon } from "@/components/plugin-parts";
+import { PluginAbilities, pluginIcon, pluginOrigin, problemTarget } from "@/components/plugin-parts";
+import { CopyButton } from "@/components/secret-parts";
 import { InfoRow } from "@/components/status-rows";
 import { ActionRow } from "@/components/tool-form";
 import { Badge, Button, ErrorState, LoadingState, Row, T, tap, type Tone } from "@/components/ui";
@@ -21,9 +22,15 @@ import { dateLocale } from "@/lib/i18n";
 import { ik, usePlugins } from "@/lib/integrations";
 import { pluginsAdmin, putPlugin } from "@/lib/plugins-admin";
 import { queryClient } from "@/lib/query";
+import { copyPlain } from "@/lib/secrets";
 import { toolsAdmin } from "@/lib/tools-admin";
 import { usePullRefresh } from "@/lib/use-pull-refresh";
-import { radius, space, useColors } from "@/lib/theme";
+import { fonts, radius, space, useColors } from "@/lib/theme";
+
+/** More agents than this: the "Runs for" list gets a search, like the desktop's. */
+const SEARCH_FROM = 6;
+
+const web = (url: string) => void Linking.openURL(url).catch(() => undefined);
 
 const STATE_TONE = { on: "success", off: "neutral", review: "warning", broken: "danger" } as const satisfies Record<ReturnType<typeof modState>, Tone>;
 
@@ -59,6 +66,7 @@ function PluginView({ mod }: { mod: Mod }) {
   const { t } = useTranslation(["tools", "common", "components"]);
   const agents = useAgents();
   const [busy, setBusy] = useState<"check" | "updates" | "upgrade" | "switch" | null>(null);
+  const [agentSearch, setAgentSearch] = useState("");
   const pull = usePullRefresh(() => queryClient.invalidateQueries({ queryKey: ik.plugins }));
   const state = modState(mod);
   const source = mod.source;
@@ -146,6 +154,14 @@ function PluginView({ mod }: { mod: Mod }) {
     patch({ agentIds: ids.includes(agentId) ? ids.filter((x) => x !== agentId) : [...ids, agentId] }, t("pluginAdmin.saveFailed", { title: name }));
   };
   const sorted = [...(agents.data ?? [])].sort((a, b) => Number(b.isDefault) - Number(a.isDefault) || a.name.localeCompare(b.name));
+  const agentQuery = agentSearch.trim().toLowerCase();
+  const agentsShown = agentQuery ? sorted.filter((a) => a.name.toLowerCase().includes(agentQuery)) : sorted;
+  const paths = Object.keys(mod.files);
+  const openProblem = (where: string) => {
+    const target = source ? null : problemTarget(where, paths);
+    if (!target) return undefined;
+    return () => router.push({ pathname: "/settings/plugin-code", params: { id: mod.id, file: target.path, ...(target.line ? { line: String(target.line) } : {}) } });
+  };
   const checkedAgo = check ? formatDistanceToNowStrict(new Date(check.checkedAt), { addSuffix: true, locale: dateLocale() }) : null;
   const contents = mod.contents;
 
@@ -159,6 +175,12 @@ function PluginView({ mod }: { mod: Mod }) {
         <T variant="title" style={{ textAlign: "center" }}>
           {name}
         </T>
+        <Row style={{ gap: 4, justifyContent: "center" }}>
+          <T variant="caption" muted numberOfLines={1} selectable style={{ fontFamily: fonts.mono, flexShrink: 1 }}>
+            {mod.name}
+          </T>
+          <CopyButton label={t("pluginAdmin.copyName")} copy={() => copyPlain(mod.name)} />
+        </Row>
         <Row style={{ gap: 6, justifyContent: "center", flexWrap: "wrap" }}>
           <Badge label={t(`pluginAdmin.state.${state}`)} tone={STATE_TONE[state]} />
           {modUpdateAvailable(mod) ? <Badge label={t("plugins.updateBadge")} tone="warning" dot={false} /> : null}
@@ -183,11 +205,32 @@ function PluginView({ mod }: { mod: Mod }) {
         <SwitchRow icon="puzzle" title={t("pluginAdmin.on")} value={mod.enabled} disabled={busy === "switch"} onChange={toggle} />
       </Group>
 
-      <Group title={t("pluginAdmin.runsFor")} footer={mod.scope === "agents" && mod.agentIds.length === 0 ? t("pluginAdmin.noAgentYet") : mod.scope === "all" ? t("pluginAdmin.everyAgentHint") : undefined}>
+      <Group title={t("pluginAdmin.runsFor")} footer={mod.scope === "agents" && mod.agentIds.length === 0 ? t("pluginAdmin.noAgentYet") : undefined}>
         <ScopeRow title={t("pluginAdmin.everyAgent")} selected={mod.scope === "all"} onPress={() => setScope("all")} />
         <ScopeRow title={t("pluginAdmin.onlyThese")} selected={mod.scope === "agents"} onPress={() => setScope("agents")} />
+        {mod.scope === "agents" && sorted.length > SEARCH_FROM ? (
+          <View style={styles.search}>
+            <Icon name="search" size={14} color={c.textMuted} />
+            <TextInput
+              accessibilityLabel={t("pluginAdmin.searchAgents")}
+              value={agentSearch}
+              onChangeText={setAgentSearch}
+              placeholder={t("pluginAdmin.searchAgents")}
+              placeholderTextColor={c.textFaint}
+              autoCorrect={false}
+              autoCapitalize="none"
+              returnKeyType="search"
+              style={[styles.searchInput, { color: c.text }]}
+            />
+          </View>
+        ) : null}
+        {mod.scope === "agents" && agentQuery && !agentsShown.length ? (
+          <T variant="subhead" muted style={styles.noAgents}>
+            {t("pluginAdmin.noAgents")}
+          </T>
+        ) : null}
         {mod.scope === "agents"
-          ? sorted.map((a) => (
+          ? agentsShown.map((a) => (
               <Pressable
                 key={a.id}
                 accessibilityRole="checkbox"
@@ -239,16 +282,7 @@ function PluginView({ mod }: { mod: Mod }) {
 
       <PluginAbilities mod={mod} />
 
-      {source ? (
-        <Group title={t("pluginAdmin.version")} footer={source.checkError ?? undefined}>
-          <InfoRow icon="branch" label={source.repo} detail={[source.version ? `v${source.version}` : null, source.commit.slice(0, 7), source.ref].filter(Boolean).join(" · ")} />
-          {modUpdateAvailable(mod) ? (
-            <ActionRow icon="refresh" title={t("plugins.update", { version: source.latestVersion ?? source.latestCommit?.slice(0, 7) })} busy={busy === "upgrade"} onPress={upgrade} />
-          ) : (
-            <ActionRow icon="refresh" title={t("plugins.checkUpdates")} busy={busy === "updates"} onPress={checkUpdates} />
-          )}
-        </Group>
-      ) : null}
+      {source ? <VersionGroup mod={mod} busy={busy} onUpgrade={upgrade} onCheck={checkUpdates} /> : null}
 
       <Group title={t("pluginAdmin.checkTitle")}>
         <InfoRow
@@ -257,12 +291,59 @@ function PluginView({ mod }: { mod: Mod }) {
           detail={check ? [check.claudeVersion ? `Claude Code ${check.claudeVersion}` : null, checkedAgo].filter(Boolean).join(" · ") : t("pluginAdmin.needsClaude")}
           tone={!check ? undefined : check.ok ? "success" : "danger"}
         />
-        {check ? [...check.errors.map((p) => ({ p, error: true })), ...check.warnings.map((p) => ({ p, error: false }))].map(({ p, error }, i) => <ProblemRow key={i} problem={p} error={error} />) : null}
+        {check ? [...check.errors.map((p) => ({ p, error: true })), ...check.warnings.map((p) => ({ p, error: false }))].map(({ p, error }, i) => <ProblemRow key={i} problem={p} error={error} onPress={openProblem(p.where)} />) : null}
         <ActionRow icon="refresh" title={check ? t("pluginAdmin.checkAgain") : t("pluginAdmin.checkNow")} busy={busy === "check"} onPress={checkAgain} />
       </Group>
 
-      <Button title={source ? t("pluginAdmin.uninstall") : t("pluginAdmin.delete")} icon="trash" variant="danger" onPress={remove} />
+      <View style={{ gap: space.md }}>
+        <T variant="footnote" muted style={{ textAlign: "center" }}>
+          {t("pluginAdmin.originAdded", { origin: pluginOrigin(mod, agents.data), date: format(new Date(mod.createdAt), "PP", { locale: dateLocale() }) })}
+        </T>
+        <Button title={source ? t("pluginAdmin.uninstall") : t("pluginAdmin.delete")} icon="trash" variant="danger" onPress={remove} />
+      </View>
     </ScrollView>
+  );
+}
+
+/** What runs and what is new: the repository, the commit, and what changed when an update waits. */
+function VersionGroup({ mod, busy, onUpgrade, onCheck }: { mod: Mod; busy: string | null; onUpgrade: () => void; onCheck: () => void }) {
+  const { t } = useTranslation("tools");
+  const source = mod.source!;
+  const update = modUpdateAvailable(mod);
+  const github = source.web?.startsWith("https://github.com/") ? source.web : null;
+  const short = source.commit.slice(0, 7);
+  const ago = (iso: string) => formatDistanceToNow(new Date(iso), { addSuffix: true, locale: dateLocale() });
+  const follows = source.ref
+    ? source.path
+      ? t("pluginAdmin.versionPanel.followsRefFolder", { ref: source.ref, repo: source.repo, path: source.path })
+      : t("pluginAdmin.versionPanel.followsRef", { ref: source.ref, repo: source.repo })
+    : source.path
+      ? t("pluginAdmin.versionPanel.followsDefaultFolder", { repo: source.repo, path: source.path })
+      : t("pluginAdmin.versionPanel.followsDefault", { repo: source.repo });
+  const status = update
+    ? [t("pluginAdmin.versionPanel.updateReady"), source.latestVersion && source.latestVersion !== source.version ? source.latestVersion : null, source.latestCommit?.slice(0, 7)].filter(Boolean).join(" · ")
+    : source.checkError
+      ? t("pluginAdmin.versionPanel.checkError", { error: source.checkError })
+      : source.checkedAt
+        ? t("pluginAdmin.versionPanel.upToDateLooked", { ago: ago(source.checkedAt) })
+        : t("pluginAdmin.versionPanel.notLookedYet");
+  const installed = source.installedAt ? t("pluginAdmin.versionPanel.installedAgo", { ago: ago(source.installedAt) }) : undefined;
+  return (
+    <Group title={t("pluginAdmin.version")} footer={follows}>
+      {github ? (
+        <LinkRow icon="branch" title={source.version ? `v${source.version} · ${short}` : short} detail={installed} chevron={false} onPress={() => web(`${github}/commit/${source.commit}`)} />
+      ) : (
+        <InfoRow icon="branch" label={source.version ? `v${source.version} · ${short}` : short} detail={installed} />
+      )}
+      {source.web ? <LinkRow icon="external" title={t("pluginAdmin.versionPanel.viewRepo")} detail={source.repo} chevron={false} onPress={() => web(source.web!)} /> : null}
+      <InfoRow icon={update ? "up" : source.checkError ? "warning" : "checkCircle"} label={status} tone={update ? undefined : source.checkError ? "warning" : undefined} />
+      {update && github ? <LinkRow icon="doc" title={t("pluginAdmin.versionPanel.whatChanged")} chevron={false} onPress={() => web(`${github}/compare/${source.commit}...${source.latestCommit}`)} /> : null}
+      {update ? (
+        <ActionRow icon="refresh" title={t("plugins.update", { version: source.latestVersion ?? source.latestCommit?.slice(0, 7) })} busy={busy === "upgrade"} onPress={onUpgrade} />
+      ) : (
+        <ActionRow icon="refresh" title={t("plugins.checkUpdates")} busy={busy === "updates"} onPress={onCheck} />
+      )}
+    </Group>
   );
 }
 
@@ -286,20 +367,35 @@ function ScopeRow({ title, selected, onPress }: { title: string; selected: boole
   );
 }
 
-function ProblemRow({ problem, error }: { problem: ModProblem; error: boolean }) {
+function ProblemRow({ problem, error, onPress }: { problem: ModProblem; error: boolean; onPress?: () => void }) {
   const c = useColors();
+  const { t } = useTranslation("tools");
   return (
-    <View style={[styles.row, { alignItems: "flex-start" }]}>
+    <Pressable
+      disabled={!onPress}
+      accessibilityRole={onPress ? "link" : undefined}
+      accessibilityLabel={onPress ? t("pluginAdmin.openProblem", { where: problem.where }) : undefined}
+      onPress={
+        onPress
+          ? () => {
+              tap();
+              onPress();
+            }
+          : undefined
+      }
+      style={({ pressed }) => [styles.row, { alignItems: "flex-start" }, pressed && { backgroundColor: c.sunken }]}
+    >
       <Icon name="warning" size={14} color={error ? c.danger : c.warning} />
       <View style={{ flex: 1, gap: 2 }}>
-        <T variant="caption" muted style={{ fontWeight: "600" }}>
+        <T variant="caption" muted={!onPress} color={onPress ? c.brandStrong : undefined} style={{ fontWeight: "600" }}>
           {problem.where}
         </T>
-        <T variant="footnote" selectable>
+        <T variant="footnote" selectable={!onPress}>
           {problem.message}
         </T>
       </View>
-    </View>
+      {onPress ? <Icon name="chevron" size={11} color={c.textFaint} /> : null}
+    </Pressable>
   );
 }
 
@@ -337,6 +433,24 @@ const styles = StyleSheet.create({
     gap: space.md,
     minHeight: 48,
     paddingHorizontal: space.lg,
+    paddingVertical: 10,
+  },
+  search: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.sm,
+    minHeight: 44,
+    paddingLeft: space.xl + space.md,
+    paddingRight: space.lg,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 15,
+    paddingVertical: 0,
+  },
+  noAgents: {
+    paddingLeft: space.xl + space.md,
+    paddingRight: space.lg,
     paddingVertical: 10,
   },
 });

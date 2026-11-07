@@ -47,11 +47,8 @@
   "scope": {
     "title": "Available to",
     "global": "Every agent",
-    "globalHint": "In every workspace",
     "workspace": "One workspace",
-    "workspaceHint": "Its agents only",
     "agent": "One agent",
-    "agentHint": "Only that agent",
     "which": "Workspace",
     "whichAgent": "Agent"
   },
@@ -91,7 +88,7 @@
     "headerValuePlaceholder": "e.g. Bearer <token>",
     "addVariable": "Add variable",
     "addHeader": "Add header",
-    "secretsHint": "Values are encrypted in your vault and never shown again; you can only replace them.",
+    "secretsHint": "Encrypted in your vault and never shown again.",
     "enabled": "Enabled",
     "test": "Test connection",
     "saveAndTest": "Save and test",
@@ -101,7 +98,9 @@
     "noTools": "The server started but didn't report any tools.",
     "testFailed": "The server didn't respond correctly",
     "unknownError": "Unknown error",
-    "managedFooter": "Set up through Composio. Its apps are managed in Composio."
+    "managedFooter": "Managed in Composio.",
+    "quickAdd": "Quick add",
+    "customServer": "Custom server"
   },
   "api": {
     "add": "Add API tool",
@@ -154,7 +153,6 @@
   },
   "presets": {
     "custom": "Any other API",
-    "customTagline": "Your key, its address and docs",
     "getKeyAt": "Get a key at {{site}}",
     "gemini": {
       "tagline": "Images with Google Gemini",
@@ -391,7 +389,6 @@
     "everyAgent": "Every agent",
     "onlyThese": "Only these agents",
     "noAgentYet": "No agent yet: nobody runs this plugin until you pick one.",
-    "everyAgentHint": "Every agent's runs load this plugin, the agents you add later too.",
     "options": "Options",
     "code": {
       "fileTooLarge": "{{path}} is larger than {{kb}} kB.",
@@ -470,7 +467,9 @@
       "range": "{{min}} to {{max}}",
       "entry": "{{label}}, entry {{n}}",
       "addEntry": "Add entry",
-      "removeEntry": "Remove entry {{n}}"
+      "removeEntry": "Remove entry {{n}}",
+      "browse": "Browse",
+      "useFolder": "Use folder"
     },
     "install": {
       "title": "Install from GitHub",
@@ -492,15 +491,36 @@
       "loadFailed": "Couldn't load the featured plugins",
       "needs": "needs {{list}}",
       "install": "Install",
-      "confirmTitle": "Install {{title}}?"
+      "confirmTitle": "Install {{title}}?",
+      "byAuthor": "by {{author}}",
+      "whatItDoes": "What it does",
+      "tryInChat": "Try it in a chat",
+      "needsOnComputer": "Needs on this computer",
+      "missingHint": "The plugin tells the agent when something is missing; the agent can install it for you.",
+      "warning": "Godmode downloads it from GitHub and checks it with Claude Code before it runs. It works with your agents' access and starts programs of its own on this computer.",
+      "warningLicense": "Godmode downloads it from GitHub and checks it with Claude Code before it runs. It works with your agents' access and starts programs of its own on this computer · {{license}} licence.",
+      "viewOnGitHub": "View on GitHub",
+      "installPlugin": "Install plugin",
+      "open": "Details of {{title}}"
     },
     "gallery": {
       "title": "Made by Godmode",
-      "footer": "Small guardrail, privacy and workflow plugins that run inside every turn. Read the code of any of them after adding it.",
+      "footer": "Read the code of any of them before you add it.",
       "loadFailed": "Couldn't load the gallery",
       "add": "Add",
       "added": "Added",
-      "addFailed": "Couldn't add the plugin"
+      "addFailed": "Couldn't add the plugin",
+      "empty": "The gallery is empty on this version of Godmode.",
+      "secretOption": "A secret you enter after adding the plugin.",
+      "default": "Default: {{value}}",
+      "noDefault": "No default.",
+      "alreadyAdded": "You already added this plugin.",
+      "setAfterAdding": "You set its options and who it runs for after adding it.",
+      "addPlugin": "Add plugin",
+      "code": "Code",
+      "options": "Options",
+      "file": "File",
+      "allCategories": "All"
     },
     "categories": {
       "guardrails": "Guardrails",
@@ -508,6 +528,59 @@
       "insight": "Insight",
       "workflow": "Workflow"
     },
-    "codeTitle": "Code"
+    "codeTitle": "Code",
+    "askGodmode": "Ask Godmode to write one",
+    "askPrompt": "Write a Claude Code plugin for Godmode that ",
+    "origin": {
+      "installedBy": "Installed by {{name}}",
+      "installedByAgent": "Installed by an agent",
+      "installedFromGitHub": "Installed from GitHub",
+      "installedFromRepo": "Installed from its repository",
+      "template": "Made by Godmode",
+      "imported": "Imported",
+      "draftedBy": "Drafted by {{name}}",
+      "draftedByAgent": "Drafted by an agent",
+      "yours": "Written by you"
+    },
+    "originAdded": "{{origin}} · added {{date}}",
+    "copyName": "Copy the plugin name",
+    "searchAgents": "Search agents…",
+    "noAgents": "No agents found.",
+    "openProblem": "Open {{where}}",
+    "lineN": "Line {{line}}",
+    "versionPanel": {
+      "followsRef": "Follows “{{ref}}” of {{repo}}.",
+      "followsRefFolder": "Follows “{{ref}}” of {{repo}}, folder {{path}}.",
+      "followsDefault": "Follows the default branch of {{repo}}.",
+      "followsDefaultFolder": "Follows the default branch of {{repo}}, folder {{path}}.",
+      "installedAgo": "Installed {{ago}}",
+      "whatChanged": "What changed",
+      "viewRepo": "View repository",
+      "viewCommit": "View commit",
+      "updateReady": "Update ready",
+      "upToDateLooked": "Up to date · looked {{ago}}",
+      "notLookedYet": "Not looked for updates yet.",
+      "checkError": "Couldn't look for updates: {{error}}"
+    },
+    "open": "Open"
+  },
+  "mcpPresets": {
+    "filesystem": {
+      "description": "Read and write files in folders you allow",
+      "note": "Replace the last argument with the absolute folder path(s) agents may access."
+    },
+    "github": {
+      "description": "GitHub's official remote MCP server",
+      "note": "Set the Authorization header to “Bearer <personal access token>”."
+    },
+    "playwright": {
+      "description": "Microsoft Playwright browser automation"
+    },
+    "fetch": {
+      "description": "Fetch web pages and convert them to markdown"
+    },
+    "context7": {
+      "description": "Up-to-date library docs for coding agents"
+    }
   }
 }

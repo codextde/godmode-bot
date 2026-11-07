@@ -25,11 +25,16 @@ function KeyboardRoom({ children }: { children: ReactNode }) {
   return <Animated.View style={[{ flex: 1 }, style]}>{children}</Animated.View>;
 }
 
-/** The root stack's `screenLayout`: the readable column, and on Android room for the keyboard on pushed screens. */
-export function rootScreenLayout(props: { route: { name: string }; options: { presentation?: string }; children: ReactElement }) {
+/** Android moves a sheet up only as far as there is room above it: one that reaches the top stays where it is, under the keyboard. */
+function reachesTop({ presentation, sheetAllowedDetents: detents }: { presentation?: string; sheetAllowedDetents?: unknown }) {
+  return presentation === "formSheet" && Array.isArray(detents) && detents.at(-1) === 1;
+}
+
+/** The root stack's `screenLayout`: the readable column, and on Android room for the keyboard on pushed screens and tall sheets. */
+export function rootScreenLayout(props: { route: { name: string }; options: { presentation?: string; sheetAllowedDetents?: unknown }; children: ReactElement }) {
   const page = readableLayout(props);
   const presentation = props.options.presentation;
   if (process.env.EXPO_OS !== "android" || OWN_KEYBOARD.has(props.route.name)) return page;
-  if (presentation !== undefined && presentation !== "card" && presentation !== "modal") return page;
+  if (presentation !== undefined && presentation !== "card" && presentation !== "modal" && !reachesTop(props.options)) return page;
   return <KeyboardRoom>{page}</KeyboardRoom>;
 }

@@ -13,22 +13,28 @@ import {
   MAX_TASK_LABELS,
   MAX_TASK_TITLE_LENGTH,
   TASK_PRIORITIES,
+  TASK_TYPES,
   type Task,
   type TaskPriority,
+  type TaskType,
 } from "@godmode/shared";
-import { Group, PickerRow } from "@/components/form";
+import { Group, PickerRow, SwitchRow } from "@/components/form";
+import { useFullAccess } from "@/components/full-access";
 import { Icon } from "@/components/icon";
-import { STATUS_META } from "@/components/task-row";
+import { CodeRow } from "@/components/task-repo-fields";
+import { STATUS_META, TYPE_META } from "@/components/task-row";
 import { ErrorState, Hairline, LoadingState, Row, SectionTitle, T, tap } from "@/components/ui";
 import { api, ApiError, errorText, updateDesktopMessage } from "@/lib/api";
-import { dueLabel, isWorking, PRIORITY_LABEL } from "@/lib/desktop-parity";
+import { dueLabel, isWorking, needsConfirm, PRIORITY_LABEL, workspaceRepos } from "@/lib/desktop-parity";
 import { useAgents } from "@/lib/hooks";
 import { dateLocale } from "@/lib/i18n";
 import { qk, queryClient } from "@/lib/query";
+import { agentsFor, useWorkspace } from "@/lib/workspace";
 import { radius, space, useColors } from "@/lib/theme";
 
 const MAX_WAITS = 10;
 const NO_GOAL = "none";
+const NO_AGENT = "none";
 
 interface Draft {
   title: string;
@@ -39,6 +45,11 @@ interface Draft {
   goalId: string | null;
   waitsFor: string[];
   blockedReason: string;
+  type: TaskType;
+  repoUrl: string;
+  baseBranch: string;
+  autoMerge: boolean;
+  agentId: string | null;
 }
 
 const day = (date: Date) => format(date, "yyyy-MM-dd");
@@ -52,13 +63,21 @@ const draftOf = (t: Task): Draft => ({
   goalId: t.goalId,
   waitsFor: (t.waitsFor ?? []).map((w) => w.id),
   blockedReason: t.blockedReason ?? "",
+  type: t.type,
+  repoUrl: t.repoUrl,
+  baseBranch: t.baseBranch,
+  autoMerge: t.autoMerge,
+  agentId: t.agentId,
 });
 
 const same = (a: string[], b: string[]) => a.length === b.length && a.every((x, i) => x === b[i]);
 
 const failure = (err: unknown) => (err instanceof ApiError && err.code === "device_forbidden" ? updateDesktopMessage() : errorText(err));
 
-/** Edit a ticket after it was filed: its words, priority, due day, labels, goal and what it waits for; `block`: put it on Blocked with a reason. */
+/**
+ * Edit a ticket after it was filed: its words, priority, due day, labels, goal and what it waits for; on a full-access
+ * phone also its kind, repository, base branch and auto-merge. `block`: put it on Blocked with a reason.
+ */
 export default function TaskEdit() {
   const c = useColors();
   const { t } = useTranslation(["tasks", "common"]);
@@ -95,7 +114,9 @@ export default function TaskEdit() {
 function Editor({ task, draft, setDraft, blocking }: { task: Task; draft: Draft; setDraft: (d: Draft) => void; blocking: boolean }) {
   const c = useColors();
   const { t } = useTranslation(["tasks", "common"]);
-  const { byId } = useAgents();
+  const { data: agents, byId } = useAgents();
+  const { fullAccess } = useFullAccess();
+  const { workspaces } = useWorkspace();
   const goals = useQuery({
     queryKey: qk.goals(task.workspaceId),
     queryFn: () => api.goals.list(task.workspaceId),
@@ -117,6 +138,11 @@ function Editor({ task, draft, setDraft, blocking }: { task: Task; draft: Draft;
     if (!same(draft.labels, base.labels)) p.labels = draft.labels;
     if (draft.goalId !== base.goalId) p.goalId = draft.goalId;
     if (!same(draft.waitsFor, base.waitsFor)) p.waitsFor = draft.waitsFor;
+    if (draft.type !== base.type) p.type = draft.type;
+    if (draft.repoUrl.trim() !== base.repoUrl) p.repoUrl = draft.repoUrl.trim();
+    if (draft.baseBranch.trim() !== base.baseBranch) p.baseBranch = draft.baseBranch.trim();
+    if (draft.autoMerge !== base.autoMerge) p.autoMerge = draft.autoMerge;
+    if (draft.agentId !== base.agentId) p.agentId = draft.agentId;
     if (blocking) {
       p.status = "blocked";
       p.blockedReason = draft.blockedReason.trim();
@@ -135,13 +161,31 @@ function Editor({ task, draft, setDraft, blocking }: { task: Task; draft: Draft;
     onError: (err) => Alert.alert(t("edit.saveFailed"), failure(err)),
   });
 
+  // A ticket keeps its kind and repository once it started, and its base branch once it has a branch.
+  const started = !!task.conversationId;
+  const defaultRepo = workspaceRepos(workspaces.find((w) => w.id === task.workspaceId), task.projectId)[0];
+  const coding = draft.type === "coding";
+  const reachable = agentsFor(agents ?? [], task.workspaceId).filter((a) => a.enabled || a.id === task.agentId);
   const changed = Object.keys(patch).length > 0;
   const ready = !!draft.title.trim() && changed && !save.isPending;
   const submit = () => {
     if (!ready) return;
     tap();
-    if (!blocking || !isWorking(task)) return save.mutate();
     const agent = task.agentId ? byId.get(task.agentId)?.name : undefined;
+    // A new agent ends what the old one is doing: asked first, like on the computer.
+    if (patch.agentId !== undefined && needsConfirm(task)) {
+      const who = agent ?? t("task.theAgent");
+      const next = patch.agentId ? (byId.get(patch.agentId)?.name ?? t("task.theAgent")) : null;
+      return Alert.alert(
+        next ? t("edit.handOverTitle", { number: task.number, next }) : t("edit.takeOffTitle", { who, number: task.number }),
+        next ? t("edit.handOverText", { who, next, ends: t(isWorking(task) ? "edit.runStops" : task.pause ? "edit.runEnds" : "edit.followupCancelled", { who }) }) : t("edit.takeOffText"),
+        [
+          { text: t("edit.keepAgent", { who }), style: "cancel" },
+          { text: next ? t("edit.handOverConfirm") : t("edit.takeOffConfirm"), style: "destructive", onPress: () => save.mutate() },
+        ],
+      );
+    }
+    if (!blocking || !isWorking(task)) return save.mutate();
     Alert.alert(t("task.stopAgentTitle"), t("edit.blockStops", { agent: agent ?? t("task.theAgent") }), [
       { text: t("task.keepWorking"), style: "cancel" },
       {
@@ -249,6 +293,13 @@ function Editor({ task, draft, setDraft, blocking }: { task: Task; draft: Draft;
 
           <Group>
             <PickerRow
+              icon="person"
+              title={t("common:words.agent")}
+              value={draft.agentId ?? NO_AGENT}
+              options={[{ value: NO_AGENT, label: t("task.unassigned") }, ...reachable.map((a) => ({ value: a.id, label: a.name }))]}
+              onChange={(v) => set({ agentId: v === NO_AGENT ? null : v })}
+            />
+            <PickerRow
               icon="flag"
               title={t("edit.priority")}
               value={draft.priority}
@@ -259,7 +310,7 @@ function Editor({ task, draft, setDraft, blocking }: { task: Task; draft: Draft;
               onChange={(priority) => set({ priority })}
             />
             <DueDate value={draft.dueDate} status={task.status} onChange={(dueDate) => set({ dueDate })} />
-            {activeGoals.length ? (
+            {activeGoals.length && !task.parentId ? (
               <PickerRow
                 icon="target"
                 title={t("edit.goal")}
@@ -268,7 +319,43 @@ function Editor({ task, draft, setDraft, blocking }: { task: Task; draft: Draft;
                 onChange={(v) => set({ goalId: v === NO_GOAL ? null : v })}
               />
             ) : null}
+            {fullAccess && !started ? (
+              <PickerRow
+                icon="tag"
+                title={t("task.type")}
+                value={draft.type}
+                options={TASK_TYPES.map((k) => ({ value: k, label: TYPE_META[k].label }))}
+                onChange={(type) => set({ type })}
+              />
+            ) : null}
           </Group>
+
+          {fullAccess && (coding || task.branch) && !(started && task.branch && !coding) ? (
+            <Group>
+              {!started && !task.repoPath ? (
+                <CodeRow
+                  label={t("task.repository")}
+                  value={draft.repoUrl}
+                  onChange={(repoUrl) => set({ repoUrl })}
+                  placeholder={defaultRepo ? (defaultRepo.url ?? defaultRepo.path) : "https://github.com/acme/app.git"}
+                  keyboardType="url"
+                />
+              ) : null}
+              {!task.branch ? (
+                <CodeRow label={t("repo.baseBranch")} value={draft.baseBranch} onChange={(baseBranch) => set({ baseBranch })} placeholder={defaultRepo?.branch || t("task.defaultBranchShort")} />
+              ) : null}
+              {coding ? (
+                <SwitchRow
+                  icon="merge"
+                  title={t("task.merge")}
+                  detail={draft.autoMerge ? t("task.autoMerge", { branch: draft.baseBranch.trim() || t("task.defaultBranch") }) : t("task.afterReview")}
+                  value={draft.autoMerge}
+                  disabled={task.pullRequest?.state === "merged"}
+                  onChange={(autoMerge) => set({ autoMerge })}
+                />
+              ) : null}
+            </Group>
+          ) : null}
 
           <Labels value={draft.labels} onChange={(labels) => set({ labels })} />
 

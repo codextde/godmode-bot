@@ -12,6 +12,7 @@ import { View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { AppLock } from "@/components/app-lock";
+import { Toast } from "@/components/toast";
 import { PushBridge } from "@/components/push-bridge";
 import { ErrorState } from "@/components/ui";
 import { rootScreenLayout } from "@/components/keyboard-room";
@@ -19,6 +20,7 @@ import { forgetLocalCopies } from "@/lib/agent-files";
 import { api } from "@/lib/api";
 import { loadAppearance, useAppearance } from "@/lib/appearance";
 import { loadLanguage, loadTimeFormat, useLanguage, useTimeFormat } from "@/lib/i18n";
+import { forgetAgentDrafts } from "@/lib/agent-drafts";
 import { forgetQueries, persistQueries, restoreQueries } from "@/lib/persist";
 import { qk, queryClient } from "@/lib/query";
 import { startRealtime } from "@/lib/realtime";
@@ -87,6 +89,7 @@ export default function RootLayout() {
     if (!deviceId) {
       queryClient.clear();
       forgetQueries();
+      forgetAgentDrafts();
       void Image.clearDiskCache().catch(() => undefined);
       return;
     }
@@ -129,6 +132,7 @@ export default function RootLayout() {
                 <Stack.Screen name="calls" options={{ headerTransparent: process.env.EXPO_OS === "ios", title: t("layout.calls") }} />
                 <Stack.Screen name="artifacts" options={{ headerTransparent: process.env.EXPO_OS === "ios", title: t("layout.artifacts") }} />
                 <Stack.Screen name="artifact/[id]" options={{ title: "" }} />
+                <Stack.Screen name="artifact-file" options={{ title: "" }} />
                 <Stack.Screen name="artifact-new" options={{ presentation: "formSheet", sheetAllowedDetents: [0.62, 1], sheetGrabberVisible: true, headerShown: false }} />
                 <Stack.Screen name="call/[id]" options={{ headerTransparent: process.env.EXPO_OS === "ios", title: "" }} />
                 <Stack.Screen name="call-new" options={{ presentation: "formSheet", sheetAllowedDetents: [1], sheetGrabberVisible: true, headerShown: false }} />
@@ -144,6 +148,10 @@ export default function RootLayout() {
                 <Stack.Screen name="chat-move" options={{ presentation: "formSheet", sheetAllowedDetents: [0.62, 1], sheetGrabberVisible: true, headerShown: false }} />
                 <Stack.Screen name="chat-folder" options={{ presentation: "formSheet", sheetAllowedDetents: [1], sheetGrabberVisible: true, headerShown: false }} />
                 <Stack.Screen name="subagent" options={{ presentation: "formSheet", sheetAllowedDetents: [0.75, 1], sheetGrabberVisible: true, headerShown: false }} />
+                <Stack.Screen name="tool-call" options={{ presentation: "formSheet", sheetAllowedDetents: [0.75, 1], sheetGrabberVisible: true, headerShown: false }} />
+                <Stack.Screen name="reply-text" options={{ presentation: "formSheet", sheetAllowedDetents: [0.75, 1], sheetGrabberVisible: true, headerShown: false }} />
+                <Stack.Screen name="chat-screen" options={{ presentation: "formSheet", sheetAllowedDetents: [0.75, 1], sheetGrabberVisible: true, headerShown: false }} />
+                <Stack.Screen name="followup-time" options={{ presentation: "formSheet", sheetAllowedDetents: [0.38, 1], sheetGrabberVisible: true, headerShown: false }} />
                 <Stack.Screen name="workspaces" options={{ presentation: "formSheet", sheetAllowedDetents: [0.5, 1], sheetGrabberVisible: true, headerShown: false }} />
                 <Stack.Screen name="automation/[id]" options={{ headerTransparent: process.env.EXPO_OS === "ios", title: "" }} />
                 <Stack.Screen name="automation-edit" options={{ presentation: "formSheet", sheetAllowedDetents: [1], sheetGrabberVisible: true, headerShown: false }} />
@@ -177,6 +185,7 @@ export default function RootLayout() {
                 <Stack.Screen name="files/delete" options={{ presentation: "formSheet", sheetAllowedDetents: [0.62, 1], sheetGrabberVisible: true, headerShown: false }} />
                 <Stack.Screen name="pull-request" options={{ headerTransparent: process.env.EXPO_OS === "ios", title: "" }} />
                 <Stack.Screen name="pull-request-merge" options={{ presentation: "formSheet", sheetAllowedDetents: [0.62, 1], sheetGrabberVisible: true, headerShown: false }} />
+                <Stack.Screen name="license" options={{ presentation: "formSheet", sheetAllowedDetents: [0.5, 1], sheetGrabberVisible: true, headerShown: false }} />
                 <Stack.Screen name="settings" options={{ presentation: "modal", headerShown: false, contentStyle: { backgroundColor: c.background } }} />
                 <Stack.Screen name="live" options={{ presentation: "fullScreenModal", headerShown: false, contentStyle: { backgroundColor: "#000" } }} />
                 <Stack.Screen name="voice-mode" options={{ presentation: "fullScreenModal", headerShown: false }} />
@@ -187,6 +196,7 @@ export default function RootLayout() {
               <Stack.Screen name="scan" options={{ presentation: "fullScreenModal", headerShown: false, contentStyle: { backgroundColor: "#000" } }} />
               <Stack.Screen name="pair" options={{ presentation: "formSheet", sheetAllowedDetents: [0.6], sheetGrabberVisible: true, headerShown: false }} />
             </Stack>
+            <Toast />
             <AppLock />
           </ThemeProvider>
         </QueryClientProvider>

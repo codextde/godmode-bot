@@ -1,4 +1,5 @@
 import { addDays, addHours, formatDistanceStrict, nextMonday, setHours, startOfHour } from "date-fns";
+import { router } from "expo-router";
 import { useState } from "react";
 import { ActivityIndicator, Alert, Pressable, StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
@@ -8,6 +9,7 @@ import { MenuSheet, type HeaderMenuItem } from "./header-actions";
 import { Icon, type IconName } from "./icon";
 import { openChat } from "./rows";
 import { Card, Hairline, SectionTitle, T, tap } from "./ui";
+import { RowPressable } from "./row-pressable";
 import { ApiError, api, errorText } from "@/lib/api";
 import { whenText } from "@/lib/format";
 import { useNow } from "@/lib/hooks";
@@ -22,7 +24,7 @@ function followupIn(iso: string, now: number): string {
   return formatDistanceStrict(new Date(iso), now, { roundingMethod: "floor", addSuffix: true, locale: dateLocale() });
 }
 
-function refresh(conversationId: string) {
+export function refreshFollowup(conversationId: string) {
   void queryClient.invalidateQueries({ queryKey: qk.followups });
   void queryClient.invalidateQueries({ queryKey: qk.conversation(conversationId) });
   void queryClient.invalidateQueries({ queryKey: qk.conversations, predicate: (q) => q.queryKey[1] !== "detail" });
@@ -43,6 +45,14 @@ function moves(now: Date): { title: string; at: Date }[] {
     { title: t("components:followupRow.moves.tomorrowMorning"), at: morning(addDays(now, 1)) },
     { title: t("components:followupRow.moves.nextMonday"), at: morning(nextMonday(now)) },
     { title: t("components:followupRow.moves.inAWeek"), at: morning(addDays(now, 7)) },
+  ];
+}
+
+/** The menu rows that move a follow-up: the presets, and a date and time of your own. */
+export function followupTimes(conversationId: string, dueAt: string, move: (at: Date) => void): HeaderMenuItem[] {
+  return [
+    ...moves(new Date()).map((m) => ({ icon: "clock" as IconName, title: m.title, onPress: () => move(m.at) })),
+    { icon: "calendar", title: t("components:followupRow.pickTime"), onPress: () => router.push({ pathname: "/followup-time", params: { conversationId, dueAt } }) },
   ];
 }
 
@@ -82,18 +92,18 @@ function FollowupRow({ followup: f, agent, now, working }: { followup: Followup;
       .runNow(id)
       .then((run) => {
         useLive.getState().runStarted(run);
-        refresh(id);
+        refreshFollowup(id);
       })
       .catch(failed(t("followupRow.continueFailed")))
       .finally(() => setBusy(false));
   };
-  const move = (at: Date) => void api.conversations.followup.move(id, at.toISOString()).then(() => refresh(id), failed(t("followupRow.moveFailed")));
+  const move = (at: Date) => void api.conversations.followup.move(id, at.toISOString()).then(() => refreshFollowup(id), failed(t("followupRow.moveFailed")));
   const cancel = () => {
     const before = queryClient.getQueryData<Followup[]>(qk.followups);
     queryClient.setQueryData<Followup[]>(qk.followups, (list) => list?.filter((x) => x.conversationId !== id));
     api.conversations.followup
       .cancel(id)
-      .then(() => refresh(id))
+      .then(() => refreshFollowup(id))
       .catch((err) => {
         queryClient.setQueryData(qk.followups, before);
         failed(t("followupRow.cancelFailed"))(err);
@@ -101,17 +111,17 @@ function FollowupRow({ followup: f, agent, now, working }: { followup: Followup;
   };
   const items: HeaderMenuItem[] = [
     ...(working ? [] : [{ icon: "play" as IconName, title: t("followupRow.continueNow"), onPress: runNow }]),
-    ...moves(new Date()).map((m) => ({ icon: "clock" as IconName, title: m.title, onPress: () => move(m.at) })),
+    ...followupTimes(id, f.dueAt, move),
     { icon: "close", title: t("followupRow.cancel"), destructive: true, onPress: cancel },
   ];
 
   return (
     <>
-      <Pressable
+      <RowPressable
         accessibilityRole="button"
         accessibilityLabel={t("followupRow.rowLabel", { title, when: whenText(f.dueAt) })}
         onPress={() => openChat(id)}
-        style={({ pressed }) => [styles.row, pressed && { backgroundColor: c.sunken }]}
+        style={styles.row}
       >
         <CharacterAvatar agent={agent} size={32} running={working} />
         <View style={{ flex: 1, minWidth: 0, gap: 1 }}>
@@ -155,7 +165,7 @@ function FollowupRow({ followup: f, agent, now, working }: { followup: Followup;
         >
           <Icon name="more" size={14} color={c.text} />
         </Pressable>
-      </Pressable>
+      </RowPressable>
       <MenuSheet items={items} open={menu} onClose={() => setMenu(false)} />
     </>
   );

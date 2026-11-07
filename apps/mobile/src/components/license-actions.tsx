@@ -78,7 +78,7 @@ function ReminderGroup({ email }: { email: string | null }) {
     void run(() => adminApi.license.setReminders({ email: next, locale: currentLanguage() }));
   };
   return (
-    <Group title={t("licenseExtra.remindersTitle")} footer={email ? undefined : t("licenseExtra.reminderFooter")}>
+    <Group title={t("licenseExtra.remindersTitle")}>
       {email ? (
         <InfoRow icon="bell" label={t("licenseExtra.reminderOn", { email })} />
       ) : (

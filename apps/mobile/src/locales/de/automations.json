@@ -119,7 +119,9 @@
       "conditionBody": "Sobald eine Prüfung die Bedingung erfüllt findet, erscheint sie hier.",
       "webhookTitle": "Noch keine Aufrufe",
       "webhookBody": "Ruf die Webhook-URL auf, oder sende ein Test-Ereignis, und es erscheint hier."
-    }
+    },
+    "eventsWait_one": "1 Ereignis wartet, bis der aktuelle Lauf fertig ist",
+    "eventsWait_other": "{{count}} Ereignisse warten, bis der aktuelle Lauf fertig ist"
   },
   "edit": {
     "timezone": "Zeitzone",

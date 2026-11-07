@@ -3,7 +3,6 @@
   "share": "Share",
   "onPrimary": "Change this on {{name}}.",
   "devices": {
-    "aloneBody": "Use Godmode on several computers as one.",
     "add": "Add a computer",
     "addShort": "Add",
     "join": "Join with an invite",
@@ -131,10 +130,7 @@
     "revokedHint": "This computer was removed in the cloud.",
     "openInBrowser": "Open in browser",
     "inBrowserOff": "Turn on the cloud link and browser access to open it in a browser.",
-    "accessFooter": "Changes apply at once.",
-    "linkDetail": "Off pauses browser and phone access without unlinking.",
     "browserDetail": "Anyone signed in to your cloud account can do everything here, including running commands.",
-    "phonesDetail": "Paired phones reach this computer through the cloud when Tailscale isn't there.",
     "secretsDetail": "Also unlocking the vault and seeing saved passwords and keys from the browser.",
     "secretsTitle": "Let secrets through the cloud?",
     "secretsBody": "Whoever is signed in to your cloud account, and the people who run that cloud, could unlock the vault and see your passwords and keys.",

@@ -98,7 +98,7 @@
     "newCode": "Neuer Code",
     "waitingOn": "Wartet auf {{address}}",
     "connected": "{{name}} ist verbunden",
-    "connectedBody": "Es kann Godmode jetzt nutzen. Vollen Zugriff gibst du auf deinem Computer."
+    "connectedBody": "Vollen Zugriff gibst du auf deinem Computer."
   },
   "passwords": {
     "changeTitle": "Godmode-Passwort",
@@ -116,7 +116,7 @@
     "changedBody": "Nutze beim nächsten Entsperren das neue Passwort.",
     "dashboardSetTitle": "Dashboard-Passwort",
     "dashboardChangeTitle": "Dashboard-Passwort",
-    "dashboardFooter": "Für das Browser-Dashboard. Nimm ein anderes als dein Godmode-Passwort.",
+    "dashboardFooter": "Nimm ein anderes als dein Godmode-Passwort.",
     "dashboardSet": "Dashboard-Passwort gesetzt",
     "dashboardChanged": "Dashboard-Passwort geändert",
     "dashboardSessions": "Andere angemeldete Dashboard-Sitzungen müssen sich neu anmelden.",
@@ -145,7 +145,6 @@
       "fillDetail": "Godmode tippt Passwörter und 2FA-Codes in die Seite. Die KI sieht sie nie.",
       "revealDetail": "Die KI darf Passwörter und Codes im Klartext lesen. Jedes Anzeigen wird protokolliert.",
       "agents": "Agenten mit Klartext-Zugriff",
-      "agentsFooter": "Gibst du einem Agenten diesen Zugriff, fragt Godmode nach deinem Godmode-Passwort.",
       "redact": "Geheimnisse schwärzen",
       "icons": "Website-Icons laden",
       "iconsDetail": "Über Googles Icon-Dienst",
@@ -197,7 +196,6 @@
   },
   "calls": {
     "ownerTitle": "Anrufe an dich",
-    "ownerFooter": "Mit Ländervorwahl. Lass sie leer, dann rufen Agenten dich nie an.",
     "number": "Deine Nummer",
     "allow": "Agenten dürfen dich anrufen",
     "invalidNumber": "Diese Telefonnummer kann Godmode nicht anrufen",
@@ -310,6 +308,22 @@
     "reminderFailed": "Adresse konnte nicht gespeichert werden",
     "reminderOn": "Erinnerungen gehen an {{email}}",
     "reminderRemove": "Erinnerungen beenden",
-    "reminderFooter": "Ein Hinweis, bevor die kostenlose Testphase endet, und ein paar Tipps."
+    "lostKey": "Schlüssel verloren?",
+    "lostKeyHint": "Er steht auf der Seite nach dem Kauf und auf deinen Rechnungen."
+  },
+  "licenseLink": {
+    "invalid": "Dieser Lizenzlink funktioniert nicht.",
+    "alreadyActive": "Diese Lizenz ist schon aktiv",
+    "failed": "Lizenz konnte nicht aktiviert werden",
+    "replaceTitle": "Neuen Lizenzschlüssel verwenden?",
+    "replaceText": "Godmode hat schon einen gültigen Schlüssel (endet auf {{old}}). Durch den Schlüssel mit der Endung {{next}} ersetzen?",
+    "replace": "Neuen Schlüssel verwenden",
+    "keep": "Aktuellen behalten",
+    "confirmTitle": "Diesen Lizenzschlüssel aktivieren?",
+    "confirmText": "Ein Link möchte den Lizenzschlüssel mit der Endung {{next}} zu Godmode hinzufügen. Mach nur weiter, wenn du ihn gerade gekauft oder von jemandem bekommen hast, dem du vertraust.",
+    "activate": "Aktivieren",
+    "cantUse": "Diese Lizenz kann gerade nicht verwendet werden.",
+    "activated": "Godmode ist aktiviert",
+    "trialActive": "Deine Testphase läuft"
   }
 }

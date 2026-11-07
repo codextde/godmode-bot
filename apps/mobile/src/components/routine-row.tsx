@@ -6,7 +6,8 @@ import { useTranslation } from "react-i18next";
 import { cronToHuman, scheduleToHuman, type Agent, type Routine, type RoutineTriggerType } from "@godmode/shared";
 import { CharacterAvatar } from "./character";
 import { Icon } from "./icon";
-import { T, tap } from "./ui";
+import { Badge, T, tap } from "./ui";
+import { RowPressable } from "./row-pressable";
 import { api, errorText } from "@/lib/api";
 import { whenText } from "@/lib/format";
 import { currentLanguage, dateLocale, t, uses12Hour } from "@/lib/i18n";
@@ -106,12 +107,12 @@ export const RoutineRow = memo(function RoutineRow({ routine, agent, working }: 
   const canRun = routine.enabled && !working && !starting;
 
   return (
-    <Pressable
+    <RowPressable
       onPress={() => {
         tap();
         router.push({ pathname: "/automation/[id]", params: { id: routine.id } });
       }}
-      style={({ pressed }) => [styles.row, pressed && { backgroundColor: c.sunken }]}
+      style={styles.row}
     >
       <CharacterAvatar agent={agent} size={40} running={working} />
       <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
@@ -141,6 +142,11 @@ export const RoutineRow = memo(function RoutineRow({ routine, agent, working }: 
             {routine.triggerStatus.message ?? t("routineRow.triggerBroken")}
           </T>
         ) : null}
+        {routine.pendingEvents > 0 ? (
+          <View style={{ flexDirection: "row", marginTop: 2 }}>
+            <Badge label={t("routineRow.waiting", { count: routine.pendingEvents })} tone="warning" dot={false} />
+          </View>
+        ) : null}
       </View>
       <Pressable
         accessibilityRole="button"
@@ -164,7 +170,7 @@ export const RoutineRow = memo(function RoutineRow({ routine, agent, working }: 
         trackColor={{ true: c.brand, false: c.sunken }}
         style={{ alignSelf: "center" }}
       />
-    </Pressable>
+    </RowPressable>
   );
 });
 

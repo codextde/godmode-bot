@@ -1,7 +1,7 @@
 import { useMutation, useQuery, type UseQueryResult } from "@tanstack/react-query";
 import { router, Stack } from "expo-router";
 import { useState } from "react";
-import { ActivityIndicator, Alert, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, Modal, Pressable, RefreshControl, StyleSheet, TextInput, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import type { BotCheckReport, BotCheckStatus, BrowserProfile } from "@godmode/shared";
 import { useFullAccess } from "@/components/admin";
@@ -11,6 +11,7 @@ import { CloseButton } from "@/components/close-button";
 import { Group, LinkRow, StepperRow, SwitchRow, Tile } from "@/components/form";
 import { MenuSheet, type HeaderMenuItem } from "@/components/header-actions";
 import { Icon, type IconName } from "@/components/icon";
+import { SettingsScroll } from "@/components/settings-scroll";
 import { FormSkeleton, isOutdated } from "@/components/settings-state";
 import { Badge, ErrorState, LiveDot, Row, Skeleton, T, tap } from "@/components/ui";
 import { api, errorText } from "@/lib/api";
@@ -67,7 +68,7 @@ export default function BrowserSettings() {
   };
 
   return (
-    <ScrollView
+    <SettingsScroll
       contentInsetAdjustmentBehavior="automatic"
       keyboardShouldPersistTaps="handled"
       contentContainerStyle={styles.content}
@@ -143,7 +144,7 @@ export default function BrowserSettings() {
           void (target ? rename(target, name) : create(name));
         }}
       />
-    </ScrollView>
+    </SettingsScroll>
   );
 }
 

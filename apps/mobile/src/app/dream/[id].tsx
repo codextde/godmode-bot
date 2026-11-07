@@ -6,7 +6,9 @@ import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-nati
 import { useTranslation } from "react-i18next";
 import { formatBytes, type DreamDetail, type DreamFileChange, type DreamWorkspaceChange } from "@godmode/shared";
 import { ACTIVE_DREAM, ChangeKindChip, DreamReasonBadge, DreamStatusBadge, ROLLED_BACK, dreamWhen, reviewedLabel } from "@/components/dream-parts";
+import { Segmented } from "@/components/form";
 import { Icon, type IconName } from "@/components/icon";
+import { Markdown } from "@/components/markdown";
 import { Badge, Card, ErrorState, Hairline, LoadingState, Row, SectionTitle, T, tap } from "@/components/ui";
 import { api, ApiError, errorText, updateDesktopMessage } from "@/lib/api";
 import { useAgents } from "@/lib/hooks";
@@ -21,7 +23,9 @@ import { alpha, fonts, radius, space, useColors, type Colors } from "@/lib/theme
 /** Rows rendered per file before "Show everything" (a new or deleted note can be long). */
 const MAX_ROWS = 400;
 
-/** One dream, like the desktop's review: what the agent says it did, a line diff of every file it changed, and undo. */
+type FileView = "changes" | "result";
+
+/** One dream, like the desktop's review: what the agent says it did, a line diff or the result of every file it changed, and undo. */
 export default function DreamScreen() {
   const { t } = useTranslation("dreams");
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -61,7 +65,9 @@ function DreamView({ dream: d }: { dream: DreamDetail }) {
   });
   const canStop = ACTIVE_DREAM.includes(d.status) && !!d.runId && !stop.isPending && !(stop.isSuccess && stop.variables === d.runId);
   const agentName = useAgents().byId.get(d.agentId)?.name ?? t("view.theAgent");
-  const fullAccess = useFullAccess().fullAccess === true;
+  const access = useFullAccess().fullAccess;
+  const fullAccess = access === true;
+  const [view, setView] = useState<FileView>("changes");
   const { t: tm } = useTranslation(["manage", "components", "common"]);
   const revert = useMutation({
     mutationFn: () => manageApi.revertDream(d.id),
@@ -189,9 +195,20 @@ function DreamView({ dream: d }: { dream: DreamDetail }) {
       </View>
 
       <View style={{ gap: space.md }}>
-        <SectionTitle title={t("view.changes")} />
         {files.length ? (
-          files.map((f, i) => <FileChangeCard key={`${i}-${f.file.path}`} file={f.file} diff={f.diff} />)
+          <Segmented<FileView>
+            options={[
+              { value: "changes", label: t("view.changes") },
+              { value: "result", label: t("view.result") },
+            ]}
+            value={view}
+            onChange={setView}
+          />
+        ) : (
+          <SectionTitle title={t("view.changes")} />
+        )}
+        {files.length ? (
+          files.map((f, i) => <FileChangeCard key={`${i}-${f.file.path}`} file={f.file} diff={f.diff} view={view} />)
         ) : (
           <Card style={{ padding: space.lg }}>
             <T variant="footnote" muted style={{ textAlign: "center" }}>
@@ -201,7 +218,7 @@ function DreamView({ dream: d }: { dream: DreamDetail }) {
         )}
       </View>
 
-      {d.files.some((path) => path !== "MEMORY.md") ? (
+      {access === false && d.files.some((path) => path !== "MEMORY.md") ? (
         <T variant="footnote" muted style={{ textAlign: "center" }}>
           {t("view.otherFiles")}
         </T>
@@ -211,7 +228,7 @@ function DreamView({ dream: d }: { dream: DreamDetail }) {
   );
 }
 
-function FileChangeCard({ file, diff }: { file: DreamFileChange; diff: FileDiff }) {
+function FileChangeCard({ file, diff, view }: { file: DreamFileChange; diff: FileDiff; view: FileView }) {
   const c = useColors();
   const { t } = useTranslation("dreams");
   const state = file.before === null ? "created" : file.after === null ? "deleted" : "edited";
@@ -239,11 +256,21 @@ function FileChangeCard({ file, diff }: { file: DreamFileChange; diff: FileDiff 
         </T>
       </Row>
       <Hairline />
-      {diff.lines.length ? (
-        <DiffView lines={diff.lines} finalNewline={diff.finalNewline} />
+      {view === "changes" ? (
+        diff.lines.length ? (
+          <DiffView lines={diff.lines} finalNewline={diff.finalNewline} />
+        ) : (
+          <T variant="footnote" muted style={{ padding: space.lg, fontStyle: "italic" }}>
+            {empty}
+          </T>
+        )
+      ) : file.after?.trim() ? (
+        <View style={{ padding: space.lg }}>
+          <Markdown text={file.after} />
+        </View>
       ) : (
         <T variant="footnote" muted style={{ padding: space.lg, fontStyle: "italic" }}>
-          {empty}
+          {file.after === null ? t("file.dreamDeleted") : t("file.emptyFile")}
         </T>
       )}
     </Card>

@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { ChoiceRow, PickerRow } from "./form";
 import { Icon, type IconName } from "./icon";
 import { T, tap } from "./ui";
+import { RowPressable } from "./row-pressable";
 import { useAgents } from "@/lib/hooks";
 import type { SecretRow } from "@/lib/tools-admin";
 import { fonts, space, useColors } from "@/lib/theme";
@@ -74,7 +75,7 @@ export function TextRow({
 function IconButton({ icon, label, onPress, tint }: { icon: IconName; label: string; onPress: () => void; tint?: string }) {
   const c = useColors();
   return (
-    <Pressable
+    <RowPressable
       accessibilityRole="button"
       accessibilityLabel={label}
       hitSlop={8}
@@ -82,10 +83,10 @@ function IconButton({ icon, label, onPress, tint }: { icon: IconName; label: str
         tap();
         onPress();
       }}
-      style={({ pressed }) => [styles.iconButton, pressed && { backgroundColor: c.sunken }]}
+      style={styles.iconButton}
     >
       <Icon name={icon} size={15} color={tint ?? c.textMuted} />
-    </Pressable>
+    </RowPressable>
   );
 }
 
@@ -172,7 +173,7 @@ export function ActionRow({ icon, title, onPress, busy, tone }: { icon: IconName
   const c = useColors();
   const color = tone === "danger" ? c.danger : c.brandStrong;
   return (
-    <Pressable
+    <RowPressable
       accessibilityRole="button"
       accessibilityState={{ busy: !!busy, disabled: !!busy }}
       disabled={busy}
@@ -180,13 +181,13 @@ export function ActionRow({ icon, title, onPress, busy, tone }: { icon: IconName
         tap();
         onPress();
       }}
-      style={({ pressed }) => [styles.row, pressed && { backgroundColor: c.sunken }]}
+      style={styles.row}
     >
       {busy ? <ActivityIndicator size="small" color={color} /> : <Icon name={icon} size={16} color={color} />}
       <T variant="callout" color={color} style={{ fontWeight: "500", flex: 1 }}>
         {title}
       </T>
-    </Pressable>
+    </RowPressable>
   );
 }
 
@@ -214,13 +215,13 @@ export function useScopeRows(value: Scope, onChange: (next: Scope) => void) {
     }
   };
   const rows = [
-    <ChoiceRow key="global" icon="globe" title={t("scope.global")} detail={t("scope.globalHint")} selected={mode === "global"} onPress={() => pick("global")} />,
+    <ChoiceRow key="global" icon="globe" title={t("scope.global")} selected={mode === "global"} onPress={() => pick("global")} />,
   ];
   if (workspaces.length) {
-    rows.push(<ChoiceRow key="workspace" icon="layers" title={t("scope.workspace")} detail={t("scope.workspaceHint")} selected={mode === "workspace"} onPress={() => pick("workspace")} />);
+    rows.push(<ChoiceRow key="workspace" icon="layers" title={t("scope.workspace")} selected={mode === "workspace"} onPress={() => pick("workspace")} />);
   }
   if (agents.length) {
-    rows.push(<ChoiceRow key="agent" icon="agents" title={t("scope.agent")} detail={t("scope.agentHint")} selected={mode === "agent"} onPress={() => pick("agent")} />);
+    rows.push(<ChoiceRow key="agent" icon="agents" title={t("scope.agent")} selected={mode === "agent"} onPress={() => pick("agent")} />);
   }
   if (mode === "workspace" && workspaces.length) {
     rows.push(

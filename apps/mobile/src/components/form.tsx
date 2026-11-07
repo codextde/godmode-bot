@@ -1,9 +1,11 @@
-import { Children, isValidElement, useState, type ReactNode } from "react";
+import { Children, isValidElement, useState, type ReactElement, type ReactNode } from "react";
 import { Pressable, StyleSheet, Switch, TextInput, View, type KeyboardTypeOptions } from "react-native";
 import { useTranslation } from "react-i18next";
 import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
 import { Icon, type IconName } from "./icon";
+import { FocusRow, norm, useFocusTerm } from "./settings-scroll";
 import { Card, Hairline, SectionTitle, T, tap } from "./ui";
+import { RowPressable } from "./row-pressable";
 import { intlLocale } from "@/lib/i18n";
 import { useAutosave, useEditable, type SaveState } from "@/lib/setup";
 import { fonts, radius, space, textScale, useColors, useLargeText } from "@/lib/theme";
@@ -24,16 +26,23 @@ export function Group({
 }) {
   const c = useColors();
   const rows = Children.toArray(children).filter(isValidElement);
+  const term = useFocusTerm();
+  const titled = term === null ? -1 : rows.findIndex((row) => rowTitle(row) === term);
+  // The search named the group, not one of its rows: its first row stands for it.
+  const focused = titled === -1 && title && term === norm(title) ? 0 : titled;
   return (
     <View>
       {title ? <SectionTitle title={title} action={action} onAction={onAction} /> : null}
       <Card style={{ overflow: "hidden" }}>
-        {rows.map((row, i) => (
-          <View key={row.key ?? i}>
-            {i > 0 && <Hairline inset={space.lg} />}
-            {row}
-          </View>
-        ))}
+        {rows.map((row, i) => {
+          const Wrap = i === focused ? FocusRow : View;
+          return (
+            <Wrap key={row.key ?? i}>
+              {i > 0 && <Hairline inset={space.lg} />}
+              {row}
+            </Wrap>
+          );
+        })}
       </Card>
       {footer ? (
         <T variant="footnote" color={c.textMuted} style={styles.footer}>
@@ -42,6 +51,13 @@ export function Group({
       ) : null}
     </View>
   );
+}
+
+/** A row's visible name: the settings search leads to rows by it. */
+function rowTitle(row: ReactElement): string | null {
+  const { title, label } = row.props as { title?: unknown; label?: unknown };
+  const name = title ?? label;
+  return typeof name === "string" ? norm(name) : null;
 }
 
 export function Tile({ icon, emoji, size = 30, tint }: { icon?: IconName; emoji?: string; size?: number; tint?: string }) {
@@ -97,13 +113,13 @@ export function LinkRow({
   const c = useColors();
   const large = useLargeText();
   return (
-    <Pressable
+    <RowPressable
       accessibilityRole="button"
       onPress={() => {
         tap();
         onPress();
       }}
-      style={({ pressed }) => [styles.row, pressed && { backgroundColor: c.sunken }]}
+      style={styles.row}
     >
       {lead ?? (icon || emoji ? <Tile icon={icon} emoji={emoji} tint={tone === "danger" ? c.danger : tone === "brand" ? c.brandStrong : undefined} /> : null)}
       <Label title={title} detail={large && value ? value : detail} tone={tone} />
@@ -117,7 +133,7 @@ export function LinkRow({
           <Icon name="chevron" size={12} color={c.textFaint} weight="semibold" />
         </View>
       ) : null}
-    </Pressable>
+    </RowPressable>
   );
 }
 
@@ -150,6 +166,7 @@ export function SwitchRow({
           onChange(next);
         }}
         trackColor={{ true: c.brand, false: c.sunken }}
+        thumbColor={process.env.EXPO_OS === "android" ? (value ? "#FFFFFF" : c.textFaint) : undefined}
         // iOS's Switch pins itself to the top of its row (alignSelf flex-start) unless told otherwise.
         style={{ alignSelf: "center" }}
       />
@@ -173,19 +190,19 @@ export function ChoiceRow({
 }) {
   const c = useColors();
   return (
-    <Pressable
+    <RowPressable
       accessibilityRole="radio"
       accessibilityState={{ checked: selected, selected }}
       onPress={() => {
         tap();
         if (!selected) onPress();
       }}
-      style={({ pressed }) => [styles.row, pressed && { backgroundColor: c.sunken }]}
+      style={styles.row}
     >
       {icon ? <Tile icon={icon} tint={selected ? c.brandStrong : undefined} /> : null}
       <Label title={title} detail={detail} />
       {selected ? <Icon name="check" size={15} color={c.brandStrong} weight="bold" /> : null}
-    </Pressable>
+    </RowPressable>
   );
 }
 
@@ -271,14 +288,14 @@ export function PickerRow<V extends string>({
   const current = options.find((o) => o.value === value);
   return (
     <View>
-      <Pressable
+      <RowPressable
         accessibilityRole="button"
         accessibilityState={{ expanded: open }}
         onPress={() => {
           tap();
           setOpen((v) => !v);
         }}
-        style={({ pressed }) => [styles.row, pressed && { backgroundColor: c.sunken }]}
+        style={styles.row}
       >
         {icon ? <Tile icon={icon} /> : null}
         <Label title={title} detail={large ? (current?.label ?? value) : detail} />
@@ -290,13 +307,13 @@ export function PickerRow<V extends string>({
         <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
           <Icon name="down" size={12} color={c.textFaint} weight="semibold" style={{ transform: [{ rotate: open ? "180deg" : "0deg" }] }} />
         </View>
-      </Pressable>
+      </RowPressable>
       {open ? (
         <Animated.View entering={FadeIn.duration(160)} exiting={FadeOut.duration(120)} style={{ backgroundColor: c.surfaceAlt }}>
           {options.map((o) => {
             const selected = o.value === value;
             return (
-              <Pressable
+              <RowPressable
                 key={o.value}
                 accessibilityRole="button"
                 accessibilityState={{ selected }}
@@ -305,7 +322,7 @@ export function PickerRow<V extends string>({
                   setOpen(false);
                   if (!selected) onChange(o.value);
                 }}
-                style={({ pressed }) => [styles.option, pressed && { backgroundColor: c.sunken }]}
+                style={styles.option}
               >
                 <View style={{ flex: 1, minWidth: 0 }}>
                   <T variant="subhead" style={{ fontWeight: selected ? "600" : "400" }}>
@@ -318,7 +335,7 @@ export function PickerRow<V extends string>({
                   ) : null}
                 </View>
                 {selected ? <Icon name="check" size={14} color={c.brandStrong} weight="bold" /> : null}
-              </Pressable>
+              </RowPressable>
             );
           })}
         </Animated.View>

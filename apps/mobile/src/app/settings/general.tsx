@@ -1,10 +1,11 @@
 import { Stack } from "expo-router";
-import { ScrollView, StyleSheet } from "react-native";
+import { StyleSheet } from "react-native";
 import { useTranslation } from "react-i18next";
 import { PALETTES, type AppLanguage, type InterfaceMode, type Palette, type Theme, type TimeFormat } from "@godmode/shared";
 import { CloseButton } from "@/components/close-button";
 import { FieldRow, Group, PickerRow, SegmentRow, SwitchRow } from "@/components/form";
 import { useFullAccess } from "@/components/full-access";
+import { SettingsScroll } from "@/components/settings-scroll";
 import { QueryState } from "@/components/settings-state";
 import { useAppearance } from "@/lib/appearance";
 import { useChatPrefs, type Animations, type FollowUp, type ToolCallView } from "@/lib/chat-prefs";
@@ -50,10 +51,11 @@ export default function General() {
   const followUp = useChatPrefs((s) => s.followUp);
   const mcpApps = useChatPrefs((s) => s.mcpApps);
   const readReplies = useChatPrefs((s) => s.readReplies);
+  const largePasteAsFile = useChatPrefs((s) => s.largePasteAsFile);
   const { fullAccess } = useFullAccess();
 
   return (
-    <ScrollView contentInsetAdjustmentBehavior="automatic" keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets contentContainerStyle={styles.content}>
+    <SettingsScroll contentInsetAdjustmentBehavior="automatic" keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets contentContainerStyle={styles.content}>
       <Stack.Screen options={{ title: t("general.title") }} />
       <CloseButton />
       <QueryState query={settings} icon="slider" errorTitle={t("general.loadFailed")}>
@@ -140,6 +142,7 @@ export default function General() {
                 />
                 {fullAccess ? <SwitchRow icon="puzzle" title={t("general.chat.mcpApps")} value={mcpApps} onChange={(on) => useChatPrefs.getState().setMcpApps(on)} /> : null}
                 <SwitchRow icon="speaker" title={t("general.chat.readReplies")} value={readReplies} onChange={(on) => useChatPrefs.getState().setReadReplies(on)} />
+                <SwitchRow icon="attach" title={t("general.chat.largePaste")} value={largePasteAsFile} onChange={(on) => useChatPrefs.getState().setLargePasteAsFile(on)} />
                 <SwitchRow
                   icon="sparkles"
                   title={t("overview.suggestions.title")}
@@ -169,7 +172,7 @@ export default function General() {
           );
         }}
       </QueryState>
-    </ScrollView>
+    </SettingsScroll>
   );
 }
 

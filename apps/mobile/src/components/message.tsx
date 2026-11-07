@@ -1,9 +1,10 @@
 import * as Clipboard from "expo-clipboard";
 import { Image } from "expo-image";
 import { useRecyclingState } from "@shopify/flash-list";
+import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { router } from "expo-router";
-import { Fragment, memo, useContext, useEffect, useMemo } from "react";
+import { createContext, Fragment, memo, useContext, useEffect, useMemo } from "react";
 import { Alert, LayoutAnimation, Pressable, StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import Animated, { FadeIn, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming } from "react-native-reanimated";
@@ -18,18 +19,23 @@ import { CALL_STATUS, callName, openCall } from "./call-parts";
 import { Icon, type IconName } from "./icon";
 import { Markdown } from "./markdown";
 import { McpAppSlots } from "./mcp-app-view";
+import { MessageSource } from "./message-source";
+import { ModChip } from "./mod-chip";
 import { ChatScope, QuestionCard } from "./question-card";
 import { RemoteImage } from "./remote-image";
+import { MenuSheet, type HeaderMenuItem } from "./header-actions";
 import { Row, T, tap } from "./ui";
-import { errorText } from "@/lib/api";
+import { api, errorText } from "@/lib/api";
 import { cardKindOf, quoteOf, type CardKind } from "@/lib/chat-blocks";
 import { useDrafts } from "@/lib/composer";
 import { toolLabel } from "@/lib/format";
 import { useChatPrefs, useLightAnimations } from "@/lib/chat-prefs";
 import { useNow } from "@/lib/hooks";
-import { dateLocale, t as translate } from "@/lib/i18n";
+import { dateLocale } from "@/lib/i18n";
+import { qk } from "@/lib/query";
 import { useSettings } from "@/lib/setup";
 import { radius, space, useColors } from "@/lib/theme";
+import { fileEditOf, openToolCall, todoItems } from "@/lib/tool-details";
 import { readAloud, stopReading, useReadAloud } from "@/lib/voice-mode";
 
 type Step = Extract<MessageBlock, { type: "tool_use" | "thinking" }>;
@@ -42,6 +48,9 @@ type Part =
   | ({ kind: "subagent" } & SubagentEntry)
   | { kind: "subagents"; entries: SubagentEntry[] };
 export type ParentAgent = Pick<Agent, "id" | "color" | "character">;
+
+/** The stored message the steps below belong to: a step's whole output loads from there. */
+export const StepSource = createContext<{ conversationId?: string; messageId?: string } | null>(null);
 
 const isSubagent = (block: MessageBlock) => block.type === "tool_use" && (block.name === "Task" || block.name === "Agent");
 
@@ -105,22 +114,15 @@ function withoutCompactCard(blocks: MessageBlock[]): MessageBlock[] {
   return blocks.filter((b) => !(b.type === "command" && b.name === "compact"));
 }
 
-const SOURCE_CAPTION = { automation: "message.source.automation", delegation: "message.source.delegation", task: "message.source.task", offer: "message.source.offer", handoff: "message.source.handoff" } as const;
-
 export const UserMessage = memo(function UserMessage({ message }: { message: Message }) {
   const c = useColors();
-  const { t } = useTranslation("components");
   // A turn the human didn't write keeps the neutral surface and says who it came from.
-  const caption = message.source ? t(SOURCE_CAPTION[message.source]) : null;
-  const fg = caption ? c.text : c.onPrimary;
+  const started = !!message.source;
+  const fg = started ? c.text : c.onPrimary;
   return (
-    <View style={[styles.userWrap, caption ? { alignItems: "flex-start" } : null]}>
-      {caption ? (
-        <T variant="caption" muted style={{ marginBottom: 4 }}>
-          {caption}
-        </T>
-      ) : null}
-      <UserBubble attachments={message.attachments} text={message.content} conversationId={message.conversationId} background={caption ? c.sunken : c.primary} color={fg} />
+    <View style={[styles.userWrap, started ? { alignItems: "flex-start" } : null]}>
+      {started ? <MessageSource message={message} /> : null}
+      <UserBubble attachments={message.attachments} text={message.content} conversationId={message.conversationId} background={started ? c.sunken : c.primary} color={fg} />
     </View>
   );
 });
@@ -159,11 +161,29 @@ function UserBubble({ attachments, text, conversationId, background, color }: { 
   );
 }
 
-export const AssistantMessage = memo(function AssistantMessage({ id, blocks, streaming, content, agent }: { id?: string; blocks: MessageBlock[]; streaming?: boolean; content?: string; agent?: ParentAgent }) {
+export const AssistantMessage = memo(function AssistantMessage({
+  id,
+  runId,
+  blocks,
+  streaming,
+  content,
+  agent,
+}: {
+  id?: string;
+  runId?: string | null;
+  blocks: MessageBlock[];
+  streaming?: boolean;
+  content?: string;
+  agent?: ParentAgent;
+}) {
   // A reply stored without blocks is its text.
   const parts = useMemo(() => group(blocks.length || !content ? withoutCompactCard(blocks) : [{ type: "text", text: content }]), [blocks, content]);
   const last = parts[parts.length - 1];
+  const scope = useContext(ChatScope);
+  const conversationId = scope?.conversationId;
+  const source = useMemo(() => ({ conversationId, messageId: id }), [conversationId, id]);
   return (
+    <StepSource.Provider value={source}>
     <View style={styles.assistant}>
       {parts.length === 0 && streaming ? <Thinking /> : null}
       {parts.map((p, i) =>
@@ -184,8 +204,9 @@ export const AssistantMessage = memo(function AssistantMessage({ id, blocks, str
       )}
       {streaming ? <BackgroundAgents parts={parts} agent={agent} /> : null}
       {streaming && last?.kind === "block" && last.block.type === "text" ? <Caret /> : null}
-      {!streaming && content?.trim() && parts.some((p) => p.kind !== "block" || p.block.type === "text") ? <ReplyActions id={id} text={content} /> : null}
+      {!streaming && content?.trim() && parts.some((p) => p.kind !== "block" || p.block.type === "text") ? <ReplyActions id={id} runId={runId} text={content} /> : null}
     </View>
+    </StepSource.Provider>
   );
 });
 
@@ -208,15 +229,53 @@ function ToolCard({ kind, block, streaming }: { kind: CardKind; block: ToolUse; 
  * Long-press selects text, so the whole reply is copied from here, like the desktop's "Copy reply"; in a chat it is also
  * quoted into the message being written.
  */
-function ReplyActions({ id, text }: { id?: string; text: string }) {
+function ReplyActions({ id, runId, text }: { id?: string; runId?: string | null; text: string }) {
   const scope = useContext(ChatScope);
   return (
     <View style={styles.actions}>
       <CopyReply text={text} />
-      {scope ? <QuoteReply text={text} conversationId={scope.conversationId} /> : null}
+      {scope && !scope.readOnly ? <QuoteReply text={text} conversationId={scope.conversationId} /> : null}
       <ReadReply reply={id ?? text} text={text} />
+      {scope && id && !(scope.readOnly && !runId) ? <ReplyMore id={id} runId={runId} conversationId={scope.conversationId} readOnly={scope.readOnly} /> : null}
     </View>
   );
+}
+
+/** Stays out of the way: how the run behind the reply went, and quoting only a part of it. */
+function ReplyMore({ id, runId, conversationId, readOnly }: { id: string; runId?: string | null; conversationId: string; readOnly?: boolean }) {
+  const c = useColors();
+  const { t } = useTranslation("components");
+  const [open, setOpen] = useRecyclingState(false, [id]);
+  return (
+    <>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={t("message.moreOnReply")}
+        hitSlop={10}
+        onPress={() => {
+          tap();
+          setOpen(true);
+        }}
+        style={({ pressed }) => [styles.more, pressed && { backgroundColor: c.sunken }]}
+      >
+        <Icon name="more" size={14} color={c.textFaint} />
+      </Pressable>
+      {open ? <ReplyMoreSheet id={id} runId={runId} conversationId={conversationId} readOnly={readOnly} onClose={() => setOpen(false)} /> : null}
+    </>
+  );
+}
+
+function ReplyMoreSheet({ id, runId, conversationId, readOnly, onClose }: { id: string; runId?: string | null; conversationId: string; readOnly?: boolean; onClose: () => void }) {
+  const { t } = useTranslation("components");
+  const run = useQuery({ queryKey: qk.run(runId ?? ""), queryFn: () => api.runs.get(runId!), enabled: !!runId, staleTime: 5 * 60_000, retry: false });
+  const items: HeaderMenuItem[] = readOnly ? [] : [{ icon: "quote", title: t("message.quotePart"), onPress: () => router.push({ pathname: "/reply-text", params: { conversationId, messageId: id } }) }];
+  const data = run.data;
+  const tokens = data?.usage
+    ? t("message.runTokens", { input: tokensLabel(data.usage.inputTokens), output: tokensLabel(data.usage.outputTokens), cached: tokensLabel(data.usage.cacheReadTokens) })
+    : null;
+  const title = !runId ? undefined : data ? [data.durationMs != null ? duration(data.durationMs) : null, data.model ? readableModelId(data.model) : null].filter(Boolean).join(" · ") : run.isError ? t("message.runFailed") : t("message.runLoading");
+  const body = data ? [data.numTurns != null ? t("message.runTurns", { count: data.numTurns }) : null, tokens].filter(Boolean).join(" · ") : undefined;
+  return <MenuSheet items={items} title={title} body={body} open onClose={onClose} />;
 }
 
 function useFlash(key: string): [boolean, () => void] {
@@ -348,12 +407,8 @@ const Block = memo(function Block({ block, streaming }: { block: MessageBlock; s
             size={14}
             color={block.level === "warning" ? c.warning : block.level === "success" ? c.success : c.textMuted}
           />
+          {block.mod ? <ModChip name={block.mod} /> : null}
           <T variant="footnote" muted style={{ flex: 1 }}>
-            {block.mod ? (
-              <T variant="footnote" style={{ fontWeight: "600" }}>
-                {block.mod}{" "}
-              </T>
-            ) : null}
             {block.text}
           </T>
         </View>
@@ -798,14 +853,23 @@ const Steps = memo(function Steps({ steps, live }: { steps: Step[]; live?: boole
 export const ToolStep = memo(function ToolStep({ step }: { step: ToolUse }) {
   const c = useColors();
   const { t } = useTranslation("components");
+  const source = useContext(StepSource);
   const label = toolLabel(step);
-  const [more, setMore] = useRecyclingState(false, [step.id]);
   const todos = step.name === "TodoWrite" ? todoItems(step.input) : null;
-  const edit = more ? fileEdit(step) : null;
-  const expandable = !!step.result || step.name === "Edit" || step.name === "MultiEdit" || step.name === "Write";
+  const pictured = !!step.imageUrl || !!step.image;
+  // A screenshot without words is all there is to see of the step.
+  const opens = !pictured || !!step.isError || !!step.result?.trim() || !!fileEditOf(step);
   return (
     <View style={{ gap: 6 }}>
-      <Pressable onPress={() => expandable && setMore((m) => !m)} accessibilityRole={expandable ? "button" : undefined} accessibilityState={expandable ? { expanded: more } : undefined}>
+      <Pressable
+        disabled={!opens}
+        accessibilityRole={opens ? "button" : undefined}
+        onPress={() => {
+          tap();
+          openToolCall(step, source?.conversationId, source?.messageId);
+        }}
+        style={({ pressed }) => pressed && { opacity: 0.6 }}
+      >
         <Row style={{ gap: 8, alignItems: "flex-start" }}>
           <Icon name={label.icon} size={13} color={step.isError ? c.warning : c.textMuted} style={{ marginTop: 3 }} />
           <View style={{ flex: 1 }}>
@@ -847,21 +911,6 @@ export const ToolStep = memo(function ToolStep({ step }: { step: ToolUse }) {
       ) : step.image ? (
         <Image source={{ uri: imageUri(step.image) }} style={[styles.shot, { backgroundColor: c.sunken }]} contentFit="contain" cachePolicy="none" />
       ) : null}
-      {edit ? (
-        <View style={[styles.result, { backgroundColor: c.sunken, gap: 1 }]}>
-          {edit.lines.map((line, i) => (
-            <T key={i} variant="mono" numberOfLines={1} color={line.kind === "add" ? c.brandStrong : line.kind === "remove" ? c.danger : c.textFaint} style={{ fontSize: 12 }}>
-              {line.kind === "add" ? "+ " : line.kind === "remove" ? "- " : "  "}
-              {line.text}
-            </T>
-          ))}
-        </View>
-      ) : more && step.result ? (
-        <T variant="mono" muted numberOfLines={16} style={[styles.result, { backgroundColor: c.sunken }]}>
-          {step.result.slice(0, 2000)}
-          {step.resultTruncated || step.result.length > 2000 ? "…" : ""}
-        </T>
-      ) : null}
     </View>
   );
 });
@@ -870,43 +919,6 @@ function imageUri(image: string): string {
   if (image.startsWith("data:")) return image;
   const mime = image.startsWith("/9j/") ? "image/jpeg" : image.startsWith("R0lG") ? "image/gif" : image.startsWith("UklG") ? "image/webp" : "image/png";
   return `data:${mime};base64,${image}`;
-}
-
-/** Plan items of a TodoWrite call. */
-function todoItems(input: unknown): { content: string; status: string }[] | null {
-  const todos = input && typeof input === "object" ? (input as { todos?: unknown }).todos : null;
-  if (!Array.isArray(todos)) return null;
-  return todos
-    .filter((t): t is Record<string, unknown> => !!t && typeof t === "object")
-    .map((t) => ({ content: String(t.content ?? t.activeForm ?? t.subject ?? ""), status: typeof t.status === "string" ? t.status : "pending" }));
-}
-
-type DiffLine = { kind: "add" | "remove" | "fold"; text: string };
-
-const DIFF_LINES = 40;
-
-/** What a file edit took out and put in, as the first lines of each: enough to see the change on a phone. */
-function fileEdit(step: ToolUse): { lines: DiffLine[] } | null {
-  const input = (step.input && typeof step.input === "object" ? step.input : {}) as { old_string?: unknown; new_string?: unknown; content?: unknown; edits?: unknown };
-  const lines: DiffLine[] = [];
-  const push = (kind: "add" | "remove", text: unknown) => {
-    if (typeof text !== "string" || !text) return;
-    for (const line of text.split("\n")) lines.push({ kind, text: line });
-  };
-  if (step.name === "Edit") {
-    push("remove", input.old_string);
-    push("add", input.new_string);
-  } else if (step.name === "Write") push("add", input.content);
-  else if (step.name === "MultiEdit" && Array.isArray(input.edits)) {
-    for (const [i, e] of (input.edits as { old_string?: unknown; new_string?: unknown }[]).entries()) {
-      if (i > 0) lines.push({ kind: "fold", text: "⋯" });
-      push("remove", e?.old_string);
-      push("add", e?.new_string);
-    }
-  } else return null;
-  if (!lines.length) return null;
-  const more = lines.length - DIFF_LINES;
-  return { lines: more > 0 ? [...lines.slice(0, DIFF_LINES), { kind: "fold", text: `⋯ ${translate("components:message.moreLines", { count: more })}` }] : lines };
 }
 
 export function ThinkingStep({ text }: { text: string }) {
@@ -1001,6 +1013,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: radius.sm,
+    borderCurve: "continuous",
+  },
+  more: {
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: radius.sm,
@@ -1118,11 +1136,6 @@ const styles = StyleSheet.create({
     width: "100%",
     aspectRatio: 16 / 10,
     borderRadius: radius.sm,
-  },
-  result: {
-    padding: 10,
-    borderRadius: radius.sm,
-    overflow: "hidden",
   },
 });
 

@@ -119,7 +119,9 @@
       "conditionBody": "Once a check finds the condition true, it shows up here.",
       "webhookTitle": "No calls yet",
       "webhookBody": "Call the webhook URL, or send a test event, and it shows up here."
-    }
+    },
+    "eventsWait_one": "1 event waits for the current run to finish",
+    "eventsWait_other": "{{count}} events wait for the current run to finish"
   },
   "edit": {
     "timezone": "Timezone",

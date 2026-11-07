@@ -20,6 +20,8 @@ export interface ChatScopeValue {
   conversationId: string;
   agentName: string;
   openQuestionId: string | null;
+  /** An agent's dream log or auto reviews: nothing can be written here. */
+  readOnly?: boolean;
 }
 
 export const ChatScope = createContext<ChatScopeValue | null>(null);

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
-import { modAbilities, modHookLabel, type Mod, type ModAbility, type ModContents, type ModHook, type ModIcon } from "@godmode/shared";
+import { modAbilities, modHookLabel, type Agent, type Mod, type ModAbility, type ModContents, type ModHook, type ModIcon } from "@godmode/shared";
 import { Group } from "./form";
 import { Icon, type IconName } from "./icon";
 import { T, tap } from "./ui";
@@ -56,6 +56,30 @@ export function hookLabel(hook: ModHook): string {
     if (tool) return translate("tools:pluginAdmin.hook.toolCalls", { tool });
   }
   return translate(`tools:pluginAdmin.hook.${hook.event.replace(/\./g, "_")}` as never, { defaultValue: modHookLabel(hook) });
+}
+
+/** Who added a plugin, in words: an agent by name when it still exists. */
+export function pluginOrigin(mod: Pick<Mod, "origin" | "createdBy" | "source">, agents: readonly Agent[] | undefined): string {
+  const authorId = mod.createdBy.startsWith("agent:") ? mod.createdBy.slice(6) : null;
+  const author = authorId ? agents?.find((a) => a.id === authorId) : undefined;
+  if (mod.origin === "git") {
+    if (authorId) return author ? translate("tools:pluginAdmin.origin.installedBy", { name: author.name }) : translate("tools:pluginAdmin.origin.installedByAgent");
+    return translate(mod.source?.web?.startsWith("https://github.com/") ? "tools:pluginAdmin.origin.installedFromGitHub" : "tools:pluginAdmin.origin.installedFromRepo");
+  }
+  if (mod.origin === "template") return translate("tools:pluginAdmin.origin.template");
+  if (mod.origin === "import") return translate("tools:pluginAdmin.origin.imported");
+  if (mod.origin === "agent") return author ? translate("tools:pluginAdmin.origin.draftedBy", { name: author.name }) : translate("tools:pluginAdmin.origin.draftedByAgent");
+  return translate("tools:pluginAdmin.origin.yours");
+}
+
+/** The file (and line) a check problem's `where` points at: "hooks/register.ts:12", "plugin.json › userConfig.paths". */
+export function problemTarget(where: string, paths: string[]): { path: string; line: number | null } | null {
+  const longestFirst = [...paths].sort((a, b) => b.length - a.length);
+  const follows = (prefix: string) => where === prefix || (where.startsWith(prefix) && /^[\s:›(,]/.test(where.slice(prefix.length)));
+  const path = longestFirst.find(follows) ?? longestFirst.find((p) => follows(p.slice(p.lastIndexOf("/") + 1)));
+  if (!path) return null;
+  const line = /:(\d+)/.exec(where)?.[1];
+  return { path, line: line ? Number(line) : null };
 }
 
 /** What a mod can do, in the app's language. */

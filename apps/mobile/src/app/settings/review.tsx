@@ -1,6 +1,6 @@
 import { useMutation } from "@tanstack/react-query";
 import { router, Stack } from "expo-router";
-import { ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
+import { ActivityIndicator, Alert, Pressable, RefreshControl, StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { cronToHuman, findModel, type Review } from "@godmode/shared";
 import { useFullAccess } from "@/components/admin";
@@ -8,6 +8,7 @@ import { CloseButton } from "@/components/close-button";
 import { Group, LinkRow, PickerRow, SwitchRow } from "@/components/form";
 import { Icon } from "@/components/icon";
 import { STATUS_TONE, isActive, useReviews, useStopReview } from "@/components/review-parts";
+import { SettingsScroll } from "@/components/settings-scroll";
 import { FormSkeleton, isOutdated } from "@/components/settings-state";
 import { EmptyState, ErrorState, Row, Skeleton, T, tap, toneColors } from "@/components/ui";
 import { errorText } from "@/lib/api";
@@ -56,7 +57,7 @@ export default function AutoReview() {
     return (
       <View style={styles.center}>
         {header}
-        <EmptyState icon="review" title={t("settings:phone.outdatedTitle")} body={t("settings:phone.outdatedBody")} />
+        <EmptyState icon="review" title={t("settings:phone.outdatedTitle")} />
       </View>
     );
   }
@@ -72,7 +73,7 @@ export default function AutoReview() {
   ];
 
   return (
-    <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content} refreshControl={<RefreshControl {...pull} />}>
+    <SettingsScroll contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content} refreshControl={<RefreshControl {...pull} />}>
       {header}
       {!r ? (
         settings.isError ? (
@@ -141,7 +142,7 @@ export default function AutoReview() {
           [0, 1, 2].map((i) => <RowSkeleton key={i} />)
         )}
       </Group>
-    </ScrollView>
+    </SettingsScroll>
   );
 }
 

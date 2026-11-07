@@ -39,7 +39,7 @@ export default function SecretAgents() {
         ) : !list.length ? (
           <EmptyState icon="agents" title={t("security.agentsEmpty")} />
         ) : (
-          <Group footer={t("security.secrets.agentsFooter")}>
+          <Group>
             {list.map((a) => (
               <SwitchRow
                 key={a.id}

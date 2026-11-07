@@ -1,6 +1,6 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { router, Stack } from "expo-router";
-import { Alert, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
+import { Alert, RefreshControl, StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { androidSummary, type AndroidDevice, type AndroidStatus, type Settings } from "@godmode/shared";
 import { AdminQueryState, FullAccessGate } from "@/components/admin";
@@ -11,6 +11,7 @@ import { HeaderActions } from "@/components/header-actions";
 import { ActionPill, reportInstall, ToolRow } from "@/components/program-parts";
 import { ListRow } from "@/components/readonly-list";
 import { phoneState } from "@/components/screen-tile";
+import { SettingsScroll } from "@/components/settings-scroll";
 import { FormSkeleton } from "@/components/settings-state";
 import { InfoRow } from "@/components/status-rows";
 import { TestResult } from "@/components/tool-form";
@@ -31,7 +32,7 @@ export default function AndroidPhones() {
   const settings = useSettings();
   const pull = usePullRefresh(() => Promise.all([status.refetch(), settings.refetch(), queryClient.invalidateQueries({ queryKey: qk.androidDevices })]));
   return (
-    <ScrollView
+    <SettingsScroll
       contentInsetAdjustmentBehavior="automatic"
       keyboardShouldPersistTaps="handled"
       automaticallyAdjustKeyboardInsets
@@ -46,7 +47,7 @@ export default function AndroidPhones() {
             <>
               {settings.data?.android.enabled === false ? (
                 <Group>
-                  <LinkRow icon="power" title={t("android.turnedOff")} detail={t("android.turnedOffBody")} onPress={() => router.push("/settings/features")} />
+                  <LinkRow icon="power" title={t("android.turnedOff")} onPress={() => router.push("/settings/features")} />
                 </Group>
               ) : null}
               <Phones status={s} />
@@ -55,7 +56,7 @@ export default function AndroidPhones() {
           )}
         </AdminQueryState>
       </FullAccessGate>
-    </ScrollView>
+    </SettingsScroll>
   );
 }
 

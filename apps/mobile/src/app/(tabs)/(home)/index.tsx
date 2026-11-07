@@ -6,6 +6,8 @@ import { useTranslation } from "react-i18next";
 import type { AgentQuestion } from "@godmode/shared";
 import Animated, { FadeIn, LinearTransition } from "react-native-reanimated";
 import { AwaySummaryCard } from "@/components/away-summary";
+import { ClaudeSignedOutBanner } from "@/components/claude-signed-out";
+import { LicenseNotice } from "@/components/license-notice";
 import { OffersCard } from "@/components/offers-card";
 import { Glass } from "@/components/glass";
 import { HeaderActions } from "@/components/header-actions";
@@ -162,6 +164,8 @@ export default function Home() {
         </Card>
       )}
 
+      <ClaudeSignedOutBanner />
+      <LicenseNotice />
       <AwaySummaryCard />
       <OffersCard />
       <NeedsYou vaultLocked={vaultLocked} />

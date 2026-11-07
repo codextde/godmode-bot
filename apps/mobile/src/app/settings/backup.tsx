@@ -2,12 +2,13 @@ import * as DocumentPicker from "expo-document-picker";
 import { Directory, File } from "expo-file-system";
 import { Stack } from "expo-router";
 import { useEffect, useState } from "react";
-import { Alert, ScrollView, Share, StyleSheet, View } from "react-native";
+import { Alert, Share, StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { confirmWithBiometrics, FullAccessGate, isRefused, NeedsFullAccess } from "@/components/admin";
 import { CloseButton } from "@/components/close-button";
 import { Group, LinkRow, SwitchRow } from "@/components/form";
 import { InputRow } from "@/components/secret-parts";
+import { SettingsScroll } from "@/components/settings-scroll";
 import { InfoRow } from "@/components/status-rows";
 import { Button, T } from "@/components/ui";
 import { adminApi, exportBackup, formatBytes } from "@/lib/admin";
@@ -19,14 +20,14 @@ import { space, useColors } from "@/lib/theme";
 export default function Backup() {
   const { t } = useTranslation("admin");
   return (
-    <ScrollView contentInsetAdjustmentBehavior="automatic" keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
+    <SettingsScroll contentInsetAdjustmentBehavior="automatic" keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
       <Stack.Screen options={{ title: t("backup.title") }} />
       <CloseButton />
       <FullAccessGate>
         <ExportCard />
         <RestoreCard />
       </FullAccessGate>
-    </ScrollView>
+    </SettingsScroll>
   );
 }
 

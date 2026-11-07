@@ -8,6 +8,7 @@ import { ChoiceRow } from "./form";
 import { Icon } from "./icon";
 import { ActionRow, TextRow } from "./tool-form";
 import { Badge, T, tap, type Tone } from "./ui";
+import { RowPressable } from "./row-pressable";
 import { t as tr } from "@/lib/i18n";
 import type { CredentialFields } from "@/lib/messaging-admin";
 import { space, useColors } from "@/lib/theme";
@@ -114,7 +115,7 @@ function AgentChoice({
     } else onChange([...value, a.id], defaultId ?? a.id);
   };
   return (
-    <Pressable
+    <RowPressable
       accessibilityRole="checkbox"
       accessibilityState={{ checked: on }}
       accessibilityLabel={a.name}
@@ -122,7 +123,7 @@ function AgentChoice({
         tap();
         toggle();
       }}
-      style={({ pressed }) => [styles.agent, pressed && { backgroundColor: c.sunken }]}
+      style={styles.agent}
     >
       <View style={[styles.check, on ? { backgroundColor: c.brand, borderColor: c.brand } : { borderColor: c.border }]}>
         {on ? <Icon name="check" size={11} color={c.onPrimary} weight="bold" /> : null}
@@ -148,7 +149,7 @@ function AgentChoice({
           </T>
         </Pressable>
       ) : null}
-    </Pressable>
+    </RowPressable>
   );
 }
 

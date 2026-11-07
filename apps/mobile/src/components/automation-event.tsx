@@ -1,9 +1,10 @@
 import { formatDistanceToNowStrict } from "date-fns";
-import { Pressable, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import type { AutomationEvent, AutomationEventSource, AutomationEventStatus } from "@godmode/shared";
 import { Icon, type IconName } from "./icon";
 import { Badge, Row, T, type Tone } from "./ui";
+import { RowPressable } from "./row-pressable";
 import { dateLocale } from "@/lib/i18n";
 import { radius, space, useColors } from "@/lib/theme";
 
@@ -32,12 +33,12 @@ export function EventRow({ event, automation, onPress }: { event: AutomationEven
   const source = EVENT_SOURCES[event.source] ?? EVENT_SOURCES.manual;
   const status = EVENT_STATUS[event.status] ?? EVENT_STATUS.pending;
   return (
-    <Pressable
+    <RowPressable
       disabled={!onPress}
       accessibilityRole={onPress ? "button" : undefined}
       accessibilityHint={onPress ? t("automation.openRunChat") : undefined}
       onPress={onPress}
-      style={({ pressed }) => [styles.event, pressed && { backgroundColor: c.sunken }]}
+      style={styles.event}
     >
       <View style={[styles.eventIcon, { backgroundColor: c.sunken }]}>
         <Icon name={source.icon} size={13} color={c.textMuted} />
@@ -64,7 +65,7 @@ export function EventRow({ event, automation, onPress }: { event: AutomationEven
         ) : null}
       </View>
       {onPress ? <Icon name="chevron" size={11} color={c.textFaint} style={{ marginTop: 4 }} /> : null}
-    </Pressable>
+    </RowPressable>
   );
 }
 

@@ -102,7 +102,8 @@
     "loadFailed": "Verlauf konnte nicht geladen werden",
     "emptyTitle": "Noch kein Verlauf",
     "emptyBody": "Jeder Lauf, jede Gedächtnisänderung und jede neue Einstellung von {{name}} erscheint hier.",
-    "noMessage": "(keine Nachricht)"
+    "noMessage": "(keine Nachricht)",
+    "copyHash": "Commit-Hash kopieren"
   },
   "notes": {
     "title": "Notizen",
@@ -251,7 +252,9 @@
         "bowtie": "Fliege",
         "scarf": "Schal"
       }
-    }
+    },
+    "customEmoji": "Eigenes Emoji",
+    "customEmojiPlaceholder": "Oder tippe ein beliebiges Emoji…"
   },
   "describe": {
     "title": "Beschreib es",
@@ -269,5 +272,23 @@
     "stop": "Träumen beenden",
     "stopping": "Wird beendet…",
     "failed": "Der Traum konnte nicht beendet werden"
+  },
+  "stats": {
+    "runsLast200": "Läufe (letzte 200)",
+    "totalRuns": "Läufe gesamt",
+    "successRate": "Erfolgsquote",
+    "failed_one": "{{count}} Fehler",
+    "failed_other": "{{count}} Fehler",
+    "avgDuration": "Ø Dauer"
+  },
+  "drafts": {
+    "title": "Mach da weiter, wo du aufgehört hast",
+    "fromScratch": "Von Grund auf",
+    "fromTemplate": "Aus {{name}}",
+    "aTemplate": "einer Vorlage",
+    "unnamed": "Unbenannter Agent",
+    "continueLabel": "{{name}} fortsetzen",
+    "source": "Entwurf · {{source}}",
+    "discardLabel": "Entwurf {{name}} verwerfen"
   }
 }

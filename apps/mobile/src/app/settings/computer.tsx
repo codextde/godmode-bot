@@ -1,11 +1,12 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Stack } from "expo-router";
-import { ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
+import { ActivityIndicator, Alert, Pressable, RefreshControl, StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { useFullAccess } from "@/components/admin";
 import { CloseButton } from "@/components/close-button";
 import { FieldRow, Group, PickerRow, StepperRow, SwitchRow, Tile } from "@/components/form";
 import { ActionPill, reportInstall } from "@/components/program-parts";
+import { SettingsScroll } from "@/components/settings-scroll";
 import { FormSkeleton, isOutdated } from "@/components/settings-state";
 import { TartGroup, useVmAccessRows } from "@/components/vm-settings";
 import { ErrorState, LiveDot, T, tap } from "@/components/ui";
@@ -56,7 +57,7 @@ export default function ComputerSettings() {
   const sizes = SCREENSHOT_SIZES.some((n) => n === size) ? SCREENSHOT_SIZES : [...SCREENSHOT_SIZES, size].sort((a, b) => a - b);
 
   return (
-    <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content} refreshControl={<RefreshControl {...pull} />}>
+    <SettingsScroll contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content} refreshControl={<RefreshControl {...pull} />}>
       <Stack.Screen options={{ title: t("computer.title") }} />
       <CloseButton />
       {!s ? (
@@ -181,7 +182,7 @@ export default function ComputerSettings() {
           {admin ? <TartGroup vm={s.vm} /> : null}
         </>
       )}
-    </ScrollView>
+    </SettingsScroll>
   );
 }
 

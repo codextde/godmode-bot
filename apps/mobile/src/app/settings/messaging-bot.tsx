@@ -12,6 +12,7 @@ import {
   type MessagingUser,
   type MessagingUserStatus,
 } from "@godmode/shared";
+import { useLeaveSettings } from "@/components/agent-actions";
 import { AdminQueryState, FullAccessGate } from "@/components/admin";
 import { FieldRow, Group, SwitchRow } from "@/components/form";
 import { HeaderActions } from "@/components/header-actions";
@@ -77,6 +78,7 @@ export default function MessagingBot() {
 }
 
 function Bot({ bot: b }: { bot: MessagingConnection }) {
+  const leave = useLeaveSettings();
   const { t } = useTranslation(["messaging", "common"]);
   const agents = useAgents();
   const users = useBotUsers(b.id);
@@ -204,7 +206,7 @@ function Bot({ bot: b }: { bot: MessagingConnection }) {
                 icon={chat.kind === "direct" ? "person" : "agents"}
                 title={chat.title || (chat.kind === "direct" ? t("bot.directMessage") : t("bot.group"))}
                 lines={[[agent ? t("bot.withAgent", { name: agent.name }) : null, ago(chat.lastMessageAt)].filter(Boolean).join(" · ")]}
-                onPress={chat.conversationId ? () => router.push({ pathname: "/chat/[id]", params: { id: chat.conversationId! } }) : undefined}
+                onPress={chat.conversationId ? () => leave(() => router.push({ pathname: "/chat/[id]", params: { id: chat.conversationId! } })) : undefined}
               />
             );
           })

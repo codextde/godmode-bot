@@ -5,7 +5,7 @@ import { Pressable, StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { formatBytes, type AgentFileEntry, type AgentFileSearchHit, type AgentFileSize } from "@godmode/shared";
-import { entryActions, openDeleteMany, openMoveMany, openNew, useDreamingNow } from "@/components/file-actions";
+import { entryActions, openDeleteMany, openMoveMany, openNew, revealItem, useCanShowOnComputer, useDreamingNow } from "@/components/file-actions";
 import { useFullAccess } from "@/components/full-access";
 import { Glass } from "@/components/glass";
 import { HeaderActions, MenuSheet, type HeaderMenuItem } from "@/components/header-actions";
@@ -24,7 +24,8 @@ type Item = { kind: "entry"; entry: AgentFileEntry } | { kind: "hit"; hit: Agent
 
 /**
  * One folder of an agent: folders open in place, files in the viewer, search covers the whole folder. With full access
- * the header makes notes and folders and opens the bin and the review; a long press renames, moves or deletes.
+ * the header makes notes and folders and opens the bin and the review; a long press renames, moves, deletes or shows it
+ * on the computer.
  */
 export default function AgentFolder() {
   const c = useColors();
@@ -35,6 +36,9 @@ export default function AgentFolder() {
   const agent = byId.get(agentId);
   const { fullAccess } = useFullAccess();
   const frozen = useDreamingNow(agentId);
+  const canShow = useCanShowOnComputer();
+  /** Where this agent's folder is on the computer, for a phone that can show files there. */
+  const root = canShow ? agent?.repoPath : undefined;
   const list = useQuery({ queryKey: fk.list(agentId, path), queryFn: () => filesApi.list(agentId, path) });
   const [search, setSearch] = useState("");
   const query = useDebounced(search.trim(), 300);
@@ -96,6 +100,7 @@ export default function AgentFolder() {
         ]
       : []),
     { icon: "note", title: t("notes.title"), onPress: () => router.push({ pathname: "/settings/files/notes", params: { agent: agentId } }) },
+    ...(root ? [revealItem(path ? `${root}/${path}` : root)] : []),
     { icon: "broom", title: t("folder.review"), onPress: () => router.push({ pathname: "/settings/files/review", params: { agent: agentId } }) },
     { icon: "trash", title: binCount ? t("folder.binCount", { count: binCount }) : t("folder.bin"), onPress: () => router.push({ pathname: "/settings/files/bin", params: { agent: agentId } }) },
   ];
@@ -117,7 +122,7 @@ export default function AgentFolder() {
         query={searching ? { ...hits, isLoading: hits.isLoading && !hits.data } : list}
         items={items}
         keyOf={(i) => (i.kind === "entry" ? i.entry.path : `hit:${i.hit.path}`)}
-        extraData={`${editable}|${frozen}|${picked ? [...picked].join() : "off"}|${sizes.dataUpdatedAt}`}
+        extraData={`${editable}|${frozen}|${root}|${picked ? [...picked].join() : "off"}|${sizes.dataUpdatedAt}`}
         search={{ placeholder: t("folder.search"), value: search, onChange: setSearch }}
         icon="folder"
         emptyTitle={t("folder.emptyTitle")}
@@ -125,7 +130,7 @@ export default function AgentFolder() {
         header={frozen ? <Dreaming name={agent?.name ?? t("folder.theAgent")} /> : undefined}
         renderRow={(i) =>
           i.kind === "hit" ? (
-            <EntryRow agentId={agentId} path={i.hit.path} type={i.hit.type} lines={[parentOf(i.hit.path) || agent?.name, i.hit.snippet ? `${i.hit.line}: ${i.hit.snippet.trim()}` : null]} editable={editable} frozen={frozen} />
+            <EntryRow agentId={agentId} path={i.hit.path} type={i.hit.type} lines={[parentOf(i.hit.path) || agent?.name, i.hit.snippet ? `${i.hit.line}: ${i.hit.snippet.trim()}` : null]} editable={editable} frozen={frozen} root={root} />
           ) : (
             <EntryRow
               agentId={agentId}
@@ -134,6 +139,7 @@ export default function AgentFolder() {
               lines={[[bytesOf(i.entry, sizeOf.get(i.entry.path)), shortTime(i.entry.modifiedAt)].filter(Boolean).join(" · ")]}
               editable={editable}
               frozen={frozen}
+              root={root}
               picking={picked ? !isLocked(i.entry.path) : undefined}
               picked={picked?.has(i.entry.path)}
               onPick={toggle}
@@ -231,6 +237,7 @@ const EntryRow = memo(function EntryRow({
   lines,
   editable,
   frozen,
+  root,
   picking,
   picked,
   onPick,
@@ -241,6 +248,7 @@ const EntryRow = memo(function EntryRow({
   lines: (string | null | undefined)[];
   editable: boolean;
   frozen: boolean;
+  root?: string;
   /** Picking several: whether this one can be picked (undefined when not picking). */
   picking?: boolean;
   picked?: boolean;
@@ -249,7 +257,7 @@ const EntryRow = memo(function EntryRow({
   const c = useColors();
   const { t } = useTranslation("files");
   const [open, setOpen] = useState(false);
-  const actions = editable ? entryActions(agentId, path, frozen) : [];
+  const actions = [...(root ? [revealItem(`${root}/${path}`)] : []), ...(editable ? entryActions(agentId, path, frozen) : [])];
   const href = hrefOf(agentId, path, type);
   const row = (onPress?: () => void, onLongPress?: () => void, trailing?: ReactNode) => (
     <ListRow

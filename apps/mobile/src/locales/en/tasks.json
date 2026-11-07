@@ -148,7 +148,17 @@
     "saveFailed": "Couldn't save the task",
     "blockStops": "{{agent}} is working on it. Blocking it stops the run.",
     "blockConfirm": "Stop and block",
-    "gone": "This task is gone"
+    "gone": "This task is gone",
+    "keepAgent": "Keep {{who}}",
+    "takeOffTitle": "Take {{who}} off #{{number}}?",
+    "takeOffText": "The run stops and the task is parked in the Backlog.",
+    "takeOffConfirm": "Take off",
+    "handOverTitle": "Hand #{{number}} to {{next}}?",
+    "handOverConfirm": "Hand over",
+    "handOverText": "{{who}} is still on it. {{ends}} and {{next}} starts over.",
+    "runStops": "{{who}}'s run stops",
+    "followupCancelled": "{{who}}'s follow-up is cancelled",
+    "runEnds": "{{who}}'s run ends"
   },
   "manage": {
     "edit": "Edit",
@@ -300,5 +310,17 @@
     "loadFailed": "Couldn't load the pull request",
     "comments_one": "{{count}} comment",
     "comments_other": "{{count}} comments"
+  },
+  "parts": {
+    "title": "Parts",
+    "add": "Add a part",
+    "new": "New part of #{{number}}",
+    "archived_one": "{{count}} more part is archived.",
+    "archived_other": "{{count}} more parts are archived."
+  },
+  "repo": {
+    "another": "Another repository…",
+    "url": "Repository URL",
+    "baseBranch": "Base branch"
   }
 }

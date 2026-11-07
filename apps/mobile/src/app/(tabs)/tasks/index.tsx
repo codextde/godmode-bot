@@ -1,7 +1,7 @@
 import { FlashList, type ListRenderItem } from "@shopify/flash-list";
 import { useQuery } from "@tanstack/react-query";
-import { Link, router, Stack } from "expo-router";
-import { memo, useCallback, useMemo, useState } from "react";
+import { Link, router, Stack, useLocalSearchParams } from "expo-router";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, Pressable, RefreshControl, StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { isOverdue, localDay, TASK_PRIORITIES, TASK_STATUSES, type Agent, type Task, type TaskStatus } from "@godmode/shared";
@@ -10,6 +10,7 @@ import { FilterChips } from "@/components/filter-chips";
 import { GoalsStrip } from "@/components/goals-strip";
 import { STATUS_META, TaskRow } from "@/components/task-row";
 import { Icon, type IconName } from "@/components/icon";
+import { useMenuSheet } from "@/components/header-actions";
 import { Button, EmptyState, ErrorState, Hairline, SectionTitle, SkeletonRows, T, tap } from "@/components/ui";
 import { WorkspaceChip } from "@/components/workspace-chip";
 import { api, errorText } from "@/lib/api";
@@ -64,6 +65,16 @@ export default function Tasks() {
   const [goalsOpen, setGoalsOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [agent, setAgent] = useState(ALL);
+  // Coming from an agent's heartbeat: its tickets. The param goes right away, so the next visit applies it again.
+  const { agent: agentParam } = useLocalSearchParams<{ agent?: string }>();
+  const [seenParam, setSeenParam] = useState<string | undefined>(undefined);
+  if (agentParam !== seenParam) {
+    setSeenParam(agentParam);
+    if (agentParam) setAgent(agentParam);
+  }
+  useEffect(() => {
+    if (agentParam) router.setParams({ agent: undefined });
+  }, [agentParam]);
   const [priority, setPriority] = useState(ALL);
   const [due, setDue] = useState<Due>(ALL);
   const [label, setLabel] = useState(ALL);
@@ -83,14 +94,14 @@ export default function Tasks() {
     setLabel(ALL);
   };
   const filterOptions = useMemo(() => {
-    const ids = [...new Set(onBoard.map((t) => t.agentId).filter((id): id is string => !!id))];
+    const ids = [...new Set([...onBoard.map((t) => t.agentId), agent === ALL || agent === UNASSIGNED ? null : agent].filter((id): id is string => !!id))];
     const named = ids.map((id) => ({ value: id, label: agents.get(id)?.name ?? t("tasks:task.anAgent") })).sort((a, b) => a.label.localeCompare(b.label));
     const labels = [...new Set(onBoard.flatMap((t) => t.labels ?? []))].sort((a, b) => a.localeCompare(b));
     return {
       agents: [{ value: ALL, label: t("tasks:list.allAgents") }, ...named, ...(onBoard.some((t) => !t.agentId) ? [{ value: UNASSIGNED, label: t("tasks:list.unassigned") }] : [])],
       labels: [{ value: ALL, label: t("tasks:list.allLabels") }, ...labels.map((l) => ({ value: l, label: l }))],
     };
-  }, [onBoard, agents, t]);
+  }, [onBoard, agents, agent, t]);
   const counts = useMemo(() => {
     const n = new Map<TaskStatus, number>();
     for (const t of board) n.set(t.status, (n.get(t.status) ?? 0) + 1);
@@ -281,7 +292,7 @@ function archiveTask(id: string) {
     .finally(() => void queryClient.invalidateQueries({ queryKey: qk.tasks }));
 }
 
-/** Long press on iOS: archive the task (off the board, restorable on the computer). */
+/** Long press: archive the task (off the board, restorable on the computer). */
 const TaskItem = memo(function TaskItem({
   task,
   agent,
@@ -296,6 +307,7 @@ const TaskItem = memo(function TaskItem({
   divided: boolean;
 }) {
   const { t } = useTranslation("tabs");
+  const menu = useMenuSheet();
   const confirmArchive = () => {
     if (task.status !== "in_progress") return archiveTask(task.id);
     Alert.alert(t("tasks.stopDialog.title"), t("tasks.stopDialog.body", { name: agent?.name ?? t("tasks.stopDialog.theAgent") }), [
@@ -304,17 +316,27 @@ const TaskItem = memo(function TaskItem({
     ]);
   };
 
-  const row = (
+  const row = (onLongPress?: () => void) => (
     <>
       {divided && <Hairline inset={72} />}
-      <TaskRow task={task} agent={agent} workspaceName={workspaceName} projectName={projectName} />
+      <TaskRow task={task} agent={agent} workspaceName={workspaceName} projectName={projectName} onLongPress={onLongPress} />
     </>
   );
-  if (process.env.EXPO_OS !== "ios") return row;
+  if (process.env.EXPO_OS !== "ios") {
+    return (
+      <>
+        {row(() => {
+          tap();
+          menu.show([{ icon: "archive", title: t("chats.menu.archive"), onPress: confirmArchive }], task.title);
+        })}
+        {menu.sheet}
+      </>
+    );
+  }
   return (
     <Link href={{ pathname: "/task/[id]", params: { id: task.id } }} asChild>
       <Link.Trigger>
-        <View>{row}</View>
+        <View>{row()}</View>
       </Link.Trigger>
       <Link.Preview />
       <Link.Menu>

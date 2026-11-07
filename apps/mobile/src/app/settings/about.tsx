@@ -1,12 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
 import Constants from "expo-constants";
 import { Stack } from "expo-router";
-import { Alert, Linking, ScrollView, StyleSheet, View } from "react-native";
+import { Alert, Linking, StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { LICENSE_SITE } from "@godmode/shared";
 import { CloseButton } from "@/components/close-button";
 import { Group, LinkRow } from "@/components/form";
 import { Logo } from "@/components/logo";
+import { SettingsScroll } from "@/components/settings-scroll";
 import { InfoRow } from "@/components/status-rows";
 import { T } from "@/components/ui";
 import { api } from "@/lib/api";
@@ -33,7 +34,7 @@ export default function About() {
   const open = (path: string) => void Linking.openURL(`${LICENSE_SITE}${path}`).catch(() => undefined);
 
   return (
-    <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content}>
+    <SettingsScroll contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content}>
       <Stack.Screen options={{ title: t("about.title") }} />
       <CloseButton />
 
@@ -66,7 +67,7 @@ export default function About() {
         <LinkRow icon="globe" title={t("about.website")} value="usegodmode.com" onPress={() => open("")} />
         <LinkRow icon="doc" title={t("about.terms")} onPress={() => open("/legal/terms")} />
       </Group>
-    </ScrollView>
+    </SettingsScroll>
   );
 }
 

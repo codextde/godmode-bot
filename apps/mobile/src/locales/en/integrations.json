@@ -7,9 +7,6 @@
   "emptyBody": "Add MCP servers, API keys and apps in Godmode on your computer.",
   "on": "On",
   "off": "Off",
-  "links": {
-    "group": "Tools and access"
-  },
   "mcp": {
     "title": "MCP servers",
     "local": "Program on your computer",
@@ -18,7 +15,12 @@
   "apiTools": {
     "title": "API keys",
     "noAddress": "Key only",
-    "noKey": "No key saved"
+    "noKey": "No key saved",
+    "docs": "Docs",
+    "docsLink": "Docs link",
+    "noDocs": "No docs",
+    "usedAgo": "Used {{ago}}",
+    "notUsed": "Not used yet"
   },
   "composio": {
     "title": "Composio apps",

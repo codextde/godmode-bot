@@ -1,10 +1,11 @@
 import { router } from "expo-router";
-import { Pressable, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { humanTaskRef, type Agent, type HumanTask } from "@godmode/shared";
 import { CharacterAvatar } from "./character";
 import { Icon } from "./icon";
 import { Badge, Row, T, tap, type Tone } from "./ui";
+import { RowPressable } from "./row-pressable";
 import { shortTime } from "@/lib/format";
 import { t } from "@/lib/i18n";
 import { radius, space, useColors } from "@/lib/theme";
@@ -43,7 +44,7 @@ export function HumanTaskRow({ task, agent }: { task: HumanTask; agent?: Agent }
     .filter(Boolean)
     .join(" · ");
   return (
-    <Pressable onPress={() => openHumanTask(task.id)} style={({ pressed }) => [styles.row, pressed && { backgroundColor: c.sunken }]}>
+    <RowPressable onPress={() => openHumanTask(task.id)} style={styles.row}>
       {agent ? (
         <CharacterAvatar agent={agent} size={40} />
       ) : (
@@ -68,7 +69,7 @@ export function HumanTaskRow({ task, agent }: { task: HumanTask; agent?: Agent }
           </T>
         </Row>
       </View>
-    </Pressable>
+    </RowPressable>
   );
 }
 

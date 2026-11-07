@@ -1,6 +1,7 @@
 import { requireOptionalNativeModule } from "expo";
 import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from "expo-audio";
 import type { File } from "expo-file-system";
+import * as SecureStore from "expo-secure-store";
 import { create } from "zustand";
 import type { Message, VoiceSettings } from "@godmode/shared";
 import { tempCopy } from "./agent-files";
@@ -145,14 +146,38 @@ function speakFromComputer(text: string, inSilentMode: boolean): Speech {
 const phoneSpeech = () => (requireOptionalNativeModule("ExpoSpeech") ? import("expo-speech") : Promise.resolve(null));
 
 const tagOf = (language: string) => language.toLowerCase().replace("_", "-");
+const baseOf = (language: string) => tagOf(language).split("-")[0];
 
-/** The phone's voice for `tag` (the language of the chat, else of the app): that one exactly or the same language, the better sounding first. */
+/** Voices differ from phone to phone, so the one picked in Settings → Voice stays on this phone. */
+const VOICE_KEY = "godmode.phoneVoice";
+
+export const pickedPhoneVoice = () => SecureStore.getItemAsync(VOICE_KEY).catch(() => null);
+
+export const pickPhoneVoice = (id: string) => (id ? SecureStore.setItemAsync(VOICE_KEY, id) : SecureStore.deleteItemAsync(VOICE_KEY)).catch(() => undefined);
+
+/** The phone's voices for a language, the better sounding first; none in a build without them. */
+export async function phoneVoices(tag: string): Promise<{ id: string; name: string; language: string }[]> {
+  const speech = await phoneSpeech();
+  if (!speech) return [];
+  const wanted = baseOf(tag.trim() || currentLanguage());
+  const voices = await speech.getAvailableVoicesAsync().catch(() => []);
+  const rank = (quality: string) => (quality === speech.VoiceQuality.Enhanced ? 0 : 1);
+  return voices
+    .filter((v) => baseOf(v.language) === wanted)
+    .sort((a, b) => rank(a.quality) - rank(b.quality) || a.name.localeCompare(b.name))
+    .map((v) => ({ id: v.identifier, name: v.name, language: v.language }));
+}
+
+/** The phone's voice for `tag` (the language of the chat, else of the app): the one picked for that language, or that one exactly or the same language, the better sounding first. */
 async function phoneVoice(speech: NonNullable<Awaited<ReturnType<typeof phoneSpeech>>>, tag: string): Promise<{ language: string; voice?: string }> {
   const language = tag.trim() || currentLanguage();
   const voices = await speech.getAvailableVoicesAsync().catch(() => []);
   const wanted = tagOf(language);
+  const picked = await pickedPhoneVoice();
+  const own = picked ? voices.find((v) => v.identifier === picked && baseOf(v.language) === baseOf(wanted)) : undefined;
+  if (own) return { language: own.language, voice: own.identifier };
   const exact = voices.filter((v) => tagOf(v.language) === wanted);
-  const near = exact.length ? exact : voices.filter((v) => tagOf(v.language).split("-")[0] === wanted.split("-")[0]);
+  const near = exact.length ? exact : voices.filter((v) => baseOf(v.language) === baseOf(wanted));
   const best = near.find((v) => v.quality === speech.VoiceQuality.Enhanced) ?? near[0];
   return best ? { language: best.language, voice: best.identifier } : { language };
 }

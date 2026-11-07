@@ -188,6 +188,7 @@
   },
   "api": {
     "license": "Godmode needs an active licence on your computer. Add your licence key in Godmode there, under Settings → License.",
+    "licenseFull": "Godmode needs an active licence. Add your licence key under Settings → License.",
     "updateDesktop": "Update Godmode on your computer to do this from your phone.",
     "offline": "Can't reach your computer. Check that it's awake and connected to Tailscale or Godmode Cloud.",
     "offlinePairing": "Can't reach your computer. Turn on Tailscale on this phone with the computer's account, or link the computer to Godmode Cloud.",

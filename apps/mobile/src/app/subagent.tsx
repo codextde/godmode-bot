@@ -5,7 +5,7 @@ import { ScrollView, StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import type { MessageBlock } from "@godmode/shared";
 import { Markdown } from "@/components/markdown";
-import { duration, Elapsed, SubagentAvatar, Thinking, ThinkingStep, ToolStep, useSubagentView, type ParentAgent } from "@/components/message";
+import { duration, Elapsed, StepSource, SubagentAvatar, Thinking, ThinkingStep, ToolStep, useSubagentView, type ParentAgent } from "@/components/message";
 import { EmptyState, ErrorState, LoadingState, T } from "@/components/ui";
 import { errorText } from "@/lib/api";
 import { fetchConversation } from "@/lib/chat-cache";
@@ -17,10 +17,10 @@ import { radius, space, useColors } from "@/lib/theme";
 type ToolUse = Extract<MessageBlock, { type: "tool_use" }>;
 
 /** The subagent's call and its work, in the answer being written first, then the stored ones from the newest. */
-function findSubagent(sources: { blocks: MessageBlock[]; live: boolean }[], id: string) {
-  for (const { blocks, live } of sources) {
+function findSubagent(sources: { blocks: MessageBlock[]; live: boolean; messageId?: string }[], id: string) {
+  for (const { blocks, live, messageId } of sources) {
     const block = blocks.find((b): b is ToolUse => b.type === "tool_use" && b.id === id);
-    if (block) return { block, children: blocks.filter((b) => "parentToolUseId" in b && b.parentToolUseId === id), live };
+    if (block) return { block, children: blocks.filter((b) => "parentToolUseId" in b && b.parentToolUseId === id), live, messageId };
   }
   return null;
 }
@@ -36,8 +36,8 @@ export default function SubagentSheet() {
   const { byId } = useAgents();
   const agent = byId.get(conversation.data?.agentId ?? "");
   const found = useMemo(() => {
-    const stored = [...(conversation.data?.messages ?? [])].reverse().map((m) => ({ blocks: m.blocks, live: !!run && m.runId === run.id }));
-    return findSubagent([...(draft ? [{ blocks: draft.blocks, live: true }] : []), ...stored], id);
+    const stored = [...(conversation.data?.messages ?? [])].reverse().map((m) => ({ blocks: m.blocks, live: !!run && m.runId === run.id, messageId: m.id }));
+    return findSubagent([...(draft ? [{ blocks: draft.blocks, live: true, messageId: draft.messageId }] : []), ...stored], id);
   }, [conversation.data?.messages, draft, run, id]);
 
   if (!found) {
@@ -53,7 +53,11 @@ export default function SubagentSheet() {
       </View>
     );
   }
-  return <Transcript block={found.block} childBlocks={found.children} streaming={found.live} agent={agent} />;
+  return (
+    <StepSource.Provider value={{ conversationId, messageId: found.messageId }}>
+      <Transcript block={found.block} childBlocks={found.children} streaming={found.live} agent={agent} />
+    </StepSource.Provider>
+  );
 }
 
 function Transcript({ block, childBlocks, streaming, agent }: { block: ToolUse; childBlocks: MessageBlock[]; streaming: boolean; agent?: ParentAgent }) {
