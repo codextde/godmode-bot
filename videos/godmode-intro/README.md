@@ -18,9 +18,9 @@ at how it works and an end card. Everything is shown in the app's light "paper" 
 ## Commands
 
 ```bash
-npx --yes hyperframes@0.9.17 preview --background   # Studio preview
-npx --yes hyperframes@0.9.17 check                  # lint, layout, motion, contrast
-npx --yes hyperframes@0.9.17 render --quality delivery -o renders/godmode-intro.mp4
+npx --yes hyperframes@0.9.19 preview --background   # Studio preview
+npx --yes hyperframes@0.9.19 check                  # lint, layout, motion, contrast
+npx --yes hyperframes@0.9.19 render --quality delivery -o renders/godmode-intro.mp4
 ```
 
 ## Sources
