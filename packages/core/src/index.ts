@@ -413,8 +413,7 @@ async function serve(values: Record<string, unknown>, role?: CoreConfig["role"])
       stopModUpdates();
     }
     await shutdownRunner();
-    await shutdownBrowsers();
-    await stopArtifactCheck().catch(() => undefined);
+    await Promise.all([shutdownBrowsers(), stopArtifactCheck().catch(() => undefined)]);
     await shutdownComputer();
     await stopHex().catch(() => undefined);
     await shutdownVms().catch((err) => log.warn("could not stop VMs", err));

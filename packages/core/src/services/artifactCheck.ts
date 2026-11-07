@@ -31,6 +31,8 @@ interface Browser {
 }
 
 let browser: Promise<Browser> | null = null;
+/** The browser on its way out still holds the profile folder. */
+let closing: Promise<void> | null = null;
 let queue: Promise<unknown> = Promise.resolve();
 
 function profileDir(): string {
@@ -41,6 +43,7 @@ async function launch(): Promise<Browser> {
   const chrome = findChrome(getSettings().browser.chromePath);
   if (!chrome) throw new Error("no Chrome or Chromium found on this computer");
   const dir = profileDir();
+  await closing;
   rmSync(dir, { recursive: true, force: true });
   ensureDir(dir);
   const proc = await launchChrome({
@@ -82,7 +85,10 @@ export async function stopArtifactCheck(): Promise<void> {
   if (!b) return;
   if (b.idle) clearTimeout(b.idle);
   b.client.close();
-  await b.proc.close();
+  const close = b.proc.close();
+  closing = close;
+  await close;
+  if (closing === close) closing = null;
 }
 
 function firstLine(text: unknown): string {

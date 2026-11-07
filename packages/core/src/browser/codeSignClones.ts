@@ -4,15 +4,15 @@
  * way. A browser that was killed leaves its clone behind until the Mac restarts, and clones of an older version keep that
  * version's files on disk.
  *
- * A clone is born within a second or so of the browser that made it. One born shortly after a browser that still runs
- * started may be that browser's own and stays; so does everything when the running processes can't be listed.
+ * A clone is born within a second or so of the browser that made it. One born within the hour after a browser of the same
+ * name that still runs started may be that browser's own and stays; so does everything when processes can't be listed.
  */
 import { lstat, readdir } from "node:fs/promises";
 import { basename, join } from "node:path";
 
 const CLONE = /^code_sign_clone\.[A-Za-z0-9._-]{6}$/;
-/** How long after its browser started a clone may be born and still count as that browser's. */
-const BORN_WITHIN = 5 * 60_000;
+/** How long after its browser started a clone may be born and still count as that browser's (measured: about 1 s). */
+const BORN_WITHIN = 60 * 60_000;
 const CLOCK_SLACK = 5_000;
 
 export interface LeftoverClone {
@@ -23,7 +23,7 @@ export interface LeftoverClone {
 }
 
 export interface StartedProcess {
-  /** Executable name ("Google Chrome"). */
+  /** Executable name ("Google Chrome"), as started or as the kernel knows it (16 characters at most). */
   name: string;
   startedAt: number;
 }
@@ -37,14 +37,17 @@ export function __setCodeSignClonesForTests(opts: { dir: string; list?: () => Pr
   processes = opts?.list ?? runningProcesses;
 }
 
-let userTemp: Promise<string | null> | null = null;
+let userTemp: string | null = null;
 
 /** The per-user folder macOS empties only at startup: the sibling `X` of the per-user temp folder. */
 async function cloneRoot(): Promise<string | null> {
   if (process.platform !== "darwin") return null;
-  userTemp ??= output(["getconf", "DARWIN_USER_TEMP_DIR"]).then((dir) => dir?.trim() || null);
-  const temp = await userTemp;
-  return temp && /^\/(private\/)?var\/folders\//.test(temp) ? join(temp, "..", "X") : null;
+  if (!userTemp) {
+    const temp = (await output(["/usr/bin/getconf", "DARWIN_USER_TEMP_DIR"]))?.trim() ?? "";
+    if (!/^\/(private\/)?var\/folders\/[^/]+\/[^/]+\/T\/?$/.test(temp)) return null;
+    userTemp = temp;
+  }
+  return join(userTemp, "..", "X");
 }
 
 async function output(cmd: string[]): Promise<string | null> {
@@ -64,17 +67,30 @@ export function elapsedSeconds(etime: string): number | null {
   return ((Number(m[1] ?? 0) * 24 + Number(m[2] ?? 0)) * 60 + Number(m[3])) * 60 + Number(m[4]);
 }
 
+/** Every process twice: by the path it was started as (a symlink, say) and by the file the kernel ran. */
 async function runningProcesses(): Promise<StartedProcess[] | null> {
-  const text = await output(["ps", "-axww", "-o", "etime=,comm="]);
-  if (!text) return null;
+  // Read first: a late clock would make processes look younger than they are.
   const now = Date.now();
+  const [asStarted, asRun] = await Promise.all([output(["/bin/ps", "-axww", "-o", "etime=,comm="]), output(["/bin/ps", "-axww", "-o", "etime=,ucomm="])]);
+  if (!asStarted || !asRun) return null;
   const list: StartedProcess[] = [];
-  for (const line of text.split("\n")) {
-    const m = /^\s*(\S+)\s+(.+)$/.exec(line);
-    const secs = m ? elapsedSeconds(m[1]!) : null;
-    if (m && secs !== null) list.push({ name: basename(m[2]!.trim()), startedAt: now - secs * 1000 });
+  for (const [text, name] of [
+    [asStarted, basename],
+    [asRun, (s: string) => s],
+  ] as const) {
+    for (const line of text.split("\n")) {
+      const m = /^\s*(\S+)\s+(.+)$/.exec(line);
+      const secs = m ? elapsedSeconds(m[1]!) : null;
+      if (m && secs !== null) list.push({ name: name(m[2]!.trim()), startedAt: now - secs * 1000 });
+    }
   }
   return list.length ? list : null;
+}
+
+function sameExecutable(executable: string, name: string): boolean {
+  const a = executable.toLowerCase();
+  const b = name.toLowerCase();
+  return a === b || a.slice(0, 16) === b;
 }
 
 async function names(dir: string): Promise<string[]> {
@@ -87,7 +103,7 @@ export async function leftoverClones(now: number, minAgeMs: number): Promise<Lef
   if (!dir) return [];
   const found: (LeftoverClone & { executables: string[] })[] = [];
   for (const group of await names(dir)) {
-    if (!group.endsWith(".code_sign_clone")) continue;
+    if (!group.endsWith(".code_sign_clone") || !(await lstat(join(dir, group)).catch(() => null))?.isDirectory()) continue;
     for (const name of await names(join(dir, group))) {
       if (!CLONE.test(name)) continue;
       const path = join(dir, group, name);
@@ -109,7 +125,10 @@ export async function leftoverClones(now: number, minAgeMs: number): Promise<Lef
     .filter(
       (c) =>
         !running.some(
-          (p) => (!c.executables.length || c.executables.includes(p.name)) && p.startedAt <= c.bornAt + CLOCK_SLACK && c.bornAt - p.startedAt <= BORN_WITHIN,
+          (p) =>
+            (!c.executables.length || c.executables.some((e) => sameExecutable(e, p.name))) &&
+            p.startedAt <= c.bornAt + CLOCK_SLACK &&
+            c.bornAt - p.startedAt <= BORN_WITHIN,
         ),
     )
     .map(({ path, app, bornAt }) => ({ path, app, bornAt }));

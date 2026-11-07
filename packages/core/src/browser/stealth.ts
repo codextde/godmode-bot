@@ -76,14 +76,17 @@ async function probeUserAgent(executable: string, launch: Launch): Promise<strin
     return null;
   } finally {
     probes.delete(abort);
-    await proc?.close();
-    if (dir) {
-      try {
-        rmSync(dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
-      } catch {
-        /* a leftover temp profile is harmless */
+    // The answer doesn't wait for the probe browser to quit.
+    void (async () => {
+      await proc?.close();
+      if (dir) {
+        try {
+          rmSync(dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+        } catch {
+          /* a leftover temp profile is harmless */
+        }
       }
-    }
+    })();
   }
 }
 

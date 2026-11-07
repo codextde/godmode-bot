@@ -410,7 +410,7 @@ async function startBrowser(profileId: string, opts: { headless?: boolean; trans
     await client.send("Target.setDiscoverTargets", { discover: true });
     tabs.addSpares(tabs.userPages().filter((p) => tabs.isBlank(p.targetId)).map((p) => p.targetId));
   } catch (err) {
-    proc?.kill("SIGKILL");
+    await proc?.close();
     throw new HttpError(500, `Could not connect to the browser: ${err instanceof Error ? err.message : String(err)}`, "browser_connect_failed");
   }
 
@@ -547,8 +547,13 @@ async function onBrowserGone(rb: RunningBrowser, reason: string) {
     chats: rb.tabs.openChats().length,
   });
   rb.client.close();
-  await terminate(rb);
-  forget(rb);
+  // A run that needs this profile meanwhile waits until the old browser is gone, as after stopBrowser.
+  const gone = terminate(rb).finally(() => {
+    forget(rb);
+    if (stopping.get(rb.profileId) === gone) stopping.delete(rb.profileId);
+  });
+  stopping.set(rb.profileId, gone);
+  await gone;
 }
 
 export async function stopBrowser(profileId: string): Promise<void> {
