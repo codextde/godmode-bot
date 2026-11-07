@@ -1,5 +1,15 @@
 {
   "agent": {
+    "toolsEmptyInherit": "Noch keine API-Tools. Füg eins hinzu, damit er Bilder erzeugen, sprechen, suchen oder deine eigenen APIs aufrufen kann.",
+    "toolsEmptyOwn": "Keine eigenen API-Tools. Füg eins hinzu, damit er Bilder erzeugen, sprechen, suchen oder deine eigenen APIs aufrufen kann.",
+    "addOwnTool": "Tool nur für diesen Agenten hinzufügen",
+    "manageTools": "Tools verwalten",
+    "toolOwn": "Nur dieser Agent",
+    "inherited": "Bekommt dieser Agent zusätzlich bei jedem Lauf",
+    "layerGlobal": "Jeder Agent",
+    "layerGlobalTitle": "Global",
+    "layerWorkspace": "Workspace",
+    "layerProject": "Projekt",
     "team": "Team",
     "workspace": "Workspace",
     "global": "Global",
@@ -51,7 +61,11 @@
     "empty": "Keine Unterordner",
     "more": "Auf dem Computer liegen mehr Ordner, als hier zu sehen sind.",
     "loadFailed": "Der Ordner konnte nicht geöffnet werden",
-    "own": "Seinen eigenen Ordner nutzen"
+    "own": "Seinen eigenen Ordner nutzen",
+    "filter": "Filtern",
+    "noMatch": "Kein Ordner passt",
+    "showHidden": "Versteckte Ordner zeigen",
+    "hideHidden": "Versteckte Ordner ausblenden"
   },
   "move": {
     "moveTo": "Verschieben nach",
@@ -114,6 +128,18 @@
     }
   },
   "workspace": {
+    "held": {
+      "projects": "Projekte",
+      "agents": "Agenten",
+      "credentials": "Logins",
+      "totp": "2FA-Codes",
+      "cards": "Karten",
+      "mcpServers": "MCP-Server",
+      "apiTools": "API-Tools",
+      "browserProfiles": "Browserprofile",
+      "composioConnections": "Composio-Verbindungen",
+      "tasks": "Aufgaben"
+    },
     "vm": "Virtuelle Maschine",
     "vmNone": "Keine",
     "accounts": "Claude-Konten",

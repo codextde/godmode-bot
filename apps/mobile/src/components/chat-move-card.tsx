@@ -6,7 +6,7 @@ import type { ChatMove } from "@godmode/shared";
 import { Icon } from "./icon";
 import { T } from "./ui";
 import { hideChatMove, useChatMoves, type MoveOnItsWay } from "@/lib/chat-moves";
-import { radius, space, type, useColors } from "@/lib/theme";
+import { radius, space, useColors } from "@/lib/theme";
 
 const MB = 1024 * 1024;
 
@@ -86,7 +86,7 @@ function Card({ conversationId, moving }: { conversationId: string; moving: Move
             {detail}
           </T>
         </View>
-        <T variant="caption" muted style={[type.mono, styles.numbers]}>
+        <T variant="caption" muted style={styles.numbers}>
           {left !== null ? t("move.left", { time: clock(left), rate: size(rate!) }) : clock((now - startedAt) / 1000)}
         </T>
         <Pressable accessibilityRole="button" accessibilityLabel={t("move.hide")} hitSlop={10} onPress={() => hideChatMove(conversationId)}>

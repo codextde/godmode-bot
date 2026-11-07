@@ -6,10 +6,12 @@ import { useTranslation } from "react-i18next";
 import type { Agent, AppNotification, MissingLogin, MissingLoginKind, MissingLoginStatus } from "@godmode/shared";
 import { CharacterAvatar } from "@/components/character";
 import { FilterChips } from "@/components/filter-chips";
+import { Segmented } from "@/components/form";
 import { useFullAccess } from "@/components/full-access";
 import { HeaderActions } from "@/components/header-actions";
 import { openHumanTask } from "@/components/human-task-row";
 import { Icon, type IconName } from "@/components/icon";
+import { ClosedList, type ClosedStatus } from "@/components/inbox-closed";
 import { NotificationRow, openNotificationLink } from "@/components/notification-row";
 import { openChat } from "@/components/rows";
 import { openTask } from "@/components/task-row";
@@ -64,6 +66,7 @@ export default function Inbox() {
   const pull = usePullRefresh(() => Promise.all([needs.refetch(), notifications.refetch()]));
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
+  const [tab, setTab] = useState<"open" | ClosedStatus>("open");
   const query = search.trim().toLowerCase();
 
   const agentName = useCallback((id: string | null) => (id ? (agents.get(id)?.name ?? "") : ""), [agents]);
@@ -105,7 +108,19 @@ export default function Inbox() {
         keyboardDismissMode="on-drag"
         refreshControl={<RefreshControl {...pull} />}
       >
-        {total > 0 && counts.size > 1 ? (
+        <Segmented
+          value={tab}
+          onChange={setTab}
+          options={[
+            { value: "open", label: t("tabs.open") },
+            { value: "resolved", label: t("tabs.resolved") },
+            { value: "dismissed", label: t("tabs.dismissed") },
+          ]}
+        />
+
+        {tab !== "open" ? <ClosedList status={tab} query={query} /> : null}
+
+        {tab === "open" && total > 0 && counts.size > 1 ? (
           <FilterChips
             bleed={space.lg}
             value={filter}
@@ -117,7 +132,7 @@ export default function Inbox() {
           />
         ) : null}
 
-        <View>
+        {tab === "open" ? <View>
           <SectionTitle title={waiting ? t("attentionCount", { count: waiting }) : t("attention")} />
           {needs.loading ? (
             <Card>
@@ -159,9 +174,9 @@ export default function Inbox() {
               ))}
             </View>
           )}
-        </View>
+        </View> : null}
 
-        {filter === "all" ? (
+        {tab === "open" && filter === "all" ? (
           <Notifications
             list={query ? shownNotifications : notifications.data}
             loading={notifications.isLoading}

@@ -17,6 +17,8 @@ export const pluginsAdmin = {
   templates: () => request<ModTemplate[]>("GET", "/api/mods/templates"),
   create: (input: ModInput) => request<Mod>("POST", "/api/mods", input, 60_000),
   update: (id: string, patch: ModPatch) => request<Mod>("PATCH", `/api/mods/${encodeURIComponent(id)}`, patch, 60_000),
+  /** A plugin folder on the computer, stays off until switched on. */
+  importFolder: (path: string) => request<Mod>("POST", "/api/mods/import", { path }, 120_000),
   /** Claude Code's validator over the saved files again. */
   check: (id: string) => request<Mod>("POST", `/api/mods/${encodeURIComponent(id)}/check`, {}, 90_000),
   /** Checks files that aren't saved; `check` is null when Claude Code isn't installed. */

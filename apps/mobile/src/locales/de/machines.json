@@ -1,6 +1,9 @@
 {
   "manage": "Verwalten",
   "computer": {
+    "entireDesktop": "Gesamter Desktop",
+    "displayCount_one": "{{count}} Bildschirm",
+    "displayCount_other": "{{count}} Bildschirme",
     "title": "Computer",
     "main": "Hauptbildschirm",
     "allWindows": "Alle Fenster",
@@ -197,6 +200,21 @@
     "turnedOffBody": "Godmode sucht keine Handys und Agenten nutzen sie nicht, bis du das einschaltest."
   },
   "phone": {
+    "buttons": {
+      "title": "Tasten",
+      "failed": "Die Taste ließ sich nicht drücken",
+      "power": "Ein/Aus",
+      "volumeDown": "Leiser",
+      "volumeUp": "Lauter",
+      "mute": "Stumm",
+      "wake": "Bildschirm aufwecken",
+      "sleep": "Bildschirm ausschalten",
+      "notifications": "Mitteilungen",
+      "quickSettings": "Schnelleinstellungen",
+      "back": "Zurück",
+      "home": "Startbildschirm",
+      "recents": "Letzte Apps"
+    },
     "watch": "{{name}} ansehen",
     "watchLive": "Live",
     "gone": "Dieses Handy ist nicht mehr bekannt",

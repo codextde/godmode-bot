@@ -1,4 +1,29 @@
 {
+  "godmode": {
+    "title": "Godmode on this server",
+    "none": "Not installed",
+    "hint": "Install it so projects with a folder on this server can run their chats there.",
+    "install": "Install",
+    "installing": "Installing and connecting…",
+    "failed": "Install failed",
+    "retry": "Try again",
+    "installFailed": "Couldn't install Godmode on the server",
+    "updating": "Updating…",
+    "update": "Update to {{version}}",
+    "updateFailed": "Couldn't update Godmode on the server",
+    "remove": "Remove",
+    "removeTitle": "Stop and remove Godmode on {{name}}?",
+    "removed": "Godmode on {{name}} was stopped and removed",
+    "removeFailed": "Couldn't remove Godmode from the server",
+    "loginsShared": "logins shared",
+    "loginsHere": "logins stay here",
+    "state": {
+      "online": "Connected",
+      "connecting": "Connecting",
+      "offline": "Offline",
+      "updateRequired": "Needs an update"
+    }
+  },
   "loadFailed": "Couldn't load the servers",
   "form": {
     "addTitle": "Add server",

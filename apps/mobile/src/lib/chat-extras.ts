@@ -3,6 +3,7 @@ import { File } from "expo-file-system";
 import { router } from "expo-router";
 import type { Conversation, DeviceGroup, MoveChatInput, RunnerState, SharedChatPreview } from "@godmode/shared";
 import { request } from "./api";
+import { t } from "./i18n";
 
 /** Sharing a chat as a code or file, opening one shared with you, and moving a chat to another computer of the group. */
 export const chatExtrasApi = {
@@ -37,6 +38,8 @@ export function moveTargets(places: Place[], chatRunnerId: string | null | undef
 }
 
 const CHAT_FILE_EXT = ".godmode-chat";
+/** A shared chat is a few megabytes at most; more is not a chat file. */
+export const MAX_CHAT_FILE_BYTES = 150 * 1024 * 1024;
 
 export const isChatFile = (file: { name: string }) => file.name.toLowerCase().endsWith(CHAT_FILE_EXT);
 
@@ -55,5 +58,7 @@ export function openChatImport(data: string, name: string | null = null) {
 }
 
 export async function openChatFile(file: { uri: string; name: string }) {
-  openChatImport(await new File(file.uri).text(), file.name);
+  const picked = new File(file.uri);
+  if ((picked.size ?? 0) > MAX_CHAT_FILE_BYTES) throw new Error(t("chat:import.tooBig"));
+  openChatImport(await picked.text(), file.name);
 }

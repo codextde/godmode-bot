@@ -17,7 +17,7 @@ const ROOTS = ["workspace", "memory"];
 export default function MoveSheet() {
   const c = useColors();
   const { fullAccess } = useFullAccess();
-  const { agent, path } = useLocalSearchParams<{ agent: string; path: string }>();
+  const { agent, path, paths } = useLocalSearchParams<{ agent: string; path?: string; paths?: string }>();
   if (fullAccess === false) {
     return (
       <View style={[styles.fill, { backgroundColor: c.background }]}>
@@ -26,24 +26,48 @@ export default function MoveSheet() {
     );
   }
   if (fullAccess === undefined) return <LoadingState />;
-  return <MoveForm agent={agent} path={path} />;
+  return <MoveForm agent={agent} paths={path ? [path] : listOf(paths)} />;
 }
 
-function MoveForm({ agent, path }: { agent: string; path: string }) {
+/** Several paths travel as a JSON list (what was picked in the folder). */
+function listOf(raw: string | undefined): string[] {
+  try {
+    const list: unknown = JSON.parse(raw ?? "[]");
+    return Array.isArray(list) ? list.filter((p): p is string => typeof p === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function MoveForm({ agent, paths }: { agent: string; paths: string[] }) {
   const c = useColors();
   const { t } = useTranslation(["files", "common"]);
+  const path = paths[0] ?? "";
   const [picked, setPicked] = useState(() => (parentOf(path).startsWith("memory") ? "memory" : "workspace"));
-  const info = useQuery({ queryKey: fk.inspect(agent, [path]), queryFn: () => filesApi.inspect(agent, [path]), gcTime: 0, staleTime: 0 });
-  const pins = pinsAmong(info.data?.[0]?.namedBy ?? []);
-  const already = parentOf(path) === picked;
+  const info = useQuery({ queryKey: fk.inspect(agent, paths), queryFn: () => filesApi.inspect(agent, paths), gcTime: 0, staleTime: 0 });
+  const pins = pinsAmong((info.data ?? []).flatMap((e) => e.namedBy));
+  const already = paths.every((p) => parentOf(p) === picked);
 
   const move = useMutation({
-    mutationFn: () => filesApi.move(agent, path, joinPath(picked, nameOf(path))),
-    onSuccess: (moved) => {
+    mutationFn: async () => {
+      const done: { from: string; to: string; rewritten: string[] }[] = [];
+      try {
+        // One by one, like the desktop: what moved stays moved when a later one fails.
+        for (const from of paths) {
+          if (parentOf(from) === picked) continue;
+          const moved = await filesApi.move(agent, from, joinPath(picked, nameOf(from)));
+          done.push({ from, to: moved.path, rewritten: moved.rewritten });
+        }
+      } finally {
+        if (done.length) fileChanged({ agentId: agent, moves: done.map(({ from, to }) => ({ from, to })) });
+      }
+      return done;
+    },
+    onSuccess: (done) => {
       refreshFiles(agent);
       router.back();
-      fileChanged({ agentId: agent, moves: [{ from: path, to: moved.path }] });
-      if (moved.rewritten.length) Alert.alert(t("move.moved", { name: nameOf(moved.path) }), t("move.pathUpdated", { files: moved.rewritten.join(", ") }));
+      const rewritten = [...new Set(done.flatMap((d) => d.rewritten))];
+      if (rewritten.length) Alert.alert(done.length === 1 ? t("move.moved", { name: nameOf(done[0]!.to) }) : t("move.movedMany", { count: done.length }), t("move.pathUpdated", { files: rewritten.join(", ") }));
     },
     onError: (err) => {
       refreshFiles(agent);
@@ -54,7 +78,7 @@ function MoveForm({ agent, path }: { agent: string; path: string }) {
   return (
     <ScrollView style={{ backgroundColor: c.background }} contentContainerStyle={styles.content}>
       <SheetHeader
-        title={t("move.title", { name: nameOf(path) })}
+        title={paths.length === 1 ? t("move.title", { name: nameOf(path) }) : t("move.titleMany", { count: paths.length })}
         action={pins.length ? t("move.moveAnyway") : t("move.moveHere")}
         ready={!already}
         busy={move.isPending}
@@ -65,7 +89,7 @@ function MoveForm({ agent, path }: { agent: string; path: string }) {
           <View key={root}>
             {i > 0 ? <Hairline inset={space.lg} /> : null}
             <FolderRow name={`${root}/`} depth={0} picked={picked === root} onPick={() => setPicked(root)} />
-            <Tree agent={agent} dir={root} depth={1} picked={picked} onPick={setPicked} moving={path} />
+            <Tree agent={agent} dir={root} depth={1} picked={picked} onPick={setPicked} moving={paths} />
           </View>
         ))}
       </Card>
@@ -80,7 +104,7 @@ function MoveForm({ agent, path }: { agent: string; path: string }) {
               {t("move.notUpdated")}
             </T>
             <T variant="footnote" muted>
-              {t("move.namedIn", { file: nameOf(path), names: pins.slice(0, 2).join(", ") })}
+              {t("move.namedIn", { file: paths.length === 1 ? nameOf(path) : t("move.titleMany", { count: paths.length }), names: pins.slice(0, 2).join(", ") })}
             </T>
             <T variant="footnote" muted>
               {t("move.changeHint")}
@@ -93,7 +117,7 @@ function MoveForm({ agent, path }: { agent: string; path: string }) {
 }
 
 /** The folders inside `dir`, each unfolding its own; the folder being moved and tmp/ or uploads/ can't be picked. */
-function Tree({ agent, dir, depth, picked, onPick, moving }: { agent: string; dir: string; depth: number; picked: string; onPick: (dir: string) => void; moving: string }) {
+function Tree({ agent, dir, depth, picked, onPick, moving }: { agent: string; dir: string; depth: number; picked: string; onPick: (dir: string) => void; moving: string[] }) {
   const c = useColors();
   const [open, setOpen] = useState<Set<string>>(() => new Set());
   const q = useQuery({ queryKey: fk.list(agent, dir), queryFn: () => filesApi.list(agent, dir) });
@@ -109,7 +133,7 @@ function Tree({ agent, dir, depth, picked, onPick, moving }: { agent: string; di
     <>
       {dirs.map((e) => {
         const unfolded = open.has(e.path);
-        const disabled = reservedPlace(e.path) || e.path === moving || e.path.startsWith(`${moving}/`);
+        const disabled = reservedPlace(e.path) || moving.some((m) => e.path === m || e.path.startsWith(`${m}/`));
         return (
           <View key={e.path}>
             <FolderRow

@@ -5,7 +5,6 @@
     "loading": "Traum wird geladen…",
     "theAgent": "Der Agent",
     "reverted": "Dieser Traum wurde rückgängig gemacht — die Dateien sind wieder wie vorher.",
-    "undoOnComputer": "Mach einen Traum in Godmode auf deinem Computer rückgängig.",
     "cantUndo": "Das Gedächtnis hat sich nach diesem Traum geändert, daher lässt er sich nicht automatisch rückgängig machen.",
     "eyebrow": "Traum · {{when}}",
     "heading": "Was {{name}} geändert hat",

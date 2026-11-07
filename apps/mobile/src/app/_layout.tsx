@@ -152,6 +152,7 @@ export default function RootLayout() {
                 <Stack.Screen name="vault/ssh-key-edit" options={{ presentation: "formSheet", sheetAllowedDetents: [0.75, 1], sheetGrabberVisible: true, headerShown: false }} />
                 <Stack.Screen name="agent-field" options={{ presentation: "formSheet", sheetAllowedDetents: [0.62, 1], sheetGrabberVisible: true, headerShown: false }} />
                 <Stack.Screen name="folder-pick" options={{ presentation: "formSheet", sheetAllowedDetents: [1], sheetGrabberVisible: true, headerShown: false }} />
+                <Stack.Screen name="folder-browse" options={{ presentation: "formSheet", sheetAllowedDetents: [1], sheetGrabberVisible: true, headerShown: false }} />
                 <Stack.Screen name="scope-move" options={{ presentation: "formSheet", sheetAllowedDetents: [0.62, 1], sheetGrabberVisible: true, headerShown: false }} />
                 <Stack.Screen name="dream-schedule" options={{ presentation: "formSheet", sheetAllowedDetents: [1], sheetGrabberVisible: true, headerShown: false }} />
                 <Stack.Screen name="files/name" options={{ presentation: "formSheet", sheetAllowedDetents: [0.5, 1], sheetGrabberVisible: true, headerShown: false }} />

@@ -60,6 +60,7 @@ export default function PullRequestScreen() {
   };
   const pull = usePullRefresh(refresh);
   const data = pr.data;
+  const link = data?.url ?? (ref ? url : null);
 
   return (
     <>
@@ -67,7 +68,7 @@ export default function PullRequestScreen() {
       <HeaderActions
         actions={[
           { icon: "refresh", label: t("pullRequest.refresh"), onPress: () => void refresh() },
-          { icon: "external", label: t("pullRequest.openOnGithub"), onPress: () => void Linking.openURL(data?.url ?? url) },
+          ...(link ? [{ icon: "external" as const, label: t("pullRequest.openOnGithub"), onPress: () => void Linking.openURL(link) }] : []),
         ]}
       />
       <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content} refreshControl={<RefreshControl {...pull} />}>

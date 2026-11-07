@@ -12,14 +12,15 @@ import { CharacterAvatar } from "@/components/character";
 import { HeaderActions } from "@/components/header-actions";
 import { Icon } from "@/components/icon";
 import { Markdown } from "@/components/markdown";
+import { MemoryBudget } from "@/components/memory-budget";
 import { useRevealLocked } from "@/components/this-phone-access";
 import { Button, Card, EmptyState, ErrorState, LoadingState, Row, T } from "@/components/ui";
 import { api, ApiError, errorText, updateDesktopMessage } from "@/lib/api";
 import { useAgents } from "@/lib/hooks";
 import { qk, queryClient } from "@/lib/query";
-import { alpha, fonts, radius, space, useColors } from "@/lib/theme";
+import { fonts, radius, space, useColors } from "@/lib/theme";
 import { usePullRefresh } from "@/lib/use-pull-refresh";
-import { dateLocale, intlLocale } from "@/lib/i18n";
+import { dateLocale } from "@/lib/i18n";
 
 interface Section {
   title: string | null;
@@ -180,7 +181,7 @@ function MemoryView({ agent, memory, refetch }: { agent: Agent; memory: AgentMem
         {save.isPending ? <T variant="caption" muted>{t("common:status.saving")}</T> : dirty ? <T variant="caption" color={c.warning}>{t("view.unsaved")}</T> : null}
       </Row>
 
-      <Budget chars={chars} memory={memory} />
+      <MemoryBudget chars={chars} memory={memory} />
       {locked ? (
         <T variant="footnote" muted>
           {tc("fullAccess.title")}
@@ -267,45 +268,6 @@ function MemoryView({ agent, memory, refetch }: { agent: Agent; memory: AgentMem
   );
 }
 
-/** What the memory takes of what dreams keep it under (`target`); past `limit` chats only load its start. */
-function Budget({ chars, memory }: { chars: number; memory: Pick<AgentMemory, "target" | "limit"> }) {
-  const c = useColors();
-  const { t } = useTranslation("memory");
-  const { target, limit } = memory;
-  const cut = chars > limit;
-  const over = chars > target;
-  const tone = cut ? c.danger : over ? c.warning : c.dream;
-  const hint = cut
-    ? t("budget.cut", { limit: limit.toLocaleString(intlLocale()) })
-    : over
-      ? t("budget.over", { over: (chars - target).toLocaleString(intlLocale()) })
-      : t("budget.full");
-  return (
-    <View style={{ gap: 6 }}>
-      <Row style={{ justifyContent: "space-between" }}>
-        <T variant="footnote" style={{ fontVariant: ["tabular-nums"] }}>
-          <T variant="footnote" color={cut || over ? tone : c.text} style={{ fontWeight: "600" }}>
-            {chars.toLocaleString(intlLocale())}
-          </T>
-          <T variant="footnote" muted>{` ${t("budget.ofTarget", { target: target.toLocaleString(intlLocale()) })}`}</T>
-        </T>
-      </Row>
-      <View
-        accessibilityRole="progressbar"
-        accessibilityLabel={t("budget.a11y")}
-        accessibilityValue={{ min: 0, max: limit, now: Math.min(chars, limit) }}
-        style={[styles.track, { backgroundColor: c.sunken }]}
-      >
-        <View style={[styles.fill, { width: `${Math.min(100, (chars / limit) * 100)}%`, backgroundColor: alpha(tone, cut || over ? 1 : 0.7) }]} />
-        <View style={[styles.tick, { left: `${(target / limit) * 100}%`, backgroundColor: alpha(c.text, 0.35) }]} />
-      </View>
-      <T variant="caption" muted>
-        {hint}
-      </T>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   content: {
     padding: space.lg,
@@ -340,20 +302,5 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
     borderRadius: radius.pill,
     borderWidth: StyleSheet.hairlineWidth,
-  },
-  track: {
-    height: 5,
-    borderRadius: radius.pill,
-    overflow: "visible",
-  },
-  fill: {
-    height: "100%",
-    borderRadius: radius.pill,
-  },
-  tick: {
-    position: "absolute",
-    top: -2,
-    bottom: -2,
-    width: 1,
   },
 });

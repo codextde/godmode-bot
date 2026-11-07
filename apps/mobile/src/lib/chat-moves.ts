@@ -1,10 +1,12 @@
 import * as Haptics from "expo-haptics";
 import { Alert } from "react-native";
 import { create } from "zustand";
-import type { ChatMove, ConversationWithMessages, MoveChatInput } from "@godmode/shared";
-import { errorText } from "./api";
+import type { ChatMove, Conversation, ConversationWithMessages, MoveChatInput } from "@godmode/shared";
+import { ApiError, errorText } from "./api";
+import { fetchConversation } from "./chat-cache";
 import { chatExtrasApi } from "./chat-extras";
 import { t } from "./i18n";
+import { staysAwake } from "./keep-awake";
 import { qk, queryClient } from "./query";
 
 export interface MoveOnItsWay {
@@ -43,18 +45,21 @@ export const hideChatMove = (conversationId: string) => change(conversationId, (
 export function startChatMove(opts: { conversationId: string; input: MoveChatInput; dest: string; agentName: string; working: boolean }) {
   const { conversationId, dest, agentName, working } = opts;
   useChatMoves.setState(({ moves }) => ({ moves: { ...moves, [conversationId]: { dest, agentName, move: null, finishing: false, hidden: false, startedAt: Date.now() } } }));
-  chatExtrasApi.move(conversationId, opts.input).then(
-    (moved) => {
-      change(conversationId, () => null);
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      queryClient.setQueryData<ConversationWithMessages>(qk.conversation(conversationId), (old) => (old ? { ...old, ...moved } : old));
-      void queryClient.invalidateQueries({ queryKey: qk.conversation(conversationId) });
-      void queryClient.invalidateQueries({ queryKey: qk.conversations });
-      Alert.alert(t("chat:move.moved", { dest }), working ? t("chat:move.movedWorking", { name: agentName }) : t("chat:move.movedIdle", { name: agentName }));
-    },
-    (err: unknown) => {
-      change(conversationId, () => null);
-      Alert.alert(t("chat:move.failed"), errorText(err));
-    },
-  );
+  const moved = (chat: Conversation) => {
+    change(conversationId, () => null);
+    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    queryClient.setQueryData<ConversationWithMessages>(qk.conversation(conversationId), (old) => (old ? { ...old, ...chat } : old));
+    void queryClient.invalidateQueries({ queryKey: qk.conversation(conversationId) });
+    void queryClient.invalidateQueries({ queryKey: qk.conversations });
+    Alert.alert(t("chat:move.moved", { dest }), working ? t("chat:move.movedWorking", { name: agentName }) : t("chat:move.movedIdle", { name: agentName }));
+  };
+  staysAwake(`chat-move-${conversationId}`, () => chatExtrasApi.move(conversationId, opts.input)).then(moved, async (err: unknown) => {
+    // Only the answer may have got lost: the chat itself says where it is now.
+    if (err instanceof ApiError && err.code === "timeout") {
+      const chat = await fetchConversation(conversationId).catch(() => null);
+      if (chat && (chat.runnerId ?? null) === opts.input.to) return moved(chat);
+    }
+    change(conversationId, () => null);
+    Alert.alert(t("chat:move.failed"), errorText(err));
+  });
 }

@@ -6,7 +6,7 @@ import { Alert, RefreshControl, ScrollView, StyleSheet } from "react-native";
 import { useTranslation } from "react-i18next";
 import { androidSummary, type AndroidDevice } from "@godmode/shared";
 import { AdminQueryState, FullAccessGate } from "@/components/admin";
-import { PhoneCommand, PhoneScreen, PhoneUsedBy } from "@/components/android-parts";
+import { PhoneButtons, PhoneCommand, PhoneScreen, PhoneUsedBy } from "@/components/android-parts";
 import { CloseButton } from "@/components/close-button";
 import { Group } from "@/components/form";
 import { HeaderActions } from "@/components/header-actions";
@@ -121,6 +121,8 @@ function Body({ device }: { device: AndroidDevice }) {
       {dirty ? <HeaderActions actions={[{ icon: "check", label: t("common:actions.save"), prominent: true, onPress: () => void save() }]} /> : null}
 
       <PhoneScreen device={device} />
+
+      {connected ? <PhoneButtons device={device} /> : null}
 
       <Group footer={t("phone.describeFooter")}>
         <TextRow label={t("phone.name")} value={name} onChange={setName} maxLength={100} />

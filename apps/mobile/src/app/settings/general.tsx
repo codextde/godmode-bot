@@ -49,6 +49,7 @@ export default function General() {
   const animations = useChatPrefs((s) => s.animations);
   const followUp = useChatPrefs((s) => s.followUp);
   const mcpApps = useChatPrefs((s) => s.mcpApps);
+  const readReplies = useChatPrefs((s) => s.readReplies);
   const { fullAccess } = useFullAccess();
 
   return (
@@ -138,6 +139,7 @@ export default function General() {
                   onChange={(next) => useChatPrefs.getState().setFollowUp(next)}
                 />
                 {fullAccess ? <SwitchRow icon="puzzle" title={t("general.chat.mcpApps")} value={mcpApps} onChange={(on) => useChatPrefs.getState().setMcpApps(on)} /> : null}
+                <SwitchRow icon="speaker" title={t("general.chat.readReplies")} value={readReplies} onChange={(on) => useChatPrefs.getState().setReadReplies(on)} />
                 <SwitchRow
                   icon="sparkles"
                   title={t("overview.suggestions.title")}

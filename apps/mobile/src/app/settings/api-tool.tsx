@@ -99,7 +99,8 @@ function authOf(f: Form): ApiToolAuth {
 /** Settings → Integrations → an API tool: its key (write-only), where it goes and how agents use it (full access only). */
 export default function ApiToolScreen() {
   const { t } = useTranslation("tools");
-  const { id, preset } = useLocalSearchParams<{ id?: string; preset?: string }>();
+  const { id, preset, agentId, workspaceId } = useLocalSearchParams<{ id?: string; preset?: string; agentId?: string; workspaceId?: string }>();
+  const scope = agentId ? { agentId, workspaceId: workspaceId || null } : undefined;
   const tools = useApiTools();
   const current = id ? tools.data?.find((x) => x.id === id) : undefined;
   return (
@@ -120,9 +121,9 @@ export default function ApiToolScreen() {
             }}
           </AdminQueryState>
         ) : preset ? (
-          <ToolForm key={preset} tool={null} preset={presetById(preset)} />
+          <ToolForm key={preset} tool={null} preset={presetById(preset)} scope={scope} />
         ) : (
-          <PresetPicker />
+          <PresetPicker scope={scope} />
         )}
       </FullAccessGate>
     </ScrollView>
@@ -130,26 +131,27 @@ export default function ApiToolScreen() {
 }
 
 /** A new tool starts from one of the desktop's presets or from scratch. */
-function PresetPicker() {
+function PresetPicker({ scope }: { scope?: Scope }) {
   const { t } = useTranslation("tools");
+  const carried = scope?.agentId ? { agentId: scope.agentId, ...(scope.workspaceId ? { workspaceId: scope.workspaceId } : {}) } : {};
   return (
     <>
       <Stack.Screen options={{ title: t("api.addTitle") }} />
       <Group>
         {API_TOOL_PRESETS.map((p) => (
-          <LinkRow key={p.id} icon={p.icon} title={p.name} detail={t(p.tagline)} onPress={() => router.replace({ pathname: "/settings/api-tool", params: { preset: p.id } })} />
+          <LinkRow key={p.id} icon={p.icon} title={p.name} detail={t(p.tagline)} onPress={() => router.replace({ pathname: "/settings/api-tool", params: { preset: p.id, ...carried } })} />
         ))}
-        <LinkRow icon="wrench" title={t("presets.custom")} detail={t("presets.customTagline")} onPress={() => router.replace({ pathname: "/settings/api-tool", params: { preset: "custom" } })} />
+        <LinkRow icon="wrench" title={t("presets.custom")} detail={t("presets.customTagline")} onPress={() => router.replace({ pathname: "/settings/api-tool", params: { preset: "custom", ...carried } })} />
       </Group>
     </>
   );
 }
 
-function ToolForm({ tool, preset }: { tool: ApiTool | null; preset?: ApiToolPreset }) {
+function ToolForm({ tool, preset, scope }: { tool: ApiTool | null; preset?: ApiToolPreset; scope?: Scope }) {
   const { t } = useTranslation(["tools", "common"]);
   const navigation = useNavigation();
   const [saved, setSaved] = useState<ApiTool | null>(tool);
-  const [base, setBase] = useState(() => fromTool(tool, preset));
+  const [base, setBase] = useState(() => ({ ...fromTool(tool, preset), ...(scope ? { scope } : {}) }));
   const [form, setForm] = useState<Form>(base);
   const [busy, setBusy] = useState<"save" | "test" | null>(null);
   const [result, setResult] = useState<ApiToolTestResult | null>(null);

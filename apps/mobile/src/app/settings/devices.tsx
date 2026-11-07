@@ -404,6 +404,18 @@ function OlderRunners({ runners }: { runners: RemoteRunner[] }) {
         .join(" "),
       [
         { text: t("common:actions.cancel"), style: "cancel" },
+        ...(r.state === "online"
+          ? []
+          : [
+              {
+                text: t("older.reconnect"),
+                onPress: () =>
+                  void linkingApi.runners
+                    .connect(r.id)
+                    .then((next) => queryClient.setQueryData<RemoteRunner[]>(lk.runners, (old) => old?.map((x) => (x.id === next.id ? next : x))))
+                    .catch((err) => actionFailed(t("older.reconnectFailed", { name: r.name }), err)),
+              },
+            ]),
         {
           text: t("common:actions.remove"),
           style: "destructive",

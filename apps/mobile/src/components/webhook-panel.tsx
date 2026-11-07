@@ -1,4 +1,3 @@
-import { useIsFetching } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { useState } from "react";
 import { Alert } from "react-native";
@@ -11,10 +10,10 @@ import { ActionRow } from "./tool-form";
 import { Row, T } from "./ui";
 import { errorText } from "@/lib/api";
 import { automationAdmin, curlFor, patchWebhookPath, webhookUrl } from "@/lib/automation-admin";
-import { qk } from "@/lib/query";
 import { copySecret, useRevealed } from "@/lib/secrets";
 import { useSettings } from "@/lib/setup";
 import { space } from "@/lib/theme";
+import { useVaultStatus } from "@/lib/vault";
 
 const SHOW_MS = 30_000;
 
@@ -29,11 +28,11 @@ export function WebhookPanel({ routine }: { routine: Routine }) {
   const [revealing, setRevealing] = useState(false);
   const [rotating, setRotating] = useState(false);
   const path = routine.webhookPath;
-  const fetching = useIsFetching({ queryKey: qk.routines }) > 0;
+  const vault = useVaultStatus();
 
-  // A list restored at launch has no secret URLs: wait for the fresh one before saying the vault is locked.
-  if (!path && fetching) return null;
+  // A list restored at launch has no secret URLs either, and offline nothing replaces it: only the vault says it is locked.
   if (!path) {
+    if (vault.data?.unlocked !== false) return null;
     return (
       <Group title={t("webhook.title")} footer={t("webhook.lockedHint")}>
         <LinkRow icon="lock" title={t("webhook.locked")} onPress={() => router.push("/vault/passphrase")} />

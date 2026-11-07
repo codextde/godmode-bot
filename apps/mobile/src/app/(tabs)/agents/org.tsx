@@ -189,10 +189,11 @@ const Node = memo(function Node({ agent, reports, leadElsewhere }: { agent: Agen
   const detail = [agent.role || null, leadElsewhere ? t("org.reportsTo", { name: leadElsewhere.name }) : null].filter(Boolean).join(" · ");
   return (
     <AgentMoveMenu agent={agent}>
-      <Pressable
+      {(onLongPress) => <Pressable
         accessibilityRole="button"
         accessibilityLabel={[agent.name, detail, presenceText(presence)].filter(Boolean).join(", ")}
         onPress={() => openAgent(agent.id)}
+        onLongPress={onLongPress}
         style={({ pressed }) => [styles.node, pressed && { backgroundColor: c.sunken }]}
       >
         <CharacterAvatar agent={agent} size={34} mood={moodOf(presence)} running={state === "working"} />
@@ -215,7 +216,7 @@ const Node = memo(function Node({ agent, reports, leadElsewhere }: { agent: Agen
             </T>
           </View>
         ) : null}
-      </Pressable>
+      </Pressable>}
     </AgentMoveMenu>
   );
 });

@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useKeepAwake } from "expo-keep-awake";
 import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useEffectEvent, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { Alert, Linking, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { Alert, AppState, Linking, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import Animated, { useAnimatedStyle, useSharedValue, withSpring, withTiming, type SharedValue } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -110,11 +110,34 @@ export default function VoiceMode() {
   const [allowed, setAllowed] = useState<boolean | null>(null);
   useEffect(() => {
     if (phaseRef.current === "unavailable") return;
-    void askToListen().then(({ granted }) => {
-      setAllowed(granted);
-      if (!granted) setPhase("denied");
-    });
+    askToListen().then(
+      ({ granted }) => {
+        setAllowed(granted);
+        if (!granted) setPhase("denied");
+      },
+      () => {
+        setAllowed(false);
+        setPhase("unavailable");
+      },
+    );
   }, []);
+
+  // Back from the phone's Settings with the microphone allowed: the conversation starts.
+  useEffect(() => {
+    if (phase !== "denied") return;
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state !== "active") return;
+      askToListen().then(
+        ({ granted }) => {
+          if (!granted) return;
+          setAllowed(true);
+          setPhase("listening");
+        },
+        () => undefined,
+      );
+    });
+    return () => sub.remove();
+  }, [phase]);
 
   // Hands-free loop: listens whenever it is in the listening phase, and ends the turn when the human pauses.
   const tag = voice?.language ?? "";
@@ -167,7 +190,7 @@ export default function VoiceMode() {
       return;
     }
     setPhase("speaking");
-    const said = speak(text, voice);
+    const said = speak(text, voice, true);
     speech.current = said;
     said.done
       .catch((err: unknown) => Alert.alert(t("voiceMode.playFailed"), errorText(err)))

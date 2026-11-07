@@ -9,9 +9,10 @@ export const composioAdmin = {
   recheck: () => request<ComposioStatus>("GET", "/api/composio/status?refresh=1"),
   /** Saved encrypted in the vault and checked with Composio; null removes it. */
   setKey: (apiKey: string | null) => request<ComposioStatus>("PUT", "/api/composio/key", { apiKey }, 30_000),
-  toolkits: (q: { search?: string; cursor?: string }) => {
+  toolkits: (q: { search?: string; category?: string; cursor?: string }) => {
     const params = new URLSearchParams();
     if (q.search) params.set("search", q.search);
+    if (q.category) params.set("category", q.category);
     if (q.cursor) params.set("cursor", q.cursor);
     const query = params.toString();
     return request<{ items: ComposioToolkit[]; nextCursor: string | null }>("GET", `/api/composio/toolkits${query ? `?${query}` : ""}`, undefined, 30_000);
@@ -21,7 +22,7 @@ export const composioAdmin = {
   disconnect: (id: string) => request<{ ok: true }>("DELETE", `/api/composio/connections/${encodeURIComponent(id)}`),
 };
 
-export const toolkitsKey = (search: string) => [...ik.composioStatus.slice(0, 2), "toolkits", search];
+export const toolkitsKey = (search: string, category = "") => [...ik.composioStatus.slice(0, 2), "toolkits", search, category];
 
 /** Composio's logo for an app. */
 export const toolkitLogoUrl = (slug: string) => `https://logos.composio.dev/api/${encodeURIComponent(slug)}`;

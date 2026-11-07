@@ -1,24 +1,27 @@
 import { Link, router } from "expo-router";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { View } from "react-native";
 import { useTranslation } from "react-i18next";
 import type { Agent } from "@godmode/shared";
 import { useFullAccess } from "./full-access";
+import { MenuSheet, type HeaderMenuItem } from "./header-actions";
 import { sfSymbol } from "./icon";
 import { useAgents } from "@/lib/hooks";
 import { moveAgent, teamOf } from "@/lib/manage";
 import { useWorkspace } from "@/lib/workspace";
 
 /**
- * The org chart's long-press menu (iOS), like dragging on the desktop: report to another agent (it moves into that
- * agent's workspace) or move to another workspace, its team along. Android moves agents in their settings.
+ * The org chart's long-press menu, like dragging on the desktop: report to another agent (it moves into that agent's
+ * workspace) or move to another workspace, its team along. The system's menu on iOS, sheets on Android: there `children`
+ * gets what a long press does.
  */
-export function AgentMoveMenu({ agent, children }: { agent: Agent; children: ReactNode }) {
+export function AgentMoveMenu({ agent, children }: { agent: Agent; children: (onLongPress?: () => void) => ReactNode }) {
   const { t } = useTranslation("manage");
   const { data: all = [] } = useAgents();
   const { workspaces } = useWorkspace();
   const fullAccess = useFullAccess().fullAccess === true;
-  if (process.env.EXPO_OS !== "ios" || agent.isDefault || !fullAccess) return <>{children}</>;
+  const [sheet, setSheet] = useState<"root" | "lead" | "workspace" | null>(null);
+  if (agent.isDefault || !fullAccess) return <>{children()}</>;
 
   const team = new Set(teamOf(agent, all).map((a) => a.id));
   const builtin = all.find((a) => a.isDefault);
@@ -38,10 +41,28 @@ export function AgentMoveMenu({ agent, children }: { agent: Agent; children: Rea
     if (workspaceId !== agent.workspaceId) void moveAgent(agent, { workspaceId }, t("move.moved", { agent: agent.name, workspace: wsName(workspaceId) }));
   };
 
+  if (process.env.EXPO_OS !== "ios") {
+    const items: HeaderMenuItem[] =
+      sheet === "lead"
+        ? [...(builtin ? [{ icon: "agents" as const, title: builtin.name, onPress: () => reportTo(null) }] : []), ...leads.map((a) => ({ icon: "person" as const, title: a.name, onPress: () => reportTo(a) }))]
+        : sheet === "workspace"
+          ? [{ icon: "globe" as const, title: t("agent.global"), onPress: () => moveTo(null) }, ...workspaces.filter((w) => !w.archivedAt).map((w) => ({ icon: "layers" as const, title: w.name, onPress: () => moveTo(w.id) }))]
+          : [
+              { icon: "orgChart", title: t("move.reportsTo"), onPress: () => setTimeout(() => setSheet("lead"), 250) },
+              { icon: "layers", title: t("move.moveTo"), onPress: () => setTimeout(() => setSheet("workspace"), 250) },
+            ];
+    return (
+      <>
+        {children(() => setSheet("root"))}
+        <MenuSheet items={items} open={!!sheet} onClose={() => setSheet(null)} />
+      </>
+    );
+  }
+
   return (
     <Link href={{ pathname: "/agent/[id]", params: { id: agent.id } }} asChild>
       <Link.Trigger>
-        <View>{children}</View>
+        <View>{children()}</View>
       </Link.Trigger>
       <Link.Menu>
         <Link.Menu title={t("move.reportsTo")} icon={sfSymbol("orgChart")}>

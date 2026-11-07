@@ -9,7 +9,9 @@ import { NeedsFullAccessScreen } from "@/components/full-access";
 import { FullAccessGate, isRefused } from "@/components/admin";
 import { CharacterAvatar } from "@/components/character";
 import { Group, LinkRow, SwitchRow } from "@/components/form";
+import { HeaderActions } from "@/components/header-actions";
 import { Icon } from "@/components/icon";
+import { PluginAbilities, pluginIcon } from "@/components/plugin-parts";
 import { InfoRow } from "@/components/status-rows";
 import { ActionRow } from "@/components/tool-form";
 import { Badge, Button, ErrorState, LoadingState, Row, T, tap, type Tone } from "@/components/ui";
@@ -149,9 +151,10 @@ function PluginView({ mod }: { mod: Mod }) {
 
   return (
     <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content} refreshControl={<RefreshControl {...pull} />}>
+      <HeaderActions actions={[{ icon: "pencil", label: t("pluginAdmin.edit"), onPress: () => router.push({ pathname: "/settings/plugin-edit", params: { id: mod.id } }) }]} />
       <View style={styles.hero}>
         <View style={[styles.icon, { backgroundColor: c.sunken }]}>
-          <Icon name="puzzle" size={26} color={mod.enabled ? c.brandStrong : c.text} />
+          <Icon name={pluginIcon(mod.icon)} size={26} color={mod.enabled ? c.brandStrong : c.text} />
         </View>
         <T variant="title" style={{ textAlign: "center" }}>
           {name}
@@ -212,22 +215,29 @@ function PluginView({ mod }: { mod: Mod }) {
         {!source ? (
           <LinkRow icon="code" title={t("pluginAdmin.codeTitle")} value={String(Object.keys(mod.files).length)} onPress={() => router.push({ pathname: "/settings/plugin-code", params: { id: mod.id } })} />
         ) : null}
-        {source && contents ? (
-          <InfoRow
+        {source ? (
+          <LinkRow
             icon="layers"
-            label={t("pluginAdmin.contents")}
-            detail={[
-              contents.skills.length ? t("pluginAdmin.skills", { count: contents.skills.length }) : null,
-              contents.commands.length ? t("pluginAdmin.commands", { count: contents.commands.length }) : null,
-              contents.agents.length ? t("pluginAdmin.subagents", { count: contents.agents.length }) : null,
-              contents.hooks.length ? t("pluginAdmin.hooks", { list: contents.hooks.join(", ") }) : null,
-              contents.mcpServers.length ? t("pluginAdmin.mcpServers", { list: contents.mcpServers.join(", ") }) : null,
-            ]
-              .filter(Boolean)
-              .join(" · ") || t("pluginAdmin.nothingFound")}
+            title={t("pluginAdmin.contents")}
+            detail={
+              contents
+                ? [
+                    contents.skills.length ? t("pluginAdmin.skills", { count: contents.skills.length }) : null,
+                    contents.commands.length ? t("pluginAdmin.commands", { count: contents.commands.length }) : null,
+                    contents.agents.length ? t("pluginAdmin.subagents", { count: contents.agents.length }) : null,
+                    contents.hooks.length ? t("pluginAdmin.hooks", { list: contents.hooks.join(", ") }) : null,
+                    contents.mcpServers.length ? t("pluginAdmin.mcpServers", { list: contents.mcpServers.join(", ") }) : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ") || t("pluginAdmin.nothingFound")
+                : undefined
+            }
+            onPress={() => router.push({ pathname: "/settings/plugin-contents", params: { id: mod.id } })}
           />
         ) : null}
       </Group>
+
+      <PluginAbilities mod={mod} />
 
       {source ? (
         <Group title={t("pluginAdmin.version")} footer={source.checkError ?? undefined}>

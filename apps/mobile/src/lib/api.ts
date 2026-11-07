@@ -90,6 +90,8 @@ export class ApiError extends Error {
     public status: number,
     message: string,
     public code?: string,
+    /** What the computer added to the refusal, e.g. what a workspace still holds. */
+    public details?: unknown,
   ) {
     super(message);
   }
@@ -116,10 +118,10 @@ async function send(url: string, init: RequestInit, timeoutMs = TIMEOUT_MS): Pro
 }
 
 /** The `{ error, code }` body the computer and the cloud gateway answer errors with; empty when there is none. */
-async function failure(res: Response): Promise<{ error?: string; code?: string }> {
+async function failure(res: Response): Promise<{ error?: string; code?: string; details?: unknown }> {
   try {
-    const body = (await res.json()) as { error?: unknown; code?: unknown } | null;
-    return { error: typeof body?.error === "string" ? body.error : undefined, code: typeof body?.code === "string" ? body.code : undefined };
+    const body = (await res.json()) as { error?: unknown; code?: unknown; details?: unknown } | null;
+    return { error: typeof body?.error === "string" ? body.error : undefined, code: typeof body?.code === "string" ? body.code : undefined, details: body?.details };
   } catch {
     return {};
   }
@@ -328,7 +330,7 @@ export async function request<T>(method: string, path: string, body?: unknown, m
       const type = res.headers.get("content-type") ?? "";
       return (type.includes("application/json") ? await res.json() : await res.text()) as T;
     }
-    const { error, code } = await failure(res);
+    const { error, code, details } = await failure(res);
     if (isRemoved(res.status, code)) {
       if (removedBy(connection, found)) {
         // A request with a key the phone has since replaced or given up says nothing about the current pairing.
@@ -342,7 +344,7 @@ export async function request<T>(method: string, path: string, body?: unknown, m
     if (!isUnreachable(res.status, code)) {
       useSession.getState().setActive(base, found);
       if (code === LICENSE_REQUIRED) throw new ApiError(res.status, licenseMessage(), code);
-      throw new ApiError(res.status, error ?? t("system:api.requestFailed", { status: res.status }), code);
+      throw new ApiError(res.status, error ?? t("system:api.requestFailed", { status: res.status }), code, details);
     }
     forget(base);
     // 502/504: the request may have reached the computer (the link dropped on the way back, or it answered oddly).
@@ -794,6 +796,7 @@ export const api = {
 
   missingLogins: {
     open: () => get<MissingLogin[]>("/api/missing-logins", { status: "open" }),
+    list: (status: MissingLoginStatus) => get<MissingLogin[]>("/api/missing-logins", { status }),
     /** Dismissed, marked resolved or opened again; the login itself is added on the computer. */
     setStatus: (id: string, status: MissingLoginStatus) => patch<MissingLogin>(`/api/missing-logins/${id}`, { status }),
   },
@@ -825,6 +828,7 @@ export const api = {
   questions: {
     /** What agents asked and wait for; answered by writing into the chat (or with optionId / decision). */
     open: () => get<AgentQuestion[]>("/api/questions", { status: "open" }),
+    list: (status: "resolved" | "withdrawn") => get<AgentQuestion[]>("/api/questions", { status }),
     /** One of optionId, decision (with an optional note) or text; the run that asked continues with it. */
     answer: (id: string, input: AnswerQuestionInput) => post<AnswerQuestionResult>(`/api/questions/${id}/answer`, input),
   },

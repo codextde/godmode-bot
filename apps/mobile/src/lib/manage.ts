@@ -39,6 +39,11 @@ export type AgentSetupPatch = AgentPatch & {
 
 export type WorkspaceSetupPatch = WorkspacePatch & { vmId?: string | null; claudeAccounts?: WorkspaceClaudeAccounts | null };
 
+const query = (params: Record<string, string | undefined>) => {
+  const given = Object.entries(params).filter(([, v]) => v);
+  return given.length ? `?${given.map(([k, v]) => `${k}=${encodeURIComponent(v!)}`).join("&")}` : "";
+};
+
 /** Calls a full-access phone makes like the desktop app (agents' places, workspace moves, dream undo, folders). */
 export const manageApi = {
   moveAgent: (id: string, input: AgentMoveInput) => request<AgentMoveResult>("POST", `/api/agents/${enc(id)}/move`, input),
@@ -50,7 +55,7 @@ export const manageApi = {
   revertDream: (id: string) => request<Dream>("POST", `/api/dreams/${enc(id)}/revert`, {}, 30_000),
   computerSources: () => request<ComputerSources>("GET", "/api/computer/sources"),
   /** Subfolders on the computer; no path = home. */
-  folders: (path?: string) => request<FolderListing>("GET", `/api/folders${path ? `?path=${enc(path)}` : ""}`),
+  folders: (path?: string, hidden = false) => request<FolderListing>("GET", `/api/folders${query({ path, hidden: hidden ? "1" : undefined })}`),
   recentFolders: () => request<string[]>("GET", "/api/folders/recent"),
 };
 
@@ -91,12 +96,11 @@ export async function moveAgent(agent: Agent, input: AgentMoveInput, done: strin
     const res = await manageApi.moveAgent(agent.id, input);
     refreshAgents(res.moved);
     const team = res.moved.length - 1;
-    if (team > 0) {
-      Alert.alert(done, t("manage:move.teamMoved", { count: team }), [
-        { text: t("common:actions.undo"), onPress: () => void moveBack(res.previous) },
-        { text: t("common:actions.done"), style: "cancel" },
-      ]);
-    }
+    // Every move can be undone, like the desktop's toast.
+    Alert.alert(done, team > 0 ? t("manage:move.teamMoved", { count: team }) : undefined, [
+      { text: t("common:actions.undo"), onPress: () => void moveBack(res.previous) },
+      { text: t("common:actions.done"), style: "cancel" },
+    ]);
     return true;
   } catch (err) {
     Alert.alert(t("manage:move.failed", { name: agent.name }), errorText(err));

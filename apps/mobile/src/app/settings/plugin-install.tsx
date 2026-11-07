@@ -6,11 +6,12 @@ import { githubRepoOf, type Mod, type ModCatalogEntry, type ModInstallInput, typ
 import { CloseButton } from "@/components/close-button";
 import { NeedsFullAccessScreen } from "@/components/full-access";
 import { FullAccessGate, isRefused } from "@/components/admin";
-import { ChoiceRow, Group, SwitchRow } from "@/components/form";
+import { ChoiceRow, Group, LinkRow, SwitchRow } from "@/components/form";
 import { Icon } from "@/components/icon";
 import { ActionRow, TextRow } from "@/components/tool-form";
 import { Badge, ErrorState, SkeletonRows, T, tap } from "@/components/ui";
 import { errorText } from "@/lib/api";
+import { pickFolder } from "@/lib/folder-pick";
 import { usePlugins } from "@/lib/integrations";
 import { PickPlugin, pluginsAdmin, putPlugin, usePluginCatalog, usePluginTemplates } from "@/lib/plugins-admin";
 import { usePullRefresh } from "@/lib/use-pull-refresh";
@@ -88,6 +89,22 @@ function AddPlugin() {
       setBusy(null);
     }
   };
+  const importFolder = async () => {
+    if (busy) return;
+    const path = await pickFolder({ title: t("pluginAdmin.importFolder.title"), action: t("pluginAdmin.importFolder.use") });
+    if (!path) return;
+    setBusy("folder");
+    try {
+      const mod = await pluginsAdmin.importFolder(path);
+      putPlugin(mod);
+      tap();
+      open(mod);
+    } catch (err) {
+      fail(t("pluginAdmin.importFolder.failed"), err);
+    } finally {
+      setBusy(null);
+    }
+  };
   const confirmInstall = (entry: ModCatalogEntry) =>
     Alert.alert(t("pluginAdmin.featured.confirmTitle", { title: entry.title }), t("pluginAdmin.install.warning"), [
       { text: t("common:actions.cancel"), style: "cancel" },
@@ -104,6 +121,11 @@ function AddPlugin() {
       automaticallyAdjustKeyboardInsets
       refreshControl={<RefreshControl {...pull} />}
     >
+      <Group>
+        <LinkRow icon="plus" title={t("pluginAdmin.newPlugin.title")} onPress={() => router.push("/settings/plugin-new")} />
+        <LinkRow icon="folder" title={t("pluginAdmin.importFolder.title")} value={busy === "folder" ? t("pluginAdmin.importFolder.busy") : undefined} onPress={() => void importFolder()} />
+      </Group>
+
       <Group title={t("pluginAdmin.install.title")} footer={problem ?? (repo ? `github.com/${repo}` : t("pluginAdmin.install.hint"))}>
         <TextRow
           label={t("pluginAdmin.install.repository")}

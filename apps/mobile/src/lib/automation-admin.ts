@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
-import type { Agent, AutomationEvent, ComposioConnection, ComposioTriggerType, Routine, ServerSettings, TestEventInput, WebhookRotateResult } from "@godmode/shared";
+import type { Agent, AutomationEvent, ComposioConnection, ComposioTriggerType, Routine, RoutineInput, ServerSettings, TestEventInput, WebhookRotateResult } from "@godmode/shared";
 import { request } from "./api";
 import { ik } from "./integrations";
 import { qk, queryClient } from "./query";
@@ -12,6 +12,9 @@ import { t } from "./i18n";
  * webhook's secret URL.
  */
 export const automationAdmin = {
+  /** `grant`: lifting `fillOnly` needs the vault password. */
+  updateWithGrant: (id: string, input: Partial<RoutineInput>, grant?: string) =>
+    request<Routine>("PATCH", `/api/routines/${encodeURIComponent(id)}`, input, 0, grant ? { "x-godmode-grant": grant } : undefined),
   /** App/webhook automations: a sample event that goes through the filter like a real one. */
   testEvent: (id: string, input: TestEventInput = {}) => request<AutomationEvent>("POST", `/api/routines/${encodeURIComponent(id)}/test-event`, input),
   /** Webhook automations: a new secret URL; the old one stops working. */

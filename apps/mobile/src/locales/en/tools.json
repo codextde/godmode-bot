@@ -192,6 +192,182 @@
     "checkFailed": "Couldn't check for updates"
   },
   "pluginAdmin": {
+    "ability": {
+      "tools": {
+        "label": "Sees and changes tool calls",
+        "detail": "It can block a tool call, rewrite its input or act on its result."
+      },
+      "prompts": {
+        "label": "Reads and rewrites prompts",
+        "detail": "It sees what is sent to the agent and can change it, the system prompt included."
+      },
+      "transcript": {
+        "label": "Edits what the conversation keeps",
+        "detail": "It can rewrite messages and tool results before the model reads them."
+      },
+      "turns": {
+        "label": "Follows the agent's turns",
+        "detail": "It is told when a turn starts, takes a step and ends."
+      },
+      "notes": {
+        "label": "Posts notes into the chat",
+        "detail": "Its log lines, toasts and status show up in the chat as notes from the mod."
+      },
+      "panes": {
+        "label": "Draws panes and bands",
+        "detail": "These show in Claude Code's own terminal and desktop app — not in Godmode's chats."
+      },
+      "model": {
+        "label": "Calls the model",
+        "detail": "It can ask Claude questions of its own, which costs tokens."
+      },
+      "store": {
+        "label": "Remembers things between chats",
+        "detail": "It keeps values of its own across sessions."
+      },
+      "files_read": {
+        "label": "Reads files on this computer",
+        "detail": "It can read any file the agent's run can read."
+      },
+      "files_write": {
+        "label": "Writes files on this computer",
+        "detail": "It can create and overwrite files."
+      },
+      "process": {
+        "label": "Runs programs on this computer",
+        "detail": "It can start commands of its own, outside the agent's tools."
+      },
+      "network": {
+        "label": "Talks to the internet",
+        "detail": "It can send requests to any server."
+      },
+      "env": {
+        "label": "Reads environment variables",
+        "detail": "These can hold API keys."
+      },
+      "programs": {
+        "label": "Starts programs of its own",
+        "detail": "It ships command hooks, servers, monitors or scripts that Claude Code runs on this computer."
+      }
+    },
+    "abilities": {
+      "skills_one": "Adds {{count}} skill",
+      "skills_other": "Adds {{count}} skills",
+      "skillsDetail": "Instructions the agent loads when a task needs them, or when you name them.",
+      "subagents_one": "Adds {{count}} subagent",
+      "subagents_other": "Adds {{count}} subagents",
+      "subagentsDetail": "Specialists the agent can hand parts of its work to.",
+      "commands_one": "Adds {{count}} slash command",
+      "commands_other": "Adds {{count}} slash commands",
+      "commandsDetail": "Prompts you or the agent start with a /name.",
+      "hooks_one": "Runs commands on {{count}} event",
+      "hooks_other": "Runs commands on {{count}} events",
+      "hooksDetail": "Shell commands on this computer on {{events}}.",
+      "hooksDetailMore": "Shell commands on this computer on {{events}} and more.",
+      "mcpServers_one": "Starts {{count}} MCP server",
+      "mcpServers_other": "Starts {{count}} MCP servers",
+      "mcpServersDetail": "Programs on this computer that give the agent tools of their own."
+    },
+    "hook": {
+      "tool_call": "Every tool call",
+      "tool_check": "Permission checks",
+      "tool_describe": "Tool descriptions",
+      "prompt_submit": "Prompts",
+      "prompt_compose": "The system prompt",
+      "prompt_context": "Prompt context",
+      "session_start": "Session start",
+      "session_end": "Session end",
+      "session_append": "Conversation rows",
+      "session_compact": "Compaction",
+      "turn_start": "Turn start",
+      "turn_step": "Model requests",
+      "turn_complete": "Turn end",
+      "ui_render": "Drawing",
+      "command_run": "Slash commands",
+      "toolCalls": "{{tool}} calls"
+    },
+    "icons": {
+      "puzzle": "Puzzle piece",
+      "shield": "Shield",
+      "fileLock": "Locked file",
+      "terminal": "Terminal",
+      "eyeOff": "Hidden",
+      "gauge": "Gauge",
+      "timer": "Timer",
+      "gitBranch": "Git branch",
+      "scroll": "Scroll",
+      "bell": "Bell",
+      "filter": "Filter",
+      "wand": "Wand",
+      "video": "Video",
+      "layers": "Layers",
+      "sparkles": "Sparkles",
+      "bot": "Robot"
+    },
+    "whatItCanDo": "What it can do",
+    "reachesOutside": "Reaches outside the conversation",
+    "hooksInto": "Hooks into",
+    "nothingHooked": "Nothing yet — it doesn't hook into Claude Code.",
+    "notCheckedReadCode": "Not checked yet. Until Claude Code has checked it, read the code to see what this plugin does.",
+    "noHooks": "No hooks.",
+    "hooksUnknown": "Not known until Claude Code checks the plugin.",
+    "noHooksYet": "No hooks yet.",
+    "nothingFoundContents": "Nothing Godmode could find.",
+    "titleLabel": "Title",
+    "descriptionLabel": "Description",
+    "descriptionPlaceholder": "What this plugin does, in a sentence or two.",
+    "iconLabel": "Icon",
+    "edit": "Edit",
+    "editFailed": "Couldn't save the plugin",
+    "newPlugin": {
+      "title": "New plugin",
+      "placeholder": "Protect .env files",
+      "pluginName": "Plugin name",
+      "create": "Create plugin",
+      "createFailed": "Couldn't create the plugin"
+    },
+    "importFolder": {
+      "title": "Import a plugin folder",
+      "use": "Import",
+      "busy": "Importing…",
+      "failed": "Couldn't import the folder"
+    },
+    "contentsView": {
+      "version": "Version",
+      "commit": "Commit",
+      "files": "Files",
+      "everySession": "Every session",
+      "skills": "Skills",
+      "subagents": "Subagents",
+      "commands": "Commands",
+      "hooks": "Hooks",
+      "mcpServers": "MCP servers",
+      "nothingFound": "Godmode found no skills, subagents, commands, hooks or MCP servers in it.",
+      "unknown": "What it brings isn't known yet. Check for updates to read it again.",
+      "manifestAndHooks": "Manifest and hooks",
+      "browseGitHub": "Browse every file on GitHub",
+      "showFewer": "Show fewer",
+      "showAll": "Show all {{n}}"
+    },
+    "codeFiles": {
+      "staleTitle": "The saved code changed while you were editing",
+      "staleHint": "Saving replaces it with what you have here.",
+      "loadSaved": "Load the saved code instead",
+      "newFile": "New file",
+      "newFilePath": "Path of the new file",
+      "newPathFor": "New path for {{path}}",
+      "enterPath": "Enter a path, like hooks/helper.ts.",
+      "pathExists": "A file with this path already exists.",
+      "maxFiles": "A plugin holds at most {{max}} files here.",
+      "deleteFile": "Delete file",
+      "deleteTitle": "Delete “{{path}}”?",
+      "deleteDescription": "The file leaves the plugin when you save.",
+      "renameFile": "Rename file",
+      "discardTitle": "Discard unsaved changes?",
+      "discardDescription": "What you changed in “{{title}}” since the last save is lost when you close it.",
+      "keepEditing": "Keep editing",
+      "discard": "Discard"
+    },
     "title": "Plugin",
     "add": "Add plugin",
     "emptyBody": "Install one from GitHub, the featured list or Godmode's gallery with +.",

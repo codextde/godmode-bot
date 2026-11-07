@@ -4,25 +4,29 @@ import { Image } from "expo-image";
 import { Stack, useLocalSearchParams, useNavigation } from "expo-router";
 import { useHeaderHeight, usePreventRemove } from "expo-router/react-navigation";
 import { useEffect, useRef, useState, type ComponentType, type ReactNode } from "react";
-import { ActivityIndicator, Alert, ScrollView, StyleSheet, TextInput, useWindowDimensions, View, type TextInputInstance } from "react-native";
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, TextInput, useWindowDimensions, View, type TextInputInstance } from "react-native";
 import RNWebView, { type WebViewProps } from "react-native-webview";
 import { useTranslation } from "react-i18next";
-import { KeyboardAvoidingView } from "react-native-keyboard-controller";
+import { KeyboardAvoidingView, useKeyboardState } from "react-native-keyboard-controller";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { entryActions, useDreamingNow } from "@/components/file-actions";
 import { useFullAccess } from "@/components/full-access";
-import { HeaderActions, type HeaderMenuItem } from "@/components/header-actions";
+import { HeaderActions, MenuSheet, type HeaderMenuItem } from "@/components/header-actions";
 import { Icon } from "@/components/icon";
 import { Markdown } from "@/components/markdown";
+import { MemoryBudget } from "@/components/memory-budget";
 import { EmptyState, ErrorState, T } from "@/components/ui";
-import { ApiError, errorText, pictureBases } from "@/lib/api";
+import { api, ApiError, errorText, pictureBases } from "@/lib/api";
 import {
   fileKind,
   filesApi,
   fk,
+  brokenMemoryLinks,
   forgetLocalCopies,
   isMemoryPath,
   localCopy,
   localTextCopy,
+  memorySections,
   movedPath,
   nameOf,
   onFileChange,
@@ -35,7 +39,8 @@ import {
   type FileKind,
 } from "@/lib/agent-files";
 import { useAgents } from "@/lib/hooks";
-import { queryClient } from "@/lib/query";
+import { intlLocale } from "@/lib/i18n";
+import { qk, queryClient } from "@/lib/query";
 import { useSession } from "@/lib/session";
 import { fonts, space, useColors } from "@/lib/theme";
 
@@ -57,6 +62,8 @@ export default function FilePreview() {
   const { t } = useTranslation(["files", "common"]);
   const navigation = useNavigation();
   const headerHeight = useHeaderHeight();
+  const insets = useSafeAreaInsets();
+  const keyboardOpen = useKeyboardState((s) => s.isVisible);
   const { agent, path, edit } = useLocalSearchParams<{ agent: string; path: string; edit?: string }>();
   const kind = fileKind({ path, type: "file" });
   const agentName = useAgents().byId.get(agent)?.name ?? t("folder.theAgent");
@@ -69,6 +76,13 @@ export default function FilePreview() {
   /** The edit, and the file's content it started from (a rewrite underneath isn't silently overwritten). */
   const [draft, setDraft] = useState<{ text: string; base: string } | null>(null);
   const dirty = !!draft && draft.text !== draft.base;
+  /** Markdown being written: how it reads, in place of the desktop's split view. */
+  const [reading, setReading] = useState(false);
+  const [sectionsOpen, setSectionsOpen] = useState(false);
+  const isMemory = path === "MEMORY.md";
+  const memory = useQuery({ queryKey: qk.agentMemory(agent), queryFn: () => api.agents.memory(agent), enabled: isMemory && !!draft });
+  const sections = kind === "markdown" && draft ? memorySections(draft.text) : [];
+  const broken = isMemory && draft && memory.data ? brokenMemoryLinks(draft.text, memory.data.topics) : [];
   const content = text.data?.content;
   const fixed = content === undefined ? null : readOnlyReason(path, content.length);
   const dreamLock = frozen && isMemoryPath(path);
@@ -154,7 +168,19 @@ export default function FilePreview() {
     ]);
   });
 
+  const jumpTo = (line: number) => {
+    if (!draft) return;
+    const offset = draft.text.split("\n").slice(0, line).reduce((n, l) => n + l.length + 1, 0);
+    setReading(false);
+    // The caret takes the view there; it needs the text view back first when the preview was up.
+    setTimeout(() => {
+      input.current?.focus();
+      input.current?.setSelection(offset, offset);
+    }, 60);
+  };
+
   const stopEditing = () => {
+    setReading(false);
     if (!dirty) return setDraft(null);
     Alert.alert(t("editor.discardTitle"), undefined, [
       { text: t("editor.keepEditing"), style: "cancel" },
@@ -163,7 +189,10 @@ export default function FilePreview() {
   };
 
   const menu: HeaderMenuItem[] = draft
-    ? [{ icon: "close", title: dirty ? t("editor.discardChanges") : t("editor.stopEditing"), destructive: dirty, onPress: stopEditing }]
+    ? [
+        ...(sections.length > 1 ? [{ icon: "list" as const, title: t("editor.sections"), onPress: () => setSectionsOpen(true) }] : []),
+        { icon: "close", title: dirty ? t("editor.discardChanges") : t("editor.stopEditing"), destructive: dirty, onPress: stopEditing },
+      ]
     : [
         ...(canShare ? [{ icon: "share" as const, title: t("preview.share"), onPress: () => !share.isPending && share.mutate() }] : []),
         ...(fullAccess ? entryActions(agent, path, frozen) : []),
@@ -174,7 +203,10 @@ export default function FilePreview() {
       <Stack.Screen options={{ title: nameOf(path), headerLargeTitleEnabled: false }} />
       {draft ? (
         <HeaderActions
-          actions={[{ icon: "check", label: t("common:actions.save"), prominent: true, onPress: () => dirty && !save.isPending && save.mutate({ value: draft.text, base: draft.base }) }]}
+          actions={[
+            ...(kind === "markdown" ? [{ icon: reading ? ("pencil" as const) : ("eye" as const), label: reading ? t("common:actions.edit") : t("editor.preview"), onPress: () => setReading((v) => !v) }] : []),
+            { icon: "check", label: t("common:actions.save"), prominent: true, onPress: () => dirty && !save.isPending && save.mutate({ value: draft.text, base: draft.base }) },
+          ]}
           menu={menu}
         />
       ) : (
@@ -184,14 +216,8 @@ export default function FilePreview() {
         <ImageView agent={agent} path={path} />
       ) : kind === "pdf" ? (
         <PdfView agent={agent} path={path} slot={slot} />
-      ) : text.isLoading ? (
-        <Centered>
-          <ActivityIndicator />
-        </Centered>
-      ) : text.isError ? (
-        <Centered>
-          <TextError error={text.error} onRetry={() => void text.refetch()} />
-        </Centered>
+      ) : draft && reading ? (
+        <TextView kind={kind} content={draft.text} />
       ) : draft ? (
         // The text view scrolls itself: a long file stays smooth, and the caret never slides under the header.
         <KeyboardAvoidingView behavior="padding" style={[styles.editor, { paddingTop: process.env.EXPO_OS === "ios" ? headerHeight : 0 }]}>
@@ -207,11 +233,50 @@ export default function FilePreview() {
             spellCheck={kind === "markdown"}
             style={[styles.input, { color: c.text }]}
           />
+          <EditorStatus text={draft.text} words={kind === "markdown"} broken={broken} />
+          {isMemory && memory.data ? (
+            <View style={styles.budget}>
+              <MemoryBudget chars={draft.text.length} memory={memory.data} />
+            </View>
+          ) : null}
+          <View style={{ height: keyboardOpen ? 0 : insets.bottom }} />
         </KeyboardAvoidingView>
+      ) : text.isLoading ? (
+        <Centered>
+          <ActivityIndicator />
+        </Centered>
+      ) : text.isError ? (
+        <Centered>
+          <TextError error={text.error} onRetry={() => void text.refetch()} />
+        </Centered>
       ) : text.data ? (
         <TextView kind={kind} content={text.data.content} note={fullAccess && (fixed ?? (dreamLock ? t("editor.dreaming", { name: agentName }) : null))} />
       ) : null}
+      <MenuSheet items={sections.slice(0, 12).map((s) => ({ icon: "doc" as const, title: s.title, onPress: () => jumpTo(s.line) }))} open={sectionsOpen} onClose={() => setSectionsOpen(false)} />
     </>
+  );
+}
+
+/** Under the editor: how long it is and, in MEMORY.md, links to notes that don't exist. */
+function EditorStatus({ text, words, broken }: { text: string; words: boolean; broken: string[] }) {
+  const c = useColors();
+  const { t } = useTranslation("files");
+  const lines = text ? text.split("\n").length : 0;
+  const wordCount = text.trim() ? text.trim().split(/\s+/).length : 0;
+  return (
+    <View style={[styles.status, { borderTopColor: c.border }]}>
+      <T variant="caption" muted style={{ fontVariant: ["tabular-nums"] }}>
+        {[t("editor.lines", { count: lines, n: lines.toLocaleString(intlLocale()) }), words ? t("editor.words", { count: wordCount, n: wordCount.toLocaleString(intlLocale()) }) : null].filter(Boolean).join(" · ")}
+      </T>
+      {broken.length ? (
+        <Pressable accessibilityRole="button" hitSlop={8} onPress={() => Alert.alert(t("editor.missingNotes"), broken.join("\n"))} style={styles.broken}>
+          <Icon name="warning" size={12} color={c.warning} />
+          <T variant="caption" color={c.warning}>
+            {t("editor.brokenLinks", { count: broken.length })}
+          </T>
+        </Pressable>
+      ) : null}
+    </View>
   );
 }
 
@@ -363,6 +428,24 @@ const styles = StyleSheet.create({
   },
   editor: {
     flex: 1,
+  },
+  status: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: space.md,
+    paddingHorizontal: space.lg,
+    paddingVertical: space.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  broken: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  budget: {
+    paddingHorizontal: space.lg,
+    paddingBottom: space.md,
   },
   input: {
     flex: 1,

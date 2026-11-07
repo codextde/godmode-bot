@@ -5,6 +5,7 @@ import { memo } from "react";
 import { ActivityIndicator, Alert, Pressable, StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { cardLabel, formatMoney, type CardPurchase, type CardPurchasePatch, type PaymentCard, type PurchaseStatus } from "@godmode/shared";
+import { confirmWithBiometrics } from "./full-access";
 import { Icon } from "./icon";
 import { openChat } from "./rows";
 import { RowMenu, type MenuItem } from "./secret-parts";
@@ -123,6 +124,9 @@ export const PurchaseRow = memo(function PurchaseRow({ purchase: p, card, action
           : []),
         ...(p.conversationId ? [{ label: t("purchaseActions.openChat"), icon: "chats" as const, onPress: () => openChat(p.conversationId!) }] : []),
       ];
+  const approve = async () => {
+    if (await confirmWithBiometrics(t("purchaseActions.approveReason", { amount: formatMoney(p.amount, p.currency), merchant: title }))) decide.mutate("approve");
+  };
   const waiting = actions && p.status === "pending" && !!p.questionId;
   const recurrence = p.recurrence !== "once" ? `${t(`purchases.recurrence.${p.recurrence}`)}${p.endedAt ? ` · ${t("purchaseActions.ended")}` : ""}` : null;
 
@@ -162,7 +166,7 @@ export const PurchaseRow = memo(function PurchaseRow({ purchase: p, card, action
             primary
             busy={decide.isPending && decide.variables === "approve"}
             disabled={decide.isPending}
-            onPress={() => decide.mutate("approve")}
+            onPress={() => void approve()}
           />
           <Pill title={t("purchaseActions.decline")} icon="close" busy={decide.isPending && decide.variables === "decline"} disabled={decide.isPending} onPress={() => decide.mutate("decline")} />
         </Row>

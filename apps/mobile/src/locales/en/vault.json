@@ -247,6 +247,7 @@
   },
   "purchaseActions": {
     "purchase": "Purchase",
+    "approveReason": "Approve {{amount}} at {{merchant}}",
     "filled": "Card entered",
     "reportedFailed": "Reported failed · still counted",
     "notCharged": "Not charged",

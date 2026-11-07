@@ -1,4 +1,29 @@
 {
+  "godmode": {
+    "title": "Godmode auf diesem Server",
+    "none": "Nicht installiert",
+    "hint": "Installiere es, damit Projekte mit einem Ordner auf diesem Server ihre Chats dort ausführen können.",
+    "install": "Installieren",
+    "installing": "Wird installiert und verbunden…",
+    "failed": "Installation fehlgeschlagen",
+    "retry": "Erneut versuchen",
+    "installFailed": "Godmode konnte nicht auf dem Server installiert werden",
+    "updating": "Wird aktualisiert…",
+    "update": "Auf {{version}} aktualisieren",
+    "updateFailed": "Godmode konnte auf dem Server nicht aktualisiert werden",
+    "remove": "Entfernen",
+    "removeTitle": "Godmode auf {{name}} stoppen und entfernen?",
+    "removed": "Godmode auf {{name}} wurde gestoppt und entfernt",
+    "removeFailed": "Godmode konnte nicht vom Server entfernt werden",
+    "loginsShared": "Logins geteilt",
+    "loginsHere": "Logins bleiben hier",
+    "state": {
+      "online": "Verbunden",
+      "connecting": "Verbindet",
+      "offline": "Offline",
+      "updateRequired": "Braucht ein Update"
+    }
+  },
   "loadFailed": "Server konnten nicht geladen werden",
   "form": {
     "addTitle": "Server hinzufügen",

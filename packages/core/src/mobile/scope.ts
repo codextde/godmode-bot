@@ -524,7 +524,7 @@ function notesPathRefusal(agentId: string, value: unknown): string | null {
 
 /**
  * Why a phone's body is refused beyond its fields (null = fine): settings keep their shape and the phone's sections, and
- * folders may only be kept where they already are — a phone adds repositories, never a folder of this computer.
+ * folders, here or on an SSH server, may only be kept where they already are — a phone adds repositories, never a folder.
  */
 export function deviceBodyRefusal(method: string, path: string, body: Record<string, unknown>): string | null {
   if (path === "/api/settings") return settingsRefusal(body);
@@ -538,10 +538,14 @@ export function deviceBodyRefusal(method: string, path: string, body: Record<str
   if (!("sources" in body)) return null;
   const sources = body.sources;
   if (!Array.isArray(sources)) return null;
-  const folders = sources.filter((s): s is { kind: "folder"; path?: unknown } => typeof s === "object" && s !== null && (s as { kind?: unknown }).kind === "folder");
-  if (!folders.length) return null;
-  const known = new Set(existingFolders(method, path));
-  return folders.every((f) => typeof f.path === "string" && known.has(f.path)) ? null : "Add folders of your computer in Godmode there. From the phone you can add git repositories.";
+  const given = sources.filter((s): s is { kind?: unknown; path?: unknown; serverId?: unknown } => typeof s === "object" && s !== null);
+  const folders = given.filter((s) => s.kind === "folder");
+  const remotes = given.filter((s) => s.kind === "remote");
+  if (!folders.length && !remotes.length) return null;
+  const there = existingFolders(method, path);
+  if (!folders.every((f) => there.some((r) => r.kind === "folder" && r.path === f.path))) return "Add folders of your computer in Godmode there. From the phone you can add git repositories.";
+  // New chats there start on that server: as much of a computer-level step as a folder of this one.
+  return remotes.every((f) => there.some((r) => r.kind === "remote" && r.path === f.path && r.server_id === f.serverId)) ? null : "Add folders on a server in Godmode on your computer, or give this phone full access there.";
 }
 
 const BRIEF_ON_COMPUTER = "Change what agents are told to do in Godmode on your computer, or give this phone full access there.";
@@ -596,7 +600,7 @@ function routineRefusal(body: Record<string, unknown>): string | null {
     : "Set up app and webhook automations in Godmode on your computer.";
 }
 
-function existingFolders(method: string, path: string): string[] {
+function existingFolders(method: string, path: string): { kind: string; path: string; server_id: string | null }[] {
   if (method !== "PATCH") return [];
   const [, , kind, id] = path.split("/");
   const owner =
@@ -604,11 +608,11 @@ function existingFolders(method: string, path: string): string[] {
       ? { workspace: id, project: null }
       : { workspace: get<{ workspace_id: string }>("SELECT workspace_id FROM projects WHERE id = ?", id)?.workspace_id, project: id };
   if (!owner.workspace) return [];
-  return all<{ path: string }>(
-    "SELECT path FROM workspace_sources WHERE kind = 'folder' AND workspace_id = ? AND project_id IS ?",
+  return all<{ kind: string; path: string; server_id: string | null }>(
+    "SELECT kind, path, server_id FROM workspace_sources WHERE kind IN ('folder', 'remote') AND workspace_id = ? AND project_id IS ?",
     owner.workspace,
     owner.project,
-  ).map((r) => r.path);
+  );
 }
 
 function settingsRefusal(body: Record<string, unknown>): string | null {

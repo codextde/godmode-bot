@@ -66,6 +66,8 @@
     "seedLine": "Ein Computer, der neu auf einer Website ist, kopiert die Anmeldung des Hauptrechners."
   },
   "older": {
+    "reconnect": "Neu verbinden",
+    "reconnectFailed": "{{name}} ist nicht erreichbar",
     "title": "Ältere Runner",
     "footer": "Vor den Gerätegruppen als Runner gekoppelt. Ihre Chats laufen hier weiter; neue Chats starten dort nicht.",
     "removeTitle": "{{name}} entfernen?",

@@ -19,7 +19,7 @@ import { qk } from "@/lib/query";
 import { copyPlain } from "@/lib/secrets";
 import { usePullRefresh } from "@/lib/use-pull-refresh";
 import { space } from "@/lib/theme";
-import { runVmAction, type VmAction } from "@/lib/vm-actions";
+import { duplicateVm, runVmAction, showVmMenu, type VmAction } from "@/lib/vm-actions";
 
 /** One VM, like its card on the desktop: its screen, power, what it is, who uses it, a command, edit, copy, reset, delete. */
 export default function VmScreenPage() {
@@ -63,6 +63,8 @@ function Body({ vm, vms, presets }: { vm: Vm; vms: Vm[]; presets: VmImagePreset[
     await runVmAction(vm, action);
     setBusy(null);
   };
+  /** A running VM says first what it interrupts, like its menu in the list. */
+  const interrupting = (action: VmAction) => (running ? showVmMenu(vm, (a) => void power(a), action) : void power(action));
 
   const job = async (name: string, failed: string, call: () => Promise<void>) => {
     setBusy(name);
@@ -79,7 +81,7 @@ function Body({ vm, vms, presets }: { vm: Vm; vms: Vm[]; presets: VmImagePreset[
   const duplicate = () => {
     if (s !== "stopped") return Alert.alert(t("vm.duplicateStopFirst"), s === "suspended" ? t("vm.duplicateShutDown") : undefined);
     void job("duplicate", t("vm.duplicateFailed", { name: vm.name }), async () => {
-      const copy = await machinesApi.vms.duplicate(vm.id);
+      const copy = await duplicateVm(vm, vms);
       putVm(copy);
       router.replace({ pathname: "/settings/vm", params: { id: copy.id } });
     });
@@ -161,9 +163,9 @@ function Body({ vm, vms, presets }: { vm: Vm; vms: Vm[]; presets: VmImagePreset[
       {running || s === "suspended" || s === "starting" ? (
         <Group>
           {s === "suspended" ? <ActionRow icon="play" title={startLabel} busy={busy === "start"} onPress={() => void power("start")} /> : null}
-          {running ? <ActionRow icon="moon" title={t("integrations:vm.suspend")} busy={busy === "suspend"} onPress={() => void power("suspend")} /> : null}
-          {running ? <ActionRow icon="refresh" title={t("integrations:vm.restart")} busy={busy === "restart"} onPress={() => void power("restart")} /> : null}
-          <ActionRow icon="power" title={s === "suspended" ? t("vm.shutDown") : t("integrations:vm.stop")} tone="danger" busy={busy === "stop"} onPress={() => void power("stop")} />
+          {running ? <ActionRow icon="moon" title={t("integrations:vm.suspend")} busy={busy === "suspend"} onPress={() => interrupting("suspend")} /> : null}
+          {running ? <ActionRow icon="refresh" title={t("integrations:vm.restart")} busy={busy === "restart"} onPress={() => interrupting("restart")} /> : null}
+          <ActionRow icon="power" title={s === "suspended" ? t("vm.shutDown") : t("integrations:vm.stop")} tone="danger" busy={busy === "stop"} onPress={() => interrupting("stop")} />
         </Group>
       ) : null}
 

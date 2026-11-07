@@ -1,4 +1,17 @@
 {
+  "tabs": {
+    "open": "Offen",
+    "resolved": "Erledigt",
+    "dismissed": "Verworfen"
+  },
+  "closed": {
+    "reopen": "Wieder öffnen",
+    "loadFailed": "Die Liste ließ sich nicht laden",
+    "empty": {
+      "resolved": "Noch nichts erledigt",
+      "dismissed": "Nichts verworfen"
+    }
+  },
   "title": "Posteingang",
   "anAgent": "Ein Agent",
   "attention": "Braucht dich",

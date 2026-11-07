@@ -17,6 +17,7 @@ import { CloseButton } from "@/components/close-button";
 import { useFullAccess } from "@/components/full-access";
 import { Group, LinkRow, PickerRow, SegmentRow, SwitchRow, TextEditor } from "@/components/form";
 import { Icon } from "@/components/icon";
+import { InheritedInstructions } from "@/components/inherited-instructions";
 import { Badge, EmptyState, Row, SectionTitle, tap } from "@/components/ui";
 import { useEffectiveModel, NO_CHOICE } from "@/lib/composer";
 import { useAgents } from "@/lib/hooks";
@@ -158,6 +159,7 @@ export default function AgentSettings() {
           hint={lockedHint}
           onSave={(instructions) => patchAgent(agent.id, { instructions }, { quiet: true })}
         />
+        <InheritedInstructions workspaceId={agent.workspaceId} />
       </View>
 
       <View>

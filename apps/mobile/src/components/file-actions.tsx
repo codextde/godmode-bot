@@ -15,6 +15,7 @@ export function useDreamingNow(agentId: string): boolean {
 export const openRename = (agent: string, path: string) => router.push({ pathname: "/files/name", params: { agent, mode: "rename", path } });
 export const openNew = (agent: string, mode: "note" | "folder", dir: string) => router.push({ pathname: "/files/name", params: { agent, mode, dir } });
 export const openMove = (agent: string, path: string) => router.push({ pathname: "/files/move", params: { agent, path } });
+export const openMoveMany = (agent: string, paths: string[]) => router.push({ pathname: "/files/move", params: { agent, paths: JSON.stringify(paths) } });
 export const openDelete = (agent: string, path: string) => router.push({ pathname: "/files/delete", params: { agent, path } });
 export const openDeleteMany = (agent: string, paths: string[]) => router.push({ pathname: "/files/delete", params: { agent, paths: JSON.stringify(paths) } });
 

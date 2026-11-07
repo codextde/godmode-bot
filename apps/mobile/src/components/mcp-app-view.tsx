@@ -1,10 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
-import { useCallback, useContext, useEffect, useMemo, useRef, useState, type ComponentType, type Ref } from "react";
+import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentType, type Ref } from "react";
 import { ActivityIndicator, Alert, Linking, Modal, Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import RNWebView, { type WebViewMessageEvent, type WebViewProps } from "react-native-webview";
-import { artifactDocument, type McpApp, type McpAppCsp, type MessageBlock } from "@godmode/shared";
+import { policyFirstDocument, type McpApp, type McpAppCsp, type MessageBlock } from "@godmode/shared";
 import { useFullAccess } from "./full-access";
 import { Icon } from "./icon";
 import { ChatScope } from "./question-card";
@@ -160,13 +160,42 @@ function McpAppView({ conversationId, block, app, mode, onMode }: { conversation
   const label = app.tool.annotations?.title ?? app.server;
   const doc = useMemo(() => {
     const viewport = `<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">`;
-    return artifactDocument(app.html, viewport + cspTag(app.csp) + bridge(token));
+    return policyFirstDocument(app.html, viewport + cspTag(app.csp) + bridge(token));
   }, [app.html, app.csp, token]);
 
   const post = useCallback((msg: JsonRpc) => {
     const json = JSON.stringify({ jsonrpc: "2.0", ...msg }).replace(/</g, "\\u003c").replace(/[\u2028\u2029]/g, "");
     frame.current?.injectJavaScript(`window.__gmDeliver(${json});true;`);
   }, []);
+
+  const hostContext = useMemo(
+    () => ({
+      toolInfo: { id: block.id, tool: app.tool },
+      theme: dark ? "dark" : "light",
+      styles: { variables: hostStyles(c) },
+      displayMode: mode,
+      availableDisplayModes: ["inline", "fullscreen"],
+      containerDimensions: fullscreen ? { height: windowHeight - insets.top - insets.bottom - FULL_HEAD, width } : { maxHeight: MAX_HEIGHT, width: width - space.xl * 2 },
+      locale: intlLocale(),
+      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      userAgent: "Godmode",
+      platform: "mobile",
+      deviceCapabilities: { touch: true, hover: false },
+    }),
+    [app.tool, block.id, c, dark, fullscreen, insets.bottom, insets.top, mode, width, windowHeight],
+  );
+
+  useEffect(() => {
+    if (initialized.current) post({ method: "ui/notifications/host-context-changed", params: hostContext });
+  }, [hostContext, post]);
+
+  // Before the view leaves: the WebView is gone by the time an ordinary effect's cleanup runs.
+  useLayoutEffect(
+    () => () => {
+      if (initialized.current) post({ id: "teardown", method: "ui/resource-teardown", params: {} });
+    },
+    [post],
+  );
 
   /** Asks before the app acts in the human's name; "Always" holds for this view. */
   const confirm = useCallback(
@@ -200,19 +229,7 @@ function McpAppView({ conversationId, block, app, mode, onMode }: { conversation
             protocolVersion: PROTOCOL_VERSION,
             hostInfo: { name: "Godmode", version: "1" },
             hostCapabilities: { openLinks: {}, serverTools: {}, serverResources: {}, logging: {}, message: { text: {} }, sandbox: { ...(app.csp ? { csp: app.csp } : {}) } },
-            hostContext: {
-              toolInfo: { id: block.id, tool: app.tool },
-              theme: dark ? "dark" : "light",
-              styles: { variables: hostStyles(c) },
-              displayMode: mode,
-              availableDisplayModes: ["inline", "fullscreen"],
-              containerDimensions: fullscreen ? { height: windowHeight - insets.top - insets.bottom - FULL_HEAD, width } : { maxHeight: MAX_HEIGHT, width: width - space.xl * 2 },
-              locale: intlLocale(),
-              timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-              userAgent: "Godmode",
-              platform: "mobile",
-              deviceCapabilities: { touch: true, hover: false },
-            },
+            hostContext,
           };
         case "ping":
           return {};
@@ -252,7 +269,7 @@ function McpAppView({ conversationId, block, app, mode, onMode }: { conversation
           throw Object.assign(new Error(`Method not found: ${msg.method}`), { code: -32601 });
       }
     },
-    [app, block.id, c, confirm, conversationId, dark, fullscreen, insets.bottom, insets.top, label, mode, onMode, t, width, windowHeight],
+    [app, confirm, conversationId, hostContext, label, onMode, t],
   );
 
   const onMessage = (e: WebViewMessageEvent) => {
@@ -276,6 +293,7 @@ function McpAppView({ conversationId, block, app, mode, onMode }: { conversation
     if (data.method === "ui/notifications/initialized") {
       initialized.current = true;
       setLoaded(true);
+      setFailure(null);
       post({ method: "ui/notifications/tool-input", params: { arguments: block.input ?? {} } });
       post({ method: "ui/notifications/tool-result", params: toolResultOf(block) });
     } else if (data.method === "ui/notifications/size-changed") {
@@ -348,7 +366,7 @@ function McpAppView({ conversationId, block, app, mode, onMode }: { conversation
           setSupportMultipleWindows={false}
           scrollEnabled={fullscreen || height >= MAX_HEIGHT}
           // Links leave through the host; the app itself never goes anywhere else.
-          onShouldStartLoadWithRequest={(r) => r.url === "about:blank" || r.url.startsWith("about:") || r.url.startsWith("data:") || r.url.startsWith("blob:") || r.isTopFrame === false}
+          onShouldStartLoadWithRequest={(r) => r.url.startsWith("about:") || r.isTopFrame === false}
           onContentProcessDidTerminate={() => setAttempt((n) => n + 1)}
           style={{ backgroundColor: "transparent" }}
         />

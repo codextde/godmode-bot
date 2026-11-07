@@ -11,7 +11,7 @@ import { ChoiceRow, Group, Segmented, SwitchRow } from "@/components/form";
 import { HeaderActions } from "@/components/header-actions";
 import { Icon } from "@/components/icon";
 import { ListRow } from "@/components/readonly-list";
-import { CommandGroup, UsedByGroup } from "@/components/ssh-server-extras";
+import { CommandGroup, GodmodeOnServerGroup, UsedByGroup } from "@/components/ssh-server-extras";
 import { ActionRow, TestResult, TextRow } from "@/components/tool-form";
 import { EmptyState, T, tap } from "@/components/ui";
 import { errorText } from "@/lib/api";
@@ -427,6 +427,7 @@ function ServerForm({ server }: { server: SshServer | null }) {
         {result?.hostKeyChanged && result.hostKey && !testing ? <SwitchRow icon="shield" title={t("ssh:result.trustNewKey")} value={trustNewKey} onChange={setTrustNewKey} /> : null}
       </Group>
 
+      {server ? <GodmodeOnServerGroup server={server} /> : null}
       {server ? <UsedByGroup server={server} /> : null}
       {server ? <CommandGroup server={server} /> : null}
 

@@ -122,6 +122,24 @@
     }
   },
   "edit": {
+    "timezone": "Timezone",
+    "timezoneSearch": "Search timezone",
+    "timezoneEmpty": "No timezone found",
+    "reveal": {
+      "title": "Reveal secrets to AI",
+      "footer": "An agent set this automation up, so its runs fill logins into pages but can't read passwords or 2FA codes. Switch on only if you trust the prompt above."
+    },
+    "runOn": {
+      "label": "Run on",
+      "any": "Any device",
+      "another": "Another computer",
+      "primary": "primary",
+      "thisComputer": "this computer",
+      "anyHint": "Runs where your schedules run: the primary, or another computer while it stands in.",
+      "pickedHint": "Only {{name}} runs it, also while another computer stands in. A time it misses while away runs when it's back.",
+      "pickedOfflineHint": "Only {{name}} runs it, also while another computer stands in. A time it misses while away runs when it's back (it's offline now).",
+      "unlistedHint": "Pinned to a computer that isn't listed: one that left the group (the primary runs it then), or one this computer can't see while the primary is away."
+    },
     "titleNew": "New automation",
     "titleEdit": "Edit automation",
     "loadFailed": "Couldn't load the automation",

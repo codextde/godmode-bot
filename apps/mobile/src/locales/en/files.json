@@ -1,4 +1,27 @@
 {
+  "notes": {
+    "title": "Notes",
+    "filter": "Filter notes",
+    "memory": "Memory",
+    "byFolder": "By folder",
+    "byModified": "Last changed",
+    "bySize": "By size",
+    "unlinked_one": "{{count}} memory note without a link from MEMORY.md",
+    "unlinked_other": "{{count}} memory notes without a link from MEMORY.md",
+    "showAll": "Show all",
+    "showOnly": "Show only these",
+    "empty": "No notes yet",
+    "loadFailed": "Couldn't load the notes"
+  },
+  "select": {
+    "start": "Select",
+    "all": "Select all",
+    "none": "Select none",
+    "pick": "Pick items",
+    "count_one": "{{count}} selected",
+    "count_other": "{{count}} selected",
+    "item": "Select {{name}}"
+  },
   "index": {
     "title": "Files",
     "emptyTitle": "No agents yet",
@@ -37,6 +60,15 @@
     "move": "Move"
   },
   "editor": {
+    "preview": "Preview",
+    "sections": "Sections",
+    "lines_one": "{{n}} line",
+    "lines_other": "{{n}} lines",
+    "words_one": "{{n}} word",
+    "words_other": "{{n}} words",
+    "missingNotes": "These linked notes don't exist",
+    "brokenLinks_one": "{{count}} broken link",
+    "brokenLinks_other": "{{count}} broken links",
     "readOnly": {
       "claude": "Generated from the agent's settings. Edit the instructions in Settings instead.",
       "state": "Snapshot written by Godmode. Changes would be overwritten.",
@@ -77,6 +109,10 @@
     }
   },
   "move": {
+    "titleMany_one": "{{count}} item",
+    "titleMany_other": "{{count}} items",
+    "movedMany_one": "Moved {{count}} item",
+    "movedMany_other": "Moved {{count}} items",
     "title": "Move {{name}}",
     "fold": "Fold",
     "unfold": "Unfold",
@@ -94,7 +130,8 @@
   "delete": {
     "titleOne": "Delete {{name}}?",
     "titleMany": "Delete {{items}}?",
-    "description": "It goes to {{name}}'s bin: you can put it back there for 30 days.",
+    "description_one": "It goes to {{name}}'s bin: you can put it back there for 30 days.",
+    "description_other": "They go to {{name}}'s bin: you can put them back there for 30 days.",
     "stillNamesOne": "{{name}} still names it",
     "stillNamesMany": "{{name}} still names {{n}} of these",
     "namedIn": "{{file}}: in {{names}}",

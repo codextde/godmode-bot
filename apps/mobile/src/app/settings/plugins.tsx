@@ -7,6 +7,7 @@ import type { Mod } from "@godmode/shared";
 import { useFullAccess } from "@/components/admin";
 import { HeaderActions } from "@/components/header-actions";
 import { ListRow, ReadonlyList } from "@/components/readonly-list";
+import { pluginIcon } from "@/components/plugin-parts";
 import { Badge, T, tap } from "@/components/ui";
 import { errorText } from "@/lib/api";
 import { ik, integrationsApi, usePlugins } from "@/lib/integrations";
@@ -141,7 +142,7 @@ export default function Plugins() {
           );
         return (
           <ListRow
-            icon="puzzle"
+            icon={pluginIcon(m.icon)}
             tint={m.enabled ? c.brandStrong : undefined}
             title={name}
             lines={[m.description, m.source ? [m.source.repo, m.source.version].filter(Boolean).join(" · ") : null]}

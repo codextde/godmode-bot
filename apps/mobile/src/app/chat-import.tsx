@@ -11,16 +11,13 @@ import { NeedsFullAccess, needsFullAccess, useFullAccess } from "@/components/fu
 import { Icon } from "@/components/icon";
 import { Button, Card, T, tap } from "@/components/ui";
 import { errorText } from "@/lib/api";
-import { chatExtrasApi, takeChatImport } from "@/lib/chat-extras";
+import { chatExtrasApi, MAX_CHAT_FILE_BYTES, takeChatImport } from "@/lib/chat-extras";
 import { pickAgent } from "@/lib/desktop-parity";
 import { useAgents } from "@/lib/hooks";
 import { dateLocale } from "@/lib/i18n";
 import { qk, queryClient } from "@/lib/query";
 import { agentsFor, useWorkspace } from "@/lib/workspace";
 import { fonts, radius, space, useColors } from "@/lib/theme";
-
-/** A shared chat is a few megabytes at most; more is not a chat file. */
-const MAX_FILE_BYTES = 150 * 1024 * 1024;
 
 /** Open a chat a colleague shared (a `.godmode-chat` file or its code) and continue it with one of your agents. */
 export default function ChatImport() {
@@ -44,12 +41,16 @@ export default function ChatImport() {
     return () => clearTimeout(timer);
   }, [code]);
   const payload = file?.data ?? (settled || null);
+  // A chat file runs to megabytes: as a query key it would be hashed on every render, so it is counted instead.
+  const [previewed, setPreviewed] = useState({ payload, number: 0 });
+  if (previewed.payload !== payload) setPreviewed({ payload, number: previewed.number + 1 });
   const preview = useQuery({
-    queryKey: ["chat-import-preview", payload],
+    queryKey: ["chat-import-preview", previewed.number, payload?.length],
     queryFn: () => chatExtrasApi.previewImport(payload!),
     enabled: !!payload && fullAccess === true,
     retry: false,
     staleTime: Infinity,
+    gcTime: 0,
   });
   const projectId = project && agent && (!agent.workspaceId || agent.workspaceId === project.workspaceId) ? project.id : null;
   const importChat = useMutation({
@@ -77,7 +78,7 @@ export default function ChatImport() {
       const asset = result.assets[0];
       const picked = new File(asset.uri);
       try {
-        if ((asset.size ?? picked.size ?? 0) > MAX_FILE_BYTES) throw new Error(t("import.tooBig"));
+        if ((asset.size ?? picked.size ?? 0) > MAX_CHAT_FILE_BYTES) throw new Error(t("import.tooBig"));
         setFile({ name: asset.name, data: await picked.text() });
         setCode("");
       } finally {

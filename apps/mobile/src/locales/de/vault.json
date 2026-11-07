@@ -247,6 +247,7 @@
   },
   "purchaseActions": {
     "purchase": "Kauf",
+    "approveReason": "{{amount}} bei {{merchant}} freigeben",
     "filled": "Karte eingegeben",
     "reportedFailed": "Als fehlgeschlagen gemeldet · zählt noch",
     "notCharged": "Nicht abgebucht",

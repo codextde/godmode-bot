@@ -1,6 +1,9 @@
 {
   "manage": "Manage",
   "computer": {
+    "entireDesktop": "Entire desktop",
+    "displayCount_one": "{{count}} display",
+    "displayCount_other": "{{count}} displays",
     "title": "Computer",
     "main": "main",
     "allWindows": "All windows",
@@ -197,6 +200,21 @@
     "turnedOffBody": "Godmode doesn't look for phones and agents don't use them until you switch this on."
   },
   "phone": {
+    "buttons": {
+      "title": "Buttons",
+      "failed": "Couldn't press the button",
+      "power": "Power",
+      "volumeDown": "Volume down",
+      "volumeUp": "Volume up",
+      "mute": "Mute",
+      "wake": "Wake the screen",
+      "sleep": "Turn the screen off",
+      "notifications": "Notifications",
+      "quickSettings": "Quick settings",
+      "back": "Back",
+      "home": "Home",
+      "recents": "Recent apps"
+    },
     "watch": "Watch {{name}}",
     "watchLive": "Live",
     "gone": "This phone isn't known anymore",

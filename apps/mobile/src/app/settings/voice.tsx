@@ -142,7 +142,7 @@ function TestPhoneVoiceRow({ voice }: { voice: VoiceSettings }) {
 
   const test = () => {
     if (speech.current) return speech.current.stop();
-    const said = speak(t("voice.sample"), voice);
+    const said = speak(t("voice.sample"), voice, true);
     speech.current = said;
     setSpeaking(true);
     said.done

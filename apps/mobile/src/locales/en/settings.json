@@ -754,7 +754,8 @@
       "toolCalls": "Tool calls",
       "cardsLabel": "Cards",
       "compactLabel": "Compact",
-      "mcpApps": "MCP app views"
+      "mcpApps": "MCP app views",
+      "readReplies": "Read replies aloud"
     },
     "summaries": {
       "title": "AI summaries",

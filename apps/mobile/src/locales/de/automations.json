@@ -122,6 +122,24 @@
     }
   },
   "edit": {
+    "timezone": "Zeitzone",
+    "timezoneSearch": "Zeitzone suchen",
+    "timezoneEmpty": "Keine Zeitzone gefunden",
+    "reveal": {
+      "title": "Secrets für die KI sichtbar machen",
+      "footer": "Ein Agent hat diese Automation eingerichtet, daher füllen ihre Läufe Logins in Seiten ein, können Passwörter und 2FA-Codes aber nicht lesen. Schalte das nur ein, wenn du dem Prompt oben vertraust."
+    },
+    "runOn": {
+      "label": "Ausführen auf",
+      "any": "Beliebiges Gerät",
+      "another": "Anderer Computer",
+      "primary": "primär",
+      "thisComputer": "dieser Computer",
+      "anyHint": "Läuft dort, wo deine Zeitpläne laufen: auf dem primären Computer oder einem anderen, solange er einspringt.",
+      "pickedHint": "Nur {{name}} führt sie aus, auch wenn ein anderer Computer einspringt. Was er verpasst, während er weg ist, läuft, sobald er zurück ist.",
+      "pickedOfflineHint": "Nur {{name}} führt sie aus, auch wenn ein anderer Computer einspringt. Was er verpasst, während er weg ist, läuft, sobald er zurück ist (gerade offline).",
+      "unlistedHint": "An einen Computer gebunden, der nicht aufgeführt ist: einer, der die Gruppe verlassen hat (dann führt der primäre sie aus), oder einer, den dieser Computer nicht sieht, solange der primäre weg ist."
+    },
     "titleNew": "Neue Automation",
     "titleEdit": "Automation bearbeiten",
     "loadFailed": "Automation konnte nicht geladen werden",

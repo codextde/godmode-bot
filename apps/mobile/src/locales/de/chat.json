@@ -67,6 +67,7 @@
     "tapHintMac": "Tippen zum Klicken, halten für Rechtsklick",
     "tapHint": "Tipp ins Bild, um dort zu klicken",
     "phone": {
+      "buttons": "Tasten",
       "hint": "Tippe, halte oder wische im Bild",
       "back": "Zurück",
       "home": "Startbildschirm",
@@ -156,6 +157,7 @@
       "afterReset": "Nachricht an {{name}} — geht nach dem Reset mit",
       "whenContinues": "Nachricht an {{name}} — geht beim Fortsetzen mit",
       "queue": "Nachricht für {{name}} einreihen",
+      "steer": "Sag {{name}}, was stattdessen zu tun ist",
       "default": "Nachricht an {{name}} oder / für Befehle"
     },
     "earlier": {
@@ -364,12 +366,7 @@
     "noVm": "Keine",
     "ssh": "Zusätzliche SSH-Server",
     "android": "Zusätzliche Android-Handys",
-    "useFolder": "Nutzen",
-    "recent": "Zuletzt",
-    "folders": "Ordner",
-    "more": "Auf dem Computer gibt es mehr Ordner als hier angezeigt.",
-    "noFolders": "Keine Unterordner",
-    "foldersFailed": "Ordner konnte nicht geöffnet werden"
+    "useFolder": "Nutzen"
   },
   "voiceMode": {
     "title": "Sprachmodus",

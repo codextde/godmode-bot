@@ -1,16 +1,18 @@
-import { Stack, useLocalSearchParams } from "expo-router";
+import { usePreventRemove } from "expo-router/react-navigation";
+import { Stack, useLocalSearchParams, useNavigation } from "expo-router";
 import { useMemo, useState } from "react";
 import { Alert, ScrollView, StyleSheet, TextInput, View } from "react-native";
 import { useTranslation } from "react-i18next";
-import { MOD_HOOKS_PATH, MOD_MANIFEST_PATH, type Mod, type ModCheck } from "@godmode/shared";
+import { MAX_MOD_FILES, MOD_HOOKS_PATH, MOD_MANIFEST_PATH, modPathProblem, type Mod, type ModCheck } from "@godmode/shared";
 import { CloseButton } from "@/components/close-button";
 import { NeedsFullAccessScreen } from "@/components/full-access";
 import { FullAccessGate, isRefused } from "@/components/admin";
 import { Group, PickerRow } from "@/components/form";
-import { HeaderActions } from "@/components/header-actions";
+import { HeaderActions, type HeaderMenuItem } from "@/components/header-actions";
 import { Icon } from "@/components/icon";
 import { CopyButton } from "@/components/secret-parts";
-import { ErrorState, LoadingState, Row, T, tap } from "@/components/ui";
+import { TextPrompt } from "@/components/text-prompt";
+import { Button, ErrorState, LoadingState, Row, T, tap } from "@/components/ui";
 import { errorText } from "@/lib/api";
 import { useAgents } from "@/lib/hooks";
 import { usePlugins } from "@/lib/integrations";
@@ -19,6 +21,15 @@ import { copyPlain } from "@/lib/secrets";
 import { fonts, radius, space, useColors } from "@/lib/theme";
 
 type Files = Record<string, string>;
+
+/** Always there: they can't be renamed or deleted. */
+const FIXED = new Set([MOD_MANIFEST_PATH, MOD_HOOKS_PATH]);
+
+function sameFiles(a: Files, b: Files): boolean {
+  if (a === b) return true;
+  const keys = Object.keys(a);
+  return keys.length === Object.keys(b).length && keys.every((k) => a[k] === b[k]);
+}
 
 /** The manifest first, then the hooks, then the rest by path. */
 function sortedPaths(files: Files): string[] {
@@ -51,7 +62,7 @@ export default function PluginCode() {
 
 function CodeEditor({ mod }: { mod: Mod }) {
   const c = useColors();
-  const { t } = useTranslation(["tools", "components"]);
+  const { t } = useTranslation(["tools", "components", "common"]);
   const { byId } = useAgents();
   const [base, setBase] = useState<Files>(mod.files);
   const [files, setFiles] = useState<Files>(mod.files);
@@ -61,7 +72,55 @@ function CodeEditor({ mod }: { mod: Mod }) {
   const paths = useMemo(() => sortedPaths(files), [files]);
   const [picked, setPicked] = useState<string | null>(null);
   const path = picked && picked in files ? picked : (paths.find((p) => p.endsWith(".ts") || p.endsWith(".js")) ?? paths[0] ?? null);
-  const dirty = Object.keys({ ...files, ...base }).some((p) => files[p] !== base[p]);
+  const dirty = !sameFiles(files, base);
+  // Follows the saved files while nothing is edited (an agent or another window may change them), keeps the edits once there are some.
+  if (base !== mod.files && !dirty) {
+    setBase(mod.files);
+    setFiles(mod.files);
+  }
+  const stale = dirty && !sameFiles(base, mod.files);
+  const [naming, setNaming] = useState<{ from: string | null } | null>(null);
+  const navigation = useNavigation();
+  usePreventRemove(dirty, ({ data }) => {
+    Alert.alert(t("pluginAdmin.codeFiles.discardTitle"), t("pluginAdmin.codeFiles.discardDescription", { title: mod.title }), [
+      { text: t("pluginAdmin.codeFiles.keepEditing"), style: "cancel" },
+      { text: t("pluginAdmin.codeFiles.discard"), style: "destructive", onPress: () => navigation.dispatch(data.action) },
+    ]);
+  });
+  const edit = (next: (f: Files) => Files) => {
+    setFiles(next);
+    setRevision((r) => r + 1);
+  };
+  const nameProblem = (next: string, renaming: string | null) => {
+    if (!next) return t("pluginAdmin.codeFiles.enterPath");
+    const refused = modPathProblem(next);
+    if (refused) return refused;
+    if (next !== renaming && next in files) return t("pluginAdmin.codeFiles.pathExists");
+    if (!renaming && paths.length >= MAX_MOD_FILES) return t("pluginAdmin.codeFiles.maxFiles", { max: MAX_MOD_FILES });
+    return null;
+  };
+  const named = (next: string) => {
+    const from = naming?.from ?? null;
+    setNaming(null);
+    if (from === next) return;
+    if (from === null) edit((f) => ({ ...f, [next]: "" }));
+    else edit((f) => Object.fromEntries(Object.entries(f).map(([p, content]) => [p === from ? next : p, content])));
+    setPicked(next);
+  };
+  const removeFile = (target: string) =>
+    Alert.alert(t("pluginAdmin.codeFiles.deleteTitle", { path: target }), t("pluginAdmin.codeFiles.deleteDescription"), [
+      { text: t("common:actions.cancel"), style: "cancel" },
+      { text: t("pluginAdmin.codeFiles.deleteFile"), style: "destructive", onPress: () => edit((f) => Object.fromEntries(Object.entries(f).filter(([p]) => p !== target))) },
+    ]);
+  const fileMenu: HeaderMenuItem[] = [
+    { icon: "plus", title: t("pluginAdmin.codeFiles.newFile"), onPress: () => setNaming({ from: null }) },
+    ...(path && !FIXED.has(path)
+      ? [
+          { icon: "pencil" as const, title: t("pluginAdmin.codeFiles.renameFile"), onPress: () => setNaming({ from: path }) },
+          { icon: "trash" as const, title: t("pluginAdmin.codeFiles.deleteFile"), destructive: true, onPress: () => removeFile(path) },
+        ]
+      : []),
+  ];
   const author = mod.createdBy.startsWith("agent:") ? (byId.get(mod.createdBy.slice(6))?.name ?? t("pluginAdmin.anAgent")) : null;
 
   const guard = () => {
@@ -114,7 +173,39 @@ function CodeEditor({ mod }: { mod: Mod }) {
           ...(busy ? [] : [{ icon: "shield" as const, label: t("pluginAdmin.code.check"), onPress: () => void check() }]),
           ...(dirty && !busy ? [{ icon: "check" as const, label: t("pluginAdmin.code.save"), prominent: true, onPress: () => void save() }] : []),
         ]}
+        menu={fileMenu}
       />
+      <TextPrompt
+        open={!!naming}
+        title={naming?.from ? t("pluginAdmin.codeFiles.newPathFor", { path: naming.from }) : t("pluginAdmin.codeFiles.newFilePath")}
+        initial={naming?.from ?? ""}
+        placeholder="hooks/helper.ts"
+        mono
+        validate={(next) => nameProblem(next, naming?.from ?? null)}
+        onSubmit={named}
+        onClose={() => setNaming(null)}
+      />
+      {stale ? (
+        <View style={[styles.notice, { backgroundColor: c.surface, borderColor: c.border }]}>
+          <Icon name="warning" size={14} color={c.textMuted} />
+          <View style={{ flex: 1, gap: space.sm }}>
+            <T variant="footnote" style={{ fontWeight: "600" }}>
+              {t("pluginAdmin.codeFiles.staleTitle")}
+            </T>
+            <T variant="footnote" muted>
+              {t("pluginAdmin.codeFiles.staleHint")}
+            </T>
+            <Button
+              title={t("pluginAdmin.codeFiles.loadSaved")}
+              variant="secondary"
+              onPress={() => {
+                setBase(mod.files);
+                setFiles(mod.files);
+              }}
+            />
+          </View>
+        </View>
+      ) : null}
       {mod.needsReview && author ? (
         <View style={[styles.notice, { backgroundColor: c.warningSoft, borderColor: c.warning }]}>
           <Icon name="warning" size={14} color={c.warning} />

@@ -23,15 +23,18 @@ import { CronBuilder, StartWindowField, startWindowProblem } from "@/components/
 import { Group, PickerRow, SwitchRow, Tile, type Option } from "@/components/form";
 import { Icon, type IconName } from "@/components/icon";
 import { phoneTimezone, triggerText, TRIGGER_TITLES } from "@/components/routine-row";
+import { TimezoneRow } from "@/components/timezone-picker";
 import { ErrorState, LoadingState, T, tap } from "@/components/ui";
 import { WebhookPanel } from "@/components/webhook-panel";
 import { api, errorText } from "@/lib/api";
-import { appTriggerProblems, connectionUsableBy, EMPTY_APP_TRIGGER, useAppTriggerSchema, type AppTriggerDraft } from "@/lib/automation-admin";
+import { appTriggerProblems, automationAdmin, connectionUsableBy, EMPTY_APP_TRIGGER, useAppTriggerSchema, type AppTriggerDraft } from "@/lib/automation-admin";
+import { usePlaces, type Place } from "@/lib/chat-extras";
 import { useModelCatalog } from "@/lib/composer";
 import { useAgents } from "@/lib/hooks";
 import { ik } from "@/lib/integrations";
 import { qk, queryClient } from "@/lib/query";
 import { configValue } from "@/lib/schema-form";
+import { isCancelled, withGrant } from "@/lib/secrets";
 import { radius, space, useColors } from "@/lib/theme";
 
 /** Conditions are checked hourly unless the human picks otherwise. */
@@ -107,6 +110,10 @@ interface Draft {
   enabled: boolean;
   reuseConversation: boolean;
   notify: RoutineNotify;
+  /** Schedules and conditions. */
+  timezone: string;
+  /** Device groups: the one computer that runs it; null = wherever schedules run. */
+  runOn: string | null;
 }
 
 type MoreAppDraft = AppTriggerDraft & { key: string };
@@ -139,6 +146,8 @@ function initialDraft(routine: Routine | null, agentId: string): Draft {
     enabled: routine?.enabled ?? true,
     reuseConversation: routine?.reuseConversation ?? true,
     notify: routine?.notify ?? "failures",
+    timezone: routine?.timezone || phoneTimezone() || "UTC",
+    runOn: routine?.runOn ?? null,
   };
 }
 
@@ -197,7 +206,7 @@ function AutomationForm({ routine, agents, defaultAgentId }: { routine: Routine 
   const eventTrigger = type === "app" || type === "webhook";
   // A limited phone can't ask for app events; it keeps the trigger as it is anyway.
   const appSchema = useAppTriggerSchema(admin ? draft.app : EMPTY_APP_TRIGGER);
-  const timezone = routine?.timezone || phoneTimezone() || "UTC";
+  const timezone = draft.timezone;
   const zone = timezone !== phoneTimezone() ? timezone.replace(/_/g, " ") : null;
   const windowProblem = type === "schedule" ? startWindowProblem(draft.cron, timezone, draft.startWindow) : null;
   const cronError = type === "schedule" ? (validateCron(draft.cron) ?? windowProblem) : type === "condition" ? validateCron(draft.checkCron) : null;
@@ -227,6 +236,11 @@ function AutomationForm({ routine, agents, defaultAgentId }: { routine: Routine 
     ...(draft.checkModel && !findModel(models, draft.checkModel) ? [{ value: draft.checkModel, label: draft.checkModel }] : []),
   ];
   const triggers = TRIGGER_OPTIONS.filter((o) => admin || LIMITED_TRIGGERS.includes(o.type));
+  const places = usePlaces(admin);
+  const pinnable = admin && places.length > 0 && !eventTrigger;
+  // An agent set it up, so its runs only fill logins in; lifting that takes a grant, and only for an agent that may read secrets.
+  const [reveal, setReveal] = useState(false);
+  const canReveal = admin && !!routine?.fillOnly && agent?.permissions.secretAccess === "reveal";
 
   const setType = (next: RoutineTriggerType) => setDraft((d) => ({ ...d, triggerType: next, reuseConversation: reuseChosen ? d.reuseConversation : defaultReuse(next) }));
   /** Another agent may not reach the chosen account: then it is dropped (the account picker offers only reachable ones). */
@@ -287,18 +301,22 @@ function AutomationForm({ routine, agents, defaultAgentId }: { routine: Routine 
     const cron = type === "schedule" ? draft.cron.trim() : type === "condition" ? draft.checkCron.trim() : undefined;
     // A limited phone never sends an app or webhook trigger: only what it does and how it reports changes.
     const input: Partial<RoutineInput> = triggerEditable
-      ? { ...common, trigger: buildTrigger(), cron, timezone, filter: eventTrigger ? draft.filter.trim() : "" }
+      ? { ...common, trigger: buildTrigger(), cron, timezone, filter: eventTrigger ? draft.filter.trim() : "", ...(pinnable ? { runOn: draft.runOn } : {}) }
       : { ...common, filter: draft.filter.trim() };
     setSaving(true);
     try {
-      const saved = routine ? await api.routines.update(routine.id, input) : await api.routines.create({ ...input, agentId: draft.agentId } as RoutineInput);
+      const saved = !routine
+        ? await api.routines.create({ ...input, agentId: draft.agentId } as RoutineInput)
+        : canReveal && reveal
+          ? await withGrant((grant) => automationAdmin.updateWithGrant(routine.id, { ...input, fillOnly: false }, grant))
+          : await api.routines.update(routine.id, input);
       void queryClient.invalidateQueries({ queryKey: qk.routines });
       tap();
       router.back();
       // A new webhook: its secret URL is on the automation's page.
       if (!routine && saved.trigger.type === "webhook") router.push({ pathname: "/automation/[id]", params: { id: saved.id } });
     } catch (err) {
-      Alert.alert(editing ? t("edit.updateFailed") : t("edit.createFailed"), errorText(err));
+      if (!isCancelled(err)) Alert.alert(editing ? t("edit.updateFailed") : t("edit.createFailed"), errorText(err));
     } finally {
       setSaving(false);
     }
@@ -395,6 +413,9 @@ function AutomationForm({ routine, agents, defaultAgentId }: { routine: Routine 
               problem={windowProblem}
             />
             <StartWindowField cron={draft.cron} timezone={timezone} value={draft.startWindow} onChange={(m) => setDraft((d) => ({ ...d, startWindow: m, runs: 1 }))} />
+            <Group>
+              <TimezoneRow title={t("edit.timezone")} value={timezone} onChange={(v) => set("timezone", v)} />
+            </Group>
           </View>
         ) : null}
 
@@ -450,6 +471,7 @@ function AutomationForm({ routine, agents, defaultAgentId }: { routine: Routine 
               <CronBuilder value={draft.checkCron} onChange={(cron) => set("checkCron", cron)} zone={zone} />
             </View>
             <Group footer={t("edit.checkModelHint")}>
+              <TimezoneRow title={t("edit.timezone")} value={timezone} onChange={(v) => set("timezone", v)} />
               <PickerRow icon="sparkles" title={t("edit.checkModel")} value={checkModel} options={modelOptions} onChange={(v) => set("checkModel", v === AGENT_MODEL ? null : v)} />
             </Group>
           </View>
@@ -519,8 +541,40 @@ function AutomationForm({ routine, agents, defaultAgentId }: { routine: Routine 
           />
           <PickerRow title={t("automation.tellMe")} value={draft.notify} options={notifyOptions} onChange={(v) => set("notify", v)} />
         </Group>
+
+        {pinnable ? <RunOnGroup places={places} value={draft.runOn} onChange={(v) => set("runOn", v)} /> : null}
+
+        {canReveal ? (
+          <Group footer={t("edit.reveal.footer")}>
+            <SwitchRow icon="key" title={t("edit.reveal.title")} value={reveal} onChange={setReveal} />
+          </Group>
+        ) : null}
       </View>
     </ScrollView>
+  );
+}
+
+const ANY_DEVICE = "__any";
+
+/** Device groups: the one computer that runs a schedule or check (one with its files and browser profiles). */
+function RunOnGroup({ places, value, onChange }: { places: Place[]; value: string | null; onChange: (runOn: string | null) => void }) {
+  const { t } = useTranslation("automations");
+  const devices = places.map((p) => ({ value: p.runnerId ?? "primary", name: p.name, primary: !p.runnerId, self: p.self, online: p.state === "online" }));
+  const picked = value ? devices.find((d) => d.value === value) : null;
+  const options: Option<string>[] = [
+    { value: ANY_DEVICE, label: t("edit.runOn.any") },
+    ...devices.map((d) => ({
+      value: d.value,
+      label: d.name,
+      detail: [d.primary ? t("edit.runOn.primary") : null, d.self ? t("edit.runOn.thisComputer") : null].filter(Boolean).join(", ") || undefined,
+    })),
+    ...(value && !picked ? [{ value, label: t("edit.runOn.another") }] : []),
+  ];
+  const footer = !value ? t("edit.runOn.anyHint") : !picked ? t("edit.runOn.unlistedHint") : picked.online ? t("edit.runOn.pickedHint", { name: picked.name }) : t("edit.runOn.pickedOfflineHint", { name: picked.name });
+  return (
+    <Group footer={footer}>
+      <PickerRow icon="laptop" title={t("edit.runOn.label")} value={value ?? ANY_DEVICE} options={options} onChange={(v) => onChange(v === ANY_DEVICE ? null : v)} />
+    </Group>
   );
 }
 

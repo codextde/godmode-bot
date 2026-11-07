@@ -1,5 +1,4 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { File, Paths } from "expo-file-system";
 import { useLocalSearchParams } from "expo-router";
 import { useState } from "react";
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, View } from "react-native";
@@ -8,6 +7,7 @@ import { formatBytes } from "@godmode/shared";
 import { Group, SwitchRow } from "@/components/form";
 import { NeedsFullAccess, needsFullAccess, useFullAccess } from "@/components/full-access";
 import { Button, T } from "@/components/ui";
+import { tempCopy } from "@/lib/agent-files";
 import { errorText } from "@/lib/api";
 import { chatExtrasApi } from "@/lib/chat-extras";
 import { fetchConversation } from "@/lib/chat-cache";
@@ -58,7 +58,7 @@ export default function ChatShare() {
     if (!result) return;
     setBusy(true);
     try {
-      const file = new File(Paths.cache, result.fileName);
+      const file = tempCopy("chat-share", result.fileName);
       if (file.exists) file.delete();
       file.create();
       file.write(result.code);

@@ -1,5 +1,15 @@
 {
   "agent": {
+    "toolsEmptyInherit": "No API tools yet. Add one to let it generate images, speak, search or call your own APIs.",
+    "toolsEmptyOwn": "No API tools of its own. Add one to let it generate images, speak, search or call your own APIs.",
+    "addOwnTool": "Add a tool only for this agent",
+    "manageTools": "Manage tools",
+    "toolOwn": "Only this agent",
+    "inherited": "Also given to this agent on every run",
+    "layerGlobal": "Every agent",
+    "layerGlobalTitle": "Global",
+    "layerWorkspace": "Workspace",
+    "layerProject": "Project",
     "team": "Team",
     "workspace": "Workspace",
     "global": "Global",
@@ -51,7 +61,11 @@
     "empty": "No subfolders",
     "more": "More folders are on the computer than shown here.",
     "loadFailed": "Couldn't open the folder",
-    "own": "Use its own folder"
+    "own": "Use its own folder",
+    "filter": "Filter",
+    "noMatch": "No folder matches",
+    "showHidden": "Show hidden folders",
+    "hideHidden": "Hide hidden folders"
   },
   "move": {
     "moveTo": "Move to",
@@ -114,6 +128,18 @@
     }
   },
   "workspace": {
+    "held": {
+      "projects": "projects",
+      "agents": "agents",
+      "credentials": "logins",
+      "totp": "2FA codes",
+      "cards": "cards",
+      "mcpServers": "MCP servers",
+      "apiTools": "API tools",
+      "browserProfiles": "browser profiles",
+      "composioConnections": "Composio connections",
+      "tasks": "tasks"
+    },
     "vm": "Virtual machine",
     "vmNone": "None",
     "accounts": "Claude accounts",

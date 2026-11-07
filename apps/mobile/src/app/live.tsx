@@ -9,6 +9,7 @@ import { KeyboardStickyView, useKeyboardState } from "react-native-keyboard-cont
 import Animated, { FadeIn, FadeOut, ZoomIn } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { browserView, type AndroidInputEvent, type AndroidKey, type ComputerInputEvent } from "@godmode/shared";
+import { PHONE_BUTTONS } from "@/components/android-parts";
 import { AndroidTouchSurface } from "@/components/android-touch";
 import { useFullAccess } from "@/components/full-access";
 import { Glass, GlassGroup } from "@/components/glass";
@@ -92,6 +93,7 @@ export default function Live() {
   const online = useLive((s) => s.status === "online");
   const fresh = !!frame && (params.kind === "browser" ? online : now - frame.at < 8000);
   const [control, setControl] = useState(false);
+  const [buttons, setButtons] = useState(false);
   const [typing, setTyping] = useState(false);
   const keyboard = useKeyboardState((k) => (k.isVisible ? k.height : 0));
   const [text, setText] = useState("");
@@ -439,7 +441,23 @@ export default function Live() {
               <GlassIconButton icon="back" label={t("live.phone.back")} onPress={() => navKey("back")} dark />
               <GlassIconButton icon="navHome" label={t("live.phone.home")} onPress={() => navKey("home")} dark />
               <GlassIconButton icon="navRecents" label={t("live.phone.recents")} onPress={() => navKey("recents")} dark />
+              <GlassIconButton icon="more" label={t("live.phone.buttons")} onPress={() => setButtons((v) => !v)} dark />
             </GlassGroup>
+          )}
+          {android && control && !typing && buttons && (
+            <Animated.View entering={FadeIn} style={{ width: "100%", maxWidth: 520 }}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.keys}>
+                {PHONE_BUTTONS.map((b) => (
+                  <Pressable key={b.key} accessibilityRole="button" accessibilityLabel={t(`machines:${b.label}`)} onPress={() => navKey(b.key)}>
+                    {({ pressed }) => (
+                      <Glass style={[styles.key, pressed && styles.keyPressed]} scheme="dark" fallback={SMOKE}>
+                        <Icon name={b.icon} size={16} color={WHITE} />
+                      </Glass>
+                    )}
+                  </Pressable>
+                ))}
+              </ScrollView>
+            </Animated.View>
           )}
           <GlassGroup style={styles.tools} spacing={14}>
             <Pressable

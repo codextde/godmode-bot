@@ -1,7 +1,9 @@
 import type {
+  FolderListing,
   SshAssignInput,
   SshExecResult,
   SshGeneratedKey,
+  SshGodmodeStatus,
   SshLocalKey,
   SshServer,
   SshServerInput,
@@ -30,6 +32,13 @@ export const sshAdmin = {
   localKeys: () => request<SshLocalKey[]>("GET", "/api/ssh/local-keys"),
   generateKey: (comment: string) => request<SshGeneratedKey>("POST", "/api/ssh/keys", { comment }, 30_000),
   installGodmode: (id: string) => request<{ ok: true }>("POST", `/api/ssh/servers/${enc(id)}/godmode`, {}),
+  /** Installs running or failed, by server. */
+  godmode: () => request<Record<string, SshGodmodeStatus>>("GET", "/api/ssh/godmode"),
+  /** The folders on the server, read over SSH. */
+  folders: (id: string, path?: string, hidden = false) => {
+    const params = [path ? `path=${enc(path)}` : null, hidden ? "hidden=1" : null].filter(Boolean).join("&");
+    return request<FolderListing>("GET", `/api/ssh/servers/${enc(id)}/folders${params ? `?${params}` : ""}`, undefined, 30_000);
+  },
   /** Runs one command as the server's user, like the desktop's command box (up to two minutes). */
   exec: (id: string, command: string) => request<SshExecResult>("POST", `/api/ssh/servers/${enc(id)}/exec`, { command, timeoutSeconds: 120 }, 130_000),
   assign: (id: string, input: SshAssignInput) => request<SshServer>("POST", `/api/ssh/servers/${enc(id)}/assign`, input),
@@ -37,6 +46,7 @@ export const sshAdmin = {
 
 export const sk = {
   localKeys: ["ssh-local-keys"],
+  godmode: ["ssh-godmode"],
 } as const;
 
 export const refreshServers = () => void queryClient.invalidateQueries({ queryKey: ik.sshServers });

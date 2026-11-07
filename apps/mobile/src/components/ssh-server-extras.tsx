@@ -1,17 +1,90 @@
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useState, type ReactNode } from "react";
 import { Alert, Pressable, StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
-import type { SshAssignment, SshExecResult, SshServer } from "@godmode/shared";
+import type { RunnerState, SshAssignment, SshExecResult, SshServer } from "@godmode/shared";
 import { CharacterAvatar } from "./character";
 import { Group } from "./form";
 import { Icon } from "./icon";
+import { InfoRow } from "./status-rows";
 import { ActionRow, TestResult, TextRow } from "./tool-form";
-import { T, tap } from "./ui";
+import { T, tap, type Tone } from "./ui";
 import { errorText } from "@/lib/api";
 import { useAgents } from "@/lib/hooks";
+import { linkingApi, lk } from "@/lib/linking";
 import { qk, queryClient } from "@/lib/query";
-import { putServer, sshAdmin } from "@/lib/ssh-admin";
+import { putServer, sk, sshAdmin } from "@/lib/ssh-admin";
 import { space, useColors } from "@/lib/theme";
+
+const UPDATING = new Set(["sending", "waiting", "installing", "restarting"]);
+
+const RUNNER_STATE = {
+  online: { key: "godmode.state.online", tone: "success" },
+  connecting: { key: "godmode.state.connecting", tone: "warning" },
+  offline: { key: "godmode.state.offline", tone: "neutral" },
+  update_required: { key: "godmode.state.updateRequired", tone: "warning" },
+} as const satisfies Record<RunnerState, { key: string; tone: Tone }>;
+
+/** The small Godmode on the server that runs chats of projects with a folder there: state, version, update, remove, install. */
+export function GodmodeOnServerGroup({ server }: { server: SshServer }) {
+  const { t } = useTranslation(["ssh", "common"]);
+  const runners = useQuery({ queryKey: lk.runners, queryFn: linkingApi.runners.list, refetchInterval: (q) => (q.state.data?.some((r) => r.sshServerId === server.id && UPDATING.has(r.update.state)) ? 2000 : false) });
+  const installs = useQuery({ queryKey: sk.godmode, queryFn: sshAdmin.godmode, refetchInterval: (q) => (q.state.data?.[server.id]?.state === "installing" ? 2000 : false) });
+  const runner = runners.data?.find((r) => r.kind === "ssh" && r.sshServerId === server.id);
+  const install = installs.data?.[server.id];
+  const refresh = () => {
+    void queryClient.invalidateQueries({ queryKey: lk.runners });
+    void queryClient.invalidateQueries({ queryKey: sk.godmode });
+  };
+  const start = useMutation({ mutationFn: () => sshAdmin.installGodmode(server.id), onSettled: refresh, onError: (err) => Alert.alert(t("godmode.installFailed"), errorText(err)) });
+  const update = useMutation({ mutationFn: (id: string) => linkingApi.runners.update(id), onSettled: refresh, onError: (err) => Alert.alert(t("godmode.updateFailed"), errorText(err)) });
+  const remove = useMutation({
+    mutationFn: (id: string) => linkingApi.runners.remove(id),
+    onSuccess: () => {
+      refresh();
+      void queryClient.invalidateQueries({ queryKey: qk.conversations });
+      Alert.alert(t("godmode.removed", { name: server.name }));
+    },
+    onError: (err) => Alert.alert(t("godmode.removeFailed"), errorText(err)),
+  });
+  const askRemove = (id: string) =>
+    Alert.alert(t("godmode.removeTitle", { name: server.name }), undefined, [
+      { text: t("common:actions.cancel"), style: "cancel" },
+      { text: t("godmode.remove"), style: "destructive", onPress: () => remove.mutate(id) },
+    ]);
+
+  const installing = install?.state === "installing" || start.isPending;
+  if (installing) {
+    return (
+      <Group title={t("godmode.title")}>
+        <InfoRow label={t("godmode.installing")} />
+      </Group>
+    );
+  }
+  if (runner) {
+    const updating = UPDATING.has(runner.update.state) || update.isPending;
+    const state = RUNNER_STATE[runner.state];
+    const problem = runner.state !== "online" ? runner.error : runner.update.state === "failed" ? runner.update.detail : null;
+    return (
+      <Group title={t("godmode.title")} footer={problem ?? undefined}>
+        <InfoRow
+          label={t(state.key)}
+          tone={state.tone}
+          detail={[runner.version, server.shareLogins ? t("godmode.loginsShared") : t("godmode.loginsHere"), updating ? t("godmode.updating") : null].filter(Boolean).join(" · ")}
+        />
+        {runner.update.state === "available" && !updating ? <ActionRow icon="refresh" title={t("godmode.update", { version: runner.update.target.version })} onPress={() => update.mutate(runner.id)} /> : null}
+        <ActionRow icon="trash" title={t("godmode.remove")} tone="danger" busy={remove.isPending} onPress={() => askRemove(runner.id)} />
+      </Group>
+    );
+  }
+  const failed = install?.state === "failed";
+  return (
+    <Group title={t("godmode.title")} footer={failed ? (install.error ?? undefined) : t("godmode.hint")}>
+      <InfoRow label={failed ? t("godmode.failed") : t("godmode.none")} />
+      <ActionRow icon={failed ? "refresh" : "package"} title={failed ? t("godmode.retry") : t("godmode.install")} onPress={() => start.mutate()} />
+    </Group>
+  );
+}
 
 /** The agents and chats that use a server: taken off with a tap, agents added from the list. */
 export function UsedByGroup({ server }: { server: SshServer }) {

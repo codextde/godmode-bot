@@ -66,6 +66,8 @@
     "seedLine": "A computer new to a site copies the primary's sign-in."
   },
   "older": {
+    "reconnect": "Reconnect",
+    "reconnectFailed": "Couldn't reach {{name}}",
     "title": "Older runners",
     "footer": "Paired as runners before device groups. Their chats keep working here; new chats don't start there.",
     "removeTitle": "Remove {{name}}?",

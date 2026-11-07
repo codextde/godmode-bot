@@ -6,7 +6,8 @@ import { useTranslation } from "react-i18next";
 import type { ConversationWithMessages } from "@godmode/shared";
 import { NeedsFullAccess, useFullAccess } from "@/components/full-access";
 import { Icon } from "@/components/icon";
-import { Button, Card, LoadingState, T, tap } from "@/components/ui";
+import { Button, Card, ErrorState, LoadingState, T, tap } from "@/components/ui";
+import { errorText } from "@/lib/api";
 import { fetchConversation } from "@/lib/chat-cache";
 import { moveTargets, usePlaces, type Place } from "@/lib/chat-extras";
 import { startChatMove, useChatMoves } from "@/lib/chat-moves";
@@ -21,6 +22,7 @@ import { radius, space, useColors } from "@/lib/theme";
  */
 export default function ChatMove() {
   const c = useColors();
+  const { t } = useTranslation("chat");
   const { fullAccess } = useFullAccess();
   const { conversationId } = useLocalSearchParams<{ conversationId: string }>();
   const conversation = useQuery({ queryKey: qk.conversation(conversationId), queryFn: () => fetchConversation(conversationId), staleTime: Infinity });
@@ -29,6 +31,13 @@ export default function ChatMove() {
     return (
       <View style={[styles.fill, { backgroundColor: c.background }]}>
         <NeedsFullAccess />
+      </View>
+    );
+  }
+  if (conversation.isError && !conversation.data) {
+    return (
+      <View style={[styles.fill, { backgroundColor: c.background }]}>
+        <ErrorState title={t("options.loadFailed")} error={errorText(conversation.error)} onRetry={() => void conversation.refetch()} />
       </View>
     );
   }
@@ -43,7 +52,9 @@ function MoveForm({ conversation, places }: { conversation: ConversationWithMess
   const working = !!useChatRun(conversation.id);
   const from = places.find((p) => p.runnerId === (conversation.runnerId ?? null)) ?? null;
   const targets = moveTargets(places, conversation.runnerId);
-  const [to, setTo] = useState<Place | null>(targets[0] ?? null);
+  const [chosen, setTo] = useState<Place | null>(null);
+  // The computers may arrive after the sheet opened, and one may go offline while it is open.
+  const to = targets.find((p) => p.runnerId === chosen?.runnerId) ?? targets[0] ?? null;
   const fromName = from?.name ?? t("move.theOtherComputer");
   const dest = to?.name ?? t("move.anotherComputer");
 

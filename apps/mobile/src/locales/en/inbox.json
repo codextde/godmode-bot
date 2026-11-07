@@ -1,4 +1,17 @@
 {
+  "tabs": {
+    "open": "Open",
+    "resolved": "Resolved",
+    "dismissed": "Dismissed"
+  },
+  "closed": {
+    "reopen": "Reopen",
+    "loadFailed": "Couldn't load the list",
+    "empty": {
+      "resolved": "Nothing resolved yet",
+      "dismissed": "Nothing dismissed"
+    }
+  },
   "title": "Inbox",
   "anAgent": "An agent",
   "attention": "Needs your attention",

@@ -5,7 +5,7 @@ import type {
   AgentFileInfo,
   AgentFileMoveResult,
   AgentFileRestoreResult,
-  AgentFileSearchHit,
+  AgentFileSearchHit, AgentNote,
   AgentFilesDeleteResult,
   AgentFilesOverview,
   DeletedAgentFile,
@@ -29,6 +29,7 @@ export const filesApi = {
   list: (agentId: string, path: string) => request<AgentFileEntry[]>("GET", `/api/agents/${agentId}/files?path=${q(path)}`),
   read: (agentId: string, path: string) => request<{ path: string; content: string }>("GET", `/api/agents/${agentId}/file?path=${q(path)}`),
   search: (agentId: string, query: string) => request<AgentFileSearchHit[]>("GET", `/api/agents/${agentId}/files/search?q=${q(query)}`),
+  notes: (agentId: string) => request<AgentNote[]>("GET", `/api/agents/${agentId}/files/notes`),
   /** `create`: only when nothing has the name yet (the computer says so instead of overwriting). */
   write: (agentId: string, path: string, content: string, create?: boolean) =>
     request<{ ok: true }>("PUT", `/api/agents/${agentId}/file`, { path, content, ...(create ? { create } : {}) }),
@@ -50,6 +51,7 @@ export const fk = {
   list: (agentId: string, path: string) => ["agent-files", agentId, "list", path],
   file: (agentId: string, path: string) => ["agent-files", agentId, "file", path],
   search: (agentId: string, query: string) => ["agent-files", agentId, "search", query],
+  notes: (agentId: string) => ["agent-files", agentId, "notes"],
   bin: (agentId: string) => ["agent-files", agentId, "bin"],
   review: (agentId: string) => ["agent-files", agentId, "review"],
   inspect: (agentId: string, paths: string[]) => ["agent-files", agentId, "inspect", ...paths],
@@ -241,6 +243,9 @@ export async function localCopy(agentId: string, path: string, slot: string): Pr
   throw last instanceof Error ? last : new ApiError(0, t("system:api.offline"), "offline");
 }
 
+/** A passing file in the folder swept at launch: gone even when the app closed before it was removed. */
+export const tempCopy = (slot: string, name: string) => new File(folder(slot), name);
+
 /** A text file written to the cache under its own name, so it is shared as a file. */
 export function localTextCopy(slot: string, path: string, content: string): File {
   const file = new File(folder(slot), nameOf(path));
@@ -264,4 +269,33 @@ export function forgetLocalCopies(slot?: string) {
 export async function shareFile(file: File, text?: string): Promise<void> {
   if (process.env.EXPO_OS === "ios") await Share.share({ url: file.uri });
   else await Share.share({ message: text ?? file.name, title: file.name });
+}
+
+/** The headings of a Markdown text (levels 1 to 3), with their lines; what is in a code fence isn't one. */
+export function memorySections(text: string): { level: number; title: string; line: number }[] {
+  const out: { level: number; title: string; line: number }[] = [];
+  let fence = false;
+  text.split("\n").forEach((raw, line) => {
+    if (/^\s*(```|~~~)/.test(raw)) fence = !fence;
+    if (fence) return;
+    const m = /^(#{1,3})\s+(.+?)\s*#*\s*$/.exec(raw);
+    if (m) out.push({ level: m[1]!.length, title: m[2]!.replace(/[*_`]/g, ""), line });
+  });
+  return out;
+}
+
+/** Relative links to memory/ notes that don't exist. */
+export function brokenMemoryLinks(text: string, topics: string[]): string[] {
+  const known = new Set(topics);
+  const out = new Set<string>();
+  for (const m of text.matchAll(/\]\(\s*(?:\.\/)?(memory\/[^)\s#?]+)/g)) {
+    let path = m[1]!;
+    try {
+      path = decodeURI(path);
+    } catch {
+      // Stays as written.
+    }
+    if (!known.has(path)) out.add(path);
+  }
+  return [...out];
 }

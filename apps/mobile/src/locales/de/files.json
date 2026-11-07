@@ -1,4 +1,27 @@
 {
+  "notes": {
+    "title": "Notizen",
+    "filter": "Notizen filtern",
+    "memory": "Gedächtnis",
+    "byFolder": "Nach Ordner",
+    "byModified": "Zuletzt geändert",
+    "bySize": "Nach Größe",
+    "unlinked_one": "{{count}} Gedächtnisnotiz ohne Link aus MEMORY.md",
+    "unlinked_other": "{{count}} Gedächtnisnotizen ohne Link aus MEMORY.md",
+    "showAll": "Alle zeigen",
+    "showOnly": "Nur diese zeigen",
+    "empty": "Noch keine Notizen",
+    "loadFailed": "Die Notizen ließen sich nicht laden"
+  },
+  "select": {
+    "start": "Auswählen",
+    "all": "Alle auswählen",
+    "none": "Nichts auswählen",
+    "pick": "Einträge wählen",
+    "count_one": "{{count}} ausgewählt",
+    "count_other": "{{count}} ausgewählt",
+    "item": "{{name}} auswählen"
+  },
   "index": {
     "title": "Dateien",
     "emptyTitle": "Noch keine Agenten",
@@ -37,6 +60,15 @@
     "move": "Verschieben"
   },
   "editor": {
+    "preview": "Vorschau",
+    "sections": "Abschnitte",
+    "lines_one": "{{n}} Zeile",
+    "lines_other": "{{n}} Zeilen",
+    "words_one": "{{n}} Wort",
+    "words_other": "{{n}} Wörter",
+    "missingNotes": "Diese verlinkten Notizen gibt es nicht",
+    "brokenLinks_one": "{{count}} kaputter Link",
+    "brokenLinks_other": "{{count}} kaputte Links",
     "readOnly": {
       "claude": "Aus den Einstellungen des Agenten erzeugt. Bearbeite die Anweisungen stattdessen in den Einstellungen.",
       "state": "Von Godmode geschriebener Schnappschuss. Änderungen würden überschrieben.",
@@ -77,6 +109,10 @@
     }
   },
   "move": {
+    "titleMany_one": "{{count}} Eintrag",
+    "titleMany_other": "{{count}} Einträge",
+    "movedMany_one": "{{count}} Eintrag verschoben",
+    "movedMany_other": "{{count}} Einträge verschoben",
     "title": "{{name}} verschieben",
     "fold": "Zuklappen",
     "unfold": "Aufklappen",
@@ -94,7 +130,8 @@
   "delete": {
     "titleOne": "{{name}} löschen?",
     "titleMany": "{{items}} löschen?",
-    "description": "Es landet im Papierkorb von {{name}}: Dort kannst du es 30 Tage lang wiederherstellen.",
+    "description_one": "Es landet im Papierkorb von {{name}}: Dort kannst du es 30 Tage lang wiederherstellen.",
+    "description_other": "Sie landen im Papierkorb von {{name}}: Dort kannst du sie 30 Tage lang wiederherstellen.",
     "stillNamesOne": "{{name}} erwähnt es noch",
     "stillNamesMany": "{{name}} erwähnt noch {{n}} davon",
     "namedIn": "{{file}}: in {{names}}",

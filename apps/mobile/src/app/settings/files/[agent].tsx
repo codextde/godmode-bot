@@ -1,19 +1,21 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Link, router, useLocalSearchParams, useNavigation } from "expo-router";
 import { memo, useEffect, useMemo, useState, type ReactNode } from "react";
-import { View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { formatBytes, type AgentFileEntry, type AgentFileSearchHit } from "@godmode/shared";
-import { entryActions, openNew, useDreamingNow } from "@/components/file-actions";
+import { entryActions, openDeleteMany, openMoveMany, openNew, useDreamingNow } from "@/components/file-actions";
 import { useFullAccess } from "@/components/full-access";
+import { Glass } from "@/components/glass";
 import { HeaderActions, MenuSheet, type HeaderMenuItem } from "@/components/header-actions";
 import { Icon, sfSymbol } from "@/components/icon";
 import { ListRow, ReadonlyList } from "@/components/readonly-list";
-import { T } from "@/components/ui";
-import { KIND_ICON, fileKind, filesApi, fk, movedPath, nameOf, onFileChange, parentOf, placeable, wasDeleted } from "@/lib/agent-files";
+import { T, tap } from "@/components/ui";
+import { KIND_ICON, fileKind, filesApi, fk, isLocked, movedPath, nameOf, onFileChange, parentOf, placeable, wasDeleted } from "@/lib/agent-files";
 import { shortTime } from "@/lib/format";
 import { useAgents } from "@/lib/hooks";
-import { space, useColors } from "@/lib/theme";
+import { radius, space, useColors } from "@/lib/theme";
 
 /** Godmode's own folders first at the top of an agent's folder, like the desktop. */
 const ROOT_ORDER = ["workspace", "memory", "MEMORY.md", "CLAUDE.md"];
@@ -25,6 +27,7 @@ type Item = { kind: "entry"; entry: AgentFileEntry } | { kind: "hit"; hit: Agent
  * the header makes notes and folders and opens the bin and the review; a long press renames, moves or deletes.
  */
 export default function AgentFolder() {
+  const c = useColors();
   const { t } = useTranslation(["files", "common"]);
   const { agent: agentId, path = "" } = useLocalSearchParams<{ agent: string; path?: string }>();
   const navigation = useNavigation();
@@ -39,6 +42,9 @@ export default function AgentFolder() {
   const searching = query.length >= 2;
   // Only the counts: the review looks through every file, so it waits until it was asked for once.
   const bin = useQuery({ queryKey: fk.bin(agentId), queryFn: () => filesApi.deleted(agentId), enabled: !!fullAccess });
+  /** Picking several at once: the set of paths, or null when not. */
+  const [picked, setPicked] = useState<Set<string> | null>(null);
+  const insets = useSafeAreaInsets();
 
   // This folder was renamed or moved: it follows; deleted: back to where it was. A new note made here opens to write.
   useEffect(
@@ -67,13 +73,26 @@ export default function AgentFolder() {
 
   const canCreate = placeable(path) && !frozen;
   const binCount = bin.data?.length ?? 0;
+  const pickable = (list.data ?? []).filter((e) => !isLocked(e.path));
+  const pickedList = pickable.filter((e) => picked?.has(e.path));
+  const pickedBytes = pickedList.reduce((n, e) => n + e.size, 0);
+  const paths = pickedList.map((e) => e.path);
+  const toggle = (target: string) =>
+    setPicked((now) => {
+      const next = new Set(now);
+      if (next.has(target)) next.delete(target);
+      else next.add(target);
+      return next;
+    });
   const menu: HeaderMenuItem[] = [
+    ...(pickable.length && !frozen ? [{ icon: "checkCircle" as const, title: t("select.start"), onPress: () => setPicked(new Set()) }] : []),
     ...(canCreate
       ? [
           { icon: "note" as const, title: t("folder.newNote"), onPress: () => openNew(agentId, "note", path) },
           { icon: "folder" as const, title: t("folder.newFolder"), onPress: () => openNew(agentId, "folder", path) },
         ]
       : []),
+    { icon: "note", title: t("notes.title"), onPress: () => router.push({ pathname: "/settings/files/notes", params: { agent: agentId } }) },
     { icon: "broom", title: t("folder.review"), onPress: () => router.push({ pathname: "/settings/files/review", params: { agent: agentId } }) },
     { icon: "trash", title: binCount ? t("folder.binCount", { count: binCount }) : t("folder.bin"), onPress: () => router.push({ pathname: "/settings/files/bin", params: { agent: agentId } }) },
   ];
@@ -81,14 +100,21 @@ export default function AgentFolder() {
 
   return (
     <>
-      {fullAccess === undefined ? null : <HeaderActions menu={menu} />}
+      {fullAccess === undefined ? null : picked ? (
+        <HeaderActions
+          actions={[{ icon: "close", label: t("common:actions.done"), onPress: () => setPicked(null) }]}
+          menu={[{ icon: "checkCircle", title: pickedList.length === pickable.length ? t("select.none") : t("select.all"), onPress: () => setPicked(new Set(pickedList.length === pickable.length ? [] : pickable.map((e) => e.path))) }]}
+        />
+      ) : (
+        <HeaderActions menu={menu} />
+      )}
       <ReadonlyList<Item>
         title={path ? nameOf(path) : (agent?.name ?? t("folder.title"))}
         inline
         query={searching ? { ...hits, isLoading: hits.isLoading && !hits.data } : list}
         items={items}
         keyOf={(i) => (i.kind === "entry" ? i.entry.path : `hit:${i.hit.path}`)}
-        extraData={`${editable}|${frozen}`}
+        extraData={`${editable}|${frozen}|${picked ? [...picked].join() : "off"}`}
         search={{ placeholder: t("folder.search"), value: search, onChange: setSearch }}
         icon="folder"
         emptyTitle={t("folder.emptyTitle")}
@@ -105,11 +131,70 @@ export default function AgentFolder() {
               lines={[[i.entry.type === "file" ? formatBytes(i.entry.size) : null, shortTime(i.entry.modifiedAt)].filter(Boolean).join(" · ")]}
               editable={editable}
               frozen={frozen}
+              picking={picked ? !isLocked(i.entry.path) : undefined}
+              picked={picked?.has(i.entry.path)}
+              onPick={toggle}
             />
           )
         }
       />
+      {picked ? (
+        <View pointerEvents="box-none" style={[styles.barWrap, { paddingBottom: Math.max(insets.bottom, space.md) + SEARCH_BAR }]}>
+          <Glass style={styles.bar} fallback={c.surface}>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <T variant="subhead" style={{ fontWeight: "600" }} numberOfLines={1}>
+                {pickedList.length ? t("select.count", { count: pickedList.length }) : t("select.pick")}
+              </T>
+              {pickedBytes ? (
+                <T variant="caption" muted>
+                  {formatBytes(pickedBytes)}
+                </T>
+              ) : null}
+            </View>
+            <BarButton
+              title={t("actions.move")}
+              icon="move"
+              disabled={!paths.length}
+              onPress={() => {
+                openMoveMany(agentId, paths);
+                setPicked(null);
+              }}
+            />
+            <BarButton
+              title={t("common:actions.delete")}
+              icon="trash"
+              danger
+              disabled={!paths.length}
+              onPress={() => {
+                openDeleteMany(agentId, paths);
+                setPicked(null);
+              }}
+            />
+          </Glass>
+        </View>
+      ) : null}
     </>
+  );
+}
+
+function BarButton({ title, icon, danger, disabled, onPress }: { title: string; icon: "move" | "trash"; danger?: boolean; disabled: boolean; onPress: () => void }) {
+  const c = useColors();
+  const color = danger ? c.danger : c.text;
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={title}
+      accessibilityState={{ disabled }}
+      disabled={disabled}
+      onPress={() => {
+        tap();
+        onPress();
+      }}
+      hitSlop={6}
+      style={({ pressed }) => [styles.barButton, { backgroundColor: c.sunken, opacity: disabled ? 0.4 : pressed ? 0.6 : 1 }]}
+    >
+      <Icon name={icon} size={16} color={color} />
+    </Pressable>
   );
 }
 
@@ -137,6 +222,9 @@ const EntryRow = memo(function EntryRow({
   lines,
   editable,
   frozen,
+  picking,
+  picked,
+  onPick,
 }: {
   agentId: string;
   path: string;
@@ -144,8 +232,13 @@ const EntryRow = memo(function EntryRow({
   lines: (string | null | undefined)[];
   editable: boolean;
   frozen: boolean;
+  /** Picking several: whether this one can be picked (undefined when not picking). */
+  picking?: boolean;
+  picked?: boolean;
+  onPick?: (path: string) => void;
 }) {
   const c = useColors();
+  const { t } = useTranslation("files");
   const [open, setOpen] = useState(false);
   const actions = editable ? entryActions(agentId, path, frozen) : [];
   const href = hrefOf(agentId, path, type);
@@ -160,6 +253,28 @@ const EntryRow = memo(function EntryRow({
       trailing={trailing}
     />
   );
+  if (picking !== undefined) {
+    return (
+      <Pressable
+        accessibilityRole="checkbox"
+        accessibilityLabel={t("select.item", { name: nameOf(path) })}
+        accessibilityState={{ checked: !!picked, disabled: !picking }}
+        disabled={!picking}
+        onPress={() => {
+          tap();
+          onPick?.(path);
+        }}
+      >
+        <ListRow
+          icon={KIND_ICON[fileKind({ path, type })]}
+          tint={type === "dir" ? c.brandStrong : undefined}
+          title={nameOf(path)}
+          lines={lines}
+          trailing={<Icon name={picked ? "checkCircleFill" : "circle"} size={20} color={!picking ? c.border : picked ? c.brandStrong : c.textFaint} />}
+        />
+      </Pressable>
+    );
+  }
   if (!actions.length) return row(() => router.push(href));
   if (process.env.EXPO_OS !== "ios") {
     return (
@@ -181,6 +296,15 @@ const EntryRow = memo(function EntryRow({
       </Link.Menu>
     </Link>
   );
+});
+
+/** iOS keeps its search field at the bottom of the screen: the bar sits above it. */
+const SEARCH_BAR = process.env.EXPO_OS === "ios" ? 60 : 0;
+
+const styles = StyleSheet.create({
+  barWrap: { position: "absolute", left: 0, right: 0, bottom: 0, paddingHorizontal: space.lg },
+  bar: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingVertical: space.sm, paddingLeft: space.lg, paddingRight: space.sm, borderRadius: radius.xl, borderCurve: "continuous" },
+  barButton: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center" },
 });
 
 function rank(path: string): number {

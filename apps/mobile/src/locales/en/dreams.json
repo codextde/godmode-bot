@@ -5,7 +5,6 @@
     "loading": "Loading the dream…",
     "theAgent": "The agent",
     "reverted": "This dream was undone — the files are back the way they were before it.",
-    "undoOnComputer": "Undo a dream in Godmode on your computer.",
     "cantUndo": "The memory changed after this dream, so it can't be undone automatically.",
     "eyebrow": "Dream · {{when}}",
     "heading": "What {{name}} changed",

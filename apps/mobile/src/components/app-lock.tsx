@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState, StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import Animated, { FadeOut } from "react-native-reanimated";
+import { FullWindowOverlay } from "react-native-screens";
 import { Logo } from "./logo";
 import { Button, T } from "./ui";
 import { useSession } from "@/lib/session";
@@ -51,18 +52,21 @@ export function AppLock() {
     if (locked) unlock();
   }, [locked, unlock]);
 
-  if (!enabled || (!locked && !covered)) return null;
-  return (
-    <Animated.View exiting={FadeOut.duration(180)} style={[StyleSheet.absoluteFill, styles.cover, { backgroundColor: c.background }]}>
-      <Logo size={64} />
-      {locked && (
-        <View style={{ alignItems: "center", gap: space.lg }}>
-          <T variant="headline">{t("appLock.locked")}</T>
-          <Button title={t("appLock.unlock")} icon="faceid" onPress={unlock} />
-        </View>
-      )}
-    </Animated.View>
-  );
+  if (!enabled) return null;
+  const cover =
+    locked || covered ? (
+      <Animated.View exiting={FadeOut.duration(180)} style={[StyleSheet.absoluteFill, styles.cover, { backgroundColor: c.background }]}>
+        <Logo size={64} />
+        {locked && (
+          <View style={{ alignItems: "center", gap: space.lg }}>
+            <T variant="headline">{t("appLock.locked")}</T>
+            <Button title={t("appLock.unlock")} icon="faceid" onPress={unlock} />
+          </View>
+        )}
+      </Animated.View>
+    ) : null;
+  // iOS presents sheets and modals natively, above the app's own views. Touches pass through while it stays empty.
+  return process.env.EXPO_OS === "ios" ? <FullWindowOverlay unstable_accessibilityContainerViewIsModal={!!cover}>{cover}</FullWindowOverlay> : cover;
 }
 
 const styles = StyleSheet.create({

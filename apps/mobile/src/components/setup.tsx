@@ -4,9 +4,13 @@ import { useTranslation } from "react-i18next";
 import Animated, { FadeIn } from "react-native-reanimated";
 import type { WorkspaceSource } from "@godmode/shared";
 import { EmojiGrid, Group, LinkRow } from "./form";
+import { useFullAccess } from "./full-access";
+import { MenuSheet } from "./header-actions";
 import { Icon } from "./icon";
 import { Badge, Button, T, tap } from "./ui";
 import type { SourceInput } from "@/lib/api";
+import { pickFolder } from "@/lib/folder-pick";
+import { useSshServers } from "@/lib/integrations";
 import { useEditable } from "@/lib/setup";
 import { radius, space, useColors } from "@/lib/theme";
 
@@ -123,6 +127,19 @@ export function Sources({
   const [url, setUrl] = useState("");
   const [branch, setBranch] = useState("");
   const [busy, setBusy] = useState(false);
+  const [choosing, setChoosing] = useState(false);
+  const { fullAccess } = useFullAccess();
+  const servers = useSshServers(fullAccess === true);
+
+  const addFolder = async () => {
+    const path = await pickFolder({ title: t("setup.addFolder"), action: t("setup.useFolder") });
+    if (path) void onSave([...inputsOf(sources), { kind: "folder", path }]);
+  };
+  const addRemote = async (server: { id: string; name: string }) => {
+    const path = await pickFolder({ title: t("setup.remoteTitle", { name: server.name }), action: t("setup.useFolder"), serverId: server.id });
+    if (path) void onSave([...inputsOf(sources), { kind: "remote", serverId: server.id, path }]);
+  };
+  const list = servers.data ?? [];
 
   const add = async () => {
     if (!url.trim()) return;
@@ -224,8 +241,13 @@ export function Sources({
           </View>
         </Animated.View>
       ) : (
-        <LinkRow icon="plus" title={t("setup.addRepo")} tone="brand" chevron={false} onPress={() => setAdding(true)} />
+        <>
+          <LinkRow icon="plus" title={t("setup.addRepo")} tone="brand" chevron={false} onPress={() => setAdding(true)} />
+          {fullAccess ? <LinkRow icon="folder" title={t("setup.addFolder")} tone="brand" chevron={false} onPress={() => void addFolder()} /> : null}
+          {fullAccess && list.length ? <LinkRow icon="server" title={t("setup.addRemote")} tone="brand" chevron={false} onPress={() => (list.length === 1 ? void addRemote(list[0]!) : setChoosing(true))} /> : null}
+        </>
       )}
+      <MenuSheet items={list.map((s) => ({ icon: "server" as const, title: s.name, onPress: () => void addRemote(s) }))} open={choosing} onClose={() => setChoosing(false)} />
     </Group>
   );
 }

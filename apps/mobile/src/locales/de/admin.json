@@ -114,13 +114,7 @@
     "changeButton": "Passwort ändern",
     "changed": "Godmode-Passwort geändert",
     "changedBody": "Nutze beim nächsten Entsperren das neue Passwort.",
-    "dashboardSetTitle": "Dashboard-Passwort",
-    "dashboardChangeTitle": "Dashboard-Passwort",
-    "dashboardFooter": "Für das Browser-Dashboard. Nimm ein anderes als dein Godmode-Passwort.",
     "setButton": "Passwort setzen",
-    "dashboardSet": "Dashboard-Passwort gesetzt",
-    "dashboardChanged": "Dashboard-Passwort geändert",
-    "dashboardSessions": "Andere angemeldete Dashboard-Sitzungen müssen sich neu anmelden.",
     "setFailed": "Passwort konnte nicht gesetzt werden"
   },
   "security": {

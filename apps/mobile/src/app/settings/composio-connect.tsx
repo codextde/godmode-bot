@@ -8,6 +8,7 @@ import { CloseButton } from "@/components/close-button";
 import { NeedsFullAccessScreen } from "@/components/full-access";
 import { FullAccessGate, isRefused } from "@/components/admin";
 import { ToolkitLogo } from "@/components/composio-parts";
+import { FilterChips } from "@/components/filter-chips";
 import { Group } from "@/components/form";
 import { Icon } from "@/components/icon";
 import { useScopeRows, type Scope } from "@/components/tool-form";
@@ -55,13 +56,15 @@ function useDebounced<T>(value: T, ms: number): T {
 
 function Gallery({ onPick }: { onPick: (toolkit: ComposioToolkit) => void }) {
   const c = useColors();
-  const { t } = useTranslation("integrations");
+  const { t } = useTranslation(["integrations", "common"]);
   const [input, setInput] = useState("");
   const search = useDebounced(input.trim(), 300);
+  const [category, setCategory] = useState("");
+  const [seen, setSeen] = useState<Map<string, number>>(new Map());
   const connections = useComposioConnections();
   const query = useInfiniteQuery({
-    queryKey: toolkitsKey(search),
-    queryFn: ({ pageParam }) => composioAdmin.toolkits({ search: search || undefined, cursor: pageParam }),
+    queryKey: toolkitsKey(search, category),
+    queryFn: ({ pageParam }) => composioAdmin.toolkits({ search: search || undefined, category: category || undefined, cursor: pageParam }),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (last) => last.nextCursor ?? undefined,
     staleTime: 5 * 60_000,
@@ -76,6 +79,24 @@ function Gallery({ onPick }: { onPick: (toolkit: ComposioToolkit) => void }) {
         return true;
       });
   }, [query.data]);
+  // Gathered over the loads, so the chips stay while a filter is on.
+  if (!category && items.length) {
+    const found = new Map<string, number>();
+    for (const x of items) for (const name of x.categories) found.set(name, (found.get(name) ?? 0) + 1);
+    if ([...found].some(([name, n]) => (seen.get(name) ?? 0) < n)) {
+      const next = new Map(seen);
+      for (const [name, n] of found) next.set(name, Math.max(seen.get(name) ?? 0, n));
+      setSeen(next);
+    }
+  }
+  const chips = useMemo(
+    () =>
+      [...seen.entries()]
+        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+        .slice(0, 16)
+        .map(([name]) => name),
+    [seen],
+  );
   const counts = useMemo(() => {
     const m = new Map<string, number>();
     for (const x of connections.data ?? []) if (x.status.toUpperCase() === "ACTIVE") m.set(x.toolkit, (m.get(x.toolkit) ?? 0) + 1);
@@ -93,6 +114,7 @@ function Gallery({ onPick }: { onPick: (toolkit: ComposioToolkit) => void }) {
       onEndReached={() => void (query.hasNextPage && !query.isFetchingNextPage && query.fetchNextPage())}
       onEndReachedThreshold={0.5}
       ListHeaderComponent={
+        <View style={styles.galleryHead}>
         <View style={[styles.search, { backgroundColor: c.sunken }]}>
           <Icon name="search" size={15} color={c.textMuted} />
           <TextInput
@@ -108,6 +130,17 @@ function Gallery({ onPick }: { onPick: (toolkit: ComposioToolkit) => void }) {
             style={[styles.searchInput, { color: c.text }]}
           />
         </View>
+        {chips.length ? (
+          <View style={{ paddingHorizontal: space.lg }}>
+            <FilterChips
+              bleed={space.lg}
+              value={category}
+              onChange={setCategory}
+              filters={[{ id: "", label: t("common:words.all") }, ...chips.map((name) => ({ id: name, label: name.replace(/^./, (x) => x.toUpperCase()) }))]}
+            />
+          </View>
+        ) : null}
+        </View>
       }
       ListEmptyComponent={
         query.isLoading ? (
@@ -115,7 +148,7 @@ function Gallery({ onPick }: { onPick: (toolkit: ComposioToolkit) => void }) {
         ) : query.isError ? (
           <ErrorState title={t("composioAdmin.gallery.loadFailed")} error={errorText(query.error)} onRetry={() => void query.refetch()} />
         ) : (
-          <EmptyState icon="search" title={search ? t("composioAdmin.gallery.noMatch", { search }) : t("composioAdmin.gallery.none")} />
+          <EmptyState icon="search" title={search ? t("composioAdmin.gallery.noMatch", { search }) : category ? t("composioAdmin.gallery.noneInCategory") : t("composioAdmin.gallery.none")} />
         )
       }
       ItemSeparatorComponent={() => <Hairline inset={space.lg + 36 + space.md} />}
@@ -317,6 +350,10 @@ function useWho(scope: Scope): string {
 }
 
 const styles = StyleSheet.create({
+  galleryHead: {
+    gap: space.md,
+    paddingBottom: space.md,
+  },
   list: {
     paddingBottom: 60,
   },
@@ -326,7 +363,6 @@ const styles = StyleSheet.create({
     gap: space.sm,
     marginHorizontal: space.lg,
     marginTop: space.sm,
-    marginBottom: space.md,
     paddingHorizontal: space.md,
     height: 40,
     borderRadius: radius.md,

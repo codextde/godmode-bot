@@ -94,6 +94,17 @@ export function artifactDocument(html: string, bridge: string): string {
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">${bridge}</head><body>${body}</body></html>`;
 }
 
+/**
+ * For a native WebView, where the page's <meta> policy is the only one: the policy and bridge come before any byte of the
+ * page, so nothing in it can decide where they land or run ahead of them. A page's own <html> and <head> after this only
+ * add their attributes and contents. What the regex finds only sets the layout: a fragment gets its <body>.
+ */
+export function policyFirstDocument(html: string, head: string): string {
+  const plain = html.replace(/<!--[\s\S]*?-->|<script\b[\s\S]*?<\/script>/gi, (m) => " ".repeat(m.length));
+  const page = /<(?:html|head|body)[\s>]/i.test(plain);
+  return `<!doctype html><html><head><meta charset="utf-8">${head}</head>${page ? html : `<body>${html}</body>`}`;
+}
+
 const standaloneCsp = (from: string) =>
   `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' https: blob: data:; style-src 'unsafe-inline' https:; img-src https: data: blob:${from}; font-src https: data:; connect-src https: wss:; media-src https: data: blob:${from}; worker-src blob:; frame-src https:">`;
 
@@ -116,5 +127,8 @@ export function webViewDocument(html: string, token: string, data: unknown, them
   const relay = `<script>(function(){var T=${JSON.stringify(token)},A={data:1,theme:1,reply:1};window.addEventListener("message",function(e){var m=e.data;if(e.source!==window||!m||m.__gm!==T||A[m.type]||!window.ReactNativeWebView)return;try{window.ReactNativeWebView.postMessage(JSON.stringify(m));}catch(x){}});})();</script>`;
   // A phone-wide viewport first: a page's own viewport tag comes later and wins.
   const viewport = `<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">`;
-  return artifactDocument(html, viewport + standaloneCsp(from) + relay + bridgeScript(token, data, theme, false, files));
+  // The theme's class is set before the page's <html> is parsed, and the parser then drops the page's own class.
+  const classes = /<html\b[^>]*?\sclass="([\w\s:./-]*)"/i.exec(html)?.[1]?.split(/\s+/).filter(Boolean) ?? [];
+  const root = classes.length ? `<script>document.documentElement.classList.add(...${JSON.stringify(classes)});</script>` : "";
+  return policyFirstDocument(html, viewport + standaloneCsp(from) + relay + root + bridgeScript(token, data, theme, false, files));
 }

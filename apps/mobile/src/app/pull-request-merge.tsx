@@ -5,9 +5,9 @@ import { useState } from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { GithubErrorCode, type PullRequestMergeMethod, type PullRequestView } from "@godmode/shared";
-import { NeedsFullAccess, useFullAccess } from "@/components/full-access";
+import { NeedsFullAccess, needsFullAccess, useFullAccess } from "@/components/full-access";
 import { Icon } from "@/components/icon";
-import { Button, Card, Hairline, LoadingState, T, tap } from "@/components/ui";
+import { Button, Card, ErrorState, Hairline, LoadingState, T, tap } from "@/components/ui";
 import { ApiError, errorText } from "@/lib/api";
 import { preferredMethod, prApi, prKey, rememberMethod } from "@/lib/pull-requests";
 import { queryClient } from "@/lib/query";
@@ -16,13 +16,21 @@ import { radius, space, useColors } from "@/lib/theme";
 /** Before a pull request is merged (or set to merge by itself): how, and what speaks against it right now. */
 export default function MergeSheet() {
   const c = useColors();
+  const { t } = useTranslation("tasks");
   const { fullAccess } = useFullAccess();
   const { url = "", mode } = useLocalSearchParams<{ url: string; mode?: "now" | "auto" }>();
   const pr = useQuery({ queryKey: prKey(url), queryFn: () => prApi.get(url), staleTime: 30_000 });
-  if (fullAccess === false) {
+  if (fullAccess === false || needsFullAccess(pr.error)) {
     return (
       <View style={[styles.fill, { backgroundColor: c.background }]}>
         <NeedsFullAccess />
+      </View>
+    );
+  }
+  if (pr.isError && !pr.data) {
+    return (
+      <View style={[styles.fill, { backgroundColor: c.background }]}>
+        <ErrorState title={t("pullRequest.loadFailed")} error={errorText(pr.error)} onRetry={() => void pr.refetch()} />
       </View>
     );
   }

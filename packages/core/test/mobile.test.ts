@@ -801,6 +801,13 @@ describe("phone access", () => {
     expect((await phone("/api/voice/hex/prepare", json("POST", {}))).status).toBe(403);
   });
 
+  test("a limited phone sets when agents dream", async () => {
+    const { token: device } = await pair("Dreams");
+    const saved = await phone("/api/settings", { bearer: device, method: "PUT", body: JSON.stringify({ memory: { dreaming: { cron: "15 4 * * *" } } }) });
+    expect(saved.status).toBe(200);
+    expect(((await saved.json()) as { memory: { dreaming: { cron: string } } }).memory.dreaming.cron).toBe("15 4 * * *");
+  });
+
   test("phones set up instructions, defaults, workspaces, projects and agents", async () => {
     const { token: device } = await pair("Setup");
     const json = (method: string, body: unknown) => ({ bearer: device, method, body: JSON.stringify(body) });

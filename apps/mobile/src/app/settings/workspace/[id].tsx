@@ -11,6 +11,7 @@ import { PickRow } from "@/components/pick-sheet";
 import { Identity, Sources } from "@/components/setup";
 import { EmptyState, SectionTitle } from "@/components/ui";
 import { WorkspaceColors } from "@/components/workspace-color";
+import { t as translate } from "@/lib/i18n";
 import { api, ApiError, errorText } from "@/lib/api";
 import { useArchive } from "@/lib/archive";
 import { useAgents } from "@/lib/hooks";
@@ -60,12 +61,12 @@ export default function WorkspaceScreen() {
     router.back();
   };
   // Like the desktop: a workspace with something in it goes only with everything in it, after a second, stronger yes.
-  const forceRemove = () =>
+  const forceRemove = (details: unknown) =>
     Alert.alert(
       t("manage:workspace.forceTitle", { name: w.name }),
       [
         t("manage:workspace.forceBody"),
-        t("manage:workspace.forceCounts", { agents: t("manage:workspace.agents", { count: team.length }), projects: t("manage:workspace.projects", { count: w.projects.length }) }),
+        heldBy(details) ?? t("manage:workspace.forceCounts", { agents: t("manage:workspace.agents", { count: team.length }), projects: t("manage:workspace.projects", { count: w.projects.length }) }),
         t("manage:workspace.forceTip"),
       ].join("\n\n"),
       [
@@ -97,7 +98,7 @@ export default function WorkspaceScreen() {
             removed();
           } catch (err) {
             const full = err instanceof ApiError && err.status === 409;
-            if (full && admin) forceRemove();
+            if (full && admin) forceRemove(err.details);
             else Alert.alert(t("workspace.deleteFailed"), full ? t("workspace.notEmpty", { name: w.name }) : errorText(err));
           }
         },
@@ -259,3 +260,17 @@ const styles = StyleSheet.create({
     gap: space.xl,
   },
 });
+
+const HELD = ["projects", "agents", "credentials", "totp", "cards", "mcpServers", "apiTools", "browserProfiles", "composioConnections", "tasks"] as const;
+
+/** What the computer says a workspace still holds, kind by kind ("3 agents\n12 tasks"), or null when it doesn't say. */
+function heldBy(details: unknown): string | null {
+  const raw = details && typeof details === "object" ? ((details as { counts?: unknown }).counts ?? details) : null;
+  if (!raw || typeof raw !== "object") return null;
+  const counts = raw as Record<string, unknown>;
+  const lines = HELD.flatMap((kind) => {
+    const n = counts[kind];
+    return typeof n === "number" && n > 0 ? [`${n} ${translate(`manage:workspace.held.${kind}`)}`] : [];
+  });
+  return lines.length ? lines.join("\n") : null;
+}

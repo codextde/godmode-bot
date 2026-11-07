@@ -129,7 +129,8 @@
       "noDescription": "Keine Beschreibung.",
       "connected": "Verbunden",
       "accounts": "{{n}} Konten",
-      "noSignIn": "Ohne Anmeldung"
+      "noSignIn": "Ohne Anmeldung",
+      "noneInCategory": "Keine Apps in dieser Kategorie"
     },
     "connect": {
       "title": "{{name}} verbinden",

@@ -93,6 +93,8 @@ export function Composer({
   const [menuForced, setMenuForced] = useState(false);
   const [dictating, setDictating] = useState(false);
   const [otherOpen, setOtherOpen] = useState(false);
+  // The run ended under the open menu: nothing may pop up by itself with the next one.
+  if (otherOpen && !otherSend) setOtherOpen(false);
   const dictated = useRef(false);
   const { fullAccess } = useFullAccess();
   const commands = useSlashCommands(agentId);

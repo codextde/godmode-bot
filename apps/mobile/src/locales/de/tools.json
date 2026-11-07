@@ -192,6 +192,182 @@
     "checkFailed": "Konnte nicht nach Updates suchen"
   },
   "pluginAdmin": {
+    "ability": {
+      "tools": {
+        "label": "Sieht und ändert Tool-Aufrufe",
+        "detail": "Es kann einen Tool-Aufruf blockieren, seine Eingabe umschreiben oder auf sein Ergebnis reagieren."
+      },
+      "prompts": {
+        "label": "Liest und ändert Prompts",
+        "detail": "Es sieht, was an den Agenten geht, und kann es ändern, auch den System-Prompt."
+      },
+      "transcript": {
+        "label": "Bearbeitet, was der Chat behält",
+        "detail": "Es kann Nachrichten und Tool-Ergebnisse umschreiben, bevor das Modell sie liest."
+      },
+      "turns": {
+        "label": "Verfolgt die Schritte des Agenten",
+        "detail": "Es erfährt, wenn ein Durchgang beginnt, einen Schritt macht und endet."
+      },
+      "notes": {
+        "label": "Schreibt Hinweise in den Chat",
+        "detail": "Seine Logzeilen, Toasts und Statusmeldungen erscheinen im Chat als Hinweise des Plugins."
+      },
+      "panes": {
+        "label": "Zeichnet Bereiche und Leisten",
+        "detail": "Sie erscheinen im Terminal und in der Desktop-App von Claude Code, nicht in den Chats von Godmode."
+      },
+      "model": {
+        "label": "Ruft das Modell auf",
+        "detail": "Es kann Claude eigene Fragen stellen, das kostet Tokens."
+      },
+      "store": {
+        "label": "Merkt sich Dinge zwischen Chats",
+        "detail": "Es behält eigene Werte über Sitzungen hinweg."
+      },
+      "files_read": {
+        "label": "Liest Dateien auf diesem Computer",
+        "detail": "Es kann jede Datei lesen, die der Lauf des Agenten lesen kann."
+      },
+      "files_write": {
+        "label": "Schreibt Dateien auf diesem Computer",
+        "detail": "Es kann Dateien anlegen und überschreiben."
+      },
+      "process": {
+        "label": "Startet Programme auf diesem Computer",
+        "detail": "Es kann eigene Befehle starten, außerhalb der Tools des Agenten."
+      },
+      "network": {
+        "label": "Spricht mit dem Internet",
+        "detail": "Es kann Anfragen an jeden Server senden."
+      },
+      "env": {
+        "label": "Liest Umgebungsvariablen",
+        "detail": "Darin können API-Schlüssel stehen."
+      },
+      "programs": {
+        "label": "Startet eigene Programme",
+        "detail": "Es bringt Befehls-Hooks, Server, Monitore oder Skripte mit, die Claude Code auf diesem Computer ausführt."
+      }
+    },
+    "abilities": {
+      "skills_one": "Fügt {{count}} Skill hinzu",
+      "skills_other": "Fügt {{count}} Skills hinzu",
+      "skillsDetail": "Anleitungen, die der Agent lädt, wenn eine Aufgabe sie braucht oder du sie nennst.",
+      "subagents_one": "Fügt {{count}} Subagenten hinzu",
+      "subagents_other": "Fügt {{count}} Subagenten hinzu",
+      "subagentsDetail": "Spezialisten, an die der Agent Teile seiner Arbeit abgeben kann.",
+      "commands_one": "Fügt {{count}} Slash-Befehl hinzu",
+      "commands_other": "Fügt {{count}} Slash-Befehle hinzu",
+      "commandsDetail": "Prompts, die du oder der Agent mit /name startet.",
+      "hooks_one": "Führt bei {{count}} Ereignis Befehle aus",
+      "hooks_other": "Führt bei {{count}} Ereignissen Befehle aus",
+      "hooksDetail": "Shell-Befehle auf diesem Computer bei {{events}}.",
+      "hooksDetailMore": "Shell-Befehle auf diesem Computer bei {{events}} und mehr.",
+      "mcpServers_one": "Startet {{count}} MCP-Server",
+      "mcpServers_other": "Startet {{count}} MCP-Server",
+      "mcpServersDetail": "Programme auf diesem Computer, die dem Agenten eigene Tools geben."
+    },
+    "hook": {
+      "tool_call": "Jeder Tool-Aufruf",
+      "tool_check": "Berechtigungsprüfungen",
+      "tool_describe": "Tool-Beschreibungen",
+      "prompt_submit": "Prompts",
+      "prompt_compose": "Der System-Prompt",
+      "prompt_context": "Prompt-Kontext",
+      "session_start": "Sitzungsstart",
+      "session_end": "Sitzungsende",
+      "session_append": "Chatzeilen",
+      "session_compact": "Komprimierung",
+      "turn_start": "Beginn eines Durchgangs",
+      "turn_step": "Modellanfragen",
+      "turn_complete": "Ende eines Durchgangs",
+      "ui_render": "Zeichnen",
+      "command_run": "Slash-Befehle",
+      "toolCalls": "{{tool}}-Aufrufe"
+    },
+    "icons": {
+      "puzzle": "Puzzleteil",
+      "shield": "Schild",
+      "fileLock": "Gesperrte Datei",
+      "terminal": "Terminal",
+      "eyeOff": "Versteckt",
+      "gauge": "Tacho",
+      "timer": "Timer",
+      "gitBranch": "Git-Branch",
+      "scroll": "Schriftrolle",
+      "bell": "Glocke",
+      "filter": "Filter",
+      "wand": "Zauberstab",
+      "video": "Video",
+      "layers": "Ebenen",
+      "sparkles": "Funkeln",
+      "bot": "Roboter"
+    },
+    "whatItCanDo": "Was es kann",
+    "reachesOutside": "Wirkt über das Gespräch hinaus",
+    "hooksInto": "Hängt sich ein in",
+    "nothingHooked": "Noch nichts – es hängt sich nicht in Claude Code ein.",
+    "notCheckedReadCode": "Noch nicht geprüft. Bis Claude Code es geprüft hat, lies den Code, um zu sehen, was dieses Plugin tut.",
+    "noHooks": "Keine Hooks.",
+    "hooksUnknown": "Unbekannt, bis Claude Code das Plugin prüft.",
+    "noHooksYet": "Noch keine Hooks.",
+    "nothingFoundContents": "Godmode hat nichts gefunden.",
+    "titleLabel": "Titel",
+    "descriptionLabel": "Beschreibung",
+    "descriptionPlaceholder": "Was dieses Plugin tut, in ein oder zwei Sätzen.",
+    "iconLabel": "Symbol",
+    "edit": "Bearbeiten",
+    "editFailed": "Das Plugin ließ sich nicht speichern",
+    "newPlugin": {
+      "title": "Neues Plugin",
+      "placeholder": ".env-Dateien schützen",
+      "pluginName": "Plugin-Name",
+      "create": "Plugin erstellen",
+      "createFailed": "Das Plugin ließ sich nicht erstellen"
+    },
+    "importFolder": {
+      "title": "Plugin-Ordner importieren",
+      "use": "Importieren",
+      "busy": "Wird importiert…",
+      "failed": "Der Ordner ließ sich nicht importieren"
+    },
+    "contentsView": {
+      "version": "Version",
+      "commit": "Commit",
+      "files": "Dateien",
+      "everySession": "Jede Sitzung",
+      "skills": "Skills",
+      "subagents": "Subagenten",
+      "commands": "Befehle",
+      "hooks": "Hooks",
+      "mcpServers": "MCP-Server",
+      "nothingFound": "Godmode hat darin keine Skills, Subagenten, Befehle, Hooks oder MCP-Server gefunden.",
+      "unknown": "Was es mitbringt, ist noch unbekannt. Such nach Updates, um es neu einzulesen.",
+      "manifestAndHooks": "Manifest und Hooks",
+      "browseGitHub": "Alle Dateien auf GitHub ansehen",
+      "showFewer": "Weniger anzeigen",
+      "showAll": "Alle {{n}} anzeigen"
+    },
+    "codeFiles": {
+      "staleTitle": "Der gespeicherte Code hat sich geändert, während du bearbeitet hast",
+      "staleHint": "Beim Speichern wird er durch deine Version ersetzt.",
+      "loadSaved": "Stattdessen gespeicherten Code laden",
+      "newFile": "Neue Datei",
+      "newFilePath": "Pfad der neuen Datei",
+      "newPathFor": "Neuer Pfad für {{path}}",
+      "enterPath": "Gib einen Pfad ein, z. B. hooks/helper.ts.",
+      "pathExists": "Eine Datei mit diesem Pfad gibt es schon.",
+      "maxFiles": "Ein Plugin enthält hier höchstens {{max}} Dateien.",
+      "deleteFile": "Datei löschen",
+      "deleteTitle": "„{{path}}“ löschen?",
+      "deleteDescription": "Die Datei wird beim Speichern aus dem Plugin entfernt.",
+      "renameFile": "Datei umbenennen",
+      "discardTitle": "Ungespeicherte Änderungen verwerfen?",
+      "discardDescription": "Was du seit dem letzten Speichern an „{{title}}“ geändert hast, geht beim Schließen verloren.",
+      "keepEditing": "Weiter bearbeiten",
+      "discard": "Verwerfen"
+    },
     "title": "Plugin",
     "add": "Plugin hinzufügen",
     "emptyBody": "Installier eins von GitHub, aus den Empfehlungen oder aus der Godmode-Galerie mit +.",

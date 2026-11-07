@@ -114,13 +114,7 @@
     "changeButton": "Change password",
     "changed": "Godmode password changed",
     "changedBody": "Use the new password next time you unlock.",
-    "dashboardSetTitle": "Dashboard password",
-    "dashboardChangeTitle": "Dashboard password",
-    "dashboardFooter": "For the browser dashboard. Use a different one than your Godmode password.",
     "setButton": "Set password",
-    "dashboardSet": "Dashboard password set",
-    "dashboardChanged": "Dashboard password changed",
-    "dashboardSessions": "Other signed-in dashboard sessions have to sign in again.",
     "setFailed": "Couldn't set the password"
   },
   "security": {

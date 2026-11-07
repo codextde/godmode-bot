@@ -2,6 +2,7 @@ import type {
   AndroidAssignInput,
   AndroidConnectInput,
   AndroidConnectResult,
+  AndroidInputRequest,
   AndroidDevice,
   AndroidDevicePatch,
   AndroidExecResult,
@@ -74,6 +75,7 @@ export const machinesApi = {
     disconnect: (id: string) => request<AndroidDevice>("POST", `/api/android/devices/${enc(id)}/disconnect`, {}, 30_000),
     exec: (id: string, command: string) => request<AndroidExecResult>("POST", `/api/android/devices/${enc(id)}/exec`, { command }, 130_000),
     assign: (id: string, input: AndroidAssignInput) => request<AndroidDevice>("POST", `/api/android/devices/${enc(id)}/assign`, input),
+    input: (id: string, input: AndroidInputRequest) => request<{ ok: true }>("POST", `/api/android/devices/${enc(id)}/input`, input),
   },
 
   browser: {

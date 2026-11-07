@@ -135,7 +135,22 @@ export function AgentAccess({ agent }: { agent: Agent }) {
         <Group title={t("agent.tools")}>
           <SwitchRow icon="layers" title={t("agent.inherit")} value={agent.inheritMcp} disabled={locked} onChange={(inheritMcp) => save({ inheritMcp })} />
           <LinkRow icon="plug" title={t("agent.mcp")} value={count(agent.mcpServerIds, mcp.data)} onPress={() => open("mcp")} />
-          <LinkRow icon="wrench" title={t("agent.apiTools")} value={tools.data ? (ownTools.length ? String(ownTools.length) : t("agent.none")) : undefined} onPress={() => router.push("/settings/integrations")} />
+        </Group>
+      ) : null}
+
+      {toolsOn ? (
+        <Group title={t("agent.apiTools")} footer={tools.data && !ownTools.length ? (agent.inheritMcp ? t("agent.toolsEmptyInherit") : t("agent.toolsEmptyOwn")) : undefined}>
+          {ownTools.map((x) => (
+            <LinkRow key={x.id} icon="wrench" title={x.name} detail={x.description || undefined} value={x.agentId ? t("agent.toolOwn") : undefined} onPress={() => router.push({ pathname: "/settings/api-tool", params: { id: x.id } })} />
+          ))}
+          <LinkRow
+            icon="plus"
+            title={t("agent.addOwnTool")}
+            tone="brand"
+            chevron={false}
+            onPress={() => (locked ? refuse() : router.push({ pathname: "/settings/api-tool", params: { agentId: agent.id, ...(agent.workspaceId ? { workspaceId: agent.workspaceId } : {}) } }))}
+          />
+          <LinkRow icon="slider" title={t("agent.manageTools")} onPress={() => router.push("/settings/integrations")} />
         </Group>
       ) : null}
     </>

@@ -129,7 +129,8 @@
       "noDescription": "No description.",
       "connected": "Connected",
       "accounts": "{{n}} accounts",
-      "noSignIn": "No sign-in"
+      "noSignIn": "No sign-in",
+      "noneInCategory": "No apps in this category"
     },
     "connect": {
       "title": "Connect {{name}}",

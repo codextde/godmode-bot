@@ -33,6 +33,9 @@ export const linkingApi = {
   runners: {
     list: () => request<RemoteRunner[]>("GET", "/api/runners"),
     remove: (id: string) => request<{ ok: true }>("DELETE", `/api/runners/${encodeURIComponent(id)}`, undefined, 30_000),
+    update: (id: string) => request<RemoteRunner>("POST", `/api/runners/${encodeURIComponent(id)}/update`, {}, 30_000),
+    /** Dial the runner again now instead of waiting for the next retry. */
+    connect: (id: string) => request<RemoteRunner>("POST", `/api/runners/${encodeURIComponent(id)}/connect`, {}, 30_000),
   },
 
   cloud: {

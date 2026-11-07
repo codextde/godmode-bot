@@ -1,13 +1,14 @@
+import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 import { Image } from "expo-image";
 import { router } from "expo-router";
 import { ActivityIndicator, Alert, Pressable, StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
-import type { AndroidAssignment, AndroidDevice, AndroidExecResult } from "@godmode/shared";
+import type { AndroidAssignment, AndroidDevice, AndroidExecResult, AndroidKey } from "@godmode/shared";
 import { CharacterAvatar } from "./character";
 import { Group } from "./form";
 import { Glass } from "./glass";
-import { Icon } from "./icon";
+import { Icon, type IconName } from "./icon";
 import { frameUri, phoneState } from "./screen-tile";
 import { ActionRow, TestResult, TextRow } from "./tool-form";
 import { LiveDot, SMOKE, T, tap } from "./ui";
@@ -74,6 +75,54 @@ export function PhoneScreen({ device }: { device: AndroidDevice }) {
         </Glass>
       ) : null}
     </Pressable>
+  );
+}
+
+/** The phone's own buttons, like the desktop's device page. */
+export const PHONE_BUTTONS = [
+  { key: "power", icon: "power", label: "phone.buttons.power" },
+  { key: "volume_down", icon: "volumeDown", label: "phone.buttons.volumeDown" },
+  { key: "volume_up", icon: "volumeUp", label: "phone.buttons.volumeUp" },
+  { key: "mute", icon: "mute", label: "phone.buttons.mute" },
+  { key: "wake", icon: "sun", label: "phone.buttons.wake" },
+  { key: "sleep", icon: "moon", label: "phone.buttons.sleep" },
+  { key: "notifications", icon: "bell", label: "phone.buttons.notifications" },
+  { key: "quick_settings", icon: "slider", label: "phone.buttons.quickSettings" },
+] as const satisfies readonly { key: AndroidKey; icon: IconName; label: string }[];
+
+const NAV_BUTTONS = [
+  { key: "back", icon: "back", label: "phone.buttons.back" },
+  { key: "home", icon: "navHome", label: "phone.buttons.home" },
+  { key: "recents", icon: "navRecents", label: "phone.buttons.recents" },
+] as const satisfies readonly { key: AndroidKey; icon: IconName; label: string }[];
+
+/** Back, home, recents and the hardware buttons of a connected phone. */
+export function PhoneButtons({ device }: { device: AndroidDevice }) {
+  const c = useColors();
+  const { t } = useTranslation("machines");
+  const press = useMutation({
+    mutationFn: (key: AndroidKey) => machinesApi.android.input(device.id, { event: { type: "key", key } }),
+    onError: (err) => Alert.alert(t("phone.buttons.failed"), errorText(err)),
+  });
+  return (
+    <Group title={t("phone.buttons.title")}>
+      <View style={styles.buttons}>
+        {[...NAV_BUTTONS, ...PHONE_BUTTONS].map((b) => (
+          <Pressable
+            key={b.key}
+            accessibilityRole="button"
+            accessibilityLabel={t(b.label)}
+            onPress={() => {
+              tap();
+              press.mutate(b.key);
+            }}
+            style={({ pressed }) => [styles.button, { backgroundColor: c.sunken, opacity: pressed ? 0.6 : 1 }]}
+          >
+            <Icon name={b.icon} size={18} color={c.text} />
+          </Pressable>
+        ))}
+      </View>
+    </Group>
   );
 }
 
@@ -205,6 +254,8 @@ export function PhoneCommand({ device }: { device: AndroidDevice }) {
 }
 
 const styles = StyleSheet.create({
+  buttons: { flexDirection: "row", flexWrap: "wrap", gap: space.sm, padding: space.md },
+  button: { width: "22.5%", flexGrow: 1, height: 44, borderRadius: radius.md, borderCurve: "continuous", alignItems: "center", justifyContent: "center" },
   tile: {
     width: 36,
     height: 36,

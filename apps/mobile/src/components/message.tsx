@@ -159,7 +159,7 @@ function UserBubble({ attachments, text, conversationId, background, color }: { 
   );
 }
 
-export const AssistantMessage = memo(function AssistantMessage({ blocks, streaming, content, agent }: { blocks: MessageBlock[]; streaming?: boolean; content?: string; agent?: ParentAgent }) {
+export const AssistantMessage = memo(function AssistantMessage({ id, blocks, streaming, content, agent }: { id?: string; blocks: MessageBlock[]; streaming?: boolean; content?: string; agent?: ParentAgent }) {
   // A reply stored without blocks is its text.
   const parts = useMemo(() => group(blocks.length || !content ? withoutCompactCard(blocks) : [{ type: "text", text: content }]), [blocks, content]);
   const last = parts[parts.length - 1];
@@ -184,7 +184,7 @@ export const AssistantMessage = memo(function AssistantMessage({ blocks, streami
       )}
       {streaming ? <BackgroundAgents parts={parts} agent={agent} /> : null}
       {streaming && last?.kind === "block" && last.block.type === "text" ? <Caret /> : null}
-      {!streaming && content?.trim() && parts.some((p) => p.kind !== "block" || p.block.type === "text") ? <ReplyActions text={content} /> : null}
+      {!streaming && content?.trim() && parts.some((p) => p.kind !== "block" || p.block.type === "text") ? <ReplyActions id={id} text={content} /> : null}
     </View>
   );
 });
@@ -208,13 +208,13 @@ function ToolCard({ kind, block, streaming }: { kind: CardKind; block: ToolUse; 
  * Long-press selects text, so the whole reply is copied from here, like the desktop's "Copy reply"; in a chat it is also
  * quoted into the message being written.
  */
-function ReplyActions({ text }: { text: string }) {
+function ReplyActions({ id, text }: { id?: string; text: string }) {
   const scope = useContext(ChatScope);
   return (
     <View style={styles.actions}>
       <CopyReply text={text} />
       {scope ? <QuoteReply text={text} conversationId={scope.conversationId} /> : null}
-      <ReadReply text={text} />
+      <ReadReply reply={id ?? text} text={text} />
     </View>
   );
 }
@@ -281,13 +281,14 @@ function QuoteReply({ text, conversationId }: { text: string; conversationId: st
   );
 }
 
-/** Reads the reply out, or stops; only with voice switched on in Settings → Voice. */
-function ReadReply({ text }: { text: string }) {
+/** Reads the reply out, or stops; only with Read replies aloud on in Settings → General and voice on in Settings → Voice. */
+function ReadReply({ reply, text }: { reply: string; text: string }) {
   const c = useColors();
   const { t } = useTranslation("components");
   const voice = useSettings().data?.voice;
-  const reading = useReadAloud((s) => s.key === text);
-  if (!voice?.enabled) return null;
+  const reading = useReadAloud((s) => s.key === reply);
+  const on = useChatPrefs((s) => s.readReplies);
+  if (!on || !voice?.enabled) return null;
   const label = reading ? t("message.stopReading") : t("message.readAloud");
   return (
     <Pressable
@@ -297,7 +298,7 @@ function ReadReply({ text }: { text: string }) {
       onPress={() => {
         tap();
         if (reading) stopReading();
-        else readAloud(text, voice, text).catch((err: unknown) => Alert.alert(t("message.readFailed"), errorText(err)));
+        else readAloud(text, voice, reply).catch((err: unknown) => Alert.alert(t("message.readFailed"), errorText(err)));
       }}
       style={({ pressed }) => [styles.copy, pressed && { backgroundColor: c.sunken }]}
     >

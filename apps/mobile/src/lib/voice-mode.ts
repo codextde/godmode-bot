@@ -1,14 +1,16 @@
 import { requireOptionalNativeModule } from "expo";
 import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from "expo-audio";
-import { File, Paths } from "expo-file-system";
+import type { File } from "expo-file-system";
 import { create } from "zustand";
 import type { Message, VoiceSettings } from "@godmode/shared";
+import { tempCopy } from "./agent-files";
 import { ApiError, pictureBases } from "./api";
 import { currentLanguage, t } from "./i18n";
 import { useSession } from "./session";
 
 /** The computer's voices stop at this many characters. */
 const MAX_SPEAK_CHARS = 4000;
+const SPEAK_MS = 60_000;
 
 /** Plain words for a voice: no Markdown signs, code or links' addresses. */
 export function forSpeech(text: string): string {
@@ -50,20 +52,28 @@ export function replyKey(m: Message): string {
 async function fetchSpeech(text: string): Promise<ArrayBuffer> {
   const connection = useSession.getState().connection;
   if (!connection) throw new ApiError(401, t("system:api.notPaired"), "not_paired");
+  // One wait for all addresses: after it the phone's own voice takes over.
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), SPEAK_MS);
   let last: unknown = null;
-  for (const base of pictureBases(connection)) {
-    try {
-      const res = await fetch(`${base}/api/voice/speak`, {
-        method: "POST",
-        headers: { authorization: `Bearer ${connection.token}`, "content-type": "application/json" },
-        body: JSON.stringify({ text: text.slice(0, MAX_SPEAK_CHARS) }),
-      });
-      if (!res.ok) throw new ApiError(res.status, t("chat:voiceMode.playFailed"));
-      return await res.arrayBuffer();
-    } catch (err) {
-      if (err instanceof ApiError) throw err;
-      last = err;
+  try {
+    for (const base of pictureBases(connection)) {
+      try {
+        const res = await fetch(`${base}/api/voice/speak`, {
+          method: "POST",
+          headers: { authorization: `Bearer ${connection.token}`, "content-type": "application/json" },
+          body: JSON.stringify({ text: text.slice(0, MAX_SPEAK_CHARS) }),
+          signal: controller.signal,
+        });
+        if (!res.ok) throw new ApiError(res.status, t("chat:voiceMode.playFailed"));
+        return await res.arrayBuffer();
+      } catch (err) {
+        if (err instanceof ApiError) throw err;
+        last = err;
+      }
     }
+  } finally {
+    clearTimeout(timer);
   }
   throw last instanceof Error ? last : new ApiError(0, t("system:api.offline"), "offline");
 }
@@ -74,7 +84,7 @@ export interface Speech {
 }
 
 /** The audio comes from the computer and plays on the phone. */
-function speakFromComputer(text: string): Speech {
+function speakFromComputer(text: string, inSilentMode: boolean): Speech {
   let player: AudioPlayer | null = null;
   let file: File | null = null;
   let stopped = false;
@@ -98,15 +108,18 @@ function speakFromComputer(text: string): Speech {
       try {
         const audio = await fetchSpeech(text);
         if (stopped) return resolve();
-        file = new File(Paths.cache, `voice-reply-${Date.now()}.mp3`);
+        file = tempCopy("voice", `reply-${Date.now()}.mp3`);
         file.create({ overwrite: true });
         file.write(new Uint8Array(audio));
-        await setAudioModeAsync({ playsInSilentMode: true });
+        await setAudioModeAsync({ playsInSilentMode: inSilentMode });
         if (stopped) return resolve();
         const p = createAudioPlayer({ uri: file.uri });
         player = p;
         p.addListener("playbackStatusUpdate", (status) => {
-          if (status.didJustFinish) resolve();
+          // On the event of a failed load, though not in expo-audio's types.
+          const { error } = status as { error?: string | null };
+          if (error) reject(new Error(error));
+          else if (status.didJustFinish) resolve();
         });
         p.play();
       } catch (err) {
@@ -159,7 +172,7 @@ function inParts(text: string, max: number): string[] {
 }
 
 /** Reads `text` out with a voice of the phone, in the language and speed set in Settings → Voice. */
-function speakOnPhone(text: string, voice: VoiceSettings | undefined): Speech {
+function speakOnPhone(text: string, voice: VoiceSettings | undefined, inSilentMode: boolean): Speech {
   let stopped = false;
   let halt = () => {};
   let finish = () => {};
@@ -170,7 +183,7 @@ function speakOnPhone(text: string, voice: VoiceSettings | undefined): Speech {
         const speech = await phoneSpeech();
         if (!speech) throw new Error(t("chat:voiceMode.playFailed"));
         const chosen = await phoneVoice(speech, voice?.language ?? "");
-        await setAudioModeAsync({ playsInSilentMode: true }).catch(() => undefined);
+        await setAudioModeAsync({ playsInSilentMode: inSilentMode }).catch(() => undefined);
         if (stopped) return resolve();
         halt = () => void speech.stop();
         const parts = inParts(text, speech.maxSpeechInputLength);
@@ -199,16 +212,19 @@ function speakOnPhone(text: string, voice: VoiceSettings | undefined): Speech {
   };
 }
 
-/** Reads `text` out the way Settings → Voice says; a computer voice that fails gives way to the phone's, like the desktop. */
-export function speak(text: string, voice: VoiceSettings | undefined): Speech {
-  if (!voice || voice.ttsProvider === "browser") return speakOnPhone(text, voice);
-  const computer = speakFromComputer(text);
+/**
+ * Reads `text` out the way Settings → Voice says; a computer voice that fails gives way to the phone's, like the desktop.
+ * `inSilentMode`: also with the phone's ring switch off, for a conversation the human started on purpose.
+ */
+export function speak(text: string, voice: VoiceSettings | undefined, inSilentMode = false): Speech {
+  if (!voice || voice.ttsProvider === "browser") return speakOnPhone(text, voice, inSilentMode);
+  const computer = speakFromComputer(text, inSilentMode);
   let phone: Speech | null = null;
   let stopped = false;
   return {
     done: computer.done.catch(() => {
       if (stopped) return;
-      phone = speakOnPhone(text, voice);
+      phone = speakOnPhone(text, voice, inSilentMode);
       return phone.done;
     }),
     stop: () => {

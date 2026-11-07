@@ -395,7 +395,7 @@ export default function Chat() {
         case "private":
           return <PrivateNote />;
         default:
-          return <AssistantMessage blocks={item.blocks} content={item.content} streaming={item.streaming} agent={agent} />;
+          return <AssistantMessage id={item.key} blocks={item.blocks} content={item.content} streaming={item.streaming} agent={agent} />;
       }
     },
     [agent, id, runId, continuedFrom, delegatedFrom],
@@ -492,7 +492,9 @@ export default function Chat() {
                       : paused
                         ? t("thread.placeholder.whenContinues", { name: agent.name })
                         : run
-                          ? t("thread.placeholder.queue", { name: agent.name })
+                          ? followUp === "steer"
+                            ? t("thread.placeholder.steer", { name: agent.name })
+                            : t("thread.placeholder.queue", { name: agent.name })
                           : t("thread.placeholder.default", { name: agent.name })
             }
             blocked={!!agent && (!agent.enabled || agent.archived)}

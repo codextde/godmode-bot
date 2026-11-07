@@ -754,7 +754,8 @@
       "toolCalls": "Werkzeugaufrufe",
       "cardsLabel": "Karten",
       "compactLabel": "Kompakt",
-      "mcpApps": "MCP-App-Ansichten"
+      "mcpApps": "MCP-App-Ansichten",
+      "readReplies": "Antworten vorlesen"
     },
     "summaries": {
       "title": "KI-Zusammenfassungen",

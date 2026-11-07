@@ -74,7 +74,7 @@ function DeleteForm({ agent, paths }: { agent: string; paths: string[] }) {
       <View style={{ gap: space.xs }}>
         <T variant="title">{title}</T>
         <T variant="subhead" muted>
-          {t("delete.description", { name: agentName })}
+          {t("delete.description", { name: agentName, count: paths.length })}
         </T>
       </View>
       {info.isLoading ? (

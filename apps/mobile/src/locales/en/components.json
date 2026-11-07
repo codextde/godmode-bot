@@ -503,7 +503,11 @@
     "repoUrl": "Repository URL",
     "branch": "Branch",
     "branchPlaceholder": "Branch (optional)",
-    "addRepo": "Add a git repository"
+    "addRepo": "Add a git repository",
+    "addFolder": "Add a folder",
+    "addRemote": "Add a folder on a server",
+    "remoteTitle": "Folder on {{name}}",
+    "useFolder": "Use"
   },
   "queueTray": {
     "alreadyHas": "{{name}} already has that message",

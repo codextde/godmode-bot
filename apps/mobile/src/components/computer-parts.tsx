@@ -3,9 +3,9 @@ import { Image } from "expo-image";
 import { router, useIsFocused } from "expo-router";
 import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";
 import { useTranslation } from "react-i18next";
-import { computerView, type ComputerDisplay } from "@godmode/shared";
+import { computerView, type ComputerDisplay, type ComputerTarget } from "@godmode/shared";
 import { Glass } from "./glass";
-import { Icon } from "./icon";
+import { Icon, type IconName } from "./icon";
 import { T, tap } from "./ui";
 import { displayTarget, machinesApi, mk, sourceHref } from "@/lib/machines";
 import { radius, space, useColors } from "@/lib/theme";
@@ -24,12 +24,23 @@ export function useComputerSources(enabled: boolean) {
   });
 }
 
-/** One of the computer's displays: a picture of it every few seconds, opened live with a tap. */
+/** One of the computer's displays. */
 export function DisplayTile({ display, style }: { display: ComputerDisplay; style?: StyleProp<ViewStyle> }) {
-  const c = useColors();
   const { t } = useTranslation("machines");
+  const size = `${Math.round(display.width)} × ${Math.round(display.height)}`;
+  return <ScreenTile target={displayTarget(display)} icon="display" title={display.name} detail={display.primary ? `${size} · ${t("computer.main")}` : size} style={style} />;
+}
+
+/** All displays in one picture, when there are several. */
+export function DesktopTile({ count, style }: { count: number; style?: StyleProp<ViewStyle> }) {
+  const { t } = useTranslation("machines");
+  return <ScreenTile target={{ kind: "desktop" }} icon="layers" title={t("computer.entireDesktop")} detail={t("computer.displayCount", { count })} style={style} />;
+}
+
+/** A picture of what the target shows every few seconds, opened live with a tap. */
+function ScreenTile({ target, icon, title, detail, style }: { target: ComputerTarget; icon: IconName; title: string; detail: string; style?: StyleProp<ViewStyle> }) {
+  const c = useColors();
   const focused = useIsFocused();
-  const target = displayTarget(display);
   const view = computerView(target);
   const shot = useQuery({
     queryKey: mk.thumbnail(view),
@@ -41,11 +52,10 @@ export function DisplayTile({ display, style }: { display: ComputerDisplay; styl
     retry: false,
   });
   const uri = shot.data ? `data:${shot.data.mime};base64,${shot.data.data}` : undefined;
-  const size = `${Math.round(display.width)} × ${Math.round(display.height)}`;
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={display.name}
+      accessibilityLabel={title}
       onPress={() => {
         tap();
         router.push(sourceHref(target));
@@ -56,18 +66,18 @@ export function DisplayTile({ display, style }: { display: ComputerDisplay; styl
         <Image source={{ uri }} style={StyleSheet.absoluteFill} contentFit="cover" contentPosition="top" transition={150} cachePolicy="none" />
       ) : (
         <View style={[StyleSheet.absoluteFill, styles.placeholder]}>
-          <Icon name="display" size={26} color={c.textFaint} />
+          <Icon name={icon} size={26} color={c.textFaint} />
         </View>
       )}
       <View style={styles.labelWrap}>
         <Glass style={styles.label} scheme="dark" fallback="rgba(20, 20, 20, 0.72)">
-          <Icon name="display" size={12} color={LABEL_MUTED} />
+          <Icon name={icon} size={12} color={LABEL_MUTED} />
           <View style={{ flexShrink: 1 }}>
             <T variant="caption" color="#FFFFFF" numberOfLines={1} style={{ fontWeight: "600" }}>
-              {display.name}
+              {title}
             </T>
             <T variant="caption" color={LABEL_MUTED} numberOfLines={1} style={{ fontSize: 11 }}>
-              {display.primary ? `${size} · ${t("computer.main")}` : size}
+              {detail}
             </T>
           </View>
         </Glass>

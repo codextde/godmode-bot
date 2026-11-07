@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { router, Stack } from "expo-router";
 import { RefreshControl, ScrollView, StyleSheet, useWindowDimensions, View } from "react-native";
 import { useTranslation } from "react-i18next";
-import { AppTile, DisplayTile, useComputerSources } from "@/components/computer-parts";
+import { AppTile, DesktopTile, DisplayTile, useComputerSources } from "@/components/computer-parts";
 import { Group } from "@/components/form";
 import { NeedsFullAccess, useFullAccess } from "@/components/full-access";
 import { ListRow } from "@/components/readonly-list";
@@ -52,6 +52,7 @@ export default function ComputerSources() {
           <View>
             <SectionTitle title={t("computer.displays")} />
             <View style={styles.grid}>
+              {data.displays.length > 1 ? <DesktopTile count={data.displays.length} style={{ width: tileWidth, height: Math.round((tileWidth * 10) / 16) }} /> : null}
               {sortedDisplays(data.displays).map((d) => (
                 <DisplayTile key={d.id} display={d} style={{ width: tileWidth, height: Math.round((tileWidth * 10) / 16) }} />
               ))}

@@ -14,6 +14,7 @@ import { body, z } from "../validate";
 const sourceSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("folder"), path: z.string().max(4096) }),
   z.object({ kind: z.literal("git"), url: z.string().max(2048), branch: z.string().max(200).nullable().optional() }),
+  z.object({ kind: z.literal("remote"), serverId: z.string().max(100), path: z.string().max(4096) }),
 ]);
 
 const workspaceSchema = z.object({
