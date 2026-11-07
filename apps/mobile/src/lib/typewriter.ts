@@ -16,7 +16,10 @@ export function useTypewriter(text: string): string {
     const prev = from.current;
     from.current = text;
     if (prev === text) return;
-    if (reduceMotion) return setShown(text);
+    if (reduceMotion) {
+      const frame = requestAnimationFrame(() => setShown(text));
+      return () => cancelAnimationFrame(frame);
+    }
     const target = Array.from(text);
     const old = Array.from(prev);
     let start = 0;
@@ -29,9 +32,9 @@ export function useTypewriter(text: string): string {
       setShown(target.slice(0, count).join(""));
       if (count < target.length) frame = requestAnimationFrame(tick);
     };
-    tick();
+    frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
   }, [text, reduceMotion]);
 
-  return shown;
+  return reduceMotion ? text : shown;
 }

@@ -43,11 +43,13 @@ function reviewCodeHash(): string | null {
 const lastSeenWrites = new Map<string, number>();
 let onlineCheck: (deviceId: string) => boolean = () => false;
 let onRevoked: (deviceId: string) => void = () => {};
+let onNarrowed: (deviceId: string) => void = () => {};
 
 /** The WebSocket hub reports which phones are connected and closes a removed phone's sockets. */
-export function setDeviceSocketHooks(hooks: { online: (deviceId: string) => boolean; revoked: (deviceId: string) => void }) {
+export function setDeviceSocketHooks(hooks: { online: (deviceId: string) => boolean; revoked: (deviceId: string) => void; narrowed?: (deviceId: string) => void }) {
   onlineCheck = hooks.online;
   onRevoked = hooks.revoked;
+  onNarrowed = hooks.narrowed ?? (() => {});
 }
 
 function toDevice(row: DeviceRow): MobileDevice {
@@ -182,6 +184,8 @@ export function setDeviceFullAccess(id: string, fullAccess: boolean, actor = "us
   const device = getDevice(id);
   if (device.fullAccess === fullAccess) return device;
   run("UPDATE mobile_devices SET full_access = ? WHERE id = ?", fullAccess ? 1 : 0, id);
+  // Live views it only had with full access end now, not when the app next asks.
+  if (!fullAccess) onNarrowed(id);
   audit(actor, "mobile.full_access", id, { name: device.name, fullAccess, ...details });
   bus.changed("mobile");
   return getDevice(id);

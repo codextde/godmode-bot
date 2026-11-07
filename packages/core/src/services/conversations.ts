@@ -432,7 +432,7 @@ export function chatFillOnly(conversationId: string): boolean {
   return !!projectOfChat(conversationId, { workspaceId: row.workspace_id, projectId: row.project_id })?.fillOnly;
 }
 
-/** From now on the chat gets no raw secrets (a phone without full access wrote its instructions). */
+/** From now on the chat gets no raw secrets: a phone without full access wrote in it or its instructions. */
 export function markChatFillOnly(conversationId: string): void {
   sql("UPDATE conversations SET secret_access = 'fill' WHERE id = ?", conversationId);
 }
@@ -1118,6 +1118,8 @@ export async function sendMessage(
     const fillOnly = input.fillOnly ? { fillOnly: true } : {};
     return remoteSend(conversationId, conv.runner_id, { content: input.content ?? "", prompt: input.prompt, marker: input.marker, trigger: input.trigger, ...fillOnly });
   }
+  // Later runs resume the same Claude session, which holds what the phone wrote: the chat stays fill-only for good.
+  if (input.fillOnly) markChatFillOnly(conversationId);
   // Before anything is stored: a refused run leaves no message or upload behind.
   requireLicense();
   const content = (input.content ?? "").trim();

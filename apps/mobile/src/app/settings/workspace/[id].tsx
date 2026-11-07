@@ -90,7 +90,7 @@ export default function WorkspaceScreen() {
         />
       </View>
 
-      <Group title={t("workspace.projects")} footer={t("workspace.projectsFooter")}>
+      <Group title={t("workspace.projects")}>
         {w.projects.map((p) => (
           <LinkRow
             key={p.id}
@@ -119,7 +119,6 @@ export default function WorkspaceScreen() {
 
       <Sources
         sources={w.sources}
-        footer={t("workspace.sourcesFooter")}
         onSave={(sources) => patchWorkspace(w.id, { sources })}
         onSync={(sourceId) => api.workspace.sync(w.id, sourceId)}
       />

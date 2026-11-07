@@ -1,12 +1,14 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { router, Stack } from "expo-router";
-import { ActivityIndicator, Alert, ScrollView, StyleSheet, View } from "react-native";
+import { Alert, ScrollView, StyleSheet } from "react-native";
 import { useTranslation } from "react-i18next";
 import { findModel, type Settings } from "@godmode/shared";
 import { useFullAccess } from "@/components/admin";
 import { CloseButton } from "@/components/close-button";
 import { ChoiceRow, Group, LinkRow, PickerRow, StepperRow, SwitchRow } from "@/components/form";
 import { ActionPill, ToolRow, reportInstall } from "@/components/program-parts";
+import { FormSkeleton } from "@/components/settings-state";
+import { ErrorState } from "@/components/ui";
 import { patchAnySettings } from "@/lib/admin";
 import { ApiError, errorText, updateDesktopMessage } from "@/lib/api";
 import { useModelCatalog } from "@/lib/composer";
@@ -57,25 +59,26 @@ export default function Memory() {
       <Stack.Screen options={{ title: t("overview.links.memory") }} />
       <CloseButton />
       {!s || !m || !d ? (
-        <View style={styles.loading}>
-          <ActivityIndicator />
-        </View>
+        settings.isError ? (
+          <ErrorState title={t("computer.loadFailed")} error={errorText(settings.error)} onRetry={() => void settings.refetch()} />
+        ) : (
+          <FormSkeleton groups={3} rows={3} />
+        )
       ) : (
         <>
           {admin ? <Backend backend={m.backend} /> : null}
-          <Group title={t("overview.links.memory")} footer={t("memory.memory.footer")}>
-            <SwitchRow icon="brain" title={t("memory.memory.inject")} detail={t("memory.memory.injectDetail")} value={m.injectMemory} onChange={(injectMemory) => void patchSettings({ memory: { injectMemory } })} />
-            <SwitchRow icon="sparkles" title={t("memory.memory.reflect")} detail={t("memory.memory.reflectDetail")} value={m.reflectAfterRun} onChange={(reflectAfterRun) => void patchSettings({ memory: { reflectAfterRun } })} />
+          <Group title={t("overview.links.memory")}>
+            <SwitchRow icon="brain" title={t("memory.memory.inject")} value={m.injectMemory} onChange={(injectMemory) => void patchSettings({ memory: { injectMemory } })} />
+            <SwitchRow icon="sparkles" title={t("memory.memory.reflect")} value={m.reflectAfterRun} onChange={(reflectAfterRun) => void patchSettings({ memory: { reflectAfterRun } })} />
             <SwitchRow icon="branch" title={t("memory.memory.autoCommit")} value={m.autoCommit} onChange={(autoCommit) => void patchSettings({ memory: { autoCommit } })} />
           </Group>
 
-          <Group title={t("memory.dreaming.title")} footer={t("memory.dreaming.footer")}>
+          <Group title={t("memory.dreaming.title")}>
             <SwitchRow icon="moon" title={t("memory.dreaming.title")} value={d.enabled} onChange={(enabled) => void patchSettings({ memory: { dreaming: { enabled } } })} />
             <PickerRow icon="clock" title={t("memory.dreaming.when")} value={cron} options={schedules} onChange={(next) => void patchSettings({ memory: { dreaming: { cron: next } } })} />
             <SwitchRow
               icon="folder"
               title={t("memory.dreaming.tidy")}
-              detail={t("memory.dreaming.tidyDetail")}
               value={d.tidyWorkspace}
               onChange={(tidyWorkspace) => void patchSettings({ memory: { dreaming: { tidyWorkspace } } })}
             />
@@ -84,7 +87,6 @@ export default function Memory() {
               <SwitchRow
                 icon="sparkles"
                 title={t("memory.dreaming.offers")}
-                detail={t("memory.dreaming.offersDetail")}
                 value={d.offers}
                 onChange={(offers) => void patchSettings({ memory: { dreaming: { offers } } })}
               />
@@ -127,12 +129,6 @@ export default function Memory() {
           <Group>
             <LinkRow icon="moon" title={t("memory.dreamAll.title")} value={dreamAll.isPending ? t("memory.dreamAll.starting") : undefined} chevron={false} onPress={() => !dreamAll.isPending && dreamAll.mutate()} />
             <LinkRow icon="inbox" title={t("memory.import.link")} onPress={() => router.push("/memory-import")} />
-          </Group>
-
-          <Group title={t("memory.upkeep.title")} footer={t("memory.upkeep.footer")}>
-            <SwitchRow icon="wrench" title={t("memory.upkeep.autoFix")} value={s.maintenance.autoFix} onChange={(autoFix) => void patchSettings({ maintenance: { autoFix } })} />
-            <SwitchRow icon="refresh" title={t("memory.upkeep.autoUpdate")} value={s.maintenance.autoUpdate} onChange={(autoUpdate) => void patchSettings({ maintenance: { autoUpdate } })} />
-            <SwitchRow icon="trash" title={t("memory.upkeep.autoCleanup")} value={s.maintenance.autoCleanup} onChange={(autoCleanup) => void patchSettings({ maintenance: { autoCleanup } })} />
           </Group>
 
           <Group title={t("memory.desktop.title")}>
@@ -178,9 +174,5 @@ const styles = StyleSheet.create({
     padding: space.lg,
     paddingBottom: 60,
     gap: space.xl,
-  },
-  loading: {
-    paddingTop: 80,
-    alignItems: "center",
   },
 });

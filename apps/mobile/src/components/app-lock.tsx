@@ -14,21 +14,26 @@ const RELOCK_AFTER_MS = 30_000;
 export function AppLock() {
   const enabled = useSession((s) => s.appLock && !!s.connection);
   const [locked, setLocked] = useState(enabled);
+  const [wasEnabled, setWasEnabled] = useState(enabled);
   const [covered, setCovered] = useState(false);
   const leftAt = useRef<number | null>(null);
   const c = useColors();
   const { t } = useTranslation("components");
 
-  const unlock = useCallback(async () => {
-    const result = await LocalAuthentication.authenticateAsync({ promptMessage: t("appLock.prompt"), disableDeviceFallback: false });
-    if (result.success) setLocked(false);
-  }, [t]);
+  if (enabled !== wasEnabled) {
+    setWasEnabled(enabled);
+    if (!enabled) setLocked(false);
+  }
+
+  const prompt = t("appLock.prompt");
+  const unlock = useCallback(() => {
+    void LocalAuthentication.authenticateAsync({ promptMessage: prompt, disableDeviceFallback: false }).then((result) => {
+      if (result.success) setLocked(false);
+    });
+  }, [prompt]);
 
   useEffect(() => {
-    if (!enabled) {
-      setLocked(false);
-      return;
-    }
+    if (!enabled) return;
     const sub = AppState.addEventListener("change", (state) => {
       if (state === "active") {
         setCovered(false);
@@ -43,7 +48,7 @@ export function AppLock() {
   }, [enabled]);
 
   useEffect(() => {
-    if (locked) void unlock();
+    if (locked) unlock();
   }, [locked, unlock]);
 
   if (!enabled || (!locked && !covered)) return null;
@@ -53,7 +58,7 @@ export function AppLock() {
       {locked && (
         <View style={{ alignItems: "center", gap: space.lg }}>
           <T variant="headline">{t("appLock.locked")}</T>
-          <Button title={t("appLock.unlock")} icon="faceid" onPress={() => void unlock()} />
+          <Button title={t("appLock.unlock")} icon="faceid" onPress={unlock} />
         </View>
       )}
     </Animated.View>

@@ -71,7 +71,9 @@ export default function Settings() {
   };
 
   const toggleLock = async (on: boolean) => {
-    const result = await LocalAuthentication.authenticateAsync({ promptMessage: on ? t("overview.lock.turnOn") : t("overview.lock.turnOff") });
+    const android = process.env.EXPO_OS === "android";
+    const promptMessage = on ? t(android ? "overview.lock.turnOnAndroid" : "overview.lock.turnOn") : t(android ? "overview.lock.turnOffAndroid" : "overview.lock.turnOff");
+    const result = await LocalAuthentication.authenticateAsync({ promptMessage });
     if (result.success) await useSession.getState().setAppLock(on);
   };
 
@@ -112,7 +114,7 @@ export default function Settings() {
       </Card>
 
       {computers.length > 1 ? (
-        <Group title={t("overview.computers.title")} footer={t("overview.computers.footer")}>
+        <Group title={t("overview.computers.title")}>
           <ChoiceRow
             icon="bolt"
             title={t("overview.computers.automatic")}
@@ -193,7 +195,7 @@ export default function Settings() {
 
       <Group title={t("overview.privacy.title")}>
         {biometrics.data ? (
-          <SwitchRow icon="faceid" title={t("overview.privacy.faceId")} detail={t("overview.privacy.faceIdDetail")} value={appLock} onChange={(on) => void toggleLock(on)} />
+          <SwitchRow icon="faceid" title={t(process.env.EXPO_OS === "android" ? "overview.privacy.screenLock" : "overview.privacy.faceId")} value={appLock} onChange={(on) => void toggleLock(on)} />
         ) : null}
         <LinkRow icon="lock" title={t("admin:security.title")} onPress={() => router.push("/settings/security")} />
         <LinkRow icon="archive" title={t("admin:backup.title")} onPress={() => router.push("/settings/backup")} />

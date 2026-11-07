@@ -50,7 +50,7 @@ export default function NotificationsSettings() {
             <EmptyState icon="bell" title={t("phone.outdatedTitle")} body={t("phone.outdatedBody")} />
           ) : (
             <>
-              <Group footer={t("notifications.footer")}>
+              <Group>
                 <SwitchRow icon="bell" title={t("notifications.switch")} value={pending ?? session.device.push} disabled={pending !== null} onChange={(on) => void toggle(on)} />
               </Group>
               {permission === "denied" ? (

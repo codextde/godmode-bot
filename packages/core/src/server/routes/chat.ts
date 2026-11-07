@@ -255,7 +255,7 @@ export function registerChatRoutes(app: Hono): void {
 
   app.patch("/api/conversations/:id/queue/:messageId", async (c) => {
     const { content } = await body(c, z.object({ content: z.string().max(200_000) }));
-    return c.json(editQueued(c.req.param("id"), c.req.param("messageId"), content));
+    return c.json(editQueued(c.req.param("id"), c.req.param("messageId"), content, phoneFill(c)));
   });
 
   app.delete("/api/conversations/:id/queue/:messageId", (c) => {
@@ -265,6 +265,7 @@ export function registerChatRoutes(app: Hono): void {
 
   // Stop what the agent is doing and start on the queue.
   app.post("/api/conversations/:id/queue/send", async (c) => {
+    if (isLimitedPhone(c)) markChatFillOnly(c.req.param("id"));
     await sendQueuedNow(c.req.param("id"));
     return c.json({ ok: true as const });
   });

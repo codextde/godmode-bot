@@ -1,7 +1,7 @@
 import * as DocumentPicker from "expo-document-picker";
 import { Directory, File } from "expo-file-system";
 import { Stack } from "expo-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Alert, ScrollView, Share, StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { confirmWithBiometrics, FullAccessGate, isRefused, NeedsFullAccess } from "@/components/admin";
@@ -51,6 +51,18 @@ function ExportCard() {
   const [busy, setBusy] = useState(false);
   const [refused, setRefused] = useState(false);
   const [saved, setSaved] = useState<File | null>(null);
+
+  // The encrypted backup leaves the phone's cache once a newer one replaces it or the screen closes.
+  useEffect(
+    () => () => {
+      try {
+        if (saved?.exists) saved.delete();
+      } catch {
+        /* already gone */
+      }
+    },
+    [saved],
+  );
 
   const mismatch = confirm.length > 0 && confirm !== pass;
   const valid = pass.length >= 8 && pass === confirm;

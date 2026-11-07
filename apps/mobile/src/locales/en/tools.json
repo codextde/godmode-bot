@@ -149,7 +149,33 @@
     "test": "Test the key",
     "testing": "Testing…",
     "keyWorks": "The key works",
-    "testFailed": "Test failed"
+    "testFailed": "Test failed",
+    "grantReason": "Send the key of {{name}} somewhere new"
+  },
+  "presets": {
+    "custom": "Any other API",
+    "customTagline": "Your key, its address and docs",
+    "getKeyAt": "Get a key at {{site}}",
+    "gemini": {
+      "tagline": "Images with Google Gemini",
+      "description": "Generate and edit images with Nano Banana (Google's Gemini image models): illustrations, product shots, photo edits, images with text."
+    },
+    "openai": {
+      "tagline": "GPT Image, GPT, speech",
+      "description": "Images with GPT Image (generate and edit), plus OpenAI's GPT models for text and vision, text-to-speech and transcription."
+    },
+    "elevenlabs": {
+      "tagline": "Voices and sound effects",
+      "description": "Lifelike speech in many voices and languages, sound effects from a description, and speech-to-text."
+    },
+    "replicate": {
+      "tagline": "Thousands of open models",
+      "description": "Run open models for images (FLUX), video, audio, upscaling and background removal."
+    },
+    "perplexity": {
+      "tagline": "Web search with sources",
+      "description": "Up-to-date answers from the web with cited sources: research, news, fact checks."
+    }
   },
   "plugins": {
     "onTitle": "Switch on {{name}}?",

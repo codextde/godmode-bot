@@ -584,6 +584,16 @@ setDeviceSocketHooks({
       }
     }
   },
+  // Full access went: screens not shared in a chat and Android phones it watched are no longer the phone's.
+  narrowed: (deviceId) => {
+    for (const ws of clients) {
+      if (ws.data.deviceId !== deviceId) continue;
+      for (const key of [...ws.data.subscriptions]) {
+        if (key.startsWith("computer:") && !deviceMayUseView(key.slice(9))) changeComputerSubscription(ws, key.slice(9), false);
+      }
+      for (const androidId of [...(ws.data.android?.keys() ?? [])]) changeAndroidSubscription(ws, androidId, null);
+    }
+  },
 });
 
 const ID = /^[\w-]{1,100}$/;

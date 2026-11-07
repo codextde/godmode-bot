@@ -207,10 +207,13 @@ export function isLimitedPhone(c: Context): boolean {
   return device ? !device.fullAccess : forwardedPhone(c) === "limited";
 }
 
-/** The desktop app or the dashboard of this computer: not a phone, the cloud or another computer of the device group. */
+/**
+ * The desktop app or the dashboard on this computer itself: not a phone, the cloud, another computer of the device
+ * group or a dashboard reached from elsewhere.
+ */
 export function isOwnComputer(c: Context): boolean {
   const kind = c.get("authKind" as never) as AuthKind | undefined;
-  return (kind === "token" || kind === "session") && !isRelayed(c) && !isMobileChannel(c) && (c.env as { channel?: string } | undefined)?.channel !== "runner-link";
+  return (kind === "token" || kind === "session") && (c.env as { channel?: string } | undefined)?.channel !== "runner-link" && isLocalRequest(c);
 }
 
 /** Where a person's request came from, for the audit: a paired phone, the cloud, another computer of the group, or this computer's app. */
@@ -296,6 +299,16 @@ export const requireAuth: MiddlewareHandler = async (c, next) => {
     const refusal = (await phoneHardRefusal(c)) ?? (limited ? await deviceRefusal(c) : null);
     if (refusal) return c.json({ error: refusal, code: "device_forbidden" }, 403);
   }
+  // Through the Godmode Cloud gateway a phone with full access gets what the owner's browser gets there (secrets only
+  // while the cloud may reveal them, nothing that is the computer's alone), and what every phone may do, as phones see it.
+  let view = limited;
+  if (phone && !limited && kind === "device" && isRelayed(c)) {
+    const cloud = await cloudRefusal(c.req.method, c.req.path, "owner", () => c.req.json());
+    if (cloud) {
+      if (await deviceRefusal(c)) return c.json({ error: cloud, code: "cloud_forbidden" }, 403);
+      view = true;
+    }
+  }
   if (kind === "cloud") {
     const refusal = await cloudRefusal(c.req.method, c.req.path, auth!.user!.role, () => c.req.json());
     if (refusal) return c.json({ error: refusal, code: "cloud_forbidden" }, 403);
@@ -320,7 +333,7 @@ export const requireAuth: MiddlewareHandler = async (c, next) => {
   if (auth?.device) c.set("device" as never, auth.device as never);
   if (auth?.user) c.set("cloudUser" as never, auth.user as never);
   await next();
-  if (limited) await applyDeviceView(c);
+  if (view) await applyDeviceView(c);
 };
 
 /** The cloud user behind a relayed dashboard request (null for everything else). */

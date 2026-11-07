@@ -57,7 +57,7 @@ function PhonesList({ status: s }: { status: MobileStatus }) {
   return (
     <>
       <Group>
-        <LinkRow icon="scan" title={t("phones.pair")} tone="brand" onPress={() => router.push("/settings/phone-pair")} />
+        <LinkRow icon="plus" title={t("phones.pair")} tone="brand" chevron={false} onPress={() => router.push("/settings/phone-pair")} />
       </Group>
 
       <Group title={t("phones.paired")}>

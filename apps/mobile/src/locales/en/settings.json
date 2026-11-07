@@ -2,7 +2,6 @@
   "overview": {
     "fullAccess": {
       "title": "Full access",
-      "turnOff": "Turn off full access",
       "offTitle": "Turn off full access?",
       "offBody": "Only Godmode on your computer can turn it on again.",
       "offConfirm": "Turn off",
@@ -21,7 +20,9 @@
     },
     "lock": {
       "turnOn": "Turn on Face ID for Godmode",
-      "turnOff": "Turn off Face ID for Godmode"
+      "turnOff": "Turn off Face ID for Godmode",
+      "turnOnAndroid": "Turn on screen lock for Godmode",
+      "turnOffAndroid": "Turn off screen lock for Godmode"
     },
     "disconnect": {
       "title": "Disconnect from {{name}}?",
@@ -31,7 +32,6 @@
     },
     "computers": {
       "title": "This phone uses",
-      "footer": "When the one you pick is out of reach, this phone uses another computer of the group and switches back once it answers again.",
       "automatic": "Automatic",
       "thePrimary": "The primary, {{name}}",
       "whoAnswers": "The computer that answers",
@@ -94,7 +94,7 @@
     "privacy": {
       "title": "Data & privacy",
       "faceId": "Require Face ID",
-      "faceIdDetail": "Hides Godmode in the app switcher and asks after 30 seconds away.",
+      "screenLock": "Require screen lock",
       "security": "Security",
       "onComputer": "On your computer"
     },
@@ -190,33 +190,20 @@
     },
     "computer": {
       "title": "Computer use",
-      "footer": "Agents only see and control a screen, window or tab you share with them in a chat.",
       "foreground": "Bring windows to the front",
-      "foregroundDetail": "Briefly, when a background action doesn't land.",
       "cursor": "Show the agent's cursor",
       "liveViewSpeed": "Live view speed"
     },
     "vm": {
       "title": "Virtual machines",
-      "footer": "Agents with a VM work inside it instead of on this computer.",
       "onQuit": "When Godmode quits",
       "suspend": "Suspend",
-      "suspendDetail": "Resume where they left off.",
       "stop": "Shut down",
       "keep": "Keep running",
       "idleStop": "Stop idle VMs after"
     }
   },
   "instructions": {
-    "intro": "Rules your agents follow on every run. Set them once for everyone, then refine them per workspace, project or agent.",
-    "layers": {
-      "everyone": "Everyone",
-      "workspace": "Workspace",
-      "project": "Project",
-      "agent": "Agent",
-      "chat": "Chat"
-    },
-    "precedence": "All of them go into every run. When two disagree, the more specific one wins.",
     "everyAgent": "Every agent",
     "everyAgentLabel": "Instructions for every agent",
     "example": "1. Commit as me only, never add an AI co-author.\n2. Keep code comments to a minimum.\n3. Merge main into your branch before opening a pull request.\n4. For UI changes, attach screenshots.",
@@ -225,16 +212,12 @@
     "lines_other": "{{count}} lines",
     "workspaces": {
       "title": "Workspaces and projects",
-      "footer": "Agent context: given to every agent working in the workspace or project.",
       "noContext": "No agent context yet",
-      "noProjectContext": "No project context yet",
-      "createDetail": "Give a client or product its own agents and context."
+      "noProjectContext": "No project context yet"
     },
     "agents": {
-      "footer": "Each agent's own role and standing orders.",
       "none": "Works from your messages alone"
-    },
-    "tip": "Just one chat? Write it into the chat. It only applies there and wins over everything above."
+    }
   },
   "memory": {
     "schedule": {
@@ -246,21 +229,15 @@
     },
     "sameAsAgent": "Same as the agent",
     "memory": {
-      "footer": "Each agent keeps what it learns in its own repository on your computer.",
       "inject": "Start every chat knowing it",
-      "injectDetail": "Loads the agent's memory into each new chat.",
       "reflect": "Learn after each run",
-      "reflectDetail": "Agents note what they learned when a run ends.",
       "autoCommit": "Save changes with git"
     },
     "dreaming": {
       "title": "Dreaming",
-      "footer": "While idle, agents review recent chats and tidy up their memory and workspace: merge duplicates, fix contradictions, date what has passed, sort files — and keep the memory short enough to load into every chat.",
       "when": "When",
       "tidy": "Tidy the workspace",
-      "tidyDetail": "Sorts files into folders and clears out leftovers.",
-      "offers": "Offer to take work off your plate",
-      "offersDetail": "Your main agent offers work it spotted on Home.",
+      "offers": "Offers on Home",
       "size": "Memory size",
       "chars_one": "{{formatted}} char",
       "chars_other": "{{formatted}} chars",
@@ -269,13 +246,6 @@
       "daily": "Daily",
       "days_one": "{{count}} day",
       "days_other": "{{count}} days"
-    },
-    "upkeep": {
-      "title": "Upkeep",
-      "footer": "Godmode looks after itself: repairs, updates of its tools, and cleaning up old files.",
-      "autoFix": "Fix problems by itself",
-      "autoUpdate": "Update tools",
-      "autoCleanup": "Clean up old files"
     },
     "desktop": {
       "title": "On your computer",
@@ -321,15 +291,11 @@
     "rolePlaceholder": "Add a role, like Bookkeeper",
     "builtIn": "Built-in",
     "active": "Active",
-    "activeOn": "Takes chats, tasks and automations.",
-    "activeOff": "Does nothing until you switch it on.",
     "instructionsLabel": "Instructions for {{name}}",
     "instructionsPlaceholder": "What it does, how, and when it asks you.\nFor example: Check my inbox every morning and draft replies to customers.",
     "about": "About",
     "descriptionLabel": "Description of {{name}}",
     "descriptionPlaceholder": "One or two lines your other agents see when they hand work over.",
-    "descriptionHint": "Teammates see this",
-    "memoryFooter": "What the agent learned and keeps loading into every chat. It updates this itself; your edits guide what it remembers.",
     "personality": {
       "title": "Personality",
       "tone": "Tone",
@@ -338,7 +304,6 @@
     },
     "thinking": {
       "title": "Thinking",
-      "footer": "Default follows AI & Claude in Settings.",
       "default": "Default",
       "special": "{{model}} (special tasks)"
     },
@@ -351,7 +316,6 @@
       "custom": "{{from}} to {{to}}"
     },
     "heartbeat": {
-      "footer": "Wakes up on its own to move its tickets forward and work through its checklist.",
       "every": "Every",
       "weekdays": "Weekdays only",
       "checklist": "Checklist",
@@ -362,7 +326,6 @@
   "workspaces": {
     "new": "New workspace",
     "create": "Create a workspace",
-    "footer": "A workspace gives a client or product its own agents, context, repositories and projects.",
     "agents_one": "{{count}} agent",
     "agents_other": "{{count}} agents",
     "repositories_one": "{{count}} repository",
@@ -386,9 +349,7 @@
     "contextLabel": "Agent context for {{name}}",
     "contextPlaceholder": "Who the client is, what the product does, links, tone, rules.\nEvery agent in this workspace gets it on every run.",
     "projects": "Projects",
-    "projectsFooter": "Projects add their own context and repositories on top of the workspace's.",
     "newProject": "New project",
-    "sourcesFooter": "Every agent in the workspace works with these. Tasks get their own branch of a repository. Add folders of your computer there.",
     "behavior": "Behavior",
     "autoMerge": "Merge pull requests right away",
     "autoMergeDetail": "A ticket is done when its agent delivers, without your review.",
@@ -404,8 +365,6 @@
     "contextLabel": "Context for {{name}}",
     "contextPlaceholder": "Goals, scope, conventions and links for this project.\nAdded to the workspace's context on every run.",
     "agents": "Agents on it",
-    "agentsFooter": "Agents work on this project by default. Chats and tickets can pick another.",
-    "sourcesFooter": "On top of the workspace's. Add folders of your computer there.",
     "workspaceProfile": "The workspace's",
     "delete": "Delete project"
   },
@@ -710,7 +669,7 @@
       "revoked": "Removed in the cloud"
     },
     "unlinkedTitle": "Not linked to Godmode Cloud",
-    "unlinkedBody": "Link it in Godmode on your computer to reach it from any browser, and from this phone without Tailscale.",
+    "unlinkedBody": "Link it in Godmode on your computer.",
     "statusTitle": "Link",
     "stateLabel": "Status",
     "server": "Cloud",
@@ -724,14 +683,13 @@
       "browser": "Browser access",
       "phones": "Phones through the cloud",
       "secrets": "Secrets through the cloud"
-    },
-    "onComputer": "Linking and access are changed in Godmode on your computer."
+    }
   },
   "devices": {
     "title": "Devices",
     "loadFailed": "Couldn't load your devices",
     "aloneTitle": "Just this computer",
-    "aloneBody": "Use Godmode on several Macs as one: add a computer in Godmode on your Mac under Settings → Devices.",
+    "aloneBody": "Add a computer in Godmode on your Mac under Settings → Devices.",
     "thisComputer": "This computer",
     "primary": "Primary",
     "standsIn": "Stands in since",
@@ -760,15 +718,13 @@
       "title": "While a computer is away",
       "failover": "Chats continue elsewhere",
       "standIn": "Another computer stands in"
-    },
-    "onComputer": "Add, remove and set up computers in Godmode on your Mac."
+    }
   },
   "connected": {
     "title": "Connected apps",
     "loadFailed": "Couldn't load the connected apps",
     "emptyTitle": "No connected apps",
     "emptyBody": "Connect Claude Code or another app in Godmode on your computer to build your team from the terminal.",
-    "footer": "Each app has its own key. Connect new apps in Godmode on your computer.",
     "access": {
       "manage": "Sets up and steers",
       "read": "Looks only"
@@ -815,18 +771,13 @@
     "mode": {
       "title": "Voice mode",
       "enable": "Voice mode",
-      "enableDetail": "Talk to agents and hear their answers",
       "autoSpeak": "Speak replies",
       "autoSpeakDetail": "When you dictated the message",
       "language": "Language"
     },
     "stt": {
       "title": "Speech to text",
-      "dictation": "Dictation",
-      "dictationDetail": "The microphone in the message field",
-      "browser": "Free, with the system's speech recognition.",
-      "openai": "More accurate, with your OpenAI key.",
-      "hex": "Private and offline on your computer. Hex is set up there."
+      "dictation": "Dictation"
     },
     "tts": {
       "title": "Text to speech",
@@ -921,7 +872,6 @@
     "warnings": "Warnings",
     "errors": "Errors",
     "lastEntry": "Last entry",
-    "masked": "Passwords, 2FA codes, API keys and tokens are masked before anything is written.",
     "issues": "Recurring",
     "level": {
       "all": "All",
@@ -993,7 +943,6 @@
     "title": "Computer",
     "loadFailed": "Couldn't load the computer settings",
     "screenshot": "Screenshot size",
-    "screenshotDetail": "Long edge the model sees. Larger costs more tokens.",
     "vmOnComputer": "Turn virtual machines on in Godmode on your computer.",
     "helper": {
       "title": "Computer-use helper",
@@ -1001,7 +950,6 @@
       "running": "Running",
       "idle": "Installed, not running",
       "notInstalled": "Not installed",
-      "footer": "It starts again when an agent needs it.",
       "stopFailed": "Couldn't stop Cua Driver"
     }
   },
@@ -1009,7 +957,6 @@
     "title": "Claude accounts",
     "loadFailed": "Couldn't load the accounts",
     "listTitle": "Accounts",
-    "onComputer": "Add, sign in again or remove accounts in Godmode on your computer.",
     "defaultFailed": "Couldn't change the default",
     "makeDefaultHint": "Makes it the default account",
     "thisComputer": "This computer",
@@ -1025,9 +972,7 @@
     "lockedBody": "Accounts added in Godmode keep their sign-in in the vault. Until it's unlocked, agents use this computer's Claude Code login.",
     "switchTitle": "Switching",
     "autoSwitch": "Switch automatically",
-    "threshold": "Switch at",
-    "thresholdFooter": "New work moves to another account once the default's session or weekly usage reaches this, and work that hits a limit goes on where there's room left.",
-    "autoSwitchOff": "Work stays on the default account."
+    "threshold": "Switch at"
   },
   "cleanup": {
     "title": "Cleanup",
@@ -1088,14 +1033,12 @@
     },
     "auto": {
       "title": "Automatic cleanup",
-      "label": "Clean up automatically",
-      "footer": "Once a day, while no agent works, Godmode removes what is safe to remove."
+      "label": "Clean up automatically"
     }
   },
   "notifications": {
     "title": "Notifications",
     "switch": "Notifications",
-    "footer": "Questions, approvals, tasks for you, replies and problems, like on your computer.",
     "denied": "Notifications for Godmode are off in this phone's settings.",
     "openSettings": "Open Settings",
     "failed": "Couldn't change notifications",

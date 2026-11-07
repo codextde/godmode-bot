@@ -38,7 +38,8 @@
   },
   "fullAccess": {
     "title": "Allow full access for this phone in Godmode on your computer.",
-    "noLock": "This phone has no Face ID or passcode."
+    "noLock": "This phone has no Face ID or passcode.",
+    "noLockAndroid": "This phone has no screen lock."
   },
   "liveStrip": {
     "watch": "Watch"

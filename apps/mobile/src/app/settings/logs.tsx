@@ -1,6 +1,7 @@
 import { FlashList, type ListRenderItem } from "@shopify/flash-list";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { format, isToday } from "date-fns";
+import { File, Paths } from "expo-file-system";
 import { router, Stack } from "expo-router";
 import { memo, useCallback, useDeferredValue, useState } from "react";
 import { Alert, Pressable, RefreshControl, ScrollView, Share, StyleSheet, TextInput, View } from "react-native";
@@ -19,6 +20,7 @@ import { useAgents } from "@/lib/hooks";
 import { dateLocale, intlLocale } from "@/lib/i18n";
 import { programsApi } from "@/lib/programs";
 import { queryClient } from "@/lib/query";
+import { saveOrShareFile } from "@/lib/save-file";
 import { useSettings } from "@/lib/setup";
 import { settingsApi, sq } from "@/lib/settings-api";
 import { usePullRefresh } from "@/lib/use-pull-refresh";
@@ -84,7 +86,7 @@ function Entries({ overview, refetchOverview }: { overview: LogOverview; refetch
 
   const header = (
     <View style={styles.header}>
-      <Group footer={t("logs.masked")}>
+      <Group>
         <InfoRow icon="doc" label={t("logs.entries")} value={count(overview.entries)} />
         <InfoRow icon="warning" label={t("logs.warnings")} value={count(overview.counts.warn)} tone={overview.counts.warn ? "warning" : undefined} />
         <InfoRow icon="octagon" label={t("logs.errors")} value={count(overview.counts.error)} tone={overview.counts.error ? "danger" : undefined} />
@@ -178,14 +180,14 @@ function Entries({ overview, refetchOverview }: { overview: LogOverview; refetch
 
 /** What the desktop does with the log: share it (for a chat with Claude), file a fix in Godmode's code, delete it. */
 function LogActions({ empty }: { empty: boolean }) {
-  const { t } = useTranslation(["programs", "common"]);
+  const { t } = useTranslation(["programs", "common", "admin"]);
   const repair = useSettings().data?.selfRepair;
   const { data: agents } = useAgents();
-  const [busy, setBusy] = useState<"share" | "fix" | "delete" | null>(null);
+  const [busy, setBusy] = useState<"share" | "full" | "fix" | "delete" | null>(null);
   const agent = agents?.find((a) => a.id === repair?.agentId) ?? agents?.find((a) => a.isDefault);
   const who = agent?.name ?? t("logs.anAgent");
 
-  const run = async (what: "share" | "fix" | "delete", job: () => Promise<void>, failed: string) => {
+  const run = async (what: "share" | "full" | "fix" | "delete", job: () => Promise<void>, failed: string) => {
     setBusy(what);
     try {
       await job();
@@ -196,12 +198,21 @@ function LogActions({ empty }: { empty: boolean }) {
     }
   };
 
-  const share = () =>
+  const share = (full = false) =>
     run(
-      "share",
+      full ? "full" : "share",
       async () => {
-        const text = await programsApi.logs.report();
-        await Share.share({ message: text, title: "godmode-log.md" });
+        const text = await programsApi.logs.report(full);
+        if (!full) {
+          await Share.share({ message: text, title: "godmode-log.md" });
+          return;
+        }
+        // The full report has no size cap: it goes as a file, not as message text.
+        const file = new File(Paths.cache, "godmode-log-full.md");
+        if (file.exists) file.delete();
+        file.create();
+        await file.write(text);
+        await saveOrShareFile(file, "text/markdown");
       },
       t("logs.shareFailed"),
     );
@@ -257,6 +268,7 @@ function LogActions({ empty }: { empty: boolean }) {
   return (
     <Group title={t("logs.title")}>
       <LinkRow icon="share" title={t("logs.share")} value={pending("share")} chevron={false} onPress={() => !busy && !empty && void share()} />
+      <LinkRow icon="doc" title={t("admin:logsExtra.shareFull")} value={pending("full")} chevron={false} onPress={() => !busy && !empty && void share(true)} />
       <LinkRow icon="wrench" title={t("logs.fix")} value={pending("fix")} chevron={false} onPress={() => !busy && !empty && fix()} />
       <LinkRow icon="trash" tone="danger" title={t("logs.delete")} value={pending("delete")} chevron={false} onPress={() => !busy && !empty && remove()} />
     </Group>

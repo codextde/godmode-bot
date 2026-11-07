@@ -8,10 +8,14 @@ import type {
   CredentialInput,
   MacPasswordStatus,
   Passkey,
+  PasswordImportPreview,
+  PasswordImportResult,
   PaymentCard,
   PaymentCardInput,
   PaymentCardSecrets,
   SshKeyGenerateInput,
+  SshKeyImportInput,
+  SshKeyInstallResult,
   SshKeyChange,
   SshKeyPatch,
   SshKeysOverview,
@@ -83,7 +87,36 @@ export const fullVaultApi = {
   updateSshKey: (name: string, input: SshKeyPatch) => request<SshKeyChange>("PATCH", `/api/ssh/key-manager/${id(name)}`, input),
   deleteSshKey: (name: string) => request<{ ok: true }>("DELETE", `/api/ssh/key-manager/${id(name)}`),
   setSshKeyLoaded: (name: string, loaded: boolean, passphrase?: string) => request<SshManagedKey>("POST", `/api/ssh/key-manager/${id(name)}/agent`, { loaded, passphrase }),
+  /** A private key (OpenSSH or PEM) or a public key line, saved in ~/.ssh of the computer. */
+  importSshKey: (input: SshKeyImportInput) => request<SshManagedKey>("POST", "/api/ssh/key-manager/import", input),
+  /** Adds the public key to a saved server's authorized_keys. */
+  installSshKey: (name: string, serverId: string) => request<SshKeyInstallResult>("POST", `/api/ssh/key-manager/${id(name)}/install`, { serverId }, 90_000),
+  /** Compares a password manager's export with the saved logins (a grant: it would tell whether a password matches). */
+  previewPasswordImport: (file: PickedFile, workspaceId: string | null, grant?: string) =>
+    request<PasswordImportPreview>("POST", "/api/credentials/import/preview", exportForm(file, workspaceId), IMPORT_MS, grantHeader(grant)),
+  importPasswords: (file: PickedFile, workspaceId: string | null, ids: number[], grant?: string) => {
+    const form = exportForm(file, workspaceId);
+    form.append("ids", JSON.stringify(ids));
+    return request<PasswordImportResult>("POST", "/api/credentials/import", form, IMPORT_MS, grantHeader(grant));
+  },
 };
+
+/** A file picked on the phone, held in memory only (lib/picked-file.ts). */
+export interface PickedFile {
+  name: string;
+  mime: string;
+  bytes: Uint8Array;
+}
+
+const IMPORT_MS = 5 * 60_000;
+
+function exportForm(file: PickedFile, workspaceId: string | null): FormData {
+  const form = new FormData();
+  // expo/fetch (the global fetch) takes parts that hand over their own bytes.
+  form.append("file", { name: file.name, type: file.mime, bytes: () => Promise.resolve(file.bytes) } as unknown as Blob);
+  form.append("workspaceId", workspaceId ?? "");
+  return form;
+}
 
 /** The app-level keys the desktop app lists, by name; others show by their key. */
 export const APP_SECRETS: Record<string, { name: string; icon: IconName }> = {

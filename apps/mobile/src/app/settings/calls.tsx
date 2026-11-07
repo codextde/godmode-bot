@@ -1,7 +1,9 @@
 import { Stack } from "expo-router";
 import { ScrollView, StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
+import { useFullAccess } from "@/components/admin";
 import { CALL_LANGUAGES } from "@/components/call-parts";
+import { CallStatusGroup, NumberGroup, useVoiceRows } from "@/components/call-setup";
 import { CallsAdmin } from "@/components/calls-admin";
 import { CloseButton } from "@/components/close-button";
 import { FieldRow, Group, PickerRow, StepperRow, SwitchRow, TextEditor } from "@/components/form";
@@ -14,10 +16,15 @@ import { space } from "@/lib/theme";
 const LONGEST = [1, 2, 3, 5, 10, 15, 20, 30, 45, 60] as const;
 const HOURS = Array.from({ length: 24 }, (_, h) => `${String(h).padStart(2, "0")}:00`);
 
-/** Settings → Calls: how Godmode's voice introduces itself and its limits. Numbers, your phone, the PIN and answering stay on the computer. */
+/**
+ * Settings → Calls: how Godmode's voice introduces itself and its limits. A full-access phone also sets up what the
+ * desktop does: the number, the voice and model, calls to you, the PIN and answering.
+ */
 export default function CallsPersona() {
   const { t } = useTranslation(["settings", "common"]);
   const settings = useSettings();
+  const admin = !!useFullAccess().fullAccess;
+  const voiceRows = useVoiceRows(settings.data?.phone, admin && !!settings.data);
 
   return (
     <ScrollView contentInsetAdjustmentBehavior="automatic" keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets contentContainerStyle={styles.content}>
@@ -31,7 +38,11 @@ export default function CallsPersona() {
           const quiet = !!(p.quietFrom && p.quietTo);
           return (
             <>
-              <Group title={t("calls.voice.title")} footer={t("calls.voice.footer")}>
+              {admin ? <CallStatusGroup /> : null}
+              {admin ? <NumberGroup phone={p} /> : null}
+
+              <Group title={t("calls.voice.title")} footer={admin ? undefined : t("calls.voice.footer")}>
+                {voiceRows}
                 <FieldRow label={t("calls.voice.name")} value={p.callerName} placeholder="Alex" maxLength={60} onCommit={(callerName) => void patchSettings({ phone: { callerName: callerName.trim() } })} />
                 <PickerRow icon="globe" title={t("calls.voice.language")} value={p.language} options={languages} onChange={(language) => void patchSettings({ phone: { language } })} />
                 <StepperRow

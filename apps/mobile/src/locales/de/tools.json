@@ -149,7 +149,33 @@
     "test": "Schlüssel testen",
     "testing": "Wird getestet…",
     "keyWorks": "Der Schlüssel funktioniert",
-    "testFailed": "Test fehlgeschlagen"
+    "testFailed": "Test fehlgeschlagen",
+    "grantReason": "Schlüssel von {{name}} an eine neue Stelle senden"
+  },
+  "presets": {
+    "custom": "Andere API",
+    "customTagline": "Dein Schlüssel, ihre Adresse und Doku",
+    "getKeyAt": "Schlüssel auf {{site}} holen",
+    "gemini": {
+      "tagline": "Bilder mit Google Gemini",
+      "description": "Bilder erstellen und bearbeiten mit Nano Banana (Googles Gemini-Bildmodelle): Illustrationen, Produktfotos, Fotobearbeitung, Bilder mit Text."
+    },
+    "openai": {
+      "tagline": "GPT Image, GPT, Sprache",
+      "description": "Bilder mit GPT Image (erstellen und bearbeiten), dazu OpenAIs GPT-Modelle für Text und Bildverständnis, Sprachausgabe und Transkription."
+    },
+    "elevenlabs": {
+      "tagline": "Stimmen und Soundeffekte",
+      "description": "Natürlich klingende Sprache in vielen Stimmen und Sprachen, Soundeffekte aus einer Beschreibung und Spracherkennung."
+    },
+    "replicate": {
+      "tagline": "Tausende offene Modelle",
+      "description": "Offene Modelle für Bilder (FLUX), Video, Audio, Hochskalieren und Hintergrundentfernung."
+    },
+    "perplexity": {
+      "tagline": "Websuche mit Quellen",
+      "description": "Aktuelle Antworten aus dem Web mit Quellenangaben: Recherche, News, Faktenchecks."
+    }
   },
   "plugins": {
     "onTitle": "{{name}} einschalten?",

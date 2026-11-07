@@ -65,7 +65,6 @@
     "removeBody": "Godmode vergisst die Anmeldung dieses Kontos. Workspaces, die es genutzt haben, nehmen ihre anderen Konten. Du kannst es jederzeit wieder hinzufügen.",
     "removeFailed": "Konto konnte nicht entfernt werden",
     "added": "{{email}} angemeldet",
-    "footer": "Tipp auf ein Konto für seine Aktionen.",
     "vaultLocked": "Entsperr den Tresor am Computer, um Konten hinzuzufügen.",
     "signedOut": "Abgemeldet. Melde dich neu an, um es zu nutzen."
   },
@@ -93,8 +92,7 @@
     "title": "Claude Code CLI",
     "path": "Programm",
     "configDir": "Konfigurationsordner",
-    "auto": "Automatisch",
-    "footer": "Lass beides leer, um das claude-Programm auf dem Computer und ~/.claude zu nutzen. Gilt für neue Läufe."
+    "auto": "Automatisch"
   },
   "advanced": {
     "title": "Erweitert",
@@ -104,8 +102,7 @@
     "bypassDetail": "Agenten führen Befehle aus und ändern Dateien, ohne zu fragen",
     "bypassTitle": "Vollständigen Bypass einschalten?",
     "bypassBody": "Agenten führen dann Befehle aus und ändern Dateien auf dem Computer, ohne vorher zu fragen. Schalte das nur ein, wenn du den Anweisungen deiner Agenten vertraust.",
-    "bypassConfirm": "Einschalten",
-    "footer": "Fehler hier können jeden Lauf kaputt machen."
+    "bypassConfirm": "Einschalten"
   },
   "tools": {
     "title": "Tools",
@@ -120,12 +117,10 @@
     "branch": "Branch",
     "agent": "Agent",
     "defaultAgent": "Standard-Agent",
-    "merge": "Fixes automatisch mergen",
-    "footer": "Wohin „Im Code beheben“ seine Tickets legt und wer daran arbeitet."
+    "merge": "Fixes automatisch mergen"
   },
   "diagnostics": {
-    "verbose": "Detailliertes Protokoll",
-    "verboseDetail": "Jede Anfrage und jeder Tool-Aufruf. Das Protokoll wächst schneller."
+    "verbose": "Detailliertes Protokoll"
   },
   "memory": {
     "title": "Gedächtnis-Backend",
@@ -137,7 +132,6 @@
   },
   "computer": {
     "useCua": "Cua Driver nutzen",
-    "useCuaDetail": "Steuert geteilte Fenster im Hintergrund",
     "command": "Befehl",
     "commandPlaceholder": "Automatisch"
   },
@@ -162,8 +156,7 @@
       "downloading": "Wird heruntergeladen… {{percent}} %",
       "verifying": "Download wird geprüft…",
       "loading": "Modell wird geladen…"
-    },
-    "footer": "Lokale Spracherkennung auf dem Computer. Nichts verlässt ihn."
+    }
   },
   "openaiBaseUrl": "OpenAI-Adresse"
 }

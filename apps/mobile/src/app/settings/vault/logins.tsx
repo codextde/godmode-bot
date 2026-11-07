@@ -25,7 +25,12 @@ export default function Logins() {
 
   return (
     <>
-      {fullAccess ? <HeaderActions actions={[{ icon: "plus", label: t("loginEdit.addTitle"), onPress: () => router.push("/vault/login-edit") }]} /> : null}
+      {fullAccess ? (
+        <HeaderActions
+          actions={[{ icon: "plus", label: t("loginEdit.addTitle"), onPress: () => router.push("/vault/login-edit") }]}
+          menu={[{ icon: "doc", title: t("passwordImport.title"), onPress: () => router.push("/vault/password-import") }]}
+        />
+      ) : null}
       <ReadonlyList<Credential>
         title={t("logins.title")}
         query={list}

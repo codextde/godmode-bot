@@ -1382,6 +1382,31 @@ export function buildEnv(agent: Agent, inFolder = false, apiKeys = true): Record
   return env;
 }
 
+/**
+ * Edit rules (they cover every file-editing tool) for Godmode's data folder: its files, every folder but the workspaces'
+ * clones (repos/, the work itself), and in agents/ and tasks/ every agent's folder and ticket checkout but `own`.
+ */
+export function dataDirDenials(own: string[]): string[] {
+  const data = config().dataDir.replace(/\\/g, "/").replace(/\/$/, "");
+  const mine = new Set(own.map((p) => p.replace(/\\/g, "/").replace(/\/$/, "")));
+  const entries = (p: string) => {
+    try {
+      return readdirSync(p, { withFileTypes: true });
+    } catch {
+      return [];
+    }
+  };
+  const out: string[] = [];
+  for (const e of entries(data)) {
+    const path = `${data}/${e.name}`;
+    if (!e.isDirectory()) out.push(`Edit(/${path})`);
+    else if (e.name === "repos") continue;
+    else if (e.name !== "agents" && e.name !== "tasks") out.push(`Edit(/${path}/**)`);
+    else for (const child of entries(path)) if (child.isDirectory() && !mine.has(`${path}/${child.name}`)) out.push(`Edit(/${path}/${child.name}/**)`);
+  }
+  return out;
+}
+
 /** The agent's place on the team for its prompt; a lookup that fails leaves the block without a reporting line. */
 function teamFor(agent: Agent): ReturnType<typeof teamOf> | undefined {
   try {
@@ -2303,7 +2328,8 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   const promptSources = (workspace || project) && sources.length ? { workspace: workspace?.name ?? null, project: project?.name ?? null, items: sources } : null;
   // Keys in the environment are only for Bash on this computer (and need an open vault).
   // GLM runs send what they read to Z.ai: no keys there.
-  const toolKeysInEnv = !upkeep && !glm && !(vm && settings.vm.isolateHostShell);
+  // Nor in a run without raw secrets: Bash could print them.
+  const toolKeysInEnv = !upkeep && !glm && !fillOnly && !(vm && settings.vm.isolateHostShell);
   const toolList = upkeep ? [] : apiToolsForAgent(agent);
   const envOwners = toolKeysInEnv && isUnlocked() ? apiToolEnvOwners(toolList) : new Map<string, string>();
   const apiTools: PromptApiTool[] = toolList.map((t) => ({
@@ -2440,6 +2466,9 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     const checkout = folder.replace(/\\/g, "/");
     disallowed.push(`Edit(/${checkout}/.git)`, `Edit(/${checkout}/.git/**)`);
   }
+  // A run without raw secrets doesn't write Godmode's own files (the database, keys, other agents and tickets): only its
+  // agent's folder, its ticket's checkout and the workspaces' clones there.
+  if (fillOnly) disallowed.push(...dataDirDenials([agent.repoPath, cwd]));
   if (disallowed.length) baseArgs.push("--disallowedTools", disallowed.join(","));
   // Never on the command line: `pkill -f <word>` in any run would also end every run whose prompt or memory holds the word.
   baseArgs.push("--append-system-prompt-file", writeTempFile(res, `godmode-prompt-${job.runId}.md`, systemPrompt));

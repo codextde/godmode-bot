@@ -28,7 +28,7 @@ import { useLive } from "@/lib/live";
 import { qk, queryClient } from "@/lib/query";
 import { radius, space, useColors } from "@/lib/theme";
 import { useWorkspace } from "@/lib/workspace";
-import { currentLanguage, t as translate, uses12Hour } from "@/lib/i18n";
+import { currentLanguage, uses12Hour } from "@/lib/i18n";
 import { templateText } from "@/lib/templates";
 
 type Kind = "workspace" | "project" | "agent";
@@ -266,9 +266,9 @@ const wordStarts = (query: string) =>
     .filter(Boolean)
     .map((term) => new RegExp(`(^|[^a-z0-9])${escape(term)}`, "i"));
 
-const searchText = (t: AgentTemplate) => {
+const searchText = (t: AgentTemplate, title: (category: AgentTemplate["category"]) => string) => {
   const shown = templateText(t);
-  return [t.name, t.role, t.description, AGENT_TEMPLATE_CATEGORY_LABELS[t.category], ...(t.covers ?? []), shown.name, shown.role, shown.description, translate(`settings:new.categoryTitles.${t.category}`), ...(shown.covers ?? [])].join(" ");
+  return [t.name, t.role, t.description, AGENT_TEMPLATE_CATEGORY_LABELS[t.category], ...(t.covers ?? []), shown.name, shown.role, shown.description, title(t.category), ...(shown.covers ?? [])].join(" ");
 };
 
 const inFilter = (t: AgentTemplate, f: Filter) => f === "all" || (f === "all-in-one" ? !!t.covers?.length : t.category === f);
@@ -276,12 +276,15 @@ const inFilter = (t: AgentTemplate, f: Filter) => f === "all" || (f === "all-in-
 /** Every role a company has, by department, searchable: one agent per job, or one all-in-one agent per department. */
 function TemplatePicker({ onPick, workspaceId }: { onPick: (template: AgentTemplate | null) => void; workspaceId: string | null }) {
   const c = useColors();
-  const { t, i18n } = useTranslation(["settings", "common", "agents"]);
+  const { t } = useTranslation(["settings", "common", "agents"]);
   const templates = useQuery({ queryKey: ["agent-templates"], queryFn: api.agents.templates, staleTime: 60 * 60_000 });
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
   const terms = useMemo(() => wordStarts(query), [query]);
-  const found = useMemo(() => (templates.data ?? []).filter((x) => terms.every((re) => re.test(searchText(x)))), [templates.data, terms, i18n.language]);
+  const found = useMemo(() => {
+    const title = (category: AgentTemplate["category"]) => t(`new.categoryTitles.${category}`);
+    return (templates.data ?? []).filter((x) => terms.every((re) => re.test(searchText(x, title))));
+  }, [templates.data, terms, t]);
   const shown = found.filter((x) => inFilter(x, filter));
   const chips = (["all", "all-in-one", ...AGENT_TEMPLATE_CATEGORIES] as Filter[]).filter((f) => f === "all" || f === filter || found.some((x) => inFilter(x, f)));
 

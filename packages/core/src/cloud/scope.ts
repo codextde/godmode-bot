@@ -106,6 +106,8 @@ const RULES: [methods: string, path: string, rule: Rule][] = [
 
   ["GET", "/api/vault/status", A],
   ["POST", "/api/vault/lock", A],
+  // A random password, made up on the spot: nothing of the vault.
+  ["POST", "/api/vault/generate-password", A],
   ["POST", "/api/vault/setup", refused(COMPUTER_ONLY)],
   ["POST", "/api/vault/remember", refused(COMPUTER_ONLY)],
   ["POST", "/api/vault/unlock", S],

@@ -56,9 +56,9 @@ export function registerArtifactRoutes(app: Hono): void {
 
   app.get("/api/artifacts/:id", (c) => c.json({ ...getArtifact(c.req.param("id")), filesLocal: isLocalRequest(c) }));
 
-  app.patch("/api/artifacts/:id", async (c) => c.json(patchArtifact(c.req.param("id"), await body(c, patchSchema))));
+  app.patch("/api/artifacts/:id", async (c) => c.json(patchArtifact(c.req.param("id"), await body(c, patchSchema), { limitedPhone: isLimitedPhone(c) })));
 
-  app.put("/api/artifacts/:id/data", async (c) => c.json(saveArtifactData(c.req.param("id"), (await body(c, dataSchema)).data)));
+  app.put("/api/artifacts/:id/data", async (c) => c.json(saveArtifactData(c.req.param("id"), (await body(c, dataSchema)).data, { limitedPhone: isLimitedPhone(c) })));
 
   app.get("/api/artifacts/:id/versions", (c) => c.json(listArtifactVersions(c.req.param("id"))));
 
@@ -71,9 +71,9 @@ export function registerArtifactRoutes(app: Hono): void {
     return c.json(await messageArtifact(c.req.param("id"), input.content, input.source, { fillOnly: isLimitedPhone(c) }));
   });
 
-  app.post("/api/artifacts/:id/refresh", async (c) => c.json(await refreshArtifact(c.req.param("id"))));
+  app.post("/api/artifacts/:id/refresh", async (c) => c.json(await refreshArtifact(c.req.param("id"), { fillOnly: isLimitedPhone(c) })));
 
-  app.post("/api/artifacts/:id/review-done", async (c) => c.json(await reviewDoneArtifact(c.req.param("id"))));
+  app.post("/api/artifacts/:id/review-done", async (c) => c.json(await reviewDoneArtifact(c.req.param("id"), { fillOnly: isLimitedPhone(c) })));
 
   // These open something on the core's machine: no use, and nobody's business, from anywhere else.
   app.post("/api/artifacts/:id/files/:name/open", (c) => {

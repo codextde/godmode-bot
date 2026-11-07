@@ -1,4 +1,4 @@
-import i18n from "i18next";
+import i18n, { changeLanguage, t as translate, use as addModule } from "i18next";
 import { initReactI18next } from "react-i18next";
 import type { Locale } from "date-fns";
 import { de as deLocale, enUS } from "date-fns/locale";
@@ -26,7 +26,7 @@ export function deviceLanguage(): UiLanguage {
 
 const resolve = (choice: AppLanguage): UiLanguage => (choice === "system" ? deviceLanguage() : choice);
 
-void i18n.use(initReactI18next).init({
+void addModule(initReactI18next).init({
   resources,
   lng: deviceLanguage(),
   fallbackLng: "en",
@@ -49,7 +49,7 @@ export const useLanguage = create<LanguageState>((set, get) => ({
   setLanguage: (language) => {
     if (!APP_LANGUAGES.includes(language)) return;
     const next = resolve(language);
-    if (i18n.language !== next) void i18n.changeLanguage(next);
+    if (i18n.language !== next) void changeLanguage(next);
     if (get().language === language) return;
     set({ language });
     void SecureStore.setItemAsync(KEY, language, STORE_OPTIONS).catch(() => undefined);
@@ -124,6 +124,6 @@ function withClock(base: Locale, hour12: boolean): Locale {
 /** The date-fns locale for format, formatDistance and friends; "p" and "pp" follow the time format. */
 export const dateLocale = (): Locale => withClock(currentLanguage() === "de" ? deLocale : enUS, uses12Hour());
 
-export const t = i18n.t.bind(i18n);
+export const t = translate;
 
 export default i18n;

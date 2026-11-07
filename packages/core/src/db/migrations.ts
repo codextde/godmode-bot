@@ -2150,4 +2150,13 @@ ALTER TABLE tasks ADD COLUMN fill_only INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE goals ADD COLUMN fill_only INTEGER NOT NULL DEFAULT 0;
 `,
   },
+  {
+    id: 137,
+    name: "phone_fill_only_artifacts",
+    sql: /* sql */ `
+-- An artifact's refresh prompt or review a phone without full access wrote: its Refresh and Review done run without raw
+-- secrets until the prompt is saved on the computer.
+ALTER TABLE artifacts ADD COLUMN refresh_fill_only INTEGER NOT NULL DEFAULT 0;
+`,
+  },
 ];

@@ -50,7 +50,10 @@ export default function SshKeys() {
 
   const menu = (k: SshManagedKey): MenuItem[] => {
     const items: MenuItem[] = [];
+    const open = () => router.push({ pathname: "/vault/ssh-key-edit", params: { name: k.name } });
     if (k.publicKey) items.push({ label: t("sshKeys.copyPublicShort"), icon: "copy", onPress: () => void copy(k) });
+    items.push({ label: t("common:actions.edit"), icon: "pencil", onPress: open });
+    if (k.publicKey) items.push({ label: t("sshEdit.addToServer"), icon: "server", onPress: open });
     if (agentOn && k.enabled && k.hasPrivate) {
       items.push(k.inAgent ? { label: t("sshKeys.unload"), icon: "minus", onPress: () => void load(k, false) } : { label: t("sshKeys.load"), icon: "plus", onPress: () => void load(k, true) });
     }
@@ -75,7 +78,10 @@ export default function SshKeys() {
   return (
     <>
       {fullAccess ? (
-        <HeaderActions actions={[{ icon: "plus", label: t("sshKeys.newKey"), onPress: () => router.push("/vault/ssh-key-new") }]} />
+        <HeaderActions
+          actions={[{ icon: "plus", label: t("sshKeys.newKey"), onPress: () => router.push("/vault/ssh-key-new") }]}
+          menu={[{ icon: "doc", title: t("sshImport.title"), onPress: () => router.push("/vault/ssh-key-import") }]}
+        />
       ) : null}
       <ReadonlyList<SshManagedKey>
         title={t("sshKeys.title")}

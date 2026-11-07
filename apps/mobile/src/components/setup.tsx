@@ -112,12 +112,10 @@ export function Sources({
   sources,
   onSave,
   onSync,
-  footer,
 }: {
   sources: WorkspaceSource[];
   onSave: (next: SourceInput[]) => Promise<boolean>;
   onSync: (sourceId: string) => Promise<unknown>;
-  footer: string;
 }) {
   const c = useColors();
   const { t } = useTranslation(["components", "common"]);
@@ -144,7 +142,7 @@ export function Sources({
     ]);
 
   return (
-    <Group title={t("setup.sourcesTitle")} footer={footer}>
+    <Group title={t("setup.sourcesTitle")}>
       {sources.map((s) => {
         const status = STATUS[s.status];
         const where =

@@ -88,7 +88,6 @@ function Sections({ settings: s, remember, unlocked }: { settings: Settings; rem
         <SwitchRow
           icon="display"
           title={t("security.vault.remember")}
-          detail={t("security.vault.rememberDetail")}
           value={!!remember}
           disabled={remember === undefined}
           onChange={setRemember}
@@ -112,7 +111,7 @@ function Sections({ settings: s, remember, unlocked }: { settings: Settings; rem
 
       <Group>
         <LinkRow icon="agents" title={t("security.secrets.agents")} onPress={() => router.push("/settings/secret-agents")} />
-        <SwitchRow icon="incognito" title={t("security.secrets.redact")} detail={t("security.secrets.redactDetail")} value={sec.redactSecrets} onChange={(redactSecrets) => void patchAnySettings({ security: { redactSecrets } })} />
+        <SwitchRow icon="incognito" title={t("security.secrets.redact")} value={sec.redactSecrets} onChange={(redactSecrets) => void patchAnySettings({ security: { redactSecrets } })} />
         <SwitchRow icon="globe" title={t("security.secrets.icons")} detail={t("security.secrets.iconsDetail")} value={sec.fetchSiteIcons} onChange={(fetchSiteIcons) => void patchAnySettings({ security: { fetchSiteIcons } })} />
         <StepperRow
           icon="history"
@@ -128,13 +127,7 @@ function Sections({ settings: s, remember, unlocked }: { settings: Settings; rem
       </Group>
 
       <Group title={t("security.web.title")} footer={srv.remoteAccess ? `${t("security.web.exposeBody")}${srv.hasDashboardPassword ? "" : ` ${t("security.web.noPassword")}`}` : t("security.web.footer")}>
-        <LinkRow
-          icon="key"
-          title={t("security.web.password")}
-          value={srv.hasDashboardPassword ? t("security.web.passwordSet") : t("security.web.passwordNotSet")}
-          onPress={() => router.push({ pathname: "/settings/dashboard-password", params: { set: srv.hasDashboardPassword ? "1" : "0" } })}
-        />
-        <SwitchRow icon="network" title={t("security.web.remote")} detail={t("security.web.remoteDetail")} value={srv.remoteAccess} onChange={setRemote} />
+        <SwitchRow icon="network" title={t("security.web.remote")} value={srv.remoteAccess} onChange={setRemote} />
         <FieldRow label={t("security.web.host")} value={srv.host} placeholder="127.0.0.1" onCommit={(host) => void patchAnySettings({ server: { host } })} />
         <FieldRow
           label={t("security.web.port")}

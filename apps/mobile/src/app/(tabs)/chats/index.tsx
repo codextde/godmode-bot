@@ -5,7 +5,7 @@ import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, Pressable, RefreshControl, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import type { Agent, Conversation, Project } from "@godmode/shared";
-import { HeaderActions } from "@/components/header-actions";
+import { FilterToolbar } from "@/components/filter-toolbar";
 import { ConversationRow } from "@/components/rows";
 import { Icon, type IconName } from "@/components/icon";
 import { SegmentedTabs } from "@/components/segmented-tabs";
@@ -83,11 +83,10 @@ export default function Chats() {
   const visible = useMemo(() => (q ? unarchived : unarchived.filter((conv) => source === "all" || chatSource(conv) === source)), [unarchived, source, q]);
   const live = useCallback((conv: Conversation) => runs.running.has(conv.id) || runs.queued.has(conv.id), [runs]);
   const counts = useMemo(() => {
-    const n = { running: 0, scheduled: 0, needsYou: 0 };
+    const n = { running: 0, scheduled: 0 };
     for (const conv of visible) {
       const bucket = chatBucket(conv, live(conv));
       if (bucket !== "done") n[bucket]++;
-      if (conv.paused?.reason === "question") n.needsYou++;
     }
     return n;
   }, [visible, live]);
@@ -157,10 +156,20 @@ export default function Chats() {
     <>
       <Stack.Title large>{t("chats.title")}</Stack.Title>
       <Stack.SearchBar placeholder={t("chats.search")} hideWhenScrolling={false} onChangeText={(e) => setSearch(e.nativeEvent.text)} onCancelButtonPress={() => setSearch("")} />
-      <HeaderActions
+      <FilterToolbar
         actions={[
           { icon: "archive", label: t("chats.archived"), onPress: () => router.push("/archived") },
           { icon: "compose", label: t("home.newChat"), onPress: () => router.push("/compose") },
+        ]}
+        filters={[
+          {
+            id: "status",
+            title: t("chats.status"),
+            icon: "filter",
+            value: tab,
+            options: TABS.map((f) => ({ value: f.value, label: t(`chats.filter.${f.value}.label`) })),
+            onChange: (next) => setTab(next as Tab),
+          },
         ]}
       />
       <FlashList
@@ -175,8 +184,9 @@ export default function Chats() {
         refreshControl={<RefreshControl {...pull} />}
         ListHeaderComponent={
           <View style={{ paddingHorizontal: space.sm, paddingVertical: space.sm, gap: space.sm }}>
-            <Row style={{ gap: space.sm, justifyContent: "space-between", marginBottom: space.xs }}>
+            <Row style={{ gap: space.sm, marginBottom: space.xs }}>
               <WorkspaceChip />
+              {tab !== "all" && <StatusChip label={t(`chats.filter.${tab}.label`)} count={tab === "running" || tab === "scheduled" ? counts[tab] : 0} onClear={() => setTab("all")} />}
               {unread.length > 0 && <MarkRead onPress={markRead} />}
             </Row>
             {q ? <SearchEverywhere query={q} /> : null}
@@ -196,18 +206,6 @@ export default function Chats() {
                 })}
               />
             )}
-            <SegmentedTabs
-              label={t("chats.filterLabel")}
-              value={tab}
-              onChange={setTab}
-              tabs={TABS.map((f) => ({
-                value: f.value,
-                label: t(`chats.filter.${f.value}.label`),
-                accessibilityHint: t(`chats.filter.${f.value}.hint`),
-                count: f.value === "running" || f.value === "scheduled" ? counts[f.value] : 0,
-                tone: f.value === "running" ? (counts.needsYou > 0 ? "warning" : "brand") : "neutral",
-              }))}
-            />
           </View>
         }
         ListFooterComponent={hasArchived && !q ? <ArchivedLink ongoing={archivedOngoing} /> : null}
@@ -248,6 +246,38 @@ function SearchEverywhere({ query }: { query: string }) {
         {t("search.everywhere", { query })}
       </T>
       <Icon name="chevron" size={12} color={c.textMuted} />
+    </Pressable>
+  );
+}
+
+/** The status the list is narrowed to (picked in the header's filter menu); tap to show every chat again. */
+function StatusChip({ label, count, onClear }: { label: string; count: number; onClear: () => void }) {
+  const c = useColors();
+  const { t } = useTranslation("components");
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${label}. ${t("filterToolbar.clear")}`}
+      hitSlop={6}
+      onPress={() => {
+        tap();
+        onClear();
+      }}
+      style={({ pressed }) => ({
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 6,
+        height: 32,
+        paddingHorizontal: 12,
+        borderRadius: radius.pill,
+        backgroundColor: c.brandSoft,
+        opacity: pressed ? 0.7 : 1,
+      })}
+    >
+      <T variant="subhead" color={c.brandStrong} style={{ fontWeight: "600" }} numberOfLines={1}>
+        {count > 0 ? `${label} ${count}` : label}
+      </T>
+      <Icon name="close" size={10} color={c.brandStrong} weight="bold" />
     </Pressable>
   );
 }

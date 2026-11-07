@@ -1,6 +1,7 @@
 import { FlashList, type FlashListRef, type ListRenderItem } from "@shopify/flash-list";
 import { useQuery } from "@tanstack/react-query";
 import { router, Stack, useFocusEffect, useLocalSearchParams } from "expo-router";
+import { useHeaderHeight } from "expo-router/react-navigation";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, Switch, TextInput, View } from "react-native";
 import { useTranslation } from "react-i18next";
@@ -106,6 +107,9 @@ export default function Chat() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
   const keyboardOpen = useKeyboardState((s) => s.isVisible);
+  // Android draws the header above the screen, not over it: the keyboard covers the screen from that far down.
+  const headerHeight = useHeaderHeight();
+  const keyboardOffset = process.env.EXPO_OS === "android" ? headerHeight : 0;
   const list = useRef<FlashListRef<Item>>(null);
   const conversation = useQuery({ queryKey: qk.conversation(id), queryFn: () => fetchConversation(id) });
   const forYou = useQuery({ queryKey: qk.chatHumanTasks(id), queryFn: () => api.humanTasks.list({ status: "active", conversationId: id }) });
@@ -386,7 +390,7 @@ export default function Chat() {
         ]}
         menu={menu}
       />
-      <KeyboardAvoidingView behavior="translate-with-padding" style={{ flex: 1 }}>
+      <KeyboardAvoidingView behavior="translate-with-padding" keyboardVerticalOffset={keyboardOffset} style={{ flex: 1 }}>
         {!conversation.data ? (
           <View style={{ flex: 1 }}>
             {conversation.isError ? (

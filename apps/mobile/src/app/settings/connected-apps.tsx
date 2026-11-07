@@ -32,11 +32,11 @@ export default function ConnectedApps() {
           <>
             {fullAccess ? (
               <Group>
-                <LinkRow icon="plus" title={t("linking:connect.title")} onPress={() => router.push("/settings/connect-app")} />
+                <LinkRow icon="plus" tone="brand" chevron={false} title={t("linking:connect.title")} onPress={() => router.push("/settings/connect-app")} />
               </Group>
             ) : null}
             {s.connectors.length ? (
-              <Group footer={fullAccess ? t("linking:connect.footer") : t("connected.footer")}>
+              <Group>
                 {s.connectors.map((c) => (
                   <ConnectorRow key={c.id} connector={c} />
                 ))}

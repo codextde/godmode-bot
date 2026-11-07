@@ -70,7 +70,7 @@ export default function McpServerScreen() {
       automaticallyAdjustKeyboardInsets
       contentContainerStyle={styles.content}
     >
-      <Stack.Screen options={id ? { title: current?.name ?? "", headerLargeTitleEnabled: false } : { headerLargeTitleEnabled: false }} />
+      <Stack.Screen options={{ title: id ? (current?.name ?? "") : t("mcp.addTitle"), headerLargeTitleEnabled: false }} />
       <FullAccessGate>
         {id ? (
           <AdminQueryState query={servers} errorTitle={t("loadFailed")}>

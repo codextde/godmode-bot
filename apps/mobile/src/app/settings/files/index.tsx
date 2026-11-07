@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { formatBytes, type Agent } from "@godmode/shared";
 import { CharacterAvatar } from "@/components/character";
+import { CloseButton } from "@/components/close-button";
 import { ListRow, ReadonlyList } from "@/components/readonly-list";
 import { filesApi, fk } from "@/lib/agent-files";
 import { useAgents } from "@/lib/hooks";
@@ -21,27 +22,30 @@ export default function Files() {
   const query = { ...agents, refetch: () => Promise.all([agents.refetch(), overview.refetch()]) };
 
   return (
-    <ReadonlyList<Agent>
-      title={t("index.title")}
-      query={query}
-      items={items}
-      keyOf={(a) => a.id}
-      extraData={sizes}
-      icon="files"
-      emptyTitle={t("index.emptyTitle")}
-      failedTitle={t("index.loadFailed")}
-      inset={64}
-      renderRow={(a) => {
-        const o = sizes.get(a.id);
-        return (
-          <ListRow
-            lead={<CharacterAvatar agent={a} size={36} />}
-            title={a.name}
-            lines={[o ? [formatBytes(o.bytes), o.notes ? t("index.notes", { count: o.notes }) : null].filter(Boolean).join(" · ") : null]}
-            onPress={() => router.push({ pathname: "/settings/files/[agent]", params: { agent: a.id } })}
-          />
-        );
-      }}
-    />
+    <>
+      <CloseButton />
+      <ReadonlyList<Agent>
+        title={t("index.title")}
+        query={query}
+        items={items}
+        keyOf={(a) => a.id}
+        extraData={sizes}
+        icon="files"
+        emptyTitle={t("index.emptyTitle")}
+        failedTitle={t("index.loadFailed")}
+        inset={64}
+        renderRow={(a) => {
+          const o = sizes.get(a.id);
+          return (
+            <ListRow
+              lead={<CharacterAvatar agent={a} size={36} />}
+              title={a.name}
+              lines={[o ? [formatBytes(o.bytes), o.notes ? t("index.notes", { count: o.notes }) : null].filter(Boolean).join(" · ") : null]}
+              onPress={() => router.push({ pathname: "/settings/files/[agent]", params: { agent: a.id } })}
+            />
+          );
+        }}
+      />
+    </>
   );
 }

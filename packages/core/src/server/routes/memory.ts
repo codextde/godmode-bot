@@ -13,7 +13,8 @@ const importSchema = z.object({
 export function registerMemoryRoutes(app: Hono): void {
   app.get("/api/offers", (c) => c.json(listOffers(c.req.query("workspaceId"))));
 
-  app.post("/api/offers/:id/accept", async (c) => c.json(await acceptOffer(c.req.param("id")), 201));
+  // Taken up from a phone without full access: the work starts without raw secrets.
+  app.post("/api/offers/:id/accept", async (c) => c.json(await acceptOffer(c.req.param("id"), { fillOnly: isLimitedPhone(c) }), 201));
 
   app.post("/api/offers/:id/dismiss", (c) => c.json(dismissOffer(c.req.param("id"))));
 

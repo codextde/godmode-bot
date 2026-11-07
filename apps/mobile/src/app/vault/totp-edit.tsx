@@ -1,5 +1,7 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { CameraView, useCameraPermissions, type BarcodeScanningResult } from "expo-camera";
+import { CameraView, scanFromURLAsync, useCameraPermissions, type BarcodeScanningResult } from "expo-camera";
+import { File } from "expo-file-system";
+import * as ImagePicker from "expo-image-picker";
 import { router, useLocalSearchParams } from "expo-router";
 import { useMemo, useRef, useState } from "react";
 import { Alert, ScrollView, StyleSheet, View } from "react-native";
@@ -68,8 +70,8 @@ function TotpForm({ entry }: { entry: TotpEntry | null }) {
     [workspaces.data, t],
   );
 
-  const importUri = async (uri: string) => {
-    const res = await fullVaultApi.importTotp([uri], workspaceId || null);
+  const importUris = async (uris: string[]) => {
+    const res = await fullVaultApi.importTotp(uris, workspaceId || null);
     if (!res.imported.length) throw new Error(res.skipped[0]?.reason || t("totpEdit.nothingImported"));
     // The computer links both sides of the login and the code.
     if (res.imported.length === 1 && credentialId) await fullVaultApi.updateTotp(res.imported[0].id, { credentialId });
@@ -83,7 +85,7 @@ function TotpForm({ entry }: { entry: TotpEntry | null }) {
         return;
       }
       if (OTP_URI.test(secret.trim())) {
-        await importUri(secret.trim());
+        await importUris([secret.trim()]);
         return;
       }
       await fullVaultApi.createTotp({ issuer: issuer.trim(), accountName: account.trim(), secret: normalizeBase32(secret), workspaceId: workspaceId || null, credentialId: credentialId || null });
@@ -137,7 +139,10 @@ function TotpForm({ entry }: { entry: TotpEntry | null }) {
       )}
 
       {scanning ? (
-        <Scanner onUri={(scanned) => importUri(scanned).then(() => (refreshVault(), router.back()))} />
+        <View style={{ gap: space.md }}>
+          <Scanner onUri={(scanned) => importUris([scanned]).then(() => (refreshVault(), router.back()))} />
+          <PhotoButton onUris={(uris) => importUris(uris).then(() => (refreshVault(), router.back()))} />
+        </View>
       ) : (
         <>
           <FieldCard>
@@ -207,6 +212,45 @@ function Scanner({ onUri }: { onUri: (uri: string) => Promise<unknown> }) {
       {busy ? <LoadingState style={StyleSheet.absoluteFill} label={t("totpEdit.adding")} /> : null}
     </View>
   );
+}
+
+/**
+ * QR codes from screenshots in the photo library, read on the phone (several at once for an authenticator's export,
+ * like the desktop's screenshot drop).
+ */
+function PhotoButton({ onUris }: { onUris: (uris: string[]) => Promise<unknown> }) {
+  const { t } = useTranslation("vault");
+  const [busy, setBusy] = useState(false);
+  const pick = async () => {
+    const picked = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], allowsMultipleSelection: true, selectionLimit: 10, orderedSelection: true, quality: 1 });
+    if (picked.canceled || !picked.assets.length) return;
+    setBusy(true);
+    try {
+      const found = new Set<string>();
+      let qr = 0;
+      for (const asset of picked.assets) {
+        const codes = await scanFromURLAsync(asset.uri, ["qr"]).catch(() => []);
+        qr += codes.length;
+        for (const code of codes) if (OTP_URI.test(code.data.trim())) found.add(code.data.trim());
+        // The picker's copy shows a 2FA secret: it goes once it is read.
+        try {
+          new File(asset.uri).delete();
+        } catch {
+          // Already gone.
+        }
+      }
+      if (!found.size) {
+        Alert.alert(qr ? t("totpEdit.notOtp") : t("totpEdit.noQr"));
+        return;
+      }
+      await onUris([...found]);
+    } catch (err) {
+      Alert.alert(t("totpEdit.addFailed"), errorText(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return <Button title={busy ? t("totpEdit.adding") : t("totpEdit.fromPhotos")} icon="photo" variant="outline" loading={busy} onPress={() => void pick()} />;
 }
 
 const styles = StyleSheet.create({

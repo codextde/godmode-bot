@@ -6,6 +6,7 @@ import { Alert, Linking, RefreshControl, ScrollView, StyleSheet, TextInput, View
 import { useTranslation } from "react-i18next";
 import type { CloudBilling, CloudLinkState, CloudSettings, CloudStatus } from "@godmode/shared";
 import { useFullAccess } from "@/components/admin";
+import { BillingLinks } from "@/components/billing-links";
 import { CloseButton } from "@/components/close-button";
 import { Group, LinkRow, SwitchRow } from "@/components/form";
 import { actionFailed } from "@/components/linking-parts";
@@ -94,7 +95,7 @@ function Linked({ status: s }: { status: CloudStatus }) {
   return (
     <>
       <StatusGroup status={s} />
-      <Group title={t("cloud.access.title")} footer={t("cloud.onComputer")}>
+      <Group title={t("cloud.access.title")}>
         <InfoRow icon="link" label={t("cloud.access.link")} value={onOff(s.settings.enabled)} />
         <InfoRow icon="globe" label={t("cloud.access.browser")} value={onOff(s.settings.browserAccess)} />
         <InfoRow icon="phone" label={t("cloud.access.phones")} value={onOff(s.settings.phoneAccess)} />
@@ -168,7 +169,7 @@ function LinkForm({ status: s }: { status: CloudStatus }) {
 
   return (
     <>
-      <EmptyState icon="network" title={t("settings:cloud.unlinkedTitle")} body={t("cloud.heroBody")} />
+      <EmptyState icon="network" title={t("settings:cloud.unlinkedTitle")} />
       <Group title={t("cloud.address")} footer={s.error ? t("cloud.lastFailed", { error: s.error }) : t("cloud.trust")}>
         <TextInput
           accessibilityLabel={t("cloud.address")}
@@ -298,6 +299,7 @@ function ManageLinked({ status: s }: { status: CloudStatus }) {
       ) : null}
 
       {billing.data ? <Subscription billing={billing.data} /> : null}
+      {billing.data ? <BillingLinks billing={billing.data} /> : null}
 
       <Group>
         <LinkRow icon="logout" tone="danger" title={t("cloud.unlinkButton")} chevron={false} onPress={() => confirmUnlink(viaCloud, false)} />

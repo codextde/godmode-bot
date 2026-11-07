@@ -41,7 +41,7 @@ export function FilterToolbar({ actions = [], filters, menu = [] }: { actions?: 
         {shown.length > 0 && (
           <Stack.Toolbar.Menu icon={sfSymbol(active ? "filterOn" : "filter")} accessibilityLabel={t("filterToolbar.filter")} tintColor={active ? c.brandStrong : undefined}>
             {shown.map((f) => (
-              <Stack.Toolbar.Menu key={f.id} title={f.title} icon={sfSymbol(f.icon)}>
+              <Stack.Toolbar.Menu key={f.id} title={f.title} icon={sfSymbol(f.icon)} inline={shown.length === 1}>
                 {f.options.map((o) => (
                   <Stack.Toolbar.MenuAction key={o.value} isOn={o.value === f.value} onPress={() => f.onChange(o.value)}>
                     {o.label}

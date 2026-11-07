@@ -97,7 +97,7 @@ export default function Cleanup() {
             <Items report={data} busy={scanning} />
             {optimize.data ? <Optimize report={optimize.data} /> : null}
             {maintenance ? (
-              <Group title={t("cleanup.auto.title")} footer={t("cleanup.auto.footer")}>
+              <Group title={t("cleanup.auto.title")}>
                 <SwitchRow icon="broom" title={t("cleanup.auto.label")} value={maintenance.autoCleanup} onChange={(autoCleanup) => void patchSettings({ maintenance: { autoCleanup } })} />
               </Group>
             ) : null}

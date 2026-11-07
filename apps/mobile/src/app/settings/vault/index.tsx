@@ -2,6 +2,7 @@ import { useMutation } from "@tanstack/react-query";
 import { router, Stack } from "expo-router";
 import { Alert, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
+import { CloseButton } from "@/components/close-button";
 import { Group, LinkRow, Tile } from "@/components/form";
 import { NeedsFullAccess, useFullAccess } from "@/components/full-access";
 import { Icon, type IconName } from "@/components/icon";
@@ -62,6 +63,7 @@ export default function Passwords() {
   return (
     <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content} refreshControl={<RefreshControl {...pull} />}>
       <Stack.Screen options={{ title: t("index.title") }} />
+      <CloseButton />
 
       {status.isError && !vault ? (
         <ErrorState title={t("index.loadFailed")} error={errorText(status.error)} onRetry={() => void status.refetch()} />
@@ -75,9 +77,11 @@ export default function Passwords() {
               {vault ? (
                 <>
                   <T variant="headline">{!vault.initialized ? t("index.notSetUp") : vault.unlocked ? t("index.unlocked") : t("index.locked")}</T>
-                  <T variant="footnote" muted>
-                    {!vault.initialized ? t("index.notSetUpDetail") : vault.unlocked ? t("index.unlockedDetail") : fullAccess ? t("index.lockedDetailFull") : t("index.lockedDetail")}
-                  </T>
+                  {!vault.initialized || (!vault.unlocked && !fullAccess) ? (
+                    <T variant="footnote" muted>
+                      {!vault.initialized ? t("index.notSetUpDetail") : t("index.lockedDetail")}
+                    </T>
+                  ) : null}
                 </>
               ) : (
                 <>

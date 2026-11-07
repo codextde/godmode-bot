@@ -65,12 +65,11 @@ export default function ComputerSettings() {
         )
       ) : (
         <>
-          <Group title={t("capabilities.computer.title")} footer={t("capabilities.computer.footer")}>
+          <Group title={t("capabilities.computer.title")}>
             <SwitchRow icon="display" title={t("capabilities.computer.title")} value={s.computer.enabled} onChange={(enabled) => void patchSettings({ computer: { enabled } })} />
             <SwitchRow
               icon="expand"
               title={t("capabilities.computer.foreground")}
-              detail={t("capabilities.computer.foregroundDetail")}
               disabled={!s.computer.enabled}
               value={s.computer.allowForeground}
               onChange={(allowForeground) => void patchSettings({ computer: { allowForeground } })}
@@ -89,7 +88,6 @@ export default function ComputerSettings() {
             <PickerRow
               icon="photo"
               title={t("computer.screenshot")}
-              detail={t("computer.screenshotDetail")}
               value={String(size)}
               options={sizes.map((n) => ({ value: String(n), label: `${n} px` }))}
               onChange={(next) => void patchSettings({ computer: { screenshotMaxSize: Number(next) } })}
@@ -97,12 +95,11 @@ export default function ComputerSettings() {
           </Group>
 
           {cua && !isOutdated(status.error) ? (
-            <Group title={t("computer.helper.title")} footer={cua.running ? t("computer.helper.footer") : undefined}>
+            <Group title={t("computer.helper.title")}>
               {admin ? (
                 <SwitchRow
                   icon="display"
                   title={t("programs:computer.useCua")}
-                  detail={t("programs:computer.useCuaDetail")}
                   disabled={!s.computer.enabled}
                   value={s.computer.useCuaDriver}
                   onChange={(useCuaDriver) => void patchAnySettings({ computer: { useCuaDriver } })}
@@ -144,7 +141,7 @@ export default function ComputerSettings() {
             </Group>
           ) : null}
 
-          <Group title={t("capabilities.vm.title")} footer={s.vm.enabled ? t("capabilities.vm.footer") : admin ? undefined : t("computer.vmOnComputer")}>
+          <Group title={t("capabilities.vm.title")} footer={s.vm.enabled || admin ? undefined : t("computer.vmOnComputer")}>
             <SwitchRow
               icon="vm"
               title={t("capabilities.vm.title")}
@@ -158,7 +155,7 @@ export default function ComputerSettings() {
                 title={t("capabilities.vm.onQuit")}
                 value={s.vm.onQuit}
                 options={[
-                  { value: "suspend", label: t("capabilities.vm.suspend"), detail: t("capabilities.vm.suspendDetail") },
+                  { value: "suspend", label: t("capabilities.vm.suspend") },
                   { value: "stop", label: t("capabilities.vm.stop") },
                   { value: "keep", label: t("capabilities.vm.keep") },
                 ]}

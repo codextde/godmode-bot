@@ -21,7 +21,7 @@ export default function Workspaces() {
       <CloseButton />
       <HeaderActions actions={[{ icon: "plus", label: t("workspaces.new"), onPress: create }]} />
       {workspaces.length ? (
-        <Group footer={t("workspaces.footer")}>
+        <Group>
           {workspaces.map((w) => {
             const team = agents?.filter((a) => a.workspaceId === w.id).length ?? 0;
             const facts = [

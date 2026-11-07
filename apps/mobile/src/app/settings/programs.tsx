@@ -75,7 +75,7 @@ function Sections({ settings: s }: { settings: Settings }) {
 
   return (
     <>
-      <Group title={t("cli.title")} footer={t("cli.footer")}>
+      <Group title={t("cli.title")}>
         <FieldRow label={t("cli.path")} value={r.claudePath} placeholder={t("cli.auto")} maxLength={1000} onCommit={(claudePath) => void patchAnySettings({ runner: { claudePath } })} />
         <FieldRow
           label={t("cli.configDir")}
@@ -87,7 +87,7 @@ function Sections({ settings: s }: { settings: Settings }) {
       </Group>
 
       <View style={{ gap: space.sm }}>
-        <Group title={t("advanced.title")} footer={t("advanced.footer")}>
+        <Group title={t("advanced.title")}>
           <SwitchRow icon="warning" title={t("advanced.bypass")} detail={t("advanced.bypassDetail")} value={r.bypassPermissions} onChange={setBypass} />
         </Group>
         <TextEditor
@@ -114,7 +114,7 @@ function Sections({ settings: s }: { settings: Settings }) {
 
       <Tools />
 
-      <Group title={t("repair.title")} footer={t("repair.footer")}>
+      <Group title={t("repair.title")}>
         <FieldRow
           stacked
           label={t("repair.repo")}
@@ -138,7 +138,6 @@ function Sections({ settings: s }: { settings: Settings }) {
         <SwitchRow
           icon="list"
           title={t("diagnostics.verbose")}
-          detail={t("diagnostics.verboseDetail")}
           value={s.diagnostics.verbose}
           onChange={(verbose) => void patchAnySettings({ diagnostics: { verbose } })}
         />

@@ -4,6 +4,8 @@ import { useState } from "react";
 import { ActivityIndicator, Alert, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, TextInput, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import type { BotCheckReport, BotCheckStatus, BrowserProfile } from "@godmode/shared";
+import { useFullAccess } from "@/components/admin";
+import { BrowserAdvancedGroup, CaptchaGroup } from "@/components/browser-extras";
 import { CloseButton } from "@/components/close-button";
 import { Group, LinkRow, StepperRow, SwitchRow, Tile } from "@/components/form";
 import { MenuSheet, type HeaderMenuItem } from "@/components/header-actions";
@@ -32,6 +34,7 @@ const botCheckKey = (profileId: string) => ["bot-check", profileId];
 export default function BrowserSettings() {
   const { t } = useTranslation(["settings", "common"]);
   const settings = useSettings();
+  const admin = !!useFullAccess().fullAccess;
   const profiles = useQuery({ queryKey: qk.browserProfiles, queryFn: api.browser.profiles });
   const pull = usePullRefresh(() => Promise.all([settings.refetch(), profiles.refetch()]));
   const [naming, setNaming] = useState<{ profile: BrowserProfile | null } | null>(null);
@@ -123,6 +126,8 @@ export default function BrowserSettings() {
           </Group>
 
           <Profiles query={profiles} disabled={!s.browser.enabled} onName={askName} />
+          {admin ? <CaptchaGroup browser={s.browser} /> : null}
+          {admin ? <BrowserAdvancedGroup browser={s.browser} /> : null}
         </>
       )}
       <NameSheet

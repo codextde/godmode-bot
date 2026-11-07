@@ -6,7 +6,8 @@ import { useTranslation } from "react-i18next";
 import type { Credential, CredentialInput } from "@godmode/shared";
 import { Group, PickerRow } from "@/components/form";
 import { NeedsFullAccess, useFullAccess } from "@/components/full-access";
-import { FieldCard, InputRow, SheetHeader } from "@/components/secret-parts";
+import { PasswordGenerator, StrengthBar } from "@/components/password-generator";
+import { FieldCard, IconButton, InputRow, SheetHeader } from "@/components/secret-parts";
 import { LoadingState, Row, T, tap } from "@/components/ui";
 import { api, errorText } from "@/lib/api";
 import { qk } from "@/lib/query";
@@ -51,6 +52,7 @@ function LoginForm({ login }: { login: Credential | null }) {
   const [url, setUrl] = useState(login?.url ?? "");
   const [username, setUsername] = useState(login?.username ?? "");
   const [password, setPassword] = useState("");
+  const [generating, setGenerating] = useState(false);
   const [totpId, setTotpId] = useState(login?.totpId ?? "");
   const [workspaceId, setWorkspaceId] = useState(login?.workspaceId ?? "");
   const [tags, setTags] = useState(login?.tags.join(", ") ?? "");
@@ -140,16 +142,31 @@ function LoginForm({ login }: { login: Credential | null }) {
         <InputRow label={t("login.website")} value={url} onChangeText={setUrl} placeholder="github.com" keyboardType="url" />
       </FieldCard>
 
-      <FieldCard>
-        <InputRow label={t("login.username")} value={username} onChangeText={setUsername} placeholder={t("loginEdit.usernamePlaceholder")} keyboardType="email-address" />
-        <InputRow
-          label={t("login.password")}
-          value={password}
-          onChangeText={setPassword}
-          secure
-          placeholder={login?.hasPassword ? t("loginEdit.unchanged") : t("loginEdit.optional")}
-        />
-      </FieldCard>
+      <View style={{ gap: space.md }}>
+        <FieldCard>
+          <InputRow label={t("login.username")} value={username} onChangeText={setUsername} placeholder={t("loginEdit.usernamePlaceholder")} keyboardType="email-address" />
+          <InputRow
+            label={t("login.password")}
+            value={password}
+            onChangeText={setPassword}
+            secure
+            placeholder={login?.hasPassword ? t("loginEdit.unchanged") : t("loginEdit.optional")}
+            trailing={<IconButton icon={generating ? "close" : "wand"} label={generating ? t("common:actions.close") : t("generator.generate")} onPress={() => setGenerating((g) => !g)} />}
+          />
+        </FieldCard>
+        {generating ? (
+          <PasswordGenerator
+            onUse={(next) => {
+              setPassword(next);
+              setGenerating(false);
+            }}
+          />
+        ) : password ? (
+          <View style={styles.strength}>
+            <StrengthBar password={password} userInputs={[name, username, domainFromUrl(url)]} />
+          </View>
+        ) : null}
+      </View>
 
       <Group>
         <PickerRow icon="shield" title={t("login.code")} value={totpId} options={totpOptions} onChange={setTotpId} />
@@ -203,6 +220,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.xl,
     paddingBottom: 40,
     gap: space.xl,
+  },
+  strength: {
+    paddingHorizontal: 4,
   },
   hiddenNotes: {
     gap: space.md,

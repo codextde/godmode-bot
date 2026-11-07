@@ -1,4 +1,3 @@
-import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
 import { useState } from "react";
 import { Alert, Share, StyleSheet, View } from "react-native";
@@ -6,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { isRefused } from "./admin";
 import { Button, Card, T, tap } from "./ui";
 import { errorText } from "@/lib/api";
+import { copySecret } from "@/lib/secrets";
 import { t as translate } from "@/lib/i18n";
 import { qk, queryClient } from "@/lib/query";
 import { radius, space, useColors } from "@/lib/theme";
@@ -25,8 +25,9 @@ export function CodeBlock({ title, text, dimmed }: { title?: string; text: strin
   const c = useColors();
   const { t } = useTranslation(["linking", "common"]);
   const [copied, setCopied] = useState(false);
+  // Invites and app keys: kept on this phone only and cleared after a minute.
   const copy = async () => {
-    await Clipboard.setStringAsync(text);
+    await copySecret(text);
     tap(Haptics.ImpactFeedbackStyle.Medium);
     setCopied(true);
     setTimeout(() => setCopied(false), 1400);

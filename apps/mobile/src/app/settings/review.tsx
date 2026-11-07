@@ -3,6 +3,7 @@ import { router, Stack } from "expo-router";
 import { ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { cronToHuman, findModel, type Review } from "@godmode/shared";
+import { useFullAccess } from "@/components/admin";
 import { CloseButton } from "@/components/close-button";
 import { Group, LinkRow, PickerRow, SwitchRow } from "@/components/form";
 import { Icon } from "@/components/icon";
@@ -30,6 +31,7 @@ const SCHEDULES = [
 export default function AutoReview() {
   const { t } = useTranslation(["review", "settings", "common"]);
   const settings = useSettings();
+  const admin = !!useFullAccess().fullAccess;
   const overview = useReviews();
   const models = (useModelCatalog().data?.models ?? []).filter((m) => !m.provider);
   const pull = usePullRefresh(() => Promise.all([overview.refetch(), settings.refetch()]));
@@ -86,7 +88,7 @@ export default function AutoReview() {
               [
                 r.enabled && overview.data?.nextReviewAt ? t("next", { when: whenText(overview.data.nextReviewAt) }) : null,
                 r.autoFix ? null : t("reportOnly"),
-                r.autoFix && r.team ? null : t("onComputer"),
+                r.autoFix && r.team ? null : admin ? null : t("onComputer"),
               ]
                 .filter(Boolean)
                 .join(" ") || undefined
@@ -102,9 +104,9 @@ export default function AutoReview() {
                 onChange={(next) => void patchSettings({ review: { cron: next } })}
               />
             ) : null}
-            {/* Off from here; back on at the computer, like the features that widen what agents do. */}
-            <SwitchRow icon="wrench" title={t("autoFix")} value={r.autoFix} disabled={!r.autoFix} onChange={(autoFix) => void patchSettings({ review: { autoFix } })} />
-            <SwitchRow icon="subagent" title={t("team")} detail={t("teamDetail")} value={r.team} disabled={!r.team} onChange={(team) => void patchSettings({ review: { team } })} />
+            {/* Off from here; back on at the computer (or a phone with full access), like the features that widen what agents do. */}
+            <SwitchRow icon="wrench" title={t("autoFix")} value={r.autoFix} disabled={!r.autoFix && !admin} onChange={(autoFix) => void patchSettings({ review: { autoFix } })} />
+            <SwitchRow icon="subagent" title={t("team")} detail={t("teamDetail")} value={r.team} disabled={!r.team && !admin} onChange={(team) => void patchSettings({ review: { team } })} />
             <PickerRow icon="sparkles" title={t("model.title")} value={reviewModel} options={modelOptions} onChange={(model) => void patchSettings({ review: { model } })} />
           </Group>
 

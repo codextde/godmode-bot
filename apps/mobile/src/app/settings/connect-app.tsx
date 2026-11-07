@@ -61,7 +61,7 @@ function Form({ onCreated }: { onCreated: (result: ConnectorCreated) => void }) 
         ]}
       />
       {client === "other" ? (
-        <Group title={t("connect.name")} footer={t("connect.nameHint")}>
+        <Group title={t("connect.name")}>
           <TextInput
             accessibilityLabel={t("connect.name")}
             value={name}

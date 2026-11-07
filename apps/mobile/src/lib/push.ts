@@ -49,8 +49,10 @@ async function ensureChannel() {
 }
 
 export async function pushPermission(): Promise<PushPermission> {
-  const { status } = await Notifications.getPermissionsAsync();
-  return status === "granted" ? "granted" : status === "denied" ? "denied" : "undetermined";
+  const { status, canAskAgain } = await Notifications.getPermissionsAsync();
+  if (status === "granted") return "granted";
+  // Android 13 and newer say "denied" before the app ever asked.
+  return status === "denied" && !(platform === "android" && canAskAgain) ? "denied" : "undetermined";
 }
 
 /** This phone's Expo push token; asks for permission first when `ask` (only after the user turned notifications on). */

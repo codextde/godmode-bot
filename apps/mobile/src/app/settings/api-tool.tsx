@@ -1,24 +1,26 @@
 import { router, Stack, useLocalSearchParams, useNavigation } from "expo-router";
 import { usePreventRemove } from "expo-router/react-navigation";
 import { useEffect, useState } from "react";
-import { Alert, ScrollView, StyleSheet, View } from "react-native";
+import { Alert, Linking, ScrollView, StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import type { ApiTool, ApiToolAuth, ApiToolInput, ApiToolTestResult } from "@godmode/shared";
 import { AdminQueryState, FullAccessGate } from "@/components/admin";
-import { Group, Segmented, SwitchRow } from "@/components/form";
+import { Group, LinkRow, Segmented, SwitchRow } from "@/components/form";
 import { HeaderActions } from "@/components/header-actions";
 import { InfoRow } from "@/components/status-rows";
 import { ActionRow, TestResult, TextRow, useScopeRows, type Scope } from "@/components/tool-form";
 import { EmptyState } from "@/components/ui";
 import { errorText } from "@/lib/api";
+import { API_TOOL_PRESETS, presetById, type ApiToolPreset } from "@/lib/api-tool-presets";
+import { t as translate } from "@/lib/i18n";
 import { useApiTools } from "@/lib/integrations";
+import { isCancelled, withConfirmedGrant } from "@/lib/secrets";
 import {
   BEARER,
   ENV_VAR_PATTERN,
   HEADER_KEY_PATTERN,
   hostOf,
   keyModeOf,
-  needsGrant,
   refreshTools,
   SECRET_NAME_PATTERN,
   suggestEnvVar,
@@ -45,7 +47,8 @@ interface Form {
   scope: Scope;
 }
 
-function fromTool(tool: ApiTool | null): Form {
+function fromTool(tool: ApiTool | null, preset?: ApiToolPreset): Form {
+  if (!tool && preset) return fromPreset(preset);
   const mode = tool ? keyModeOf(tool.auth) : "bearer";
   return {
     name: tool?.name ?? "",
@@ -66,6 +69,27 @@ function fromTool(tool: ApiTool | null): Form {
   };
 }
 
+function fromPreset(p: ApiToolPreset): Form {
+  const mode = keyModeOf(p.auth);
+  return {
+    name: p.name,
+    description: translate(p.description, { ns: "tools" }),
+    apiKey: "",
+    removeKey: false,
+    baseUrl: p.baseUrl,
+    keyMode: mode,
+    headerName: mode === "header" ? p.auth.name : "x-api-key",
+    prefix: mode === "header" ? p.auth.prefix : "",
+    queryName: p.auth.in === "query" ? p.auth.name : "key",
+    docs: p.docs,
+    docsUrl: p.docsUrl,
+    testPath: p.testPath,
+    envOn: false,
+    envVar: p.envVar,
+    scope: { workspaceId: null, agentId: null },
+  };
+}
+
 function authOf(f: Form): ApiToolAuth {
   if (f.keyMode === "bearer") return BEARER;
   if (f.keyMode === "query") return { in: "query", name: f.queryName.trim(), prefix: "" };
@@ -75,7 +99,7 @@ function authOf(f: Form): ApiToolAuth {
 /** Settings → Integrations → an API tool: its key (write-only), where it goes and how agents use it (full access only). */
 export default function ApiToolScreen() {
   const { t } = useTranslation("tools");
-  const { id } = useLocalSearchParams<{ id?: string }>();
+  const { id, preset } = useLocalSearchParams<{ id?: string; preset?: string }>();
   const tools = useApiTools();
   const current = id ? tools.data?.find((x) => x.id === id) : undefined;
   return (
@@ -95,19 +119,37 @@ export default function ApiToolScreen() {
               return tool ? <ToolForm key={tool.id} tool={tool} /> : <EmptyState icon="link" title={t("api.notFound")} />;
             }}
           </AdminQueryState>
+        ) : preset ? (
+          <ToolForm key={preset} tool={null} preset={presetById(preset)} />
         ) : (
-          <ToolForm tool={null} />
+          <PresetPicker />
         )}
       </FullAccessGate>
     </ScrollView>
   );
 }
 
-function ToolForm({ tool }: { tool: ApiTool | null }) {
+/** A new tool starts from one of the desktop's presets or from scratch. */
+function PresetPicker() {
+  const { t } = useTranslation("tools");
+  return (
+    <>
+      <Stack.Screen options={{ title: t("api.addTitle") }} />
+      <Group>
+        {API_TOOL_PRESETS.map((p) => (
+          <LinkRow key={p.id} icon={p.icon} title={p.name} detail={t(p.tagline)} onPress={() => router.replace({ pathname: "/settings/api-tool", params: { preset: p.id } })} />
+        ))}
+        <LinkRow icon="wrench" title={t("presets.custom")} detail={t("presets.customTagline")} onPress={() => router.replace({ pathname: "/settings/api-tool", params: { preset: "custom" } })} />
+      </Group>
+    </>
+  );
+}
+
+function ToolForm({ tool, preset }: { tool: ApiTool | null; preset?: ApiToolPreset }) {
   const { t } = useTranslation(["tools", "common"]);
   const navigation = useNavigation();
   const [saved, setSaved] = useState<ApiTool | null>(tool);
-  const [base, setBase] = useState(() => fromTool(tool));
+  const [base, setBase] = useState(() => fromTool(tool, preset));
   const [form, setForm] = useState<Form>(base);
   const [busy, setBusy] = useState<"save" | "test" | null>(null);
   const [result, setResult] = useState<ApiToolTestResult | null>(null);
@@ -177,13 +219,14 @@ function ToolForm({ tool }: { tool: ApiTool | null }) {
       ...(key ? { apiKey: key } : form.removeKey ? { apiKey: "" } : {}),
     };
     try {
-      const next = saved ? await toolsAdmin.apiTools.update(saved.id, input) : await toolsAdmin.apiTools.create({ ...input, preset: null });
+      // The saved key would go somewhere new (another address, the runs' environment): Face ID and the vault password first.
+      const next = saved
+        ? await withConfirmedGrant(t("api.grantReason", { name: saved.name }), (grant) => toolsAdmin.apiTools.update(saved.id, input, grant))
+        : await toolsAdmin.apiTools.create({ ...input, preset: preset?.id ?? null });
       refreshTools();
       return next;
     } catch (err) {
-      // The saved key would go somewhere new: the computer wants the vault password, or the key typed again.
-      if (needsGrant(err)) Alert.alert(t("api.grantTitle"), t("api.grantBody"));
-      else Alert.alert(t("api.saveFailed"), errorText(err));
+      if (!isCancelled(err)) Alert.alert(t("api.saveFailed"), errorText(err));
       return null;
     }
   };
@@ -253,12 +296,13 @@ function ToolForm({ tool }: { tool: ApiTool | null }) {
 
   const host = hostOf(form.baseUrl);
   const auth = authOf(form);
+  const from = preset ?? presetById(saved?.preset);
   const preview = auth.in === "query" ? `${host || "api.example.com"}/…?${auth.name || "key"}=••••••••` : `${auth.name || "header"}: ${auth.prefix}••••••••`;
   const canTest = !!form.testPath.trim() && !!form.baseUrl.trim();
 
   return (
     <>
-      {tool ? null : <Stack.Screen options={{ title: saved ? saved.name : t("api.addTitle") }} />}
+      {tool ? null : <Stack.Screen options={{ title: saved ? saved.name : (preset?.name ?? t("api.addTitle")) }} />}
       {dirty || !saved ? <HeaderActions actions={[{ icon: "check", label: t("common:actions.save"), prominent: true, onPress: () => void saveAndClose() }]} /> : null}
 
       <Group title={t("api.whatItIs")}>
@@ -285,10 +329,13 @@ function ToolForm({ tool }: { tool: ApiTool | null }) {
           label={t("api.key")}
           value={form.apiKey}
           onChange={(v) => setForm((f) => ({ ...f, apiKey: v, removeKey: false }))}
-          placeholder={keySaved ? t("api.keySavedPlaceholder") : t("api.keyPlaceholder")}
+          placeholder={keySaved ? t("api.keySavedPlaceholder") : (from?.keyPlaceholder ?? t("api.keyPlaceholder"))}
           secure
           stacked
         />
+        {from && !keySaved ? (
+          <ActionRow icon="external" title={t("presets.getKeyAt", { site: from.keyUrl.label })} onPress={() => void Linking.openURL(from.keyUrl.href).catch(() => undefined)} />
+        ) : null}
         {saved?.hasKey && !form.apiKey ? (
           form.removeKey ? (
             <ActionRow icon="reply" title={t("api.keepKey")} onPress={() => set("removeKey", false)} />

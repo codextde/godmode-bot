@@ -57,11 +57,11 @@ export function Tile({ icon, emoji, size = 30, tint }: { icon?: IconName; emoji?
   );
 }
 
-function Label({ title, detail, tone }: { title: string; detail?: ReactNode; tone?: "danger" | "brand" }) {
+function Label({ title, detail, tone }: { title: string; detail?: ReactNode; tone?: "danger" | "brand" | "dim" }) {
   const c = useColors();
   return (
     <View style={{ flex: 1, minWidth: 0, gap: 1 }}>
-      <T variant="callout" color={tone === "danger" ? c.danger : tone === "brand" ? c.brandStrong : c.text} style={{ fontWeight: "500" }} numberOfLines={1}>
+      <T variant="callout" color={tone === "danger" ? c.danger : tone === "brand" ? c.brandStrong : tone === "dim" ? c.textMuted : c.text} style={{ fontWeight: "500" }} numberOfLines={1}>
         {title}
       </T>
       {detail ? (
@@ -137,9 +137,9 @@ export function SwitchRow({
 }) {
   const c = useColors();
   return (
-    <View style={[styles.row, disabled && { opacity: 0.45 }]}>
-      {icon ? <Tile icon={icon} /> : null}
-      <Label title={title} detail={detail} />
+    <View style={styles.row}>
+      {icon ? <Tile icon={icon} tint={disabled ? c.textFaint : undefined} /> : null}
+      <Label title={title} detail={detail} tone={disabled ? "dim" : undefined} />
       <Switch
         accessibilityLabel={title}
         value={value}

@@ -1,6 +1,6 @@
 import { File, Paths } from "expo-file-system";
 import { Alert } from "react-native";
-import type { AuditEntry, BackupImportResult, LicenseState, MobileDevice, MobilePairingOffer, MobileStatus, Settings, VaultStatus } from "@godmode/shared";
+import type { AuditEntry, BackupImportResult, LicenseReminderInput, LicenseState, MobileDevice, MobilePairingOffer, MobileStatus, Settings, VaultStatus } from "@godmode/shared";
 import { ApiError, errorText, reachableBase, request, type SettingsPatch } from "./api";
 import { t } from "./i18n";
 import { isCancelled, withGrant } from "./secrets";
@@ -41,6 +41,8 @@ export const adminApi = {
     pairing: () => request<MobilePairingOffer>("POST", "/api/mobile/pairing", {}),
     cancelPairing: () => request<{ ok: true }>("DELETE", "/api/mobile/pairing"),
     rename: (id: string, name: string) => request<MobileDevice>("PATCH", `/api/mobile/devices/${encodeURIComponent(id)}`, { name }),
+    /** Only ever off from a phone: the computer alone gives full access. */
+    dropFullAccess: (id: string) => request<MobileDevice>("PATCH", `/api/mobile/devices/${encodeURIComponent(id)}`, { fullAccess: false }),
     remove: (id: string) => request<{ ok: true }>("DELETE", `/api/mobile/devices/${encodeURIComponent(id)}`),
   },
 
@@ -59,12 +61,14 @@ export const adminApi = {
     set: (key: string) => request<LicenseState>("PUT", "/api/license", { key }, 30_000),
     remove: () => request<LicenseState>("DELETE", "/api/license"),
     refresh: () => request<LicenseState>("POST", "/api/license/refresh", {}, 30_000),
+    /** Reminders before the free trial ends: the address goes to usegodmode.com only. */
+    setReminders: (input: LicenseReminderInput) => request<LicenseState>("PUT", "/api/license/reminders", input, 30_000),
+    removeReminders: () => request<LicenseState>("DELETE", "/api/license/reminders", undefined, 30_000),
   },
 
   security: {
     audit: (action?: string) => request<AuditEntry[]>("GET", `/api/audit?limit=200${action ? `&action=${encodeURIComponent(action)}` : ""}`),
     changePassphrase: (current: string, next: string) => request<{ ok: true }>("POST", "/api/vault/passphrase", { current, next }, 60_000),
-    setDashboardPassword: (password: string) => request<{ ok: true }>("POST", "/api/auth/password", { password }),
     remember: (remember: boolean, grant?: string) => request<VaultStatus>("POST", "/api/vault/remember", { remember }, 0, grantHeader(grant)),
     settings: (patch: DeepPartial<Settings>, grant?: string) => request<Settings>("PUT", "/api/settings", patch, 0, grantHeader(grant)),
     agentAccess: (id: string, secretAccess: "fill" | "reveal", grant?: string) =>

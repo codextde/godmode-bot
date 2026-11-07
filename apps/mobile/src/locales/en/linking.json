@@ -3,7 +3,7 @@
   "share": "Share",
   "onPrimary": "Change this on {{name}}.",
   "devices": {
-    "aloneBody": "Use Godmode on several computers as one. The others take the primary's agents, logins and settings, and chats move between them.",
+    "aloneBody": "Use Godmode on several computers as one.",
     "add": "Add a computer",
     "addShort": "Add",
     "join": "Join with an invite",
@@ -115,7 +115,6 @@
     "failed": "Couldn't join the group"
   },
   "cloud": {
-    "heroBody": "Reach this computer from any browser, and from your phones without Tailscale.",
     "address": "Cloud address",
     "trust": "Only connect to a cloud you trust. It relays, and can see, everything you do through it.",
     "lastFailed": "The last link failed: {{error}}",
@@ -164,11 +163,9 @@
   },
   "connect": {
     "title": "Connect an app",
-    "footer": "Each app has its own key.",
     "another": "Another app",
     "name": "Name",
     "namePlaceholder": "Cursor, Codex, a script…",
-    "nameHint": "Any app that speaks MCP, or the godmode command line.",
     "claudeBody": "Godmode adds itself to Claude Code on the computer, for every project.",
     "claudeMissing": "Claude Code wasn't found on the computer: you get the command to run in a terminal where it is installed.",
     "mayDo": "What it may do",

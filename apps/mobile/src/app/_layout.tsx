@@ -12,7 +12,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { AppLock } from "@/components/app-lock";
 import { PushBridge } from "@/components/push-bridge";
-import { readableLayout } from "@/components/readable";
+import { rootScreenLayout } from "@/components/keyboard-room";
 import { forgetLocalCopies } from "@/lib/agent-files";
 import { api } from "@/lib/api";
 import { loadAppearance, useAppearance } from "@/lib/appearance";
@@ -57,8 +57,7 @@ export default function RootLayout() {
   useEffect(() => {
     if (!ready || restored) return;
     const connection = useSession.getState().connection;
-    if (!connection) return setRestored(true);
-    void restoreQueries(connection.deviceId).finally(() => setRestored(true));
+    void (connection ? restoreQueries(connection.deviceId) : Promise.resolve()).finally(() => setRestored(true));
   }, [ready, restored]);
 
   useEffect(() => {
@@ -95,7 +94,7 @@ export default function RootLayout() {
             <TimeFormatSync paired={paired} />
             <PushBridge paired={paired} />
             <StatusBar style="auto" />
-            <Stack screenOptions={{ headerShadowVisible: false, headerBackButtonDisplayMode: "minimal", contentStyle: page }} screenLayout={readableLayout}>
+            <Stack screenOptions={{ headerShadowVisible: false, headerBackButtonDisplayMode: "minimal", contentStyle: page }} screenLayout={rootScreenLayout}>
               <Stack.Protected guard={paired} redirectTo="/welcome">
                 <Stack.Screen name="(tabs)" options={{ headerShown: false, contentStyle: { backgroundColor: c.background } }} />
                 <Stack.Screen name="chat/[id]" options={{ headerTransparent: process.env.EXPO_OS === "ios", title: "" }} />
@@ -142,6 +141,9 @@ export default function RootLayout() {
                 <Stack.Screen name="vault/card-edit" options={{ presentation: "formSheet", sheetAllowedDetents: [1], sheetGrabberVisible: true, headerShown: false }} />
                 <Stack.Screen name="vault/ssh-key-new" options={{ presentation: "formSheet", sheetAllowedDetents: [0.75, 1], sheetGrabberVisible: true, headerShown: false }} />
                 <Stack.Screen name="vault/key-edit" options={{ presentation: "formSheet", sheetAllowedDetents: [0.5, 1], sheetGrabberVisible: true, headerShown: false }} />
+                <Stack.Screen name="vault/password-import" options={{ presentation: "formSheet", sheetAllowedDetents: [1], sheetGrabberVisible: true, headerShown: false }} />
+                <Stack.Screen name="vault/ssh-key-import" options={{ presentation: "formSheet", sheetAllowedDetents: [0.75, 1], sheetGrabberVisible: true, headerShown: false }} />
+                <Stack.Screen name="vault/ssh-key-edit" options={{ presentation: "formSheet", sheetAllowedDetents: [0.75, 1], sheetGrabberVisible: true, headerShown: false }} />
                 <Stack.Screen name="settings" options={{ presentation: "modal", headerShown: false, contentStyle: { backgroundColor: c.background } }} />
                 <Stack.Screen name="live" options={{ presentation: "fullScreenModal", headerShown: false, contentStyle: { backgroundColor: "#000" } }} />
               </Stack.Protected>

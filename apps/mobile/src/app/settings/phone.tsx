@@ -73,6 +73,20 @@ function Details({ device: d }: { device: MobileDevice }) {
       },
     ]);
 
+  const takeBack = () =>
+    Alert.alert(t("phonesExtra.takeBackTitle", { name: d.name }), t("phonesExtra.takeBackBody"), [
+      { text: t("common:actions.cancel"), style: "cancel" },
+      {
+        text: t("phonesExtra.takeBack"),
+        style: "destructive",
+        onPress: () =>
+          void adminApi.phones
+            .dropFullAccess(d.id)
+            .then(setDevice)
+            .catch((err) => failed(t("phones.saveFailed"), err)),
+      },
+    ]);
+
   const remove = () =>
     Alert.alert(t("phones.removeTitle", { name: d.name }), self ? t("phones.removeSelfBody") : t("phones.removeBody"), [
       { text: t("common:actions.cancel"), style: "cancel" },
@@ -114,6 +128,7 @@ function Details({ device: d }: { device: MobileDevice }) {
       </Group>
 
       {self && d.fullAccess ? <Button title={t("phones.dropConfirm")} icon="lock" variant="outline" onPress={dropFullAccess} /> : null}
+      {me.data && !self && d.fullAccess ? <Button title={t("phonesExtra.takeBack")} icon="lock" variant="outline" onPress={takeBack} /> : null}
       <Button title={self ? t("phones.removeSelf") : t("phones.remove")} icon="trash" variant="danger" onPress={remove} />
     </>
   );

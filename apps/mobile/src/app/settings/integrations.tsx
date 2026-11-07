@@ -3,11 +3,13 @@ import { Alert, RefreshControl, ScrollView, StyleSheet, Switch, View } from "rea
 import { useTranslation } from "react-i18next";
 import type { ApiTool, ComposioConnection, McpServer } from "@godmode/shared";
 import { useFullAccess } from "@/components/admin";
+import { CloseButton } from "@/components/close-button";
 import { Group } from "@/components/form";
 import { ListRow } from "@/components/readonly-list";
 import { ActionRow } from "@/components/tool-form";
 import { Badge, EmptyState, ErrorState, SkeletonRows, tap } from "@/components/ui";
 import { errorText } from "@/lib/api";
+import { toolIcon } from "@/lib/api-tool-presets";
 import { hostOfUrl, useApiTools, useComposioConnections, useComposioStatus, useMcpServers } from "@/lib/integrations";
 import { queryClient } from "@/lib/query";
 import { setEnabled } from "@/lib/tools-admin";
@@ -36,6 +38,7 @@ export default function Integrations() {
   return (
     <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content} refreshControl={<RefreshControl {...pull} />}>
       <Stack.Screen options={{ title: t("title") }} />
+      <CloseButton />
       {loading ? (
         <SkeletonRows count={5} avatar={36} />
       ) : isOutdated(mcp.error) ? (
@@ -127,7 +130,7 @@ function ApiToolRow({ tool, admin }: { tool: ApiTool; admin: boolean }) {
   return (
     <ListRow
       grouped
-      icon="link"
+      icon={toolIcon(tool.preset)}
       title={tool.name}
       lines={[hostOfUrl(tool.baseUrl) || t("apiTools.noAddress"), tool.hasKey ? null : t("apiTools.noKey")]}
       trailing={admin ? <EnabledSwitch kind="api" id={tool.id} name={tool.name} enabled={tool.enabled} /> : <Badge label={tool.enabled ? t("on") : t("off")} tone={tool.enabled ? "success" : "neutral"} />}

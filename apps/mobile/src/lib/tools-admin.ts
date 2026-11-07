@@ -24,7 +24,8 @@ export const toolsAdmin = {
   },
   apiTools: {
     create: (input: ApiToolInput) => request<ApiTool>("POST", "/api/api-tools", input),
-    update: (id: string, input: Partial<ApiToolInput>) => request<ApiTool>("PATCH", `/api/api-tools/${id}`, input),
+    /** Sending the saved key somewhere new needs a grant. */
+    update: (id: string, input: Partial<ApiToolInput>, grant?: string) => request<ApiTool>("PATCH", `/api/api-tools/${id}`, input, 0, grant ? { "x-godmode-grant": grant } : undefined),
     remove: (id: string) => request<{ ok: true }>("DELETE", `/api/api-tools/${id}`),
     test: (id: string) => request<ApiToolTestResult>("POST", `/api/api-tools/${id}/test`, {}, 45_000),
   },

@@ -1,5 +1,4 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { format } from "date-fns";
 import { router, Stack } from "expo-router";
 import { memo, useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
@@ -19,7 +18,6 @@ import { openTask } from "@/components/task-row";
 import { Card, LiveDot, Row, SkeletonRows, T, tap } from "@/components/ui";
 import { WorkspaceChip } from "@/components/workspace-chip";
 import { api, errorText } from "@/lib/api";
-import { dateLocale } from "@/lib/i18n";
 import { trackAway } from "@/lib/away";
 import { greeting, pickAgent, SUGGESTIONS, type Need } from "@/lib/desktop-parity";
 import { chatListQuery, useAgents } from "@/lib/hooks";
@@ -106,13 +104,6 @@ export default function Home() {
       </Pressable>
 
       <View style={styles.hero}>
-        <View style={[styles.pill, { backgroundColor: c.surface, borderColor: c.border }]}>
-          <LiveDot size={6} />
-          <T variant="caption" muted>
-            {format(now, t("home.datePattern"), { locale: dateLocale() })}
-            {enabled.length > 0 ? ` · ${t("home.agentsReady", { count: enabled.length })}` : ""}
-          </T>
-        </View>
         <T variant="largeTitle" style={styles.greeting}>
           {greeting(now)}
           {userName ? `, ${userName}` : ""}.
@@ -134,12 +125,18 @@ export default function Home() {
       </Pressable>
 
       {hideSuggestions ? null : (
-        <View style={styles.suggestions}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.suggestions} contentContainerStyle={styles.suggestionRow}>
           {SUGGESTIONS.map((s) => (
             <Pressable
               key={s.text}
               accessibilityRole="button"
+              accessibilityActions={[{ name: "hide", label: t("home.hideSuggestions") }]}
+              onAccessibilityAction={confirmHideSuggestions}
               onPress={() => ask(s.text)}
+              onLongPress={() => {
+                tap();
+                confirmHideSuggestions();
+              }}
               style={({ pressed }) => [styles.suggestion, { backgroundColor: c.surface, borderColor: c.border, opacity: pressed ? 0.6 : 1 }]}
             >
               <Icon name={s.icon} size={13} color={c.textMuted} />
@@ -148,19 +145,7 @@ export default function Home() {
               </T>
             </Pressable>
           ))}
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={t("home.hideSuggestions")}
-            hitSlop={8}
-            onPress={() => {
-              tap();
-              confirmHideSuggestions();
-            }}
-            style={({ pressed }) => [styles.suggestion, { borderColor: "transparent", opacity: pressed ? 0.6 : 1 }]}
-          >
-            <Icon name="close" size={12} weight="semibold" color={c.textFaint} />
-          </Pressable>
-        </View>
+        </ScrollView>
       )}
 
       {status === "offline" && (
@@ -521,18 +506,6 @@ const styles = StyleSheet.create({
   hero: {
     gap: space.md,
     paddingHorizontal: 4,
-    paddingTop: space.sm,
-  },
-  pill: {
-    flexDirection: "row",
-    alignItems: "center",
-    alignSelf: "flex-start",
-    gap: 6,
-    paddingVertical: 4,
-    paddingLeft: 9,
-    paddingRight: 11,
-    borderRadius: radius.pill,
-    borderWidth: StyleSheet.hairlineWidth,
   },
   greeting: {
     fontSize: 30,
@@ -555,16 +528,19 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   suggestions: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: space.sm,
+    flexGrow: 0,
+    marginHorizontal: -space.lg,
     marginTop: -space.xs,
+  },
+  suggestionRow: {
+    gap: space.sm,
+    paddingHorizontal: space.lg,
   },
   suggestion: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    maxWidth: "100%",
+    maxWidth: 300,
     paddingVertical: 7,
     paddingHorizontal: 11,
     borderRadius: radius.sm,

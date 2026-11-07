@@ -141,7 +141,7 @@ export default function AgentSettings() {
 
       {!agent.isDefault ? (
         <Group>
-          <SwitchRow icon="power" title={t("agent.active")} detail={agent.enabled ? t("agent.activeOn") : t("agent.activeOff")} value={agent.enabled} onChange={(enabled) => save({ enabled })} />
+          <SwitchRow icon="power" title={t("agent.active")} value={agent.enabled} onChange={(enabled) => save({ enabled })} />
         </Group>
       ) : null}
 
@@ -168,12 +168,12 @@ export default function AgentSettings() {
           maxLength={2000}
           minHeight={64}
           readOnly={locked}
-          hint={lockedHint ?? t("agent.descriptionHint")}
+          hint={lockedHint}
           onSave={(description) => patchAgent(agent.id, { description }, { quiet: true })}
         />
       </View>
 
-      <Group footer={t("agent.memoryFooter")}>
+      <Group>
         <LinkRow icon="brain" title={t("overview.links.memory")} detail="MEMORY.md" onPress={() => router.push({ pathname: "/memory/[id]", params: { id: agent.id } })} />
       </Group>
 
@@ -188,7 +188,7 @@ export default function AgentSettings() {
         />
       </Group>
 
-      <Group title={t("agent.thinking.title")} footer={t("agent.thinking.footer")}>
+      <Group title={t("agent.thinking.title")}>
         <PickerRow
           icon="cpu"
           title={t("ai.defaultModel.model")}
@@ -232,7 +232,7 @@ export default function AgentSettings() {
         ) : null}
       </Group>
 
-      <Group title={t("agents.heartbeat")} footer={t("agent.heartbeat.footer")}>
+      <Group title={t("agents.heartbeat")}>
         <SwitchRow icon="pulse" title={t("agents.heartbeat")} value={hb.enabled} onChange={(enabled) => save({ heartbeat: { enabled } })} />
         <PickerRow
           icon="clock"

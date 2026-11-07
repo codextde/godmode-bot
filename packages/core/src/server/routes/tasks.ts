@@ -157,7 +157,12 @@ export function registerTaskRoutes(app: Hono): void {
     if (isLimitedPhone(c)) {
       const current = getTask(id);
       const rewrites = (["title", "description", "blockedReason", "goalId"] as const).some((k) => patch[k] !== undefined && patch[k] !== current[k]);
-      if (rewrites) markTaskFillOnly(id);
+      // Labels and the tickets it waits for go into its brief too (their results among them).
+      const sameList = (a: string[], b: string[]) => JSON.stringify([...a].sort()) === JSON.stringify([...b].sort());
+      const relists =
+        (patch.labels !== undefined && !sameList(patch.labels, current.labels)) ||
+        (patch.waitsFor !== undefined && !sameList(patch.waitsFor, current.waitsFor.map((w) => w.id)));
+      if (rewrites || relists) markTaskFillOnly(id);
     }
     return c.json(updateTask(id, patch));
   });

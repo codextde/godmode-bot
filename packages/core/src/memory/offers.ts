@@ -191,7 +191,7 @@ export function settleOffers(dreamId: string, succeeded: boolean): void {
 }
 
 /** "Do it": start a chat with the agent that offered, with the offer's prompt as the human's message. */
-export async function acceptOffer(id: string): Promise<AcceptOfferResult> {
+export async function acceptOffer(id: string, opts: { fillOnly?: boolean } = {}): Promise<AcceptOfferResult> {
   const row = offerRow(id);
   if (row.status !== "open") throw conflict(row.status === "accepted" ? "This offer was already taken up" : "This offer is no longer open");
   const claimed = exec("UPDATE offers SET status = 'accepted', decided_at = ? WHERE id = ? AND status = 'open'", now(), id);
@@ -205,6 +205,7 @@ export async function acceptOffer(id: string): Promise<AcceptOfferResult> {
       source: "offer",
       workspaceId: scope.workspace_id,
       projectId: scope.project_id,
+      fillOnly: opts.fillOnly,
     });
     exec("UPDATE offers SET conversation_id = ? WHERE id = ?", conversation.id, id);
     emit();

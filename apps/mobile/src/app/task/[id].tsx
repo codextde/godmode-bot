@@ -645,7 +645,7 @@ function Properties({ task: t, onEdit }: { task: Task; onEdit?: () => void }) {
           </Row>
         </Prop>
       ) : null}
-      <Prop label={tr("task.type")} value={TYPE_META[t.type].label} detail={TYPE_META[t.type].hint} />
+      <Prop label={tr("task.type")} value={TYPE_META[t.type].label} />
       {coding ? <Prop label={tr("task.repository")} value={taskRepoLabel(t) || tr("task.workspaceRepo")} mono /> : null}
       {t.branch ? <Prop label={tr("task.branch")} value={`${t.branch} → ${t.baseBranch || tr("task.defaultBranchShort")}`} mono /> : null}
       {t.type === "coding" ? (

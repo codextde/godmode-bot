@@ -76,7 +76,7 @@ function InGroup({ group: g }: { group: DeviceGroup }) {
         ))}
       </Group>
 
-      <Group title={t("devices.away.title")} footer={t("devices.onComputer")}>
+      <Group title={t("devices.away.title")}>
         <InfoRow icon="handoff" label={t("devices.away.failover")} value={after(g.failover, g.failoverMinutes)} />
         <InfoRow icon="server" label={t("devices.away.standIn")} value={after(g.standInEnabled, g.standInMinutes)} />
       </Group>

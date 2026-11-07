@@ -38,7 +38,8 @@
   },
   "fullAccess": {
     "title": "Erlaube in Godmode auf deinem Computer vollen Zugriff für dieses Handy.",
-    "noLock": "Auf diesem Handy ist weder Face ID noch ein Code eingerichtet."
+    "noLock": "Auf diesem Handy ist weder Face ID noch ein Code eingerichtet.",
+    "noLockAndroid": "Auf diesem Handy ist keine Displaysperre eingerichtet."
   },
   "liveStrip": {
     "watch": "Ansehen"

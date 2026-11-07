@@ -10,7 +10,6 @@
     "notSetUp": "Tresor nicht eingerichtet",
     "notSetUpDetail": "Richte ihn in Godmode auf deinem Computer ein.",
     "unlocked": "Tresor entsperrt",
-    "unlockedDetail": "Agenten können sich mit dem Gespeicherten anmelden.",
     "locked": "Tresor gesperrt",
     "lockedDetail": "Entsperre ihn in Godmode auf deinem Computer.",
     "lockNow": "Jetzt sperren",
@@ -26,7 +25,6 @@
     "notSaved": "Nicht gespeichert",
     "sshKeys": "SSH-Schlüssel",
     "unlock": "Entsperren",
-    "lockedDetailFull": "Agenten können sich nicht anmelden oder bezahlen, bis er entsperrt ist.",
     "apiKeys": "API-Schlüssel"
   },
   "logins": {
@@ -134,6 +132,109 @@
       "cancelled": "Abgebrochen"
     }
   },
+  "generator": {
+    "generate": "Passwort erzeugen",
+    "regenerate": "Neues Passwort",
+    "length": "Länge",
+    "numbers": "Zahlen",
+    "symbols": "Sonderzeichen",
+    "use": "Dieses Passwort verwenden"
+  },
+  "strength": {
+    "label": "Passwortstärke",
+    "tooWeak": "Zu schwach",
+    "weak": "Schwach",
+    "fair": "Okay",
+    "strong": "Stark",
+    "excellent": "Sehr stark"
+  },
+  "passwordImport": {
+    "title": "Passwörter importieren",
+    "saveTo": "Speichern in",
+    "chooseTitle": "Wähle deinen Passwort-Export",
+    "choose": "Datei wählen",
+    "reading": "Wird gelesen …",
+    "wrongFile": "Wähle die .csv-, .zip- oder .1pux-Datei, die dein Passwortmanager exportiert hat.",
+    "tooBig": "Die Datei ist größer, als ein Export sein kann.",
+    "dashBackup": "Das ist das verschlüsselte Backup von Dashlane. Exportiere in Dashlane stattdessen als CSV.",
+    "noEntries": "{{file}} enthält keine Einträge.",
+    "noLogins": "Keine Website-Logins in {{file}}.",
+    "vaultLocked": "Der Tresor ist gesperrt",
+    "readFailed": "Export konnte nicht gelesen werden",
+    "failed": "Logins konnten nicht importiert werden",
+    "summary": "{{source}} · {{entries}} · {{logins}}",
+    "entries_one": "{{count, number}} Eintrag",
+    "entries_other": "{{count, number}} Einträge",
+    "logins_one": "{{count, number}} Login",
+    "logins_other": "{{count, number}} Logins",
+    "changeFile": "Ändern",
+    "filters": {
+      "all": "Alle",
+      "new": "Neu",
+      "update": "Updates",
+      "unchanged": "Im Tresor",
+      "conflict": "Auswahl nötig"
+    },
+    "searchPlaceholder": "Suchen",
+    "selectAll": "Alle auswählen",
+    "selectNone": "Keine auswählen",
+    "conflictCallout": "Manche Logins haben mehr als ein Passwort. Wähle das aktuelle aus.",
+    "heldBack_one": "{{count, number}} gespeicherter Login hat hier ein anderes Passwort. Er bleibt, wie er ist, solange du ihn nicht auswählst.",
+    "heldBack_other": "{{count, number}} gespeicherte Logins haben hier ein anderes Passwort. Sie bleiben, wie sie sind, solange du sie nicht auswählst.",
+    "importCount_one": "{{count, number}} importieren",
+    "importCount_other": "{{count, number}} importieren",
+    "nothingSelected": "Importieren",
+    "nothingMatches": "Keine Treffer",
+    "importRow": "{{name}} importieren",
+    "merged": "{{n}} zusammengeführt",
+    "pillUpdate": "Update",
+    "leftOut_one": "{{count, number}} Eintrag ausgelassen",
+    "leftOut_other": "{{count, number}} Einträge ausgelassen",
+    "untitled": "Ohne Titel",
+    "plaintext": "{{file}} enthält jedes Passwort im Klartext. Lösch die Datei jetzt.",
+    "result": {
+      "imported_one": "{{count, number}} Login importiert",
+      "imported_other": "{{count, number}} Logins importiert",
+      "updated_one": "{{count, number}} Login aktualisiert",
+      "updated_other": "{{count, number}} Logins aktualisiert",
+      "nothing": "Alles war schon in deinem Tresor",
+      "updatedDetail_one": "{{count, number}} aktualisiert",
+      "updatedDetail_other": "{{count, number}} aktualisiert",
+      "totpLinked_one": "{{count, number}} 2FA-Code verknüpft",
+      "totpLinked_other": "{{count, number}} 2FA-Codes verknüpft"
+    }
+  },
+  "cardAgents": {
+    "all": "Alle Agenten",
+    "some": "Nur diese",
+    "pickOne": "Wähle mindestens einen Agenten aus.",
+    "cantSee": "Sieht diese Karte nicht",
+    "deleted": "Gelöschter Agent"
+  },
+  "sshImport": {
+    "title": "Schlüssel importieren",
+    "import": "Importieren",
+    "paste": "Privaten oder öffentlichen Schlüssel einfügen",
+    "chooseFile": "Datei wählen",
+    "fileTooBig": "Die Datei ist zu groß für einen Schlüssel.",
+    "failed": "Schlüssel konnte nicht importiert werden"
+  },
+  "sshEdit": {
+    "title": "Schlüssel bearbeiten",
+    "gone": "Diesen Schlüssel gibt es nicht mehr",
+    "saved": "Gespeichert",
+    "configUpdated": "~/.ssh/config verweist für {{hosts}} jetzt auf den neuen Namen. Die alte Datei bleibt daneben liegen.",
+    "publicKey": "Öffentlicher Schlüssel",
+    "fingerprint": "Fingerabdruck",
+    "copyFingerprint": "Fingerabdruck kopieren",
+    "usedBy": "Verwendet von",
+    "allHosts": "Alle Hosts",
+    "addToServer": "Zu Server hinzufügen",
+    "addTo": "Zu {{server}} hinzufügen",
+    "addedToServer": "{{name}} zu {{server}} hinzugefügt",
+    "alreadyOnServer": "{{name}} ist schon auf {{server}}",
+    "addToServerFailed": "Schlüssel konnte nicht hinzugefügt werden"
+  },
   "secret": {
     "show": "Anzeigen",
     "hide": "Verbergen",
@@ -201,6 +302,9 @@
     "allowCamera": "Kamera erlauben",
     "adding": "Wird hinzugefügt …",
     "nothingImported": "Dieser QR-Code enthält keinen 2FA-Code.",
+    "fromPhotos": "Aus Fotos wählen",
+    "noQr": "Kein QR-Code im Foto gefunden",
+    "notOtp": "Dieser QR-Code ist kein 2FA-Code",
     "addFailed": "2FA-Code konnte nicht hinzugefügt werden",
     "updateFailed": "Änderungen konnten nicht gespeichert werden",
     "delete": "2FA-Code löschen",
@@ -282,7 +386,8 @@
     "changeFailed": "API konnte nicht geändert werden",
     "deleteToolTitle": "{{name}} löschen?",
     "deleteToolBody": "Agenten können diese API nicht mehr aufrufen. Ihr Schlüssel wird ebenfalls gelöscht.",
-    "deleteToolFailed": "API konnte nicht gelöscht werden"
+    "deleteToolFailed": "API konnte nicht gelöscht werden",
+    "setUp": "Einrichten"
   },
   "keyEdit": {
     "key": "Schlüssel",

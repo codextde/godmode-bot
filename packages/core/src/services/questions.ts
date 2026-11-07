@@ -35,7 +35,7 @@ import { getAgent, getDefaultAgentId } from "../agents/service";
 import { askPause, getRun, questionRefusal, resumeRun } from "../runner/runner";
 import { describeNow, stripNoteTags, type ContinueAnswer } from "../runner/prompt";
 import { audit } from "./audit";
-import { getMessage, promptWithFiles, runFillOnly, saveAttachments, updateMessage } from "./conversations";
+import { getMessage, markChatFillOnly, promptWithFiles, runFillOnly, saveAttachments, updateMessage } from "./conversations";
 import { hasDeliverable } from "./messageQueue";
 import { markRead, notify } from "./notifications";
 import { pausedRun } from "./pauses";
@@ -533,6 +533,7 @@ export function answerQuestion(id: string, input: AnswerQuestionInput, by: Answe
   let run: Run;
   try {
     run = resumeRun(paused, "user", answer, { status, optionId, text: stored, attachments, at: ts, via: by.via }, { fillOnly: by.fillOnly });
+    if (by.fillOnly) markChatFillOnly(r.conversation_id);
   } catch (err) {
     // The run couldn't continue (agent switched off, shutting down): the question waits for another try.
     sql(

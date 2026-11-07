@@ -44,13 +44,13 @@ export default function Voice() {
           return (
             <>
               <Group title={t("voice.mode.title")}>
-                <SwitchRow icon="waveform" title={t("voice.mode.enable")} detail={t("voice.mode.enableDetail")} value={v.enabled} onChange={(enabled) => save({ enabled })} />
+                <SwitchRow icon="waveform" title={t("voice.mode.enable")} value={v.enabled} onChange={(enabled) => save({ enabled })} />
                 <SwitchRow icon="call" title={t("voice.mode.autoSpeak")} detail={t("voice.mode.autoSpeakDetail")} value={v.autoSpeak} onChange={(autoSpeak) => save({ autoSpeak })} />
                 <PickerRow icon="globe" title={t("voice.mode.language")} value={v.language || "en-US"} options={languages} onChange={(language) => save({ language })} />
               </Group>
 
-              <Group title={t("voice.stt.title")} footer={t(`voice.stt.${v.sttProvider}`)}>
-                <SwitchRow icon="mic" title={t("voice.stt.dictation")} detail={t("voice.stt.dictationDetail")} value={v.dictation} onChange={(dictation) => save({ dictation })} />
+              <Group title={t("voice.stt.title")}>
+                <SwitchRow icon="mic" title={t("voice.stt.dictation")} value={v.dictation} onChange={(dictation) => save({ dictation })} />
                 <SegmentRow<SttProvider>
                   title={t("voice.provider")}
                   options={stt.map((p) => ({ value: p, label: p === "browser" ? t("voice.browser") : p === "openai" ? "OpenAI" : "Hex" }))}
@@ -137,7 +137,7 @@ function HexGroup({ voice }: { voice: VoiceSettings }) {
   const start = <ActionPill label={t("hex.downloadAction")} busy={prepare.isPending} onPress={() => prepare.mutate()} />;
 
   return (
-    <Group title={t("hex.title")} footer={s?.error && !progress ? s.error : t("hex.footer")}>
+    <Group title={t("hex.title")} footer={s?.error && !progress ? s.error : undefined}>
       {!s ? (
         <ToolRow title={t("hex.app")} detail={status.isError ? errorText(status.error) : undefined} />
       ) : s.path ? (

@@ -2,7 +2,6 @@
   "overview": {
     "fullAccess": {
       "title": "Voller Zugriff",
-      "turnOff": "Vollen Zugriff ausschalten",
       "offTitle": "Vollen Zugriff ausschalten?",
       "offBody": "Nur Godmode auf deinem Computer kann ihn wieder einschalten.",
       "offConfirm": "Ausschalten",
@@ -21,7 +20,9 @@
     },
     "lock": {
       "turnOn": "Face ID für Godmode einschalten",
-      "turnOff": "Face ID für Godmode ausschalten"
+      "turnOff": "Face ID für Godmode ausschalten",
+      "turnOnAndroid": "Displaysperre für Godmode einschalten",
+      "turnOffAndroid": "Displaysperre für Godmode ausschalten"
     },
     "disconnect": {
       "title": "Von {{name}} trennen?",
@@ -31,7 +32,6 @@
     },
     "computers": {
       "title": "Dieses Handy nutzt",
-      "footer": "Ist der gewählte Computer nicht erreichbar, nutzt dieses Handy einen anderen aus der Gruppe und wechselt zurück, sobald er wieder antwortet.",
       "automatic": "Automatisch",
       "thePrimary": "Den Hauptcomputer, {{name}}",
       "whoAnswers": "Den Computer, der antwortet",
@@ -94,7 +94,7 @@
     "privacy": {
       "title": "Daten & Datenschutz",
       "faceId": "Face ID verlangen",
-      "faceIdDetail": "Verbirgt Godmode im App-Umschalter und fragt nach 30 Sekunden Abwesenheit.",
+      "screenLock": "Displaysperre verlangen",
       "security": "Sicherheit",
       "onComputer": "Auf deinem Computer"
     },
@@ -190,33 +190,20 @@
     },
     "computer": {
       "title": "Computersteuerung",
-      "footer": "Agenten sehen und steuern nur einen Bildschirm, ein Fenster oder einen Tab, den du in einem Chat mit ihnen teilst.",
       "foreground": "Fenster nach vorne holen",
-      "foregroundDetail": "Kurz, wenn eine Aktion im Hintergrund nicht ankommt.",
       "cursor": "Cursor des Agenten zeigen",
       "liveViewSpeed": "Tempo der Live-Ansicht"
     },
     "vm": {
       "title": "Virtuelle Maschinen",
-      "footer": "Agenten mit einer VM arbeiten darin statt auf diesem Computer.",
       "onQuit": "Wenn Godmode beendet wird",
       "suspend": "Pausieren",
-      "suspendDetail": "Machen dort weiter, wo sie aufgehört haben.",
       "stop": "Herunterfahren",
       "keep": "Weiterlaufen lassen",
       "idleStop": "Inaktive VMs stoppen nach"
     }
   },
   "instructions": {
-    "intro": "Regeln, die deine Agenten bei jedem Lauf befolgen. Leg sie einmal für alle fest und verfeinere sie dann pro Workspace, Projekt oder Agent.",
-    "layers": {
-      "everyone": "Alle",
-      "workspace": "Workspace",
-      "project": "Projekt",
-      "agent": "Agent",
-      "chat": "Chat"
-    },
-    "precedence": "Alle fließen in jeden Lauf ein. Widersprechen sich zwei, gewinnt die spezifischere.",
     "everyAgent": "Jeder Agent",
     "everyAgentLabel": "Anweisungen für jeden Agenten",
     "example": "1. Committe nur als ich, füge nie einen KI-Co-Autor hinzu.\n2. Halte Code-Kommentare minimal.\n3. Merge main in deinen Branch, bevor du einen Pull Request öffnest.\n4. Hänge bei UI-Änderungen Screenshots an.",
@@ -225,16 +212,12 @@
     "lines_other": "{{count}} Zeilen",
     "workspaces": {
       "title": "Workspaces und Projekte",
-      "footer": "Agenten-Kontext: Jeder Agent, der im Workspace oder Projekt arbeitet, bekommt ihn.",
       "noContext": "Noch kein Agenten-Kontext",
-      "noProjectContext": "Noch kein Projektkontext",
-      "createDetail": "Gib einem Kunden oder Produkt eigene Agenten und eigenen Kontext."
+      "noProjectContext": "Noch kein Projektkontext"
     },
     "agents": {
-      "footer": "Die eigene Rolle und die festen Aufträge jedes Agenten.",
       "none": "Arbeitet nur mit deinen Nachrichten"
-    },
-    "tip": "Nur ein Chat? Schreib es in den Chat. Es gilt nur dort und hat Vorrang vor allem oben."
+    }
   },
   "memory": {
     "schedule": {
@@ -246,21 +229,15 @@
     },
     "sameAsAgent": "Wie der Agent",
     "memory": {
-      "footer": "Jeder Agent speichert, was er lernt, in einem eigenen Repository auf deinem Computer.",
       "inject": "Jeden Chat mit Gedächtnis starten",
-      "injectDetail": "Lädt das Gedächtnis des Agenten in jeden neuen Chat.",
       "reflect": "Nach jedem Lauf lernen",
-      "reflectDetail": "Agenten notieren am Ende eines Laufs, was sie gelernt haben.",
       "autoCommit": "Änderungen mit git speichern"
     },
     "dreaming": {
       "title": "Träumen",
-      "footer": "In Ruhephasen sehen Agenten die letzten Chats durch und räumen Gedächtnis und Workspace auf: Duplikate zusammenführen, Widersprüche klären, Vergangenes datieren, Dateien sortieren — und das Gedächtnis kurz genug halten, um es in jeden Chat zu laden.",
       "when": "Wann",
       "tidy": "Workspace aufräumen",
-      "tidyDetail": "Sortiert Dateien in Ordner und entfernt Überreste.",
-      "offers": "Anbieten, dir Arbeit abzunehmen",
-      "offersDetail": "Dein Hauptagent bietet auf der Startseite Arbeit an, die ihm aufgefallen ist.",
+      "offers": "Angebote auf Start",
       "size": "Gedächtnisgröße",
       "chars_one": "{{formatted}} Zeichen",
       "chars_other": "{{formatted}} Zeichen",
@@ -269,13 +246,6 @@
       "daily": "Täglich",
       "days_one": "{{count}} Tag",
       "days_other": "{{count}} Tage"
-    },
-    "upkeep": {
-      "title": "Pflege",
-      "footer": "Godmode kümmert sich um sich selbst: Reparaturen, Updates seiner Tools und Aufräumen alter Dateien.",
-      "autoFix": "Probleme selbst beheben",
-      "autoUpdate": "Tools aktualisieren",
-      "autoCleanup": "Alte Dateien aufräumen"
     },
     "desktop": {
       "title": "Auf deinem Computer",
@@ -321,15 +291,11 @@
     "rolePlaceholder": "Rolle hinzufügen, z. B. Buchhalter",
     "builtIn": "Eingebaut",
     "active": "Aktiv",
-    "activeOn": "Übernimmt Chats, Aufgaben und Automationen.",
-    "activeOff": "Tut nichts, bis du ihn einschaltest.",
     "instructionsLabel": "Anweisungen für {{name}}",
     "instructionsPlaceholder": "Was er tut, wie, und wann er dich fragt.\nZum Beispiel: Prüfe jeden Morgen meinen Posteingang und entwirf Antworten an Kunden.",
     "about": "Über",
     "descriptionLabel": "Beschreibung von {{name}}",
     "descriptionPlaceholder": "Ein, zwei Zeilen, die deine anderen Agenten sehen, wenn sie Arbeit übergeben.",
-    "descriptionHint": "Sehen die Kollegen",
-    "memoryFooter": "Was der Agent gelernt hat und in jeden Chat lädt. Er aktualisiert das selbst; deine Änderungen lenken, was er sich merkt.",
     "personality": {
       "title": "Persönlichkeit",
       "tone": "Ton",
@@ -338,7 +304,6 @@
     },
     "thinking": {
       "title": "Denken",
-      "footer": "Standard folgt KI & Claude in den Einstellungen.",
       "default": "Standard",
       "special": "{{model}} (Spezialaufgaben)"
     },
@@ -351,7 +316,6 @@
       "custom": "{{from}} bis {{to}} Uhr"
     },
     "heartbeat": {
-      "footer": "Wacht von selbst auf, um seine Aufgaben voranzubringen und seine Checkliste abzuarbeiten.",
       "every": "Alle",
       "weekdays": "Nur werktags",
       "checklist": "Checkliste",
@@ -362,7 +326,6 @@
   "workspaces": {
     "new": "Neuer Workspace",
     "create": "Workspace erstellen",
-    "footer": "Ein Workspace gibt einem Kunden oder Produkt eigene Agenten, Kontext, Repositories und Projekte.",
     "agents_one": "{{count}} Agent",
     "agents_other": "{{count}} Agenten",
     "repositories_one": "{{count}} Repository",
@@ -386,9 +349,7 @@
     "contextLabel": "Agenten-Kontext für {{name}}",
     "contextPlaceholder": "Wer der Kunde ist, was das Produkt macht, Links, Ton, Regeln.\nJeder Agent in diesem Workspace bekommt es bei jedem Lauf.",
     "projects": "Projekte",
-    "projectsFooter": "Projekte ergänzen den Workspace um eigenen Kontext und eigene Repositories.",
     "newProject": "Neues Projekt",
-    "sourcesFooter": "Jeder Agent im Workspace arbeitet damit. Aufgaben bekommen einen eigenen Branch eines Repositorys. Ordner deines Computers fügst du dort hinzu.",
     "behavior": "Verhalten",
     "autoMerge": "Pull Requests sofort mergen",
     "autoMergeDetail": "Eine Aufgabe ist erledigt, wenn ihr Agent liefert, ohne deine Prüfung.",
@@ -404,8 +365,6 @@
     "contextLabel": "Kontext für {{name}}",
     "contextPlaceholder": "Ziele, Umfang, Konventionen und Links für dieses Projekt.\nWird bei jedem Lauf zum Kontext des Workspace hinzugefügt.",
     "agents": "Agenten im Projekt",
-    "agentsFooter": "Agenten arbeiten standardmäßig an diesem Projekt. Chats und Aufgaben können ein anderes wählen.",
-    "sourcesFooter": "Zusätzlich zu denen des Workspace. Ordner deines Computers fügst du dort hinzu.",
     "workspaceProfile": "Das des Workspace",
     "delete": "Projekt löschen"
   },
@@ -710,7 +669,7 @@
       "revoked": "In der Cloud entfernt"
     },
     "unlinkedTitle": "Nicht mit Godmode Cloud verknüpft",
-    "unlinkedBody": "Verknüpf ihn in Godmode auf deinem Computer, um ihn in jedem Browser und ohne Tailscale von diesem Handy aus zu erreichen.",
+    "unlinkedBody": "Verknüpf ihn in Godmode auf deinem Computer.",
     "statusTitle": "Verknüpfung",
     "stateLabel": "Status",
     "server": "Cloud",
@@ -724,14 +683,13 @@
       "browser": "Browserzugriff",
       "phones": "Handys über die Cloud",
       "secrets": "Geheimnisse über die Cloud"
-    },
-    "onComputer": "Verknüpfung und Zugriff änderst du in Godmode auf deinem Computer."
+    }
   },
   "devices": {
     "title": "Geräte",
     "loadFailed": "Deine Geräte konnten nicht geladen werden",
     "aloneTitle": "Nur dieser Computer",
-    "aloneBody": "Nutze Godmode auf mehreren Macs wie auf einem: Füg in Godmode auf deinem Mac unter Einstellungen → Geräte einen Computer hinzu.",
+    "aloneBody": "Füg in Godmode auf deinem Mac unter Einstellungen → Geräte einen Computer hinzu.",
     "thisComputer": "Dieser Computer",
     "primary": "Hauptrechner",
     "standsIn": "Springt ein seit",
@@ -760,15 +718,13 @@
       "title": "Wenn ein Computer weg ist",
       "failover": "Chats laufen woanders weiter",
       "standIn": "Ein anderer Computer springt ein"
-    },
-    "onComputer": "Computer fügst du in Godmode auf deinem Mac hinzu, entfernst und richtest sie dort ein."
+    }
   },
   "connected": {
     "title": "Verbundene Apps",
     "loadFailed": "Verbundene Apps konnten nicht geladen werden",
     "emptyTitle": "Keine verbundenen Apps",
     "emptyBody": "Verbinde Claude Code oder eine andere App in Godmode auf deinem Computer, um dein Team aus dem Terminal aufzubauen.",
-    "footer": "Jede App hat ihren eigenen Schlüssel. Neue Apps verbindest du in Godmode auf deinem Computer.",
     "access": {
       "manage": "Richtet ein und steuert",
       "read": "Nur ansehen"
@@ -815,18 +771,13 @@
     "mode": {
       "title": "Sprachmodus",
       "enable": "Sprachmodus",
-      "enableDetail": "Mit Agenten sprechen und ihre Antworten hören",
       "autoSpeak": "Antworten vorlesen",
       "autoSpeakDetail": "Wenn du die Nachricht diktiert hast",
       "language": "Sprache"
     },
     "stt": {
       "title": "Sprache zu Text",
-      "dictation": "Diktieren",
-      "dictationDetail": "Das Mikrofon im Nachrichtenfeld",
-      "browser": "Kostenlos, mit der Spracherkennung des Systems.",
-      "openai": "Genauer, mit deinem OpenAI-Schlüssel.",
-      "hex": "Privat und offline auf deinem Computer. Hex richtest du dort ein."
+      "dictation": "Diktieren"
     },
     "tts": {
       "title": "Text zu Sprache",
@@ -921,7 +872,6 @@
     "warnings": "Warnungen",
     "errors": "Fehler",
     "lastEntry": "Letzter Eintrag",
-    "masked": "Passwörter, 2FA-Codes, API-Schlüssel und Tokens werden maskiert, bevor etwas geschrieben wird.",
     "issues": "Wiederkehrend",
     "level": {
       "all": "Alle",
@@ -993,7 +943,6 @@
     "title": "Computer",
     "loadFailed": "Computer-Einstellungen konnten nicht geladen werden",
     "screenshot": "Screenshot-Größe",
-    "screenshotDetail": "Lange Kante, die das Modell sieht. Größer kostet mehr Tokens.",
     "vmOnComputer": "Virtuelle Maschinen schaltest du in Godmode auf deinem Computer ein.",
     "helper": {
       "title": "Helfer für die Computersteuerung",
@@ -1001,7 +950,6 @@
       "running": "Läuft",
       "idle": "Installiert, läuft nicht",
       "notInstalled": "Nicht installiert",
-      "footer": "Er startet wieder, sobald ein Agent ihn braucht.",
       "stopFailed": "Cua Driver konnte nicht gestoppt werden"
     }
   },
@@ -1009,7 +957,6 @@
     "title": "Claude-Konten",
     "loadFailed": "Konten konnten nicht geladen werden",
     "listTitle": "Konten",
-    "onComputer": "Konten fügst du in Godmode auf deinem Computer hinzu, meldest sie dort neu an oder entfernst sie.",
     "defaultFailed": "Standard konnte nicht geändert werden",
     "makeDefaultHint": "Macht es zum Standardkonto",
     "thisComputer": "Dieser Computer",
@@ -1025,9 +972,7 @@
     "lockedBody": "In Godmode hinzugefügte Konten speichern ihre Anmeldung im Tresor. Bis er entsperrt ist, nutzen Agenten den Claude-Code-Login dieses Computers.",
     "switchTitle": "Wechseln",
     "autoSwitch": "Automatisch wechseln",
-    "threshold": "Wechseln ab",
-    "thresholdFooter": "Neue Arbeit wechselt zu einem anderen Konto, sobald die Sitzungs- oder Wochennutzung des Standardkontos diesen Wert erreicht, und Arbeit, die an ein Limit stößt, geht dort weiter, wo noch Luft ist.",
-    "autoSwitchOff": "Arbeit bleibt beim Standardkonto."
+    "threshold": "Wechseln ab"
   },
   "cleanup": {
     "title": "Aufräumen",
@@ -1088,14 +1033,12 @@
     },
     "auto": {
       "title": "Automatisches Aufräumen",
-      "label": "Automatisch aufräumen",
-      "footer": "Einmal am Tag, während kein Agent arbeitet, entfernt Godmode, was sich gefahrlos entfernen lässt."
+      "label": "Automatisch aufräumen"
     }
   },
   "notifications": {
     "title": "Mitteilungen",
     "switch": "Mitteilungen",
-    "footer": "Fragen, Freigaben, Aufgaben für dich, Antworten und Probleme, wie auf deinem Computer.",
     "denied": "Mitteilungen für Godmode sind in den Einstellungen dieses Handys aus.",
     "openSettings": "Einstellungen öffnen",
     "failed": "Mitteilungen konnten nicht geändert werden",

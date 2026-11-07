@@ -53,7 +53,7 @@ export async function confirmWithBiometrics(reason: string): Promise<boolean> {
     if (result.error !== "not_enrolled" && result.error !== "passcode_not_set") return false;
   }
   return new Promise((resolve) => {
-    Alert.alert(reason, t("components:fullAccess.noLock"), [
+    Alert.alert(reason, t(process.env.EXPO_OS === "android" ? "components:fullAccess.noLockAndroid" : "components:fullAccess.noLock"), [
       { text: t("common:actions.cancel"), style: "cancel", onPress: () => resolve(false) },
       { text: t("common:actions.continue"), onPress: () => resolve(true) },
     ], { cancelable: true, onDismiss: () => resolve(false) });

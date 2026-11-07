@@ -14,7 +14,7 @@ import { bus } from "../events/bus";
 import { badRequest, conflict, newId, notFound, now, parseJson } from "../util";
 import { redact } from "../vault/vault";
 import { activeRunForConversation, cancelRun, listActiveRuns, startRun, waitForRun } from "../runner/runner";
-import { addMessage, emitConversationUpdated, handoffAllowed, messageTarget, promptWithFiles, saveAttachments, sendMessage, setConversationState } from "./conversations";
+import { addMessage, emitConversationUpdated, handoffAllowed, markChatFillOnly, messageTarget, promptWithFiles, saveAttachments, sendMessage, setConversationState } from "./conversations";
 import { continueConversation, pauseOf } from "./pauses";
 
 interface QueueRow {
@@ -131,6 +131,7 @@ export async function submitMessage(conversationId: string, input: SendMessageIn
   const paused = pauseOf(conversationId);
   if (!busy && !paused && !hasQueued(conversationId)) return sendMessage(conversationId, { ...input, trigger: "chat" });
   const queued = enqueue(conversationId, input);
+  if (input.fillOnly) markChatFillOnly(conversationId);
   // Also with runs waiting behind the pause: the paused run is the one that takes the queue.
   if (paused) {
     // Writing to a chat the human paused continues it with the message. While Claude's limit is reached there is
@@ -155,13 +156,15 @@ export async function submitMessage(conversationId: string, input: SendMessageIn
   return started && message ? { message, run: started.run } : { queued };
 }
 
-export function editQueued(conversationId: string, id: string, content: string): QueuedMessage {
+/** `fillOnly`: a phone without full access edits it; it then only reaches a run without raw secrets. */
+export function editQueued(conversationId: string, id: string, content: string, opts: { fillOnly?: boolean } = {}): QueuedMessage {
   const row = requireRow(conversationId, id);
   const text = content.trim();
   if (!text && !parseJson<Attachment[]>(row.attachments, []).length) throw badRequest("Message is empty");
   // The stored text has the secret masked, and that is all an editor ever sees.
   if ((typed.get(id) ?? row.content) !== row.content) throw badRequest("This message contains a saved secret, so it can't be edited. Remove it and write it again.");
-  sql("UPDATE queued_messages SET content = ? WHERE id = ?", redact(text), id);
+  sql("UPDATE queued_messages SET content = ?, fill_only = MAX(fill_only, ?) WHERE id = ?", redact(text), int(!!opts.fillOnly)!, id);
+  if (opts.fillOnly) markChatFillOnly(conversationId);
   typed.set(id, text);
   emitQueue(conversationId);
   return toQueued({ ...row, content: redact(text) });

@@ -10,15 +10,19 @@ import {
   cardDigits,
   cardExpired,
   luhnValid,
+  type Agent,
   type CardBilling,
   type PaymentCard,
   type PaymentCardInput,
 } from "@godmode/shared";
-import { Group, PickerRow, SegmentRow, SwitchRow } from "@/components/form";
+import { CharacterAvatar } from "@/components/character";
+import { Group, PickerRow, Segmented, SegmentRow, SwitchRow } from "@/components/form";
+import { Icon } from "@/components/icon";
 import { NeedsFullAccess, useFullAccess } from "@/components/full-access";
 import { FieldCard, InputRow, SheetHeader } from "@/components/secret-parts";
 import { LoadingState, Row, SectionTitle, T, tap } from "@/components/ui";
 import { api, errorText } from "@/lib/api";
+import { useAgents } from "@/lib/hooks";
 import { qk, queryClient } from "@/lib/query";
 import { isCancelled, reveal, withConfirmedGrant } from "@/lib/secrets";
 import { fullVaultApi, useCards, vk } from "@/lib/vault";
@@ -101,6 +105,9 @@ function CardForm({ card }: { card: PaymentCard | null }) {
   const [workspaceId, setWorkspaceId] = useState(card?.workspaceId ?? "");
   const [sites, setSites] = useState(card?.allowedSites.join(", ") ?? "");
   const [frozen, setFrozen] = useState(card?.frozen ?? false);
+  const [agentsMode, setAgentsMode] = useState<"all" | "some">(card?.agentIds ? "some" : "all");
+  const [agentIds, setAgentIds] = useState<string[]>(card?.agentIds ?? []);
+  const agents = useAgents();
 
   const digits = cardDigits(number);
   const brand = replacing ? cardBrand(digits) : card!.brand;
@@ -115,11 +122,24 @@ function CardForm({ card }: { card: PaymentCard | null }) {
     expiry: expiry && (!parsedExpiry ? t("cardEdit.expiryInvalid") : cardExpired({ expMonth: parsedExpiry.month, expYear: parsedExpiry.year }) ? t("cardEdit.expired") : null),
     cvc: cvc && !/^\d{3,4}$/.test(cvc) ? t("cardEdit.cvcInvalid") : null,
     amount: Number.isNaN(limitPer) || Number.isNaN(limitMon) || (approval === "above" && (askMinor === null || Number.isNaN(askMinor))) ? t("cardEdit.amountInvalid") : null,
+    agents: agentsMode === "some" && agentIds.length === 0 ? t("cardAgents.pickOne") : null,
   };
   const complete = (!replacing || luhnValid(digits)) && !!parsedExpiry;
   const ready = complete && !Object.values(errors).some(Boolean);
 
   const currencyOptions = useMemo(() => CARD_CURRENCIES.map((x) => ({ value: x as string, label: x })), []);
+  // Agents that can see a card in this workspace, plus any picked earlier, like the desktop.
+  const agentChoices = useMemo(() => {
+    const inScope = (a: Agent) => !workspaceId || a.workspaceId === workspaceId;
+    const shown: { id: string; agent?: Agent; seesCard: boolean }[] = (agents.data ?? [])
+      .filter((a) => inScope(a) || agentIds.includes(a.id))
+      .map((a) => ({ id: a.id, agent: a, seesCard: inScope(a) }));
+    // Deleted ones only once the list is in: before that every picked agent would look deleted.
+    if (agents.isSuccess) for (const id of agentIds) if (!agents.byId.has(id)) shown.push({ id, seesCard: false });
+    return shown;
+  }, [agents.data, agents.byId, agents.isSuccess, workspaceId, agentIds]);
+  const toggleAgent = (id: string) => setAgentIds((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]));
+
   const workspaceOptions = useMemo(
     () => [{ value: "", label: t("loginEdit.allWorkspaces") }, ...(workspaces.data ?? []).map((w) => ({ value: w.id, label: w.name }))],
     [workspaces.data, t],
@@ -147,6 +167,7 @@ function CardForm({ card }: { card: PaymentCard | null }) {
     const askValue = approval === "always" ? 0 : approval === "never" ? null : askMinor;
     const finalName = name.trim() || (last4 ? `${CARD_BRAND_LABELS[brand]} ${last4}` : card?.name ?? "");
     const allowed = sitesOf(sites);
+    const nextAgents = agentsMode === "all" ? null : agentIds;
     if (!card) {
       return {
         workspaceId: workspaceId || null,
@@ -159,7 +180,7 @@ function CardForm({ card }: { card: PaymentCard | null }) {
         limitPerPurchase: limitPer,
         limitMonthly: limitMon,
         askAbove: askValue,
-        agentIds: null,
+        agentIds: nextAgents,
         allowedSites: allowed,
         frozen,
         ...(cvc ? { cvc } : {}),
@@ -189,6 +210,7 @@ function CardForm({ card }: { card: PaymentCard | null }) {
     if (limitPer !== card.limitPerPurchase) patch.limitPerPurchase = limitPer;
     if (limitMon !== card.limitMonthly) patch.limitMonthly = limitMon;
     if (askValue !== card.askAbove) patch.askAbove = askValue;
+    if (nextAgents === null ? card.agentIds !== null : card.agentIds === null || !sameSet(nextAgents, card.agentIds)) patch.agentIds = nextAgents;
     if (!sameSet(allowed, card.allowedSites)) patch.allowedSites = allowed;
     if (frozen !== card.frozen) patch.frozen = frozen;
     return patch;
@@ -214,7 +236,7 @@ function CardForm({ card }: { card: PaymentCard | null }) {
     },
   });
 
-  const firstError = Object.values(errors).find(Boolean);
+  const firstError = [errors.number, errors.expiry, errors.cvc, errors.amount].find(Boolean);
   const setBill = (k: keyof CardBilling) => (v: string) => setBilling((b) => ({ ...b, [k]: v }));
 
   return (
@@ -299,7 +321,70 @@ function CardForm({ card }: { card: PaymentCard | null }) {
         <InputRow label={t("cards.sites")} value={sites} onChangeText={setSites} placeholder={t("cards.anySite")} keyboardType="url" />
         <SwitchRow title={t("card.freeze")} value={frozen} onChange={setFrozen} />
       </Group>
+
+      <View style={{ gap: space.sm }}>
+        <Group title={t("cards.agents")}>
+          <View style={styles.segment}>
+            <Segmented
+              options={[
+                { value: "all", label: t("cardAgents.all") },
+                { value: "some", label: t("cardAgents.some") },
+              ]}
+              value={agentsMode}
+              onChange={setAgentsMode}
+            />
+          </View>
+          {agentsMode === "some"
+            ? agentChoices.map((choice) => (
+                <AgentToggle
+                  key={choice.id}
+                  agent={choice.agent}
+                  detail={choice.seesCard ? choice.agent?.role || undefined : choice.agent ? t("cardAgents.cantSee") : undefined}
+                  selected={agentIds.includes(choice.id)}
+                  onPress={() => toggleAgent(choice.id)}
+                />
+              ))
+            : null}
+        </Group>
+        {errors.agents ? (
+          <T variant="footnote" muted style={styles.note}>
+            {errors.agents}
+          </T>
+        ) : null}
+      </View>
     </ScrollView>
+  );
+}
+
+/** One agent in the card's list: picked ones carry a check. */
+function AgentToggle({ agent, detail, selected, onPress }: { agent: Agent | undefined; detail?: string; selected: boolean; onPress: () => void }) {
+  const c = useColors();
+  const { t } = useTranslation("vault");
+  const name = agent?.name ?? t("cardAgents.deleted");
+  return (
+    <Pressable
+      accessibilityRole="checkbox"
+      accessibilityState={{ checked: selected }}
+      accessibilityLabel={name}
+      onPress={() => {
+        tap();
+        onPress();
+      }}
+      style={({ pressed }) => [styles.agentRow, pressed && { backgroundColor: c.sunken }]}
+    >
+      <CharacterAvatar agent={agent} size={30} />
+      <View style={{ flex: 1, minWidth: 0, gap: 1 }}>
+        <T variant="callout" numberOfLines={1} style={{ fontWeight: "500" }} color={agent ? c.text : c.textMuted}>
+          {name}
+        </T>
+        {detail ? (
+          <T variant="footnote" muted numberOfLines={1}>
+            {detail}
+          </T>
+        ) : null}
+      </View>
+      <Icon name={selected ? "checkFill" : "circle"} size={22} color={selected ? c.brand : c.textFaint} />
+    </Pressable>
   );
 }
 
@@ -349,5 +434,16 @@ const styles = StyleSheet.create({
   label: {
     width: 112,
     fontWeight: "500",
+  },
+  segment: {
+    paddingHorizontal: space.lg,
+    paddingVertical: space.md,
+  },
+  agentRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+    paddingHorizontal: space.lg,
+    paddingVertical: 10,
   },
 });

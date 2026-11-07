@@ -8,6 +8,7 @@ import type { IconName } from "@/components/icon";
 import { confirmDelete, RowMenu, type MenuItem } from "@/components/secret-parts";
 import { EmptyState, ErrorState, SkeletonRows, T, tap } from "@/components/ui";
 import { errorText } from "@/lib/api";
+import { toolIcon } from "@/lib/api-tool-presets";
 import { whenText } from "@/lib/format";
 import { hostOfUrl } from "@/lib/integrations";
 import { queryClient } from "@/lib/query";
@@ -137,7 +138,7 @@ function ToolRow({ tool }: { tool: ApiTool }) {
   const host = hostOfUrl(tool.baseUrl);
   return (
     <KeyRow
-      icon="link"
+      icon={toolIcon(tool.preset)}
       title={tool.name}
       detail={[host || null, tool.enabled ? null : t("apiKeys.off"), tool.hasKey ? null : t("apiKeys.noKey")].filter(Boolean).join(" · ") || t("apiKeys.set")}
       set={tool.hasKey}
@@ -145,6 +146,7 @@ function ToolRow({ tool }: { tool: ApiTool }) {
       label={t("apiKeys.actionsFor", { name: tool.name })}
       menu={[
         { label: tool.hasKey ? t("apiKeys.replace") : t("apiKeys.setKey"), icon: "pencil", onPress: edit },
+        { label: t("apiKeys.setUp"), icon: "slider", onPress: () => router.push({ pathname: "/settings/api-tool", params: { id: tool.id } }) },
         ...(tool.testPath && tool.hasKey ? [{ label: t("apiKeys.test"), icon: "checkCircle" as const, onPress: () => void test() }] : []),
         { label: tool.enabled ? t("apiKeys.turnOff") : t("apiKeys.turnOn"), icon: "power", onPress: () => void toggle() },
         { label: t("common:actions.delete"), icon: "trash", destructive: true, onPress: remove },

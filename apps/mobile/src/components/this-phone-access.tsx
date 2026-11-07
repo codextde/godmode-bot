@@ -1,9 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Alert, Pressable, StyleSheet } from "react-native";
+import { Alert, StyleSheet, Switch } from "react-native";
 import { useTranslation } from "react-i18next";
 import { useFullAccess } from "@/components/full-access";
 import { Icon } from "@/components/icon";
-import { Hairline, Row, T, tap } from "@/components/ui";
+import { Row, T, tap } from "@/components/ui";
 import { api, errorText } from "@/lib/api";
 import { qk } from "@/lib/query";
 import { space, useColors } from "@/lib/theme";
@@ -16,7 +16,7 @@ export function useRevealLocked(agent: { permissions: { secretAccess: string } }
 
 /**
  * Settings: whether the computer gave this phone full access, and switching it off from here (only the computer turns
- * it on). One row of a Group, two while it is on.
+ * it on). One row of a Group.
  */
 export function ThisPhoneAccess() {
   const c = useColors();
@@ -41,37 +41,30 @@ export function ThisPhoneAccess() {
     ]);
 
   return (
-    <>
-      <Row style={styles.row}>
-        <Icon name={full ? "lockOpen" : "lock"} size={18} color={c.textMuted} />
-        <T variant="subhead" style={{ flex: 1 }}>
-          {t("overview.fullAccess.title")}
-        </T>
-        {full !== undefined ? (
-          <T variant="subhead" muted>
-            {full ? t("common:status.on") : t("common:status.off")}
-          </T>
-        ) : null}
-      </Row>
+    <Row style={styles.row}>
+      <Icon name={full ? "lockOpen" : "lock"} size={18} color={c.textMuted} />
+      <T variant="subhead" style={{ flex: 1 }}>
+        {t("overview.fullAccess.title")}
+      </T>
       {full ? (
-        <>
-          <Hairline inset={space.lg} />
-          <Pressable
-            accessibilityRole="button"
-            disabled={off.isPending}
-            onPress={() => {
-              tap();
-              confirm();
-            }}
-            style={({ pressed }) => [styles.row, pressed && { backgroundColor: c.sunken }]}
-          >
-            <T variant="subhead" style={{ color: c.danger, opacity: off.isPending ? 0.5 : 1 }}>
-              {t("overview.fullAccess.turnOff")}
-            </T>
-          </Pressable>
-        </>
+        <Switch
+          accessibilityLabel={t("overview.fullAccess.title")}
+          value={!off.isPending}
+          disabled={off.isPending}
+          onValueChange={(next) => {
+            if (next) return;
+            tap();
+            confirm();
+          }}
+          trackColor={{ true: c.brand, false: c.sunken }}
+          style={{ alignSelf: "center" }}
+        />
+      ) : full === false ? (
+        <T variant="subhead" muted>
+          {t("common:status.off")}
+        </T>
       ) : null}
-    </>
+    </Row>
   );
 }
 
@@ -80,7 +73,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: space.md,
+    minHeight: 48,
     paddingHorizontal: space.lg,
-    paddingVertical: 14,
+    paddingVertical: 8,
   },
 });

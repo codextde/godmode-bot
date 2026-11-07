@@ -9,17 +9,12 @@ import { FieldCard, InputRow, SheetHeader } from "@/components/secret-parts";
 import { T } from "@/components/ui";
 import { errorText } from "@/lib/api";
 import { queryClient } from "@/lib/query";
+import { freeKeyName, keyNameProblem } from "@/lib/ssh-keys";
 import { fullVaultApi, useSshKeys, vk } from "@/lib/vault";
 import { space, useColors } from "@/lib/theme";
 
 type Algorithm = "ed25519" | "rsa" | "ecdsa";
-const NAME = /^[A-Za-z0-9_@+][A-Za-z0-9._@+-]*$/;
 const BITS: Record<Exclude<Algorithm, "ed25519">, string[]> = { rsa: ["4096", "3072", "2048"], ecdsa: ["256", "384", "521"] };
-
-function freeName(base: string, taken: string[]): string {
-  if (!taken.includes(base)) return base;
-  for (let n = 2; ; n++) if (!taken.includes(`${base}_${n}`)) return `${base}_${n}`;
-}
 
 /** A new key pair in ~/.ssh of the computer, like the desktop's "New key". Only its public half ever shows. */
 export default function SshKeyNew() {
@@ -34,10 +29,11 @@ export default function SshKeyNew() {
   const [touched, setTouched] = useState(false);
   const [comment, setComment] = useState("");
   const [passphrase, setPassphrase] = useState("");
-  const shownName = touched ? name : freeName(`id_${algorithm}`, taken);
+  const shownName = touched ? name : freeKeyName(`id_${algorithm}`, taken);
 
   const clean = shownName.trim();
-  const nameError = !clean ? null : taken.includes(clean) ? t("sshKeys.nameTaken") : !NAME.test(clean) || /\.pub$/i.test(clean) ? t("sshKeys.nameInvalid") : null;
+  const nameProblem = keyNameProblem(clean, taken);
+  const nameError = nameProblem ? t(nameProblem) : null;
 
   const make = useMutation({
     mutationFn: () => fullVaultApi.generateSshKey({ name: clean, algorithm, bits: bits ? Number(bits) : undefined, comment: comment.trim() || undefined, passphrase: passphrase || undefined }),

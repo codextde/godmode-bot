@@ -1,13 +1,15 @@
 import { router, Stack } from "expo-router";
 import { ScrollView, StyleSheet } from "react-native";
 import { useTranslation } from "react-i18next";
-import type { Settings } from "@godmode/shared";
+import { findModel, type Settings } from "@godmode/shared";
 import { useFullAccess } from "@/components/admin";
 import { CloseButton } from "@/components/close-button";
-import { Group, LinkRow, SwitchRow } from "@/components/form";
+import { Group, LinkRow, PickerRow, SwitchRow } from "@/components/form";
 import type { IconName } from "@/components/icon";
 import { QueryState } from "@/components/settings-state";
+import { patchAnySettings } from "@/lib/admin";
 import type { SettingsPatch } from "@/lib/api";
+import { useModelCatalog } from "@/lib/composer";
 import { patchSettings, useSettings } from "@/lib/setup";
 import { space } from "@/lib/theme";
 
@@ -32,9 +34,10 @@ const enabledOf = (s: Settings, id: Feature): boolean | undefined => (s as unkno
 
 /** Settings → Features: every optional feature off from here; only the harmless ones back on, unless this phone has full access. */
 export default function Features() {
-  const { t } = useTranslation(["settings", "common"]);
+  const { t } = useTranslation(["settings", "common", "admin"]);
   const settings = useSettings();
   const { fullAccess } = useFullAccess();
+  const models = (useModelCatalog().data?.models ?? []).filter((m) => !m.provider);
 
   return (
     <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content}>
@@ -58,9 +61,21 @@ export default function Features() {
                   onChange={(enabled) => void patchSettings({ [id]: { enabled } } as SettingsPatch)}
                 />
               );
-              return id === "phone" && on
-                ? [row, <LinkRow key="persona" icon="personCircle" title={t("features.phone.persona")} onPress={() => router.push("/settings/calls")} />]
-                : [row];
+              if (id === "phone" && on) return [row, <LinkRow key="persona" icon="personCircle" title={t("features.phone.persona")} onPress={() => router.push("/settings/calls")} />];
+              if (id === "artifacts" && on && fullAccess) {
+                const current = s.artifacts.builderModel ?? "";
+                const known = findModel(models, current)?.id ?? current;
+                const options = [
+                  { value: "", label: t("admin:featureExtra.builderOff") },
+                  ...(known && !models.some((m) => m.id === known) ? [{ value: known, label: known }] : []),
+                  ...models.map((m) => ({ value: m.id, label: m.label, detail: m.description })),
+                ];
+                return [
+                  row,
+                  <PickerRow key="builder" icon="bolt" title={t("admin:featureExtra.builder")} value={known} options={options} onChange={(builderModel) => void patchAnySettings({ artifacts: { builderModel } })} />,
+                ];
+              }
+              return [row];
             })}
           </Group>
         )}

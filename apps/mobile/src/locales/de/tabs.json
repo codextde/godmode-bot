@@ -19,9 +19,6 @@
       "connecting": "Verbinde mit {{computer}}…",
       "outOfReach": "{{computer}} ist nicht erreichbar"
     },
-    "datePattern": "EEEE, d. MMMM",
-    "agentsReady_one": "1 Agent bereit",
-    "agentsReady_other": "{{count}} Agenten bereit",
     "askAgent": "Frag {{name}} etwas oder übergib eine Aufgabe…",
     "ask": "Frag etwas oder übergib eine Aufgabe…",
     "offline": {
@@ -44,10 +41,8 @@
     "queued_other": "{{count}} in der Warteschlange",
     "liveScreens": "Live-Bildschirme",
     "offers": {
-      "titleOwner": "{{name}} kann dir das abnehmen",
-      "title": "Arbeit, die dir dein Agent abnehmen kann",
-      "startsWith": "Beginnt mit:",
-      "offered": "Angeboten {{time}}",
+      "titleOwner": "{{name}} bietet an",
+      "title": "Angebote",
       "decline": "Nein danke",
       "accept": "Mach das",
       "startError": "Konnte nicht gestartet werden",
@@ -84,7 +79,7 @@
     "archivedOngoing_one": "1 archivierter Chat hat noch Arbeit vor sich",
     "archivedOngoing_other": "{{count}} archivierte Chats haben noch Arbeit vor sich",
     "sourceLabel": "Wer die Chats gestartet hat",
-    "filterLabel": "Letzte Chats filtern",
+    "status": "Status",
     "source": {
       "mine": { "label": "Meine", "hint": "Chats, die du gestartet hast" },
       "automations": { "label": "Automationen", "hint": "Von einer Automation oder der API gestartet" },
@@ -92,10 +87,10 @@
       "all": { "label": "Alle", "hint": "Alle Chats" }
     },
     "filter": {
-      "all": { "label": "Alle", "hint": "Alle letzten Chats" },
-      "running": { "label": "Aktiv", "hint": "Arbeiten, warten in der Schlange oder auf dich" },
-      "scheduled": { "label": "Geplant", "hint": "Machen später von selbst weiter" },
-      "done": { "label": "Fertig", "hint": "Abgeschlossene Chats" }
+      "all": { "label": "Alle" },
+      "running": { "label": "Aktiv" },
+      "scheduled": { "label": "Geplant" },
+      "done": { "label": "Fertig" }
     },
     "empty": {
       "all": { "title": "Noch keine Chats", "body": "Neue Chats landen in dieser Liste, auch auf deinem Computer." },

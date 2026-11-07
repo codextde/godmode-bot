@@ -126,10 +126,7 @@ export default function ClaudeAccounts() {
           return (
             <>
               {state.locked && extra > 0 ? <Locked /> : null}
-              <Group
-                title={t("accounts.listTitle")}
-                footer={admin ? (state.locked ? t("programs:accounts.vaultLocked") : t("programs:accounts.footer")) : t("accounts.onComputer")}
-              >
+              <Group title={t("accounts.listTitle")} footer={admin && state.locked ? t("programs:accounts.vaultLocked") : undefined}>
                 {state.accounts.map((a) => (
                   <AccountRow
                     key={a.id}
@@ -163,7 +160,7 @@ export default function ClaudeAccounts() {
                 ) : null}
               </Group>
               {r ? (
-                <Group title={t("accounts.switchTitle")} footer={autoSwitch ? t("accounts.thresholdFooter") : t("accounts.autoSwitchOff")}>
+                <Group title={t("accounts.switchTitle")}>
                   <SwitchRow icon="move" title={t("accounts.autoSwitch")} value={autoSwitch} onChange={(accountAutoSwitch) => void patchSettings({ runner: { accountAutoSwitch } })} />
                   {autoSwitch ? (
                     <StepperRow

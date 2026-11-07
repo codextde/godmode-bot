@@ -8,5 +8,5 @@
     }
   },
   "include": ["**/*.ts", "**/*.tsx", ".expo/types/**/*.ts", "expo-env.d.ts"],
-  "exclude": ["node_modules", "babel.config.js", "metro.config.js", "android", "ios", "**/*.test.ts"]
+  "exclude": ["node_modules", "babel.config.js", "metro.config.js", "app.config.ts", "android", "ios", "**/*.test.ts"]
 }

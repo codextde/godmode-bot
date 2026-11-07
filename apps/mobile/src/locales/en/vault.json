@@ -10,7 +10,6 @@
     "notSetUp": "Vault not set up",
     "notSetUpDetail": "Set it up in Godmode on your computer.",
     "unlocked": "Vault unlocked",
-    "unlockedDetail": "Agents can sign in with what's saved.",
     "locked": "Vault locked",
     "lockedDetail": "Unlock it in Godmode on your computer.",
     "lockNow": "Lock now",
@@ -26,7 +25,6 @@
     "notSaved": "Not saved",
     "sshKeys": "SSH keys",
     "unlock": "Unlock",
-    "lockedDetailFull": "Agents can't sign in or pay until it's unlocked.",
     "apiKeys": "API keys"
   },
   "logins": {
@@ -134,6 +132,109 @@
       "cancelled": "Cancelled"
     }
   },
+  "generator": {
+    "generate": "Generate password",
+    "regenerate": "New password",
+    "length": "Length",
+    "numbers": "Numbers",
+    "symbols": "Symbols",
+    "use": "Use this password"
+  },
+  "strength": {
+    "label": "Password strength",
+    "tooWeak": "Too weak",
+    "weak": "Weak",
+    "fair": "Fair",
+    "strong": "Strong",
+    "excellent": "Excellent"
+  },
+  "passwordImport": {
+    "title": "Import passwords",
+    "saveTo": "Save to",
+    "chooseTitle": "Choose your password export",
+    "choose": "Choose file",
+    "reading": "Reading…",
+    "wrongFile": "Choose the .csv, .zip or .1pux file your password manager exported.",
+    "tooBig": "That file is bigger than an export can be.",
+    "dashBackup": "That's Dashlane's encrypted backup. In Dashlane, export to CSV instead.",
+    "noEntries": "{{file}} has no entries.",
+    "noLogins": "No website logins in {{file}}.",
+    "vaultLocked": "The vault is locked",
+    "readFailed": "Couldn't read the export",
+    "failed": "Couldn't import the logins",
+    "summary": "{{source}} · {{entries}} · {{logins}}",
+    "entries_one": "{{count, number}} entry",
+    "entries_other": "{{count, number}} entries",
+    "logins_one": "{{count, number}} login",
+    "logins_other": "{{count, number}} logins",
+    "changeFile": "Change",
+    "filters": {
+      "all": "All",
+      "new": "New",
+      "update": "Updates",
+      "unchanged": "In vault",
+      "conflict": "Pick one"
+    },
+    "searchPlaceholder": "Search",
+    "selectAll": "Select all",
+    "selectNone": "Select none",
+    "conflictCallout": "Some logins have more than one password. Pick the current one.",
+    "heldBack_one": "{{count, number}} saved login has a different password here. It stays as it is unless you select it.",
+    "heldBack_other": "{{count, number}} saved logins have a different password here. They stay as they are unless you select them.",
+    "importCount_one": "Import {{count, number}}",
+    "importCount_other": "Import {{count, number}}",
+    "nothingSelected": "Import",
+    "nothingMatches": "Nothing matches",
+    "importRow": "Import {{name}}",
+    "merged": "{{n}} merged",
+    "pillUpdate": "Update",
+    "leftOut_one": "{{count, number}} entry left out",
+    "leftOut_other": "{{count, number}} entries left out",
+    "untitled": "Untitled",
+    "plaintext": "{{file}} holds every password in plain text. Delete it now.",
+    "result": {
+      "imported_one": "Imported {{count, number}} login",
+      "imported_other": "Imported {{count, number}} logins",
+      "updated_one": "Updated {{count, number}} login",
+      "updated_other": "Updated {{count, number}} logins",
+      "nothing": "Everything was already in your vault",
+      "updatedDetail_one": "{{count, number}} updated",
+      "updatedDetail_other": "{{count, number}} updated",
+      "totpLinked_one": "{{count, number}} 2FA code linked",
+      "totpLinked_other": "{{count, number}} 2FA codes linked"
+    }
+  },
+  "cardAgents": {
+    "all": "All agents",
+    "some": "Only these",
+    "pickOne": "Pick at least one agent.",
+    "cantSee": "Can't see this card",
+    "deleted": "Deleted agent"
+  },
+  "sshImport": {
+    "title": "Import key",
+    "import": "Import",
+    "paste": "Paste a private or public key",
+    "chooseFile": "Choose file",
+    "fileTooBig": "That file is too big to be a key.",
+    "failed": "Couldn't import the key"
+  },
+  "sshEdit": {
+    "title": "Edit key",
+    "gone": "This key is gone",
+    "saved": "Saved",
+    "configUpdated": "~/.ssh/config now points {{hosts}} to the new name. The old config is kept next to it.",
+    "publicKey": "Public key",
+    "fingerprint": "Fingerprint",
+    "copyFingerprint": "Copy fingerprint",
+    "usedBy": "Used by",
+    "allHosts": "All hosts",
+    "addToServer": "Add to server",
+    "addTo": "Add to {{server}}",
+    "addedToServer": "{{name}} added to {{server}}",
+    "alreadyOnServer": "{{name}} already is on {{server}}",
+    "addToServerFailed": "Couldn't add the key"
+  },
   "secret": {
     "show": "Show",
     "hide": "Hide",
@@ -201,6 +302,9 @@
     "allowCamera": "Allow camera",
     "adding": "Adding…",
     "nothingImported": "This QR code holds no 2FA code.",
+    "fromPhotos": "Choose from Photos",
+    "noQr": "No QR code found in the photo",
+    "notOtp": "That QR code isn't a 2FA code",
     "addFailed": "Couldn't add the 2FA code",
     "updateFailed": "Couldn't save the changes",
     "delete": "Delete 2FA code",
@@ -282,7 +386,8 @@
     "changeFailed": "Couldn't change the API",
     "deleteToolTitle": "Delete {{name}}?",
     "deleteToolBody": "Agents can't call this API anymore. Its key is deleted too.",
-    "deleteToolFailed": "Couldn't delete the API"
+    "deleteToolFailed": "Couldn't delete the API",
+    "setUp": "Set up"
   },
   "keyEdit": {
     "key": "Key",

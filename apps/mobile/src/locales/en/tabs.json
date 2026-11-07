@@ -19,9 +19,6 @@
       "connecting": "Connecting to {{computer}}…",
       "outOfReach": "{{computer}} is out of reach"
     },
-    "datePattern": "EEEE, MMMM d",
-    "agentsReady_one": "1 agent ready",
-    "agentsReady_other": "{{count}} agents ready",
     "askAgent": "Ask {{name}} anything, or hand over a task…",
     "ask": "Ask anything, or hand over a task…",
     "offline": {
@@ -44,10 +41,8 @@
     "queued_other": "{{count}} queued",
     "liveScreens": "Live screens",
     "offers": {
-      "titleOwner": "{{name}} can take these off your plate",
-      "title": "Work your agent can take off your plate",
-      "startsWith": "Starts with:",
-      "offered": "Offered {{time}}",
+      "titleOwner": "{{name}} offers",
+      "title": "Offers",
       "decline": "No thanks",
       "accept": "Do it",
       "startError": "Couldn't start it",
@@ -84,7 +79,7 @@
     "archivedOngoing_one": "1 archived chat still has work ahead",
     "archivedOngoing_other": "{{count}} archived chats still have work ahead",
     "sourceLabel": "Who started the chats",
-    "filterLabel": "Filter recent chats",
+    "status": "Status",
     "source": {
       "mine": { "label": "Mine", "hint": "Chats you started" },
       "automations": { "label": "Automations", "hint": "Started by an automation or the API" },
@@ -92,10 +87,10 @@
       "all": { "label": "All", "hint": "Every chat" }
     },
     "filter": {
-      "all": { "label": "All", "hint": "Every recent chat" },
-      "running": { "label": "Running", "hint": "Working, queued or waiting for you" },
-      "scheduled": { "label": "Scheduled", "hint": "Continue on their own later" },
-      "done": { "label": "Done", "hint": "Finished chats" }
+      "all": { "label": "All" },
+      "running": { "label": "Running" },
+      "scheduled": { "label": "Scheduled" },
+      "done": { "label": "Done" }
     },
     "empty": {
       "all": { "title": "No chats yet", "body": "New chats you start land in this list, on your computer too." },

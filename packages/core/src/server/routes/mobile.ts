@@ -82,7 +82,7 @@ export function registerMobileRoutes(app: Hono) {
     return c.json({ ok: true as const });
   });
 
-  /** Renames a phone, or switches its full access: on only from this computer's own app or dashboard. */
+  /** Renames a phone, or switches its full access: on only from the app or dashboard on this computer itself. */
   app.patch("/api/mobile/devices/:id", async (c) => {
     onlyComputer(c);
     const { name, fullAccess } = await body(

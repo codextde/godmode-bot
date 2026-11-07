@@ -91,7 +91,7 @@ export default function ProjectScreen() {
       </View>
 
       {team.length ? (
-        <Group title={t("project.agents")} footer={t("project.agentsFooter")}>
+        <Group title={t("project.agents")}>
           {team.map((a) => (
             <LinkRow
               key={a.id}
@@ -106,7 +106,6 @@ export default function ProjectScreen() {
 
       <Sources
         sources={p.sources}
-        footer={t("project.sourcesFooter")}
         onSave={(sources) => patchProject(p.id, { sources })}
         onSync={(sourceId) => api.projects.sync(p.id, sourceId)}
       />
