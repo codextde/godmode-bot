@@ -102,7 +102,8 @@
     "loadFailed": "Couldn't load the history",
     "emptyTitle": "No history yet",
     "emptyBody": "Every run, memory update and settings change of {{name}} shows up here.",
-    "noMessage": "(no message)"
+    "noMessage": "(no message)",
+    "copyHash": "Copy commit hash"
   },
   "notes": {
     "title": "Notes",
@@ -176,7 +177,7 @@
   "look": {
     "title": "Look",
     "surprise": "Surprise me",
-    "color": "Colour",
+    "color": "Color",
     "emoji": "Emoji",
     "discardTitle": "Discard the new look?",
     "keepEditing": "Keep editing",
@@ -251,7 +252,9 @@
         "bowtie": "Bow tie",
         "scarf": "Scarf"
       }
-    }
+    },
+    "customEmoji": "Custom emoji",
+    "customEmojiPlaceholder": "Or type any emoji…"
   },
   "describe": {
     "title": "Describe it",
@@ -269,5 +272,23 @@
     "stop": "Stop dreaming",
     "stopping": "Stopping…",
     "failed": "Couldn't stop the dream"
+  },
+  "stats": {
+    "runsLast200": "Runs (last 200)",
+    "totalRuns": "Total runs",
+    "successRate": "Success rate",
+    "failed_one": "{{count}} failed",
+    "failed_other": "{{count}} failed",
+    "avgDuration": "Avg duration"
+  },
+  "drafts": {
+    "title": "Pick up where you left off",
+    "fromScratch": "From scratch",
+    "fromTemplate": "From {{name}}",
+    "aTemplate": "a template",
+    "unnamed": "Unnamed agent",
+    "continueLabel": "Continue {{name}}",
+    "source": "Draft · {{source}}",
+    "discardLabel": "Discard draft {{name}}"
   }
 }

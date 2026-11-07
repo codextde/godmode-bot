@@ -1,12 +1,11 @@
 import { Image } from "expo-image";
 import { useRecyclingState } from "@shopify/flash-list";
-import { useState, type ReactNode } from "react";
-import { Modal, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import type { ReactNode } from "react";
+import { Pressable, StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { Attachment } from "@godmode/shared";
-import { Icon } from "./icon";
-import { T, tap } from "./ui";
+import { PictureViewer } from "./picture-viewer";
+import { tap } from "./ui";
 import { pictureBases } from "@/lib/api";
 import { useSession } from "@/lib/session";
 import { radius, useColors } from "@/lib/theme";
@@ -38,79 +37,46 @@ function usePictureSource(url: string) {
  */
 export function AttachmentPictures({ files, conversationId, fallback }: { files: Attachment[]; conversationId: string; fallback: (file: Attachment) => ReactNode }) {
   const single = files.length === 1;
+  const [open, setOpen] = useRecyclingState<number | null>(null, [conversationId, files[0]?.path]);
   return (
     <View style={styles.row}>
       {files.map((f, i) => (
-        <Thumbnail key={`${f.path}-${i}`} file={f} url={pictureUrl(conversationId, f.path)} single={single} fallback={fallback} />
+        <Thumbnail key={`${f.path}-${i}`} file={f} url={pictureUrl(conversationId, f.path)} single={single} fallback={fallback} onOpen={() => setOpen(i)} />
       ))}
+      {open !== null ? <PictureViewer pictures={files.map((f) => ({ url: pictureUrl(conversationId, f.path), name: f.name }))} start={open} onClose={() => setOpen(null)} /> : null}
     </View>
   );
 }
 
-function Thumbnail({ file, url, single, fallback }: { file: Attachment; url: string; single: boolean; fallback: (file: Attachment) => ReactNode }) {
+function Thumbnail({ file, url, single, fallback, onOpen }: { file: Attachment; url: string; single: boolean; fallback: (file: Attachment) => ReactNode; onOpen: () => void }) {
   const c = useColors();
   const { t } = useTranslation("components");
   const { source, failed, next } = usePictureSource(url);
   const [ratio, setRatio] = useRecyclingState(4 / 3, [url]);
-  const [open, setOpen] = useState(false);
   if (failed || !source) return <>{fallback(file)}</>;
   const r = Math.min(2, Math.max(0.6, ratio));
   const width = 240 * Math.min(1, r);
   const box = single ? { width, height: Math.round(width / r) } : { width: 104, height: 104 };
   return (
-    <>
-      <Pressable
-        accessibilityRole="imagebutton"
-        accessibilityLabel={t("attachmentPictures.enlarge", { name: file.name })}
-        onPress={() => {
-          tap();
-          setOpen(true);
-        }}
-        style={({ pressed }) => [styles.thumb, { borderColor: c.border, backgroundColor: c.sunken }, box, pressed && { opacity: 0.8 }]}
-      >
-        <Image
-          source={source}
-          onLoad={(e) => e.source.width && e.source.height && setRatio(e.source.width / e.source.height)}
-          onError={next}
-          contentFit="cover"
-          cachePolicy="disk"
-          transition={150}
-          style={StyleSheet.absoluteFill}
-        />
-      </Pressable>
-      {open ? <Viewer source={source} name={file.name} onClose={() => setOpen(false)} /> : null}
-    </>
-  );
-}
-
-/** One picture on black, pinched to zoom; swipe down or Close to go back. */
-function Viewer({ source, name, onClose }: { source: { uri: string; headers: Record<string, string>; cacheKey: string }; name: string; onClose: () => void }) {
-  const { t } = useTranslation("common");
-  const insets = useSafeAreaInsets();
-  return (
-    <Modal visible animationType="fade" presentationStyle="overFullScreen" transparent={false} onRequestClose={onClose} statusBarTranslucent>
-      <View style={styles.viewer}>
-        <ScrollView
-          style={StyleSheet.absoluteFill}
-          contentContainerStyle={{ flex: 1 }}
-          maximumZoomScale={4}
-          minimumZoomScale={1}
-          centerContent
-          showsHorizontalScrollIndicator={false}
-          showsVerticalScrollIndicator={false}
-        >
-          <Image source={source} accessibilityLabel={name} contentFit="contain" cachePolicy="disk" style={{ flex: 1 }} />
-        </ScrollView>
-        <View style={[styles.viewerBar, { paddingTop: insets.top + 6 }]} pointerEvents="box-none">
-          <Pressable accessibilityRole="button" accessibilityLabel={t("actions.close")} hitSlop={10} onPress={onClose} style={({ pressed }) => [styles.close, pressed && { opacity: 0.6 }]}>
-            <Icon name="close" size={15} color="#FFFFFF" weight="semibold" />
-          </Pressable>
-          <T variant="footnote" color="#FFFFFF" numberOfLines={1} style={{ flex: 1, opacity: 0.85 }}>
-            {name}
-          </T>
-        </View>
-      </View>
-    </Modal>
+    <Pressable
+      accessibilityRole="imagebutton"
+      accessibilityLabel={t("attachmentPictures.enlarge", { name: file.name })}
+      onPress={() => {
+        tap();
+        onOpen();
+      }}
+      style={({ pressed }) => [styles.thumb, { borderColor: c.border, backgroundColor: c.sunken }, box, pressed && { opacity: 0.8 }]}
+    >
+      <Image
+        source={source}
+        onLoad={(e) => e.source.width && e.source.height && setRatio(e.source.width / e.source.height)}
+        onError={next}
+        contentFit="cover"
+        cachePolicy="disk"
+        transition={150}
+        style={StyleSheet.absoluteFill}
+      />
+    </Pressable>
   );
 }
 
@@ -126,29 +92,5 @@ const styles = StyleSheet.create({
     borderRadius: radius.xl,
     borderCurve: "continuous",
     borderWidth: StyleSheet.hairlineWidth,
-  },
-  viewer: {
-    flex: 1,
-    backgroundColor: "#000000",
-  },
-  viewerBar: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    top: 0,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    paddingHorizontal: 16,
-    paddingBottom: 10,
-    backgroundColor: "rgba(0, 0, 0, 0.35)",
-  },
-  close: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.16)",
   },
 });

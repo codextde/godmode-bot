@@ -8,6 +8,7 @@ import { useTranslation } from "react-i18next";
 import type { GitCommit } from "@godmode/shared";
 import { failureText } from "@/components/agent-actions";
 import { Icon } from "@/components/icon";
+import { CopyButton } from "@/components/markdown-parts";
 import { EmptyState, ErrorState, SkeletonRows, T } from "@/components/ui";
 import { api } from "@/lib/api";
 import { dateLocale } from "@/lib/i18n";
@@ -105,7 +106,7 @@ function CommitRow({ commit, date, last }: { commit: GitCommit; date: Date; last
   const body = rest.join("\n").trim();
   const valid = !Number.isNaN(date.getTime());
   return (
-    <View style={styles.row} accessible accessibilityLabel={`${title || t("history.noMessage")}, ${valid ? formatDistanceToNowStrict(date, { addSuffix: true, locale: dateLocale() }) : commit.timestamp}`}>
+    <View style={styles.row}>
       <View style={styles.rail}>
         <View style={[styles.node, { backgroundColor: c.surface, borderColor: c.borderStrong }]}>
           <Icon name="dot" size={8} color={c.textMuted} />
@@ -113,31 +114,41 @@ function CommitRow({ commit, date, last }: { commit: GitCommit; date: Date; last
         {!last ? <View style={[styles.line, { backgroundColor: c.border }]} /> : null}
       </View>
       <View style={{ flex: 1, minWidth: 0, gap: 3, paddingBottom: space.lg }}>
-        <View style={{ flexDirection: "row", gap: space.sm, alignItems: "baseline" }}>
-          <T variant="subhead" style={{ flex: 1, fontWeight: "600" }} numberOfLines={2}>
-            {title || t("history.noMessage")}
-          </T>
-          <T variant="caption" muted style={{ fontVariant: ["tabular-nums"] }}>
-            {valid ? formatDistanceToNowStrict(date, { addSuffix: true, locale: dateLocale() }) : commit.timestamp}
-          </T>
+        <View accessible accessibilityLabel={`${title || t("history.noMessage")}, ${valid ? formatDistanceToNowStrict(date, { addSuffix: true, locale: dateLocale() }) : commit.timestamp}`} style={{ gap: 3 }}>
+          <View style={{ flexDirection: "row", gap: space.sm, alignItems: "baseline" }}>
+            <T variant="subhead" style={{ flex: 1, fontWeight: "600" }} numberOfLines={2}>
+              {title || t("history.noMessage")}
+            </T>
+            <T variant="caption" muted style={{ fontVariant: ["tabular-nums"] }}>
+              {valid ? formatDistanceToNowStrict(date, { addSuffix: true, locale: dateLocale() }) : commit.timestamp}
+            </T>
+          </View>
+          {body ? (
+            <T variant="footnote" muted numberOfLines={4}>
+              {body}
+            </T>
+          ) : null}
         </View>
-        {body ? (
-          <T variant="footnote" muted numberOfLines={4}>
-            {body}
+        <View style={styles.meta}>
+          <T variant="caption" muted numberOfLines={1} style={{ flexShrink: 1 }}>
+            {`${commit.author} · `}
+            <T variant="caption" muted style={{ fontFamily: fonts.mono }}>
+              {commit.oid.slice(0, 7)}
+            </T>
           </T>
-        ) : null}
-        <T variant="caption" muted numberOfLines={1}>
-          {`${commit.author} · `}
-          <T variant="caption" muted style={{ fontFamily: fonts.mono }}>
-            {commit.oid.slice(0, 7)}
-          </T>
-        </T>
+          <CopyButton text={commit.oid} label={t("history.copyHash")} />
+        </View>
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  meta: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginVertical: -7,
+  },
   day: {
     paddingTop: space.xl,
     paddingBottom: space.sm,

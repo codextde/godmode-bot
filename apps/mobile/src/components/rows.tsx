@@ -6,6 +6,7 @@ import { CharacterAvatar, moodOf, presenceText, useAgentPresence } from "./chara
 import { ProjectTag } from "./project-picker";
 import { Icon, type IconName } from "./icon";
 import { Badge, Card, LiveDot, Row, T, tap } from "./ui";
+import { RowPressable } from "./row-pressable";
 import { api } from "@/lib/api";
 import { activityText, elapsed, shortTime, whenText } from "@/lib/format";
 import { useAgents, useNow } from "@/lib/hooks";
@@ -60,6 +61,7 @@ export function ConversationRow({
   running,
   queued,
   project,
+  onLongPress,
 }: {
   conversation: Conversation;
   agent?: Agent;
@@ -69,6 +71,8 @@ export function ConversationRow({
   queued?: boolean;
   /** The project it works on, when the list isn't scoped to it already. */
   project?: Pick<Project, "name" | "icon">;
+  /** Android's way to the row's actions. */
+  onLongPress?: () => void;
 }) {
   const c = useColors();
   const { t } = useTranslation("components");
@@ -80,7 +84,7 @@ export function ConversationRow({
   const unread = conversation.unread;
   const statusColor = status?.tone === "warning" ? c.warning : status?.tone === "brand" ? c.brandStrong : c.textMuted;
   return (
-    <Pressable onPress={() => openChat(conversation.id)} style={({ pressed }) => [styles.convo, pressed && { backgroundColor: c.sunken }]}>
+    <RowPressable onPress={() => openChat(conversation.id)} onLongPress={onLongPress} style={styles.convo}>
       <CharacterAvatar agent={agent} size={44} running={running} />
       <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
         <Row style={{ gap: space.sm }}>
@@ -115,7 +119,7 @@ export function ConversationRow({
           {conversation.preview || t("rows.noMessages")}
         </T>
       </View>
-    </Pressable>
+    </RowPressable>
   );
 }
 
@@ -172,7 +176,7 @@ export function AgentRow({ agent, running, queued, onPress }: { agent: Agent; ru
   const dot = state === "idle" ? c.success : state === "waiting" || state === "paused" ? c.warning : state === "failed" ? c.danger : alpha(c.textMuted, 0.5);
   const tone = state === "working" ? c.text : state === "waiting" ? c.text : state === "failed" ? c.danger : c.textMuted;
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => [styles.agent, pressed && { backgroundColor: c.sunken }]}>
+    <RowPressable onPress={onPress} style={styles.agent}>
       <CharacterAvatar agent={agent} size={46} running={state === "working"} mood={moodOf(presence)} />
       <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
         <Row style={{ gap: space.sm }}>
@@ -192,7 +196,7 @@ export function AgentRow({ agent, running, queued, onPress }: { agent: Agent; ru
         </Row>
       </View>
       <Icon name="chevron" size={13} color={c.textFaint} />
-    </Pressable>
+    </RowPressable>
   );
 }
 

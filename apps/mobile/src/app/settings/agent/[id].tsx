@@ -1,4 +1,5 @@
 import { router, Stack, useLocalSearchParams } from "expo-router";
+import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import {
@@ -6,16 +7,20 @@ import {
   MAX_AGENT_ROLE_LENGTH,
   MAX_HEARTBEAT_CHECKLIST_LENGTH,
   PERSONALITY_PRESETS,
+  personalityPreset,
   personalityText,
   findModel,
   heartbeatIntervalLabel,
+  type Agent,
   type Effort,
 } from "@godmode/shared";
+import { useLeaveSettings } from "@/components/agent-actions";
 import { AgentAccess, AgentTeam } from "@/components/agent-setup";
 import { CharacterAvatar } from "@/components/character";
 import { CloseButton } from "@/components/close-button";
 import { useFullAccess } from "@/components/full-access";
-import { Group, LinkRow, PickerRow, SegmentRow, SwitchRow, TextEditor } from "@/components/form";
+import { Group, LinkRow, PickerRow, SegmentRow, StepperRow, SwitchRow, TextEditor } from "@/components/form";
+import { hourLabel } from "@/components/heartbeat-card";
 import { Icon } from "@/components/icon";
 import { InheritedInstructions } from "@/components/inherited-instructions";
 import { Badge, EmptyState, Row, SectionTitle, tap } from "@/components/ui";
@@ -28,15 +33,14 @@ import { currentLanguage } from "@/lib/i18n";
 
 const DEFAULT = "default";
 const NONE = "none";
+const CUSTOM = "custom";
+const MAX_CUSTOM_PERSONALITY = 600;
 
-const HOURS = [
-  { value: "any", labelKey: "agent.hours.any", hours: null },
-  { value: "9-18", labelKey: "agent.hours.work", hours: { from: 9, to: 18 } },
-  { value: "8-22", labelKey: "agent.hours.day", hours: { from: 8, to: 22 } },
-  { value: "22-7", labelKey: "agent.hours.night", hours: { from: 22, to: 7 } },
-] as const;
+const WORKING_HOURS = { from: 8, to: 18 };
+const range = (from: number, to: number) => Array.from({ length: to - from + 1 }, (_, i) => from + i);
 
 export default function AgentSettings() {
+  const leave = useLeaveSettings();
   const c = useColors();
   const { t } = useTranslation(["settings", "common", "agents"]);
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -65,18 +69,7 @@ export default function AgentSettings() {
   const save = (patch: Parameters<typeof patchAgent>[1]) => void patchAgent(agent.id, patch);
   const models = catalog.data?.models ?? [];
   const projects = workspaces.find((w) => w.id === agent.workspaceId)?.projects ?? [];
-  const preset = PERSONALITY_PRESETS.find((p) => p.id === agent.personality);
-  const personalities = [
-    { value: NONE, label: t("agent.personality.none") },
-    ...PERSONALITY_PRESETS.map((p) => ({ value: p.id, label: personalityText(p, currentLanguage()).label, detail: personalityText(p, currentLanguage()).blurb })),
-    ...(agent.personality && !preset ? [{ value: agent.personality, label: t("agent.personality.custom"), detail: agent.personality }] : []),
-  ];
   const hb = agent.heartbeat;
-  const hours = HOURS.find((h) => (h.hours === null ? hb.hours === null : hb.hours?.from === h.hours.from && hb.hours?.to === h.hours.to));
-  const hourOptions = [
-    ...(hours ? [] : [{ value: "custom", label: t("agent.hours.custom", { from: hb.hours?.from, to: hb.hours?.to }) }]),
-    ...HOURS.map((h) => ({ value: h.value as string, label: t(h.labelKey) })),
-  ];
   const efforts = current.efforts;
 
   return (
@@ -177,19 +170,10 @@ export default function AgentSettings() {
       </View>
 
       <Group>
-        <LinkRow icon="brain" title={t("overview.links.memory")} detail="MEMORY.md" onPress={() => router.push({ pathname: "/memory/[id]", params: { id: agent.id } })} />
+        <LinkRow icon="brain" title={t("overview.links.memory")} detail="MEMORY.md" onPress={() => leave(() => router.push({ pathname: "/memory/[id]", params: { id: agent.id } }))} />
       </Group>
 
-      <Group title={t("agent.personality.title")}>
-        <PickerRow
-          icon="sparkles"
-          title={t("agent.personality.tone")}
-          detail={preset ? personalityText(preset, currentLanguage()).blurb : undefined}
-          value={agent.personality || NONE}
-          options={personalities}
-          onChange={(v) => save({ personality: v === NONE ? "" : v })}
-        />
-      </Group>
+      <PersonalityGroup agent={agent} locked={locked} hint={lockedHint} />
 
       <AgentTeam agent={agent} />
 
@@ -246,16 +230,37 @@ export default function AgentSettings() {
           options={HEARTBEAT_INTERVALS.map((m) => ({ value: String(m), label: heartbeatIntervalLabel(m, currentLanguage()) }))}
           onChange={(v) => save({ heartbeat: { intervalMinutes: Number(v) } })}
         />
-        <PickerRow
-          icon="moon"
+        <SegmentRow
           title={t("memory.dreaming.when")}
-          value={hours?.value ?? "custom"}
-          options={hourOptions}
-          onChange={(v) => {
-            const next = HOURS.find((h) => h.value === v);
-            if (next) save({ heartbeat: { hours: next.hours ? { ...next.hours } : null } });
-          }}
+          value={hb.hours ? "hours" : "any"}
+          options={[
+            { value: "any", label: t("agent.hours.any") },
+            { value: "hours", label: t("agent.hours.working") },
+          ]}
+          onChange={(v) => save({ heartbeat: { hours: v === "hours" ? WORKING_HOURS : null } })}
         />
+        {hb.hours ? (
+          <StepperRow
+            title={t("agent.hours.from")}
+            value={hb.hours.from}
+            min={0}
+            max={23}
+            steps={range(0, 23).filter((h) => h !== hb.hours!.to % 24)}
+            format={hourLabel}
+            onChange={(from) => save({ heartbeat: { hours: { ...hb.hours!, from } } })}
+          />
+        ) : null}
+        {hb.hours ? (
+          <StepperRow
+            title={t("agent.hours.to")}
+            value={hb.hours.to}
+            min={1}
+            max={24}
+            steps={range(1, 24).filter((h) => h % 24 !== hb.hours!.from)}
+            format={hourLabel}
+            onChange={(to) => save({ heartbeat: { hours: { ...hb.hours!, to } } })}
+          />
+        ) : null}
         <SwitchRow icon="tasks" title={t("agent.heartbeat.weekdays")} value={hb.weekdays} onChange={(weekdays) => save({ heartbeat: { weekdays } })} />
       </Group>
 
@@ -277,6 +282,60 @@ export default function AgentSettings() {
 
       <AgentAccess agent={agent} />
     </ScrollView>
+  );
+}
+
+/** How the agent talks: a preset voice, none, or the human's own words (desktop: PersonalityPicker). */
+function PersonalityGroup({ agent, locked, hint }: { agent: Agent; locked: boolean; hint?: string }) {
+  const { t } = useTranslation("settings");
+  const language = currentLanguage();
+  const value = agent.personality ?? "";
+  const preset = personalityPreset(value);
+  const written = !!value.trim() && !preset;
+  const [picked, setPicked] = useState(written);
+  const last = useRef(written ? value : "");
+  // Text still waiting to save must not win over the voice just picked instead.
+  const left = useRef(false);
+  useEffect(() => {
+    if (written) last.current = value;
+  }, [written, value]);
+  const custom = picked || written;
+  const save = (personality: string) => void patchAgent(agent.id, { personality });
+  const options = [
+    { value: NONE, label: t("agent.personality.none") },
+    ...PERSONALITY_PRESETS.map((p) => ({ value: p.id as string, label: personalityText(p, language).label, detail: personalityText(p, language).blurb })),
+    // Text an agent that reads raw secrets follows stays as the computer wrote it.
+    ...(locked && !custom ? [] : [{ value: CUSTOM, label: t("agent.personality.custom"), detail: t("agent.personality.customDetail") }]),
+  ];
+  return (
+    <View style={{ gap: space.sm }}>
+      <Group title={t("agent.personality.title")}>
+        <PickerRow
+          icon="sparkles"
+          title={t("agent.personality.tone")}
+          detail={preset ? personalityText(preset, language).blurb : undefined}
+          value={custom ? CUSTOM : value || NONE}
+          options={options}
+          onChange={(v) => {
+            left.current = v !== CUSTOM;
+            setPicked(v === CUSTOM);
+            save(v === CUSTOM ? last.current : v === NONE ? "" : v);
+          }}
+        />
+      </Group>
+      {custom ? (
+        <TextEditor
+          label={t("agent.personality.customLabel")}
+          value={written ? value : ""}
+          placeholder={t("agent.personality.customPlaceholder")}
+          maxLength={MAX_CUSTOM_PERSONALITY}
+          minHeight={84}
+          readOnly={locked}
+          hint={hint}
+          onSave={async (personality) => left.current || (await patchAgent(agent.id, { personality }, { quiet: true }))}
+        />
+      ) : null}
+    </View>
   );
 }
 

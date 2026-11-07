@@ -2,20 +2,21 @@ import { useQuery } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
 import { Stack } from "expo-router";
 import { useState } from "react";
-import { Alert, Linking, RefreshControl, ScrollView, StyleSheet, TextInput, View } from "react-native";
+import { Alert, Linking, RefreshControl, StyleSheet, TextInput, View } from "react-native";
 import { useTranslation } from "react-i18next";
-import type { CloudBilling, CloudLinkState, CloudSettings, CloudStatus } from "@godmode/shared";
+import type { CloudLinkState, CloudSettings, CloudStatus } from "@godmode/shared";
 import { useFullAccess } from "@/components/admin";
-import { BillingLinks } from "@/components/billing-links";
 import { CloseButton } from "@/components/close-button";
 import { Group, LinkRow, SwitchRow } from "@/components/form";
 import { actionFailed } from "@/components/linking-parts";
+import { SettingsScroll } from "@/components/settings-scroll";
 import { QueryState } from "@/components/settings-state";
 import { InfoRow, ago } from "@/components/status-rows";
 import { Button, EmptyState, T, tap, type Tone } from "@/components/ui";
 import { hostOf } from "@/lib/format";
 import { useNow } from "@/lib/hooks";
 import { t as i18nT } from "@/lib/i18n";
+import { cloudText } from "@/lib/license-text";
 import { approvalUrl, clock, isLinked, linkingApi, normalizeCloudUrl } from "@/lib/linking";
 import { queryClient } from "@/lib/query";
 import { isGatewayUrl, useSession } from "@/lib/session";
@@ -46,7 +47,7 @@ export default function Cloud() {
   const pull = usePullRefresh(status.refetch);
 
   return (
-    <ScrollView
+    <SettingsScroll
       contentInsetAdjustmentBehavior="automatic"
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode="interactive"
@@ -67,7 +68,7 @@ export default function Cloud() {
           )
         }
       </QueryState>
-    </ScrollView>
+    </SettingsScroll>
   );
 }
 
@@ -75,7 +76,7 @@ function StatusGroup({ status: s }: { status: CloudStatus }) {
   const { t } = useTranslation("settings");
   const state = STATE[s.state];
   return (
-    <Group title={t("cloud.statusTitle")} footer={s.error ?? undefined}>
+    <Group title={t("cloud.statusTitle")} footer={s.error ? cloudText(s.error) : undefined}>
       <InfoRow icon="network" label={t("cloud.stateLabel")} value={t(state.key)} tone={state.tone} />
       {s.url ? <InfoRow icon="globe" label={t("cloud.server")} value={hostOf(s.url)} /> : null}
       {s.account ? <InfoRow icon="user" label={t("cloud.account")} value={s.account.email} /> : null}
@@ -234,7 +235,6 @@ function Pending({ status: s }: { status: CloudStatus }) {
 function ManageLinked({ status: s }: { status: CloudStatus }) {
   const { t } = useTranslation(["linking", "settings"]);
   const viaCloud = useViaCloud();
-  const billing = useQuery({ queryKey: sq.cloudBilling, queryFn: settingsApi.cloud.billing, enabled: isLinked(s), retry: false });
   const revoked = s.state === "revoked";
   const browserOn = s.settings.enabled && s.settings.browserAccess;
 
@@ -290,64 +290,18 @@ function ManageLinked({ status: s }: { status: CloudStatus }) {
       ) : null}
 
       {!revoked ? (
-        <Group title={t("settings:cloud.access.title")} footer={t("cloud.accessFooter")}>
-          <SwitchRow icon="link" title={t("settings:cloud.access.link")} detail={t("cloud.linkDetail")} value={s.settings.enabled} onChange={toggle("enabled")} />
+        <Group title={t("settings:cloud.access.title")}>
+          <SwitchRow icon="link" title={t("settings:cloud.access.link")} value={s.settings.enabled} onChange={toggle("enabled")} />
           <SwitchRow icon="globe" title={t("settings:cloud.access.browser")} detail={t("cloud.browserDetail")} value={s.settings.browserAccess} onChange={toggle("browserAccess")} />
-          <SwitchRow icon="phone" title={t("settings:cloud.access.phones")} detail={t("cloud.phonesDetail")} value={s.settings.phoneAccess} onChange={toggle("phoneAccess")} />
+          <SwitchRow icon="phone" title={t("settings:cloud.access.phones")} value={s.settings.phoneAccess} onChange={toggle("phoneAccess")} />
           <SwitchRow icon="lock" title={t("settings:cloud.access.secrets")} detail={t("cloud.secretsDetail")} value={s.settings.allowSecrets} onChange={toggle("allowSecrets")} />
         </Group>
       ) : null}
-
-      {billing.data ? <Subscription billing={billing.data} /> : null}
-      {billing.data ? <BillingLinks billing={billing.data} /> : null}
 
       <Group>
         <LinkRow icon="logout" tone="danger" title={t("cloud.unlinkButton")} chevron={false} onPress={() => confirmUnlink(viaCloud, false)} />
       </Group>
     </>
-  );
-}
-
-/** Cancel at the end of the period, or resume: both can be undone. */
-function Subscription({ billing: b }: { billing: CloudBilling }) {
-  const { t } = useTranslation("linking");
-  const [busy, setBusy] = useState(false);
-  const sub = b.subscription;
-  const live = !!sub && (sub.status === "active" || sub.status === "trialing" || sub.status === "past_due");
-  if (!b.billingEnabled || !sub || !live) return null;
-  const end = sub.currentPeriodEnd ? new Date(sub.currentPeriodEnd).toLocaleDateString() : null;
-
-  const change = async (action: "cancel" | "resume") => {
-    setBusy(true);
-    try {
-      queryClient.setQueryData(sq.cloudBilling, action === "cancel" ? await linkingApi.cloud.cancel() : await linkingApi.cloud.resume());
-      tap(Haptics.ImpactFeedbackStyle.Medium);
-      void queryClient.invalidateQueries({ queryKey: sq.cloud });
-    } catch (err) {
-      actionFailed(action === "cancel" ? t("billing.cancelFailed") : t("billing.resumeFailed"), err);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const confirm = (action: "cancel" | "resume") =>
-    Alert.alert(
-      action === "cancel" ? t("billing.cancelTitle") : t("billing.resumeTitle"),
-      action === "cancel" ? (end ? t("billing.cancelUntil", { date: end }) : t("billing.cancelPeriod")) : end ? t("billing.resumeOn", { date: end }) : undefined,
-      [
-        { text: action === "cancel" ? t("billing.keep") : i18nT("common:actions.cancel"), style: "cancel" },
-        { text: action === "cancel" ? t("billing.cancel") : t("billing.resume"), style: action === "cancel" ? "destructive" : "default", onPress: () => void change(action) },
-      ],
-    );
-
-  return (
-    <Group title={t("billing.title")} footer={end ? (sub.cancelAtPeriodEnd ? t("billing.endsOn", { date: end }) : t("billing.renewsOn", { date: end })) : undefined}>
-      {sub.cancelAtPeriodEnd ? (
-        <LinkRow icon="refresh" title={busy ? i18nT("common:status.saving") : t("billing.resume")} chevron={false} onPress={() => !busy && confirm("resume")} />
-      ) : (
-        <LinkRow icon="close" tone="danger" title={busy ? i18nT("common:status.saving") : t("billing.cancelPlan")} chevron={false} onPress={() => !busy && confirm("cancel")} />
-      )}
-    </Group>
   );
 }
 

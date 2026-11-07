@@ -163,6 +163,7 @@ export default function Compose() {
                     !!options.vmId ||
                     options.sshServerIds.length > 0 ||
                     options.androidDeviceIds.length > 0 ||
+                    !!options.computerTarget ||
                     options.runnerId !== undefined
                   }
                   onPress={() => router.push({ pathname: "/chat-options", params: { agentId: current.id, ...(workspaceId ? { workspaceId } : {}) } })}

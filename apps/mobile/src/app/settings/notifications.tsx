@@ -1,10 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
-import { Alert, AppState, Linking, ScrollView, StyleSheet } from "react-native";
+import { Alert, AppState, Linking, StyleSheet } from "react-native";
 import { useTranslation } from "react-i18next";
 import { CloseButton } from "@/components/close-button";
 import { Group, LinkRow, SwitchRow } from "@/components/form";
+import { SettingsScroll } from "@/components/settings-scroll";
 import { QueryState } from "@/components/settings-state";
 import { EmptyState } from "@/components/ui";
 import { api, errorText } from "@/lib/api";
@@ -41,13 +42,13 @@ export default function NotificationsSettings() {
   };
 
   return (
-    <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content}>
+    <SettingsScroll contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content}>
       <Stack.Screen options={{ title: t("notifications.title") }} />
       <CloseButton />
       <QueryState query={me} icon="bell" errorTitle={t("notifications.loadFailed")}>
         {(session) =>
           typeof session.device.push !== "boolean" ? (
-            <EmptyState icon="bell" title={t("phone.outdatedTitle")} body={t("phone.outdatedBody")} />
+            <EmptyState icon="bell" title={t("phone.outdatedTitle")} />
           ) : (
             <>
               <Group>
@@ -62,7 +63,7 @@ export default function NotificationsSettings() {
           )
         }
       </QueryState>
-    </ScrollView>
+    </SettingsScroll>
   );
 }
 

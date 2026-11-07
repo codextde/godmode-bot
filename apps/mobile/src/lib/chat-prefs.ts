@@ -18,22 +18,26 @@ interface ChatPrefsState {
   mcpApps: boolean;
   /** Replies can be read out: a Read button under them, and spoken after a dictated message (off by default). */
   readReplies: boolean;
+  /** A very long paste goes along as a text file instead of filling the message (on by default, like the desktop). */
+  largePasteAsFile: boolean;
   setToolCalls: (toolCalls: ToolCallView) => void;
   setAnimations: (animations: Animations) => void;
   setFollowUp: (followUp: FollowUp) => void;
   setMcpApps: (mcpApps: boolean) => void;
   setReadReplies: (readReplies: boolean) => void;
+  setLargePasteAsFile: (largePasteAsFile: boolean) => void;
 }
 
 /** How chats look on this phone (Settings → General); the computer keeps its own. */
 export const useChatPrefs = create<ChatPrefsState>((set, get) => {
-  const save = () => void SecureStore.setItemAsync(KEY, JSON.stringify({ toolCalls: get().toolCalls, animations: get().animations, followUp: get().followUp, mcpApps: get().mcpApps, readReplies: get().readReplies })).catch(() => undefined);
+  const save = () => void SecureStore.setItemAsync(KEY, JSON.stringify({ toolCalls: get().toolCalls, animations: get().animations, followUp: get().followUp, mcpApps: get().mcpApps, readReplies: get().readReplies, largePasteAsFile: get().largePasteAsFile })).catch(() => undefined);
   return {
     toolCalls: "cards",
     animations: "full",
     followUp: "queue",
     mcpApps: false,
     readReplies: false,
+    largePasteAsFile: true,
     setToolCalls: (toolCalls) => {
       set({ toolCalls });
       save();
@@ -54,6 +58,10 @@ export const useChatPrefs = create<ChatPrefsState>((set, get) => {
       set({ readReplies });
       save();
     },
+    setLargePasteAsFile: (largePasteAsFile) => {
+      set({ largePasteAsFile });
+      save();
+    },
   };
 });
 
@@ -62,13 +70,14 @@ void SecureStore.getItemAsync(KEY)
   .then((saved) => {
     if (!saved) return;
     try {
-      const prefs = JSON.parse(saved) as Partial<Record<"toolCalls" | "animations" | "followUp" | "mcpApps" | "readReplies", unknown>>;
+      const prefs = JSON.parse(saved) as Partial<Record<"toolCalls" | "animations" | "followUp" | "mcpApps" | "readReplies" | "largePasteAsFile", unknown>>;
       useChatPrefs.setState({
         ...(prefs.toolCalls === "compact" || prefs.toolCalls === "cards" ? { toolCalls: prefs.toolCalls } : {}),
         ...(prefs.animations === "light" || prefs.animations === "full" ? { animations: prefs.animations } : {}),
         ...(prefs.followUp === "queue" || prefs.followUp === "steer" ? { followUp: prefs.followUp } : {}),
         ...(typeof prefs.mcpApps === "boolean" ? { mcpApps: prefs.mcpApps } : {}),
         ...(typeof prefs.readReplies === "boolean" ? { readReplies: prefs.readReplies } : {}),
+        ...(typeof prefs.largePasteAsFile === "boolean" ? { largePasteAsFile: prefs.largePasteAsFile } : {}),
       });
     } catch {
       // A broken entry keeps the defaults.

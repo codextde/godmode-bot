@@ -29,7 +29,7 @@ export function CallsAdmin({ phone: p }: { phone: Phone }) {
 
   return (
     <>
-      <Group title={t("calls.ownerTitle")} footer={t("calls.ownerFooter")}>
+      <Group title={t("calls.ownerTitle")}>
         <FieldRow label={t("calls.number")} value={p.ownerNumber} placeholder="+49 151 12345678" keyboardType="phone-pad" maxLength={24} onCommit={saveNumber} />
         <SwitchRow icon="callOut" title={t("calls.allow")} value={p.callOwner} disabled={!p.ownerNumber} onChange={(callOwner) => void set({ callOwner })} />
         {p.ownerNumber ? <TestCallRow phone={p} /> : null}

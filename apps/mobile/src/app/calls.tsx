@@ -2,7 +2,7 @@ import { FlashList, type ListRenderItem } from "@shopify/flash-list";
 import { useQuery } from "@tanstack/react-query";
 import { router, Stack } from "expo-router";
 import { memo, useCallback } from "react";
-import { Pressable, RefreshControl, StyleSheet, View } from "react-native";
+import { RefreshControl, StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { isCallActive, type Agent, type PhoneCall } from "@godmode/shared";
 import { CallStatusBadge, callListQuery, callName, formatCallTime, openCall } from "@/components/call-parts";
@@ -10,6 +10,7 @@ import { CharacterAvatar } from "@/components/character";
 import { HeaderActions } from "@/components/header-actions";
 import { Icon } from "@/components/icon";
 import { Button, EmptyState, ErrorState, Hairline, Row, SkeletonRows, T } from "@/components/ui";
+import { RowPressable } from "@/components/row-pressable";
 import { ApiError, errorText } from "@/lib/api";
 import { shortTime } from "@/lib/format";
 import { useAgents } from "@/lib/hooks";
@@ -87,11 +88,11 @@ const CallRow = memo(function CallRow({ call: c, agent }: { call: PhoneCall; age
   const inbound = c.direction === "inbound";
   const agentName = agent?.name ?? c.agentName;
   return (
-    <Pressable
+    <RowPressable
       accessibilityRole="button"
       accessibilityLabel={inbound ? t("list.incomingWith", { name: callName(c) }) : t("list.outgoingWith", { name: callName(c) })}
       onPress={() => openCall(c.id)}
-      style={({ pressed }) => [styles.row, pressed && { backgroundColor: colors.sunken }]}
+      style={styles.row}
     >
       <View style={[styles.tile, { backgroundColor: colors.sunken }]}>
         <Icon name={inbound ? "callIn" : "callOut"} size={17} color={inbound ? colors.skyMark : colors.brandStrong} />
@@ -125,7 +126,7 @@ const CallRow = memo(function CallRow({ call: c, agent }: { call: PhoneCall; age
           ) : null}
         </Row>
       </View>
-    </Pressable>
+    </RowPressable>
   );
 });
 

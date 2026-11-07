@@ -1,11 +1,13 @@
 import { useMutation } from "@tanstack/react-query";
 import { router, Stack } from "expo-router";
-import { Alert, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
+import { Alert, RefreshControl, StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { CloseButton } from "@/components/close-button";
 import { Group, LinkRow, Tile } from "@/components/form";
 import { NeedsFullAccess, useFullAccess } from "@/components/full-access";
 import { Icon, type IconName } from "@/components/icon";
+import { SettingsScroll } from "@/components/settings-scroll";
+import { ago } from "@/components/status-rows";
 import { Button, Card, EmptyState, ErrorState, Row, Skeleton, T } from "@/components/ui";
 import { ApiError, errorText } from "@/lib/api";
 import { qk, queryClient } from "@/lib/query";
@@ -59,9 +61,10 @@ export default function Passwords() {
   const count = (q: { data?: unknown[] }) => (q.data ? String(q.data.length) : undefined);
   const sshOff = sshKeys.error instanceof ApiError && sshKeys.error.code === "ssh_keys_off";
   const showCards = settings.data?.cards.enabled || !!cards.data?.length;
+  const macUse = mac.data?.saved ? (mac.data.lastUsedAt ? t("macPassword.lastUsed", { when: ago(mac.data.lastUsedAt) }) : t("macPassword.neverUsed")) : undefined;
 
   return (
-    <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content} refreshControl={<RefreshControl {...pull} />}>
+    <SettingsScroll contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content} refreshControl={<RefreshControl {...pull} />}>
       <Stack.Screen options={{ title: t("index.title") }} />
       <CloseButton />
 
@@ -111,11 +114,12 @@ export default function Passwords() {
             <LinkRow
               icon="laptop"
               title={t("index.macPassword")}
+              detail={macUse}
               value={mac.data.saved ? t("index.saved") : t("index.notSaved")}
               onPress={() => router.push({ pathname: "/vault/key-edit", params: { kind: "mac" } })}
             />
           ) : (
-            <InfoRow icon="laptop" label={t("index.macPassword")} value={mac.data.saved ? t("index.saved") : t("index.notSaved")} />
+            <InfoRow icon="laptop" label={t("index.macPassword")} detail={macUse} value={mac.data.saved ? t("index.saved") : t("index.notSaved")} />
           )
         ) : null}
         {fullAccess ? <LinkRow icon="code" title={t("index.apiKeys")} onPress={() => router.push("/settings/vault/api-keys")} /> : null}
@@ -127,17 +131,24 @@ export default function Passwords() {
       </Group>
 
       {fullAccess === false ? <NeedsFullAccess /> : null}
-    </ScrollView>
+    </SettingsScroll>
   );
 }
 
-function InfoRow({ icon, label, value }: { icon: IconName; label: string; value: string }) {
+function InfoRow({ icon, label, detail, value }: { icon: IconName; label: string; detail?: string; value: string }) {
   return (
     <Row style={styles.info}>
       <Tile icon={icon} />
-      <T variant="callout" style={{ flex: 1, fontWeight: "500" }}>
-        {label}
-      </T>
+      <View style={{ flex: 1, minWidth: 0, gap: 1 }}>
+        <T variant="callout" style={{ fontWeight: "500" }}>
+          {label}
+        </T>
+        {detail ? (
+          <T variant="footnote" muted numberOfLines={1}>
+            {detail}
+          </T>
+        ) : null}
+      </View>
       <T variant="subhead" muted numberOfLines={1}>
         {value}
       </T>

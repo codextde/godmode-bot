@@ -1,7 +1,7 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
+import { ActivityIndicator, Alert, Pressable, RefreshControl, StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import type { ClaudeAccount, ClaudeAccountLogin, ClaudeAccountsState, ClaudeUsageWindow } from "@godmode/shared";
 import { useFullAccess } from "@/components/admin";
@@ -10,6 +10,8 @@ import { Group, LinkRow, StepperRow, SwitchRow } from "@/components/form";
 import { Icon } from "@/components/icon";
 import { SignInSteps } from "@/components/program-parts";
 import { FormSkeleton, QueryState } from "@/components/settings-state";
+import { useMenuSheet } from "@/components/header-actions";
+import { SettingsScroll } from "@/components/settings-scroll";
 import { Badge, Card, Row, T, tap } from "@/components/ui";
 import { errorText } from "@/lib/api";
 import { intlLocale, t as translate } from "@/lib/i18n";
@@ -39,6 +41,7 @@ const setList = (accounts: ClaudeAccount[]) => queryClient.setQueryData<ClaudeAc
  */
 export default function ClaudeAccounts() {
   const { t } = useTranslation(["settings", "common", "programs"]);
+  const menu = useMenuSheet();
   const admin = useFullAccess().fullAccess === true;
   const accounts = useQuery({
     queryKey: sq.claudeAccounts,
@@ -98,11 +101,12 @@ export default function ClaudeAccounts() {
         { text: t("programs:accounts.remove"), style: "destructive", onPress: () => remove.mutate(a.id) },
       ]);
     const buttons = [
-      ...(!a.isDefault && !a.needsSignIn ? [{ text: t("programs:accounts.makeDefault"), onPress: () => makeDefault.mutate(a.id) }] : []),
-      ...(!a.system ? [{ text: t("programs:accounts.signInAgain"), onPress: () => startLogin.mutate(a.id) }] : []),
-      ...(!a.system ? [{ text: t("programs:accounts.remove"), style: "destructive" as const, onPress: confirmRemove }] : []),
+      ...(!a.isDefault && !a.needsSignIn ? [{ text: t("programs:accounts.makeDefault"), icon: "check" as const, onPress: () => makeDefault.mutate(a.id) }] : []),
+      ...(!a.system ? [{ text: t("programs:accounts.signInAgain"), icon: "key" as const, onPress: () => startLogin.mutate(a.id) }] : []),
+      ...(!a.system ? [{ text: t("programs:accounts.remove"), icon: "trash" as const, style: "destructive" as const, onPress: confirmRemove }] : []),
     ];
     if (!buttons.length) return;
+    if (process.env.EXPO_OS === "android") return menu.show(buttons.map((b) => ({ icon: b.icon, title: b.text, destructive: b.style === "destructive", onPress: b.onPress })), name);
     Alert.alert(name, undefined, [...buttons, { text: t("common:actions.cancel"), style: "cancel" }]);
   };
 
@@ -110,7 +114,7 @@ export default function ClaudeAccounts() {
   const autoSwitch = r?.accountAutoSwitch ?? true;
 
   return (
-    <ScrollView
+    <SettingsScroll
       contentInsetAdjustmentBehavior="automatic"
       contentContainerStyle={styles.content}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void refresh()} />}
@@ -180,7 +184,8 @@ export default function ClaudeAccounts() {
           );
         }}
       </QueryState>
-    </ScrollView>
+      {menu.sheet}
+    </SettingsScroll>
   );
 }
 

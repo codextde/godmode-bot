@@ -1,12 +1,13 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Stack } from "expo-router";
-import { Alert, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
+import { Alert, RefreshControl, StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import type { Settings } from "@godmode/shared";
 import { AdminQueryState, FullAccessGate } from "@/components/admin";
 import { CloseButton } from "@/components/close-button";
 import { FieldRow, Group, PickerRow, SwitchRow, TextEditor } from "@/components/form";
 import { ActionPill, ToolRow, reportInstall } from "@/components/program-parts";
+import { SettingsScroll } from "@/components/settings-scroll";
 import { FormSkeleton } from "@/components/settings-state";
 import { patchAnySettings } from "@/lib/admin";
 import { useAgents } from "@/lib/hooks";
@@ -36,7 +37,7 @@ export default function Programs() {
   );
 
   return (
-    <ScrollView
+    <SettingsScroll
       contentInsetAdjustmentBehavior="automatic"
       keyboardShouldPersistTaps="handled"
       automaticallyAdjustKeyboardInsets
@@ -50,7 +51,7 @@ export default function Programs() {
           {(s) => <Sections settings={s} />}
         </AdminQueryState>
       </FullAccessGate>
-    </ScrollView>
+    </SettingsScroll>
   );
 }
 

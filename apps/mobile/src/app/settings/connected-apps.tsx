@@ -1,12 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
 import { router, Stack } from "expo-router";
-import { Alert, RefreshControl, ScrollView, StyleSheet } from "react-native";
+import { Alert, RefreshControl, StyleSheet } from "react-native";
 import { useTranslation } from "react-i18next";
 import type { ConnectStatus, Connector } from "@godmode/shared";
 import { useFullAccess } from "@/components/admin";
 import { CloseButton } from "@/components/close-button";
 import { Group, LinkRow } from "@/components/form";
+import { SettingsScroll } from "@/components/settings-scroll";
 import { QueryState } from "@/components/settings-state";
 import { ago } from "@/components/status-rows";
 import { EmptyState, tap } from "@/components/ui";
@@ -24,7 +25,7 @@ export default function ConnectedApps() {
   const pull = usePullRefresh(status.refetch);
 
   return (
-    <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content} refreshControl={<RefreshControl {...pull} />}>
+    <SettingsScroll contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content} refreshControl={<RefreshControl {...pull} />}>
       <Stack.Screen options={{ title: t("connected.title") }} />
       <CloseButton />
       <QueryState query={status} icon="plug" errorTitle={t("connected.loadFailed")}>
@@ -44,10 +45,15 @@ export default function ConnectedApps() {
             ) : (
               <EmptyState icon="plug" title={t("connected.emptyTitle")} body={fullAccess ? undefined : t("connected.emptyBody")} />
             )}
+            {s.tools.length ? (
+              <Group>
+                <LinkRow icon="wrench" title={t("connected.tools.title")} value={String(s.tools.length)} onPress={() => router.push("/settings/connected-tools")} />
+              </Group>
+            ) : null}
           </>
         )}
       </QueryState>
-    </ScrollView>
+    </SettingsScroll>
   );
 }
 

@@ -2,35 +2,14 @@ import { useMemo } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { Layers, TriangleAlert, X } from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
+import { reviewOtpUris } from "@godmode/shared";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { parseOtpUri, type MigrationPreview, type OtpPreview } from "@/lib/qr";
 import { Favicon } from "./favicon";
 import { issuerDomain } from "./use-totp-codes";
 
-type Parsed =
-  | { kind: "otpauth"; uri: string; preview: OtpPreview }
-  | { kind: "migration"; uri: string; preview: MigrationPreview };
-
 export function useParsedUris(uris: string[]) {
-  return useMemo(() => {
-    const parsed: Parsed[] = [];
-    for (const uri of uris) {
-      const p = parseOtpUri(uri);
-      if (p.kind !== "invalid") parsed.push(p);
-    }
-    const accountCount = parsed.reduce((n, p) => n + (p.kind === "otpauth" ? 1 : p.preview.accounts.length), 0);
-    // Incomplete multi-QR Google Authenticator exports
-    const batches = new Map<number, { size: number; indexes: Set<number> }>();
-    for (const p of parsed) {
-      if (p.kind !== "migration" || p.preview.batchSize <= 1) continue;
-      const b = batches.get(p.preview.batchId) ?? { size: p.preview.batchSize, indexes: new Set<number>() };
-      b.indexes.add(p.preview.batchIndex);
-      batches.set(p.preview.batchId, b);
-    }
-    const incomplete = [...batches.values()].filter((b) => b.indexes.size < b.size).map((b) => ({ size: b.size, missing: b.size - b.indexes.size }));
-    return { parsed, accountCount, incomplete };
-  }, [uris]);
+  return useMemo(() => reviewOtpUris(uris), [uris]);
 }
 
 /** Preview of everything that is about to be imported, with per-code removal. */

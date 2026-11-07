@@ -1,11 +1,12 @@
 import { FlashList } from "@shopify/flash-list";
 import { router, Stack } from "expo-router";
 import { memo, type ReactElement, type ReactNode } from "react";
-import { Pressable, RefreshControl, StyleSheet, View } from "react-native";
+import { RefreshControl, StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { CloseButton } from "./close-button";
 import { Icon, type IconName } from "./icon";
 import { Button, EmptyState, ErrorState, Hairline, Row, SkeletonRows, T, tap } from "./ui";
+import { RowPressable } from "./row-pressable";
 import { ApiError, errorText } from "@/lib/api";
 import { usePullRefresh } from "@/lib/use-pull-refresh";
 import { isOutdated } from "@/lib/vault";
@@ -107,6 +108,7 @@ export const ListRow = memo(function ListRow({
   lead,
   title,
   lines = [],
+  badges,
   trailing,
   onPress,
   onLongPress,
@@ -120,6 +122,8 @@ export const ListRow = memo(function ListRow({
   lead?: ReactNode;
   title: string;
   lines?: (string | null | undefined | false)[];
+  /** Small facts under the lines, for when the end of the row has no room. */
+  badges?: ReactNode;
   trailing?: ReactNode;
   onPress?: () => void;
   /** More for the row (its actions), on a long press. */
@@ -150,6 +154,7 @@ export const ListRow = memo(function ListRow({
             {line}
           </T>
         ))}
+        {badges ? <Row style={styles.badges}>{badges}</Row> : null}
       </View>
       {trailing ? <Row style={{ gap: space.sm, flexShrink: 0 }}>{trailing}</Row> : null}
       {onPress && chevron ? <Icon name="chevron" size={12} color={c.textFaint} weight="semibold" /> : null}
@@ -163,7 +168,7 @@ export const ListRow = memo(function ListRow({
     );
   }
   return (
-    <Pressable
+    <RowPressable
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? title}
       onPress={() => {
@@ -171,10 +176,10 @@ export const ListRow = memo(function ListRow({
         onPress();
       }}
       onLongPress={onLongPress}
-      style={({ pressed }) => [rowStyle, pressed && { backgroundColor: c.sunken }]}
+      style={rowStyle}
     >
       {body}
-    </Pressable>
+    </RowPressable>
   );
 });
 
@@ -191,6 +196,11 @@ const styles = StyleSheet.create({
   grouped: {
     paddingHorizontal: space.lg,
     borderRadius: 0,
+  },
+  badges: {
+    flexWrap: "wrap",
+    gap: 4,
+    paddingTop: 2,
   },
   tile: {
     width: 36,

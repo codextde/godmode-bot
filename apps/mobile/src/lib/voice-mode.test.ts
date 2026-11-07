@@ -3,7 +3,7 @@ import type { VoiceSettings } from "@godmode/shared";
 import { phone } from "./test-natives.test";
 
 const { useSession } = await import("./session");
-const { speak } = await import("./voice-mode");
+const { phoneVoices, pickPhoneVoice, speak } = await import("./voice-mode");
 
 const onPhone = { ttsProvider: "browser" } as VoiceSettings;
 const onComputer = { ttsProvider: "openai" } as VoiceSettings;
@@ -57,5 +57,45 @@ describe("speaking", () => {
     globalThis.fetch = (async () => new Response("", { status: 403 })) as unknown as typeof fetch;
     await speak("hello", onComputer).done;
     expect(phone.spoken).toEqual(["hello"]);
+  });
+});
+
+describe("the phone's own voice", () => {
+  const anna = { identifier: "anna", name: "Anna", language: "de-DE", quality: "Default" };
+  const petra = { identifier: "petra", name: "Petra", language: "de-AT", quality: "Enhanced" };
+  const sam = { identifier: "sam", name: "Sam", language: "en-US", quality: "Default" };
+  const german = { ttsProvider: "browser", language: "de-DE" } as VoiceSettings;
+
+  beforeEach(() => {
+    phone.reset();
+    phone.voices = [anna, petra, sam];
+  });
+
+  test("lists the language's voices, the better sounding first", async () => {
+    expect((await phoneVoices("de-DE")).map((v) => v.id)).toEqual(["petra", "anna"]);
+  });
+
+  test("without a pick it takes that exact language", async () => {
+    await speak("Hallo", german).done;
+    expect(phone.spokenWith).toBe("anna");
+  });
+
+  test("the picked voice reads aloud", async () => {
+    await pickPhoneVoice("petra");
+    await speak("Hallo", german).done;
+    expect(phone.spokenWith).toBe("petra");
+  });
+
+  test("a voice picked for another language stays out of it", async () => {
+    await pickPhoneVoice("sam");
+    await speak("Hallo", german).done;
+    expect(phone.spokenWith).toBe("anna");
+  });
+
+  test("taking the pick back goes automatic again", async () => {
+    await pickPhoneVoice("petra");
+    await pickPhoneVoice("");
+    await speak("Hallo", german).done;
+    expect(phone.spokenWith).toBe("anna");
   });
 });

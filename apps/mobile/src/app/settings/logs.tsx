@@ -1,13 +1,15 @@
-import { FlashList, type ListRenderItem } from "@shopify/flash-list";
+import { FlashList, type FlashListRef, type ListRenderItem } from "@shopify/flash-list";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { format, isToday } from "date-fns";
 import { File, Paths } from "expo-file-system";
 import { router, Stack } from "expo-router";
-import { memo, useCallback, useDeferredValue, useState } from "react";
+import { memo, useCallback, useDeferredValue, useRef, useState } from "react";
 import { Alert, Pressable, RefreshControl, ScrollView, Share, StyleSheet, TextInput, View } from "react-native";
+import { useHeaderHeight } from "expo-router/react-navigation";
 import { useTranslation } from "react-i18next";
-import type { LogEntry, LogLevel, LogOverview } from "@godmode/shared";
+import type { LogEntry, LogIssue, LogLevel, LogOverview } from "@godmode/shared";
 import { useFullAccess } from "@/components/admin";
+import { useLeaveSettings } from "@/components/agent-actions";
 import { CloseButton } from "@/components/close-button";
 import { FilterChips } from "@/components/filter-chips";
 import { Group, LinkRow } from "@/components/form";
@@ -30,6 +32,13 @@ type Level = "all" | LogLevel;
 
 const LIMIT = 200;
 const TONE = { debug: "neutral", info: "sky", warn: "warning", error: "danger" } as const satisfies Record<LogLevel, Tone>;
+
+/** Issues group messages that differ only in ids and numbers: search for the longest part they share. */
+function issueSearch(msg: string): string {
+  const parts = msg.split(/\b[a-z]+_[A-Za-z0-9]{8,}\b|\b[0-9a-f]{8}-[0-9a-f-]{27}\b|\b[0-9a-f]{12,}\b|\d+(?:\.\d+)?/i).map((p) => p.trim());
+  const longest = parts.reduce((a, b) => (b.length > a.length ? b : a), "");
+  return (longest.length >= 4 ? longest : msg).slice(0, 80);
+}
 
 /**
  * Settings → Logs: Godmode's diagnostic log on the computer (secrets are masked before it is written). A full-access
@@ -62,6 +71,15 @@ function Entries({ overview, refetchOverview }: { overview: LogOverview; refetch
   const [search, setSearch] = useState("");
   const query = useDeferredValue(search.trim());
   const [open, setOpen] = useState<string | null>(null);
+  const scroller = useRef<FlashListRef<LogEntry>>(null);
+  const filtersY = useRef(0);
+  const headerHeight = useHeaderHeight();
+  const showIssue = (issue: LogIssue) => {
+    setOpen(null);
+    setLevel(issue.level);
+    setSearch(issueSearch(issue.msg));
+    scroller.current?.scrollToOffset({ offset: Math.max(filtersY.current - headerHeight - space.sm, 0), animated: true });
+  };
   const entries = useQuery({
     queryKey: sq.logEntries(level, query),
     queryFn: () => settingsApi.logs.entries({ level: level === "all" ? undefined : level, search: query || undefined, limit: LIMIT }),
@@ -97,13 +115,13 @@ function Entries({ overview, refetchOverview }: { overview: LogOverview; refetch
 
       {overview.issues.length ? (
         <Group title={t("logs.issues")}>
-          {overview.issues.slice(0, 8).map((i) => (
-            <InfoRow key={`${i.level}-${i.scope}-${i.msg}`} label={i.msg} detail={`${i.scope} · ${ago(i.lastTs)}`} value={`${i.count}×`} tone={i.level === "error" ? "danger" : "warning"} />
+          {overview.issues.map((i) => (
+            <IssueRow key={`${i.level}-${i.scope}-${i.msg}`} issue={i} onPress={() => showIssue(i)} />
           ))}
         </Group>
       ) : null}
 
-      <View style={{ gap: space.md }}>
+      <View style={{ gap: space.md }} onLayout={(e) => (filtersY.current = e.nativeEvent.layout.y)}>
         <FilterChips
           bleed={space.lg}
           value={level}
@@ -147,6 +165,7 @@ function Entries({ overview, refetchOverview }: { overview: LogOverview; refetch
       <Stack.Screen options={{ title: t("logs.title") }} />
       <CloseButton />
       <FlashList
+        ref={scroller}
         data={entries.isLoading ? [] : list}
         keyExtractor={(e, i) => `${e.ts}-${i}`}
         renderItem={renderItem}
@@ -178,8 +197,41 @@ function Entries({ overview, refetchOverview }: { overview: LogOverview; refetch
   );
 }
 
+/** A message that keeps coming back; a tap filters the log down to it. */
+function IssueRow({ issue: i, onPress }: { issue: LogIssue; onPress: () => void }) {
+  const c = useColors();
+  const { t } = useTranslation("settings");
+  const tone = toneColors(c, i.level === "error" ? "danger" : "warning");
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityHint={t("logs.showIssue")}
+      onPress={() => {
+        tap();
+        onPress();
+      }}
+      style={({ pressed }) => [styles.issue, pressed && { backgroundColor: c.sunken }]}
+    >
+      <View style={[styles.dot, { backgroundColor: tone.dot }]} />
+      <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+        <T variant="subhead" numberOfLines={2}>
+          {i.msg}
+        </T>
+        <T variant="caption" muted numberOfLines={1}>
+          {i.scope} · {ago(i.lastTs)}
+        </T>
+      </View>
+      <T variant="footnote" color={tone.fg} style={{ fontVariant: ["tabular-nums"] }}>
+        {i.count.toLocaleString(intlLocale())}×
+      </T>
+      <Icon name="chevron" size={11} color={c.textFaint} />
+    </Pressable>
+  );
+}
+
 /** What the desktop does with the log: share it (for a chat with Claude), file a fix in Godmode's code, delete it. */
 function LogActions({ empty }: { empty: boolean }) {
+  const leave = useLeaveSettings();
   const { t } = useTranslation(["programs", "common", "admin"]);
   const repair = useSettings().data?.selfRepair;
   const { data: agents } = useAgents();
@@ -226,7 +278,7 @@ function LogActions({ empty }: { empty: boolean }) {
         const merge = repair?.autoMerge ?? true;
         Alert.alert(t("logs.filed", { number: task.number }), merge ? t("logs.filedMerge", { branch: task.baseBranch || repair?.baseBranch || "main" }) : t("logs.filedReview"), [
           { text: t("common:actions.done"), style: "cancel" },
-          { text: t("logs.openTask"), onPress: () => router.push(`/task/${task.id}`) },
+          { text: t("logs.openTask"), onPress: () => leave(() => router.push(`/task/${task.id}`)) },
         ]);
       },
       t("logs.fixFailed"),
@@ -343,6 +395,13 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 15,
     paddingVertical: 0,
+  },
+  issue: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.sm + 2,
+    paddingVertical: 10,
+    paddingHorizontal: space.lg,
   },
   row: {
     flexDirection: "row",

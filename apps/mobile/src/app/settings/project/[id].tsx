@@ -9,6 +9,7 @@ import { useFullAccess } from "@/components/full-access";
 import { Group, LinkRow, PickerRow, TextEditor } from "@/components/form";
 import { Identity, Sources } from "@/components/setup";
 import { EmptyState, SectionTitle } from "@/components/ui";
+import { WorkspaceColors } from "@/components/workspace-color";
 import { api, errorText } from "@/lib/api";
 import { useArchive } from "@/lib/archive";
 import { useAgents } from "@/lib/hooks";
@@ -73,6 +74,7 @@ export default function ProjectScreen() {
       <CloseButton />
 
       <Identity icon={p.icon} name={p.name} description={p.description} fallbackIcon="folder" onChange={(patch) => void patchProject(p.id, patch)} />
+      <WorkspaceColors value={p.color} onChange={(color) => void patchProject(p.id, { color })} />
 
       <LinkRow
         emoji={ownEmoji(workspace.icon)}

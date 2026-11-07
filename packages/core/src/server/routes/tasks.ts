@@ -149,7 +149,13 @@ export function registerTaskRoutes(app: Hono): void {
   app.get("/api/tasks/:id", (c) => c.json(getTask(c.req.param("id"))));
 
   // What a phone without full access writes on a ticket, its agent works on without raw secrets (also later, on retries).
-  app.post("/api/tasks", async (c) => c.json(createTask((await body(c, createSchema)) as Parameters<typeof createTask>[0], "user", { fillOnly: isLimitedPhone(c) })));
+  app.post("/api/tasks", async (c) => {
+    const limited = isLimitedPhone(c);
+    const task = createTask((await body(c, createSchema)) as Parameters<typeof createTask>[0], "user", { fillOnly: limited });
+    // A part's result goes into its ticket's brief.
+    if (limited && task.parentId) markTaskFillOnly(task.parentId);
+    return c.json(task);
+  });
 
   app.patch("/api/tasks/:id", async (c) => {
     const id = c.req.param("id");

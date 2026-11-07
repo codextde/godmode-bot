@@ -1,7 +1,7 @@
 import { FlashList } from "@shopify/flash-list";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { router, Stack, useLocalSearchParams } from "expo-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import {
@@ -17,11 +17,13 @@ import {
 import { failureText, useLeaveSettings } from "@/components/agent-actions";
 import { Character } from "@/components/character";
 import { CloseButton } from "@/components/close-button";
-import { EmojiGrid, Group, Segmented, SwitchRow } from "@/components/form";
+import { EmojiGrid, Group, Segmented, SwitchRow, Tile } from "@/components/form";
 import { phoneTimezone } from "@/components/routine-row";
 import { TeamCard, seatTree } from "@/components/team-parts";
 import { Icon } from "@/components/icon";
-import { Badge, Button, Hairline, Skeleton, SkeletonRows, T, tap } from "@/components/ui";
+import { RowPressable } from "@/components/row-pressable";
+import { Badge, Button, Card, Hairline, Skeleton, SkeletonRows, T, tap } from "@/components/ui";
+import { dropAgentDraft, keepAgentDraft, SCRATCH, setDescribeDraft, useAgentDrafts, useLoadAgentDrafts, type AgentDraft, type AgentDraftFields } from "@/lib/agent-drafts";
 import { api, errorText } from "@/lib/api";
 import { useAgents } from "@/lib/hooks";
 import { useLive } from "@/lib/live";
@@ -53,14 +55,28 @@ export default function New() {
   const [picked, setPicked] = useState(kind !== "agent");
   const [template, setTemplate] = useState<AgentTemplate | null>(null);
   const [withRoutine, setWithRoutine] = useState(true);
+  // Where the agent form started: it is a draft while it differs from that.
+  const [origin, setOrigin] = useState<(AgentDraftFields & { id: string }) | null>(null);
   const parent = workspaces.find((w) => w.id === workspaceId);
+  useLoadAgentDrafts();
 
-  const start = (picked: AgentTemplate | null) => {
+  useEffect(() => {
+    if (!origin) return;
+    const fields = { name, role, instructions, workspaceId };
+    if (name === origin.name && role === origin.role && instructions === origin.instructions && workspaceId === origin.workspaceId) dropAgentDraft(origin.id);
+    else keepAgentDraft(origin.id, fields);
+  }, [origin, name, role, instructions, workspaceId]);
+
+  const start = (picked: AgentTemplate | null, id = picked?.id ?? SCRATCH) => {
     setTemplate(picked);
     const shown = picked ? templateText(picked) : null;
-    setName(shown?.name ?? "");
-    setRole(shown?.role ?? "");
-    setInstructions(picked?.instructions ?? "");
+    const from = { name: shown?.name ?? "", role: shown?.role ?? "", instructions: picked?.instructions ?? "", workspaceId: params.workspaceId ?? GLOBAL };
+    const draft: AgentDraft | undefined = useAgentDrafts.getState().drafts[id];
+    setOrigin({ ...from, id });
+    setName(draft?.name ?? from.name);
+    setRole(draft?.role ?? from.role);
+    setInstructions(draft?.instructions ?? from.instructions);
+    setWorkspaceId(draft && (!draft.workspaceId || workspaces.some((w) => w.id === draft.workspaceId)) ? draft.workspaceId : from.workspaceId);
     setPicked(true);
   };
 
@@ -82,6 +98,7 @@ export default function New() {
           ? { avatar: template.avatar, color: template.color, character: template.character, personality: template.personality, description: templateText(template).description }
           : {};
         const a = await api.agents.create({ ...look, name: name.trim(), role: role.trim() || undefined, instructions: text, workspaceId: workspaceId || null });
+        if (origin) dropAgentDraft(origin.id);
         await queryClient.invalidateQueries({ queryKey: qk.agents });
         // Its automation from the template, like the desktop; made on the phone, its runs fill logins but read no raw secrets.
         if (template?.routine && withRoutine) {
@@ -272,7 +289,7 @@ const searchText = (t: AgentTemplate, title: (category: AgentTemplate["category"
 const inFilter = (t: AgentTemplate, f: Filter) => f === "all" || (f === "all-in-one" ? !!t.covers?.length : t.category === f);
 
 /** Every role a company has, by department, searchable: one agent per job, or one all-in-one agent per department. */
-function TemplatePicker({ onPick, workspaceId }: { onPick: (template: AgentTemplate | null) => void; workspaceId: string | null }) {
+function TemplatePicker({ onPick, workspaceId }: { onPick: (template: AgentTemplate | null, id?: string) => void; workspaceId: string | null }) {
   const c = useColors();
   const { t } = useTranslation(["settings", "common", "agents"]);
   const templates = useQuery({ queryKey: ["agent-templates"], queryFn: api.agents.templates, staleTime: 60 * 60_000 });
@@ -297,13 +314,11 @@ function TemplatePicker({ onPick, workspaceId }: { onPick: (template: AgentTempl
 
   const header = (
     <View style={styles.pickerHeader}>
+      <Drafts templates={templates.data} loading={templates.isLoading} onOpen={(d) => onPick(templates.data?.find((x) => x.id === d.templateId) ?? null, d.templateId)} />
       <Describe workspaceId={workspaceId} />
       <Button title={t("new.picker.scratch")} icon="plus" variant="secondary" onPress={() => onPick(null)} />
       <Teams roles={templates.data} />
       <T variant="headline">{t("new.picker.hire")}</T>
-      <T variant="subhead" muted style={{ marginTop: -space.sm }}>
-        {t("new.picker.intro")}
-      </T>
       <View style={[styles.search, { backgroundColor: c.sunken }]}>
         <Icon name="search" size={15} color={c.textMuted} />
         <TextInput
@@ -380,16 +395,68 @@ function TemplatePicker({ onPick, workspaceId }: { onPick: (template: AgentTempl
   );
 }
 
+/** New agents left unfinished on this phone, newest first. */
+function Drafts({ templates, loading, onOpen }: { templates: AgentTemplate[] | undefined; loading: boolean; onOpen: (draft: AgentDraft) => void }) {
+  const c = useColors();
+  const { t } = useTranslation("agents");
+  const drafts = useAgentDrafts((s) => s.drafts);
+  const list = Object.values(drafts).sort((a, b) => b.at - a.at);
+  if (!list.length) return null;
+  return (
+    <View style={{ gap: space.sm }}>
+      <T variant="headline">{t("drafts.title")}</T>
+      <Card style={{ overflow: "hidden" }}>
+        {list.map((d, i) => {
+          const template = templates?.find((x) => x.id === d.templateId);
+          const name = d.name.trim() || t("drafts.unnamed");
+          const source = d.templateId === SCRATCH ? t("drafts.fromScratch") : t("drafts.fromTemplate", { name: template ? templateText(template).name : t("drafts.aTemplate") });
+          return (
+            <View key={d.templateId}>
+              {i > 0 && <Hairline inset={space.lg + 36 + space.md} />}
+              <View style={{ justifyContent: "center" }}>
+                <RowPressable accessibilityRole="button" accessibilityLabel={t("drafts.continueLabel", { name })} disabled={loading} onPress={() => onOpen(d)} style={styles.draft}>
+                  {template ? <Character character={template.character} color={template.color} size={36} seed={template.id} /> : <Tile icon="compose" size={36} />}
+                  <View style={{ flex: 1, minWidth: 0, gap: 1 }}>
+                    <T variant="subhead" numberOfLines={1} style={{ fontWeight: "600" }}>
+                      {name}
+                    </T>
+                    <T variant="caption" muted numberOfLines={1}>
+                      {t("drafts.source", { source })}
+                    </T>
+                  </View>
+                </RowPressable>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={t("drafts.discardLabel", { name })}
+                  hitSlop={10}
+                  onPress={() => {
+                    tap();
+                    dropAgentDraft(d.templateId);
+                  }}
+                  style={({ pressed }) => [styles.discard, { backgroundColor: c.sunken, opacity: pressed ? 0.6 : 1 }]}
+                >
+                  <Icon name="close" size={11} color={c.textMuted} weight="semibold" />
+                </Pressable>
+              </View>
+            </View>
+          );
+        })}
+      </Card>
+    </View>
+  );
+}
+
 /** "Describe it and Godmode builds it": a chat with the main agent that sets the agent up, like the desktop's. */
 function Describe({ workspaceId }: { workspaceId: string | null }) {
   const c = useColors();
   const { t } = useTranslation("agents");
   const main = useAgents().data?.find((a) => a.isDefault);
   const leave = useLeaveSettings();
-  const [text, setText] = useState("");
+  const text = useAgentDrafts((s) => s.describe);
   const describe = useMutation({
     mutationFn: () => api.chat.start({ agentId: main?.id, workspaceId, content: t("describe.prompt", { description: text.trim() }) }),
     onSuccess: (res) => {
+      setDescribeDraft("");
       useLive.getState().runStarted(res.run);
       void queryClient.invalidateQueries({ queryKey: qk.conversations });
       leave(() => router.push({ pathname: "/chat/[id]", params: { id: res.conversation.id } }));
@@ -404,7 +471,7 @@ function Describe({ workspaceId }: { workspaceId: string | null }) {
         <TextInput
           accessibilityLabel={t("describe.label")}
           value={text}
-          onChangeText={setText}
+          onChangeText={setDescribeDraft}
           placeholder={t("describe.placeholder")}
           placeholderTextColor={c.textFaint}
           multiline
@@ -578,6 +645,23 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: space.md,
     paddingHorizontal: 4,
+  },
+  draft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+    paddingLeft: space.lg,
+    paddingRight: space.lg + 24 + space.md,
+    paddingVertical: space.md,
+  },
+  discard: {
+    position: "absolute",
+    right: space.lg,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
   },
   describe: {
     borderRadius: radius.lg,

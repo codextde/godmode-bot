@@ -98,7 +98,7 @@
     "newCode": "New code",
     "waitingOn": "Waiting on {{address}}",
     "connected": "{{name}} is connected",
-    "connectedBody": "It can use Godmode now. Full access is given on your computer."
+    "connectedBody": "Full access is given on your computer."
   },
   "passwords": {
     "changeTitle": "Godmode password",
@@ -116,7 +116,7 @@
     "changedBody": "Use the new password next time you unlock.",
     "dashboardSetTitle": "Dashboard password",
     "dashboardChangeTitle": "Dashboard password",
-    "dashboardFooter": "For the browser dashboard. Use a different one than your Godmode password.",
+    "dashboardFooter": "Use a different one than your Godmode password.",
     "dashboardSet": "Dashboard password set",
     "dashboardChanged": "Dashboard password changed",
     "dashboardSessions": "Other signed-in dashboard sessions have to sign in again.",
@@ -131,7 +131,7 @@
     "days_other": "{{count}} days",
     "vault": {
       "title": "Vault",
-      "open": "Vault",
+      "open": "Passwords",
       "unlocked": "Unlocked",
       "locked": "Locked",
       "passphrase": "Change Godmode password",
@@ -145,7 +145,6 @@
       "fillDetail": "Godmode types passwords and 2FA codes into the page. The AI never sees them.",
       "revealDetail": "The AI may read raw passwords and codes. Every reveal is audited.",
       "agents": "Agents that read secrets",
-      "agentsFooter": "Giving an agent this access asks for your Godmode password.",
       "redact": "Redact secrets",
       "icons": "Load website icons",
       "iconsDetail": "From Google's icon service",
@@ -182,22 +181,8 @@
       "originsHint": "One per line"
     }
   },
-  "license": {
-    "keyTitle": "Licence key",
-    "key": "Key",
-    "save": "Save key",
-    "add": "Enter licence key",
-    "change": "Change licence key",
-    "refresh": "Check again",
-    "remove": "Remove key",
-    "removeTitle": "Remove the licence key?",
-    "removeEnforced": "Godmode stops starting new work on this computer until a key is added again. Your subscription itself isn't changed.",
-    "removeFree": "Your subscription itself isn't changed; you can add the key again any time.",
-    "failed": "Couldn't change the licence"
-  },
   "calls": {
     "ownerTitle": "Calls to you",
-    "ownerFooter": "With the country code. Leave it empty and agents never call you.",
     "number": "Your number",
     "allow": "Agents may call you",
     "invalidNumber": "That isn't a phone number Godmode can call",
@@ -270,10 +255,6 @@
     "takeBackTitle": "Take back full access from {{name}}?",
     "takeBackBody": "That phone goes back to what phones may do. Only your computer can give full access again."
   },
-  "billingExtra": {
-    "invoices": "Invoices",
-    "portal": "Billing and payment"
-  },
   "browserExtra": {
     "captcha": "CAPTCHA solving",
     "local": "Click through checkboxes",
@@ -300,16 +281,5 @@
   },
   "logsExtra": {
     "shareFull": "Share the full log"
-  },
-  "licenseExtra": {
-    "manage": "Manage subscription",
-    "remindersTitle": "Trial reminders",
-    "reminderEmail": "Email",
-    "reminderPlaceholder": "you@example.com",
-    "reminderInvalid": "That isn't an email address",
-    "reminderFailed": "Couldn't save the address",
-    "reminderOn": "Reminders go to {{email}}",
-    "reminderRemove": "Stop reminders",
-    "reminderFooter": "A heads-up before the free trial ends, plus a few tips."
   }
 }

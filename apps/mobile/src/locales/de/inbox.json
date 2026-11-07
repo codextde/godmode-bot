@@ -1,6 +1,5 @@
 {
   "tabs": {
-    "open": "Offen",
     "resolved": "Erledigt",
     "dismissed": "Verworfen"
   },
@@ -14,8 +13,6 @@
   },
   "title": "Posteingang",
   "anAgent": "Ein Agent",
-  "attention": "Braucht dich",
-  "attentionCount": "Braucht dich · {{count}}",
   "allClear": "Alles erledigt",
   "allClearBody": "Wenn ein Agent eine Entscheidung, deine Freigabe oder einen Login braucht, landet es hier.",
   "search": "Suchen",

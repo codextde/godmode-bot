@@ -1,4 +1,10 @@
 {
+  "order": {
+    "top": "Ganz nach oben",
+    "up": "Nach oben",
+    "down": "Nach unten",
+    "failed": "Aufgabe konnte nicht verschoben werden"
+  },
   "task": {
     "title": "Aufgabe",
     "notFound": "Aufgabe nicht gefunden",
@@ -107,6 +113,7 @@
   },
   "list": {
     "search": "Aufgaben suchen",
+    "status": "Status",
     "agent": "Agent",
     "allAgents": "Alle Agenten",
     "unassigned": "Nicht zugewiesen",
@@ -148,7 +155,17 @@
     "saveFailed": "Aufgabe konnte nicht gespeichert werden",
     "blockStops": "{{agent}} arbeitet gerade daran. Blockieren stoppt den Lauf.",
     "blockConfirm": "Stoppen und blockieren",
-    "gone": "Diese Aufgabe gibt es nicht mehr"
+    "gone": "Diese Aufgabe gibt es nicht mehr",
+    "keepAgent": "{{who}} behalten",
+    "takeOffTitle": "{{who}} von #{{number}} abziehen?",
+    "takeOffText": "Der Lauf stoppt und die Aufgabe wird im Backlog geparkt.",
+    "takeOffConfirm": "Abziehen",
+    "handOverTitle": "#{{number}} an {{next}} übergeben?",
+    "handOverConfirm": "Übergeben",
+    "handOverText": "{{who}} ist noch dran. {{ends}} und {{next}} fängt neu an.",
+    "runStops": "Der Lauf von {{who}} stoppt",
+    "followupCancelled": "Das Follow-up von {{who}} wird abgebrochen",
+    "runEnds": "Der Lauf von {{who}} endet"
   },
   "manage": {
     "edit": "Bearbeiten",
@@ -300,5 +317,17 @@
     "loadFailed": "Pull Request konnte nicht geladen werden",
     "comments_one": "{{count}} Kommentar",
     "comments_other": "{{count}} Kommentare"
+  },
+  "parts": {
+    "title": "Teile",
+    "add": "Teil hinzufügen",
+    "new": "Neuer Teil von #{{number}}",
+    "archived_one": "{{count}} weiterer Teil ist archiviert.",
+    "archived_other": "{{count}} weitere Teile sind archiviert."
+  },
+  "repo": {
+    "another": "Anderes Repository…",
+    "url": "Repository-URL",
+    "baseBranch": "Basis-Branch"
   }
 }

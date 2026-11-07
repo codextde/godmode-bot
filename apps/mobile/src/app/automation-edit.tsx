@@ -209,7 +209,9 @@ function AutomationForm({ routine, agents, defaultAgentId }: { routine: Routine 
   const timezone = draft.timezone;
   const zone = timezone !== phoneTimezone() ? timezone.replace(/_/g, " ") : null;
   const windowProblem = type === "schedule" ? startWindowProblem(draft.cron, timezone, draft.startWindow) : null;
-  const cronError = type === "schedule" ? (validateCron(draft.cron) ?? windowProblem) : type === "condition" ? validateCron(draft.checkCron) : null;
+  const [scheduleProblem, setScheduleProblem] = useState<string | null>(null);
+  const [checkProblem, setCheckProblem] = useState<string | null>(null);
+  const cronError = type === "schedule" ? (validateCron(draft.cron) ?? scheduleProblem ?? windowProblem) : type === "condition" ? (validateCron(draft.checkCron) ?? checkProblem) : null;
   const appProblems = type === "app" && admin ? appTriggerProblems(draft.app, appSchema) : null;
   const problems = {
     agentId: !draft.agentId ? t("edit.problem.agent") : null,
@@ -405,10 +407,13 @@ function AutomationForm({ routine, agents, defaultAgentId }: { routine: Routine 
               onChange={(cron) => set("cron", cron)}
               startWindowMinutes={draft.startWindow}
               runsPerWindow={draft.runs}
+              onWindowChange={(w) => setDraft((d) => ({ ...d, startWindow: w.startWindowMinutes, runs: w.runsPerWindow }))}
+              onProblemChange={setScheduleProblem}
               zone={zone}
               problem={windowProblem}
-            />
-            <StartWindowField cron={draft.cron} timezone={timezone} value={draft.startWindow} onChange={(m) => setDraft((d) => ({ ...d, startWindow: m, runs: 1 }))} />
+            >
+              <StartWindowField cron={draft.cron} timezone={timezone} value={draft.startWindow} onChange={(m) => setDraft((d) => ({ ...d, startWindow: m, runs: 1 }))} />
+            </CronBuilder>
             <Group>
               <TimezoneRow title={t("edit.timezone")} value={timezone} onChange={(v) => set("timezone", v)} />
             </Group>
@@ -464,7 +469,7 @@ function AutomationForm({ routine, agents, defaultAgentId }: { routine: Routine 
               <T variant="eyebrow" muted>
                 {t("edit.howOften")}
               </T>
-              <CronBuilder value={draft.checkCron} onChange={(cron) => set("checkCron", cron)} zone={zone} />
+              <CronBuilder value={draft.checkCron} onChange={(cron) => set("checkCron", cron)} onProblemChange={setCheckProblem} zone={zone} />
             </View>
             <Group footer={t("edit.checkModelHint")}>
               <TimezoneRow title={t("edit.timezone")} value={timezone} onChange={(v) => set("timezone", v)} />

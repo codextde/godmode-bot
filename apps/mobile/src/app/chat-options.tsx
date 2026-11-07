@@ -5,10 +5,11 @@ import { useTranslation } from "react-i18next";
 import { MAX_INSTRUCTIONS_LENGTH, type Agent, type ConversationWithMessages } from "@godmode/shared";
 import { Group, PickerRow, TextEditor } from "@/components/form";
 import { useFullAccess } from "@/components/full-access";
-import { NewChatPlace } from "@/components/new-chat-place";
+import { ChatPlace, NewChatPlace } from "@/components/new-chat-place";
 import { ErrorState, Skeleton, T } from "@/components/ui";
 import { ApiError, api, errorText, updateDesktopMessage, type ChatPlacePatch } from "@/lib/api";
 import { fetchConversation } from "@/lib/chat-cache";
+import { changeChatWork } from "@/lib/chat-extras";
 import { fallbackProfile, useNewChatOptions } from "@/lib/chat-options";
 import { useAgents } from "@/lib/hooks";
 import { qk, queryClient } from "@/lib/query";
@@ -76,6 +77,7 @@ export default function ChatOptionsSheet() {
       ) : (
         <>
           {!conversationId && agent && fullAccess ? <NewChatPlace agent={agent} /> : null}
+          {data && agent && fullAccess ? <ChatPlace agent={agent} chat={data} set={(patch) => void changeChatWork(data.id, patch).catch((err: unknown) => Alert.alert(t("options.changeFailed"), errorText(err)))} /> : null}
           {data || agent ? (
             <Place
               agent={agent}
@@ -83,6 +85,7 @@ export default function ChatOptionsSheet() {
               projectId={data?.projectId ?? null}
               profileId={data ? (data.browserProfileId ?? null) : options.browserProfileId}
               withProject={!!data}
+              withWorkspace={!!data && fullAccess === true}
               onChange={(patch) => void save(patch)}
             />
           ) : null}
@@ -112,6 +115,7 @@ function Place({
   projectId,
   profileId,
   withProject,
+  withWorkspace,
   onChange,
 }: {
   agent?: Agent;
@@ -119,6 +123,7 @@ function Place({
   projectId: string | null;
   profileId: string | null;
   withProject: boolean;
+  withWorkspace: boolean;
   onChange: (patch: ChatPlacePatch) => void;
 }) {
   const { t } = useTranslation(["chat", "common"]);
@@ -136,10 +141,24 @@ function Place({
   const fallback = agent ? fallbackProfile(agent, profiles.data ?? [], workspaceId, project) : null;
   // Only when there is something to pick besides the profile it browses with anyway.
   const showProfiles = browsing && (usable.some((p) => p.id !== fallback?.id) || !!profileId);
-  if (!projects.length && !showProfiles) return null;
+  // A global agent's chat can work in any workspace; a workspace agent's stays in its own.
+  const moves = withWorkspace && !!agent && !agent.workspaceId && workspaces.length > 0;
+  if (!projects.length && !showProfiles && !moves) return null;
 
   return (
     <Group>
+      {moves ? (
+        <PickerRow
+          icon="layers"
+          title={t("options.workspace")}
+          value={workspaceId && workspaceId !== agentProject?.workspaceId ? workspaceId : OWN}
+          options={[
+            { value: OWN, label: agentProject ? t("options.agentProject", { name: agent?.name ?? "" }) : t("options.noWorkspace"), detail: agentProject?.name },
+            ...workspaces.filter((w) => w.id !== agentProject?.workspaceId).map((w) => ({ value: w.id, label: w.name })),
+          ]}
+          onChange={(v) => onChange({ workspaceId: v === OWN ? (agentProject?.workspaceId ?? null) : v, projectId: null })}
+        />
+      ) : null}
       {projects.length ? (
         <PickerRow
           icon="folder"

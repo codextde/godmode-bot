@@ -141,7 +141,7 @@ function PresetPicker({ scope }: { scope?: Scope }) {
         {API_TOOL_PRESETS.map((p) => (
           <LinkRow key={p.id} icon={p.icon} title={p.name} detail={t(p.tagline)} onPress={() => router.replace({ pathname: "/settings/api-tool", params: { preset: p.id, ...carried } })} />
         ))}
-        <LinkRow icon="wrench" title={t("presets.custom")} detail={t("presets.customTagline")} onPress={() => router.replace({ pathname: "/settings/api-tool", params: { preset: "custom", ...carried } })} />
+        <LinkRow icon="wrench" title={t("presets.custom")} onPress={() => router.replace({ pathname: "/settings/api-tool", params: { preset: "custom", ...carried } })} />
       </Group>
     </>
   );

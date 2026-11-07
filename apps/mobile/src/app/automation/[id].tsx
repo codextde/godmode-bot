@@ -197,6 +197,7 @@ function AutomationView({ routine, refetchList }: { routine: Routine; refetchLis
             <Badge label={t("status.paused")} />
           )}
           {routine.fillOnly ? <Badge label={t("automation.fillOnly")} dot={false} /> : null}
+          {routine.pendingEvents > 0 ? <Badge label={t("automation.eventsWait", { count: routine.pendingEvents })} tone="warning" dot={false} /> : null}
         </Row>
         {agent ? (
           <T variant="subhead" muted style={{ textAlign: "center" }}>

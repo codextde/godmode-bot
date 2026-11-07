@@ -33,6 +33,7 @@ import type {
   TotpInput,
   VaultStatus,
 } from "@godmode/shared";
+import { cardExpired } from "@godmode/shared";
 import type { IconName } from "@/components/icon";
 import { ApiError, request } from "./api";
 import { qk, queryClient } from "./query";
@@ -51,7 +52,7 @@ export const vaultApi = {
   totp: () => get<TotpEntry[]>("/api/totp"),
   passkeys: () => get<Passkey[]>("/api/passkeys"),
   cards: () => get<PaymentCard[]>("/api/cards"),
-  purchases: (cardId?: string) => get<CardPurchase[]>(`/api/card-purchases?limit=100${cardId ? `&cardId=${encodeURIComponent(cardId)}` : ""}`),
+  purchases: (cardId?: string) => get<CardPurchase[]>(`/api/card-purchases?limit=200${cardId ? `&cardId=${encodeURIComponent(cardId)}` : ""}`),
   macPassword: () => get<MacPasswordStatus>("/api/vault/mac-password"),
   sshKeys: () => get<SshKeysOverview>("/api/ssh/key-manager"),
 };
@@ -204,6 +205,15 @@ export function isVaultLocked(err: unknown): boolean {
   return err instanceof ApiError && err.status === 423;
 }
 
+/** "all", "global" or a workspace's id: the desktop's scope filter on vault lists. */
+export type VaultScope = string;
+
+/** Exact, like the computer's own filter: a workspace shows what is saved in it, not the global entries. */
+export const inScope = (item: { workspaceId: string | null }, scope: VaultScope) => scope === "all" || (scope === "global" ? !item.workspaceId : item.workspaceId === scope);
+
+/** A limited phone isn't told a card's expiry: it gets 0, which isn't an expired card. */
+export const isCardExpired = (card: Pick<PaymentCard, "expMonth" | "expYear">) => card.expYear > 0 && cardExpired(card);
+
 /** "github.com" from what someone typed as a website: "https://www.github.com/login" or "github.com". */
 export function domainFromUrl(input: string): string {
   const s = input.trim();
@@ -220,6 +230,15 @@ export function normalizeUrl(input: string): string {
   const s = input.trim();
   if (!s) return "";
   return /^[a-z][a-z0-9+.-]*:\/\//i.test(s) ? s : `https://${s}`;
+}
+
+/** The site a 2FA entry's service most likely is: "GitHub" → "github.com", "accounts.google.com" stays. */
+export function issuerDomain(issuer: string): string {
+  const s = issuer.trim().toLowerCase();
+  if (!s) return "";
+  if (/^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(s)) return s.replace(/^www\./, "");
+  const slug = s.replace(/\(.*?\)/g, "").replace(/[^a-z0-9]/g, "");
+  return slug ? `${slug}.com` : "";
 }
 
 /** "github.com" for a login: its first domain, else its address' host. */

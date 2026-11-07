@@ -76,6 +76,7 @@ import type {
 import { CloudErrorCode, LICENSE_REQUIRED, isPhoneUrlAllowed } from "@godmode/shared";
 import type { PendingFile, UploadFile } from "./attachments";
 import { t } from "./i18n";
+import { sellsSomething } from "./license-text";
 import { useLive } from "./live";
 import { withPending } from "./pending-queue";
 import { accepts, baseUrl, candidateOrder, computerOf, removedBy, type Candidate } from "./peers";
@@ -97,7 +98,7 @@ export class ApiError extends Error {
   }
 }
 
-/** New work is refused until the computer has an active licence; it is added there, not on the phone. */
+/** New work is refused until the computer has an active licence. */
 const licenseMessage = () => t("system:api.license");
 
 /** An older Godmode on the computer refuses what the phone asked for (`device_forbidden`). */
@@ -121,7 +122,11 @@ async function send(url: string, init: RequestInit, timeoutMs = TIMEOUT_MS): Pro
 async function failure(res: Response): Promise<{ error?: string; code?: string; details?: unknown }> {
   try {
     const body = (await res.json()) as { error?: unknown; code?: unknown; details?: unknown } | null;
-    return { error: typeof body?.error === "string" ? body.error : undefined, code: typeof body?.code === "string" ? body.code : undefined, details: body?.details };
+    const error = typeof body?.error === "string" ? body.error : undefined;
+    const code = typeof body?.code === "string" ? body.code : undefined;
+    // The cloud words its limits with advice to buy a bigger plan; a store app must not show that.
+    const sells = code === CloudErrorCode.PlanLimit || (code === "cloud_error" && !!error && sellsSomething(error));
+    return { error: sells ? t("system:api.cloudLimit") : error, code, details: body?.details };
   } catch {
     return {};
   }
@@ -479,8 +484,16 @@ export type AgentPatch = {
 
 export type ModelChoicePatch = { model?: string | null; effort?: Effort | null; ultracode?: boolean | null };
 
-/** A chat's own project, browser profile and instructions (null / "" = the agent's). */
-export type ChatPlacePatch = { projectId?: string | null; browserProfileId?: string | null; instructions?: string };
+/** A chat's own project, browser profile and instructions (null / "" = the agent's); its workspace only with full access. */
+export type ChatPlacePatch = { workspaceId?: string | null; projectId?: string | null; browserProfileId?: string | null; instructions?: string };
+/** Where an open chat works on the computer: what only a phone with full access changes. */
+export type ChatWorkPatch = {
+  workingDirectory?: string | null;
+  vmId?: string | null;
+  sshServerIds?: string[];
+  androidDeviceIds?: string[];
+  computerTarget?: import("@godmode/shared").ComputerTarget | null;
+};
 
 export type BrowserInput =
   | { type: "click"; x: number; y: number }
@@ -548,8 +561,8 @@ export const api = {
     resume: (id: string) => post<{ continued: number }>(`/api/agents/${id}/continue`, {}),
     /** A one-off task in a new chat; without a prompt it follows its instructions. */
     runOnce: (id: string, prompt: string, workspaceId: string | null) => post<StartChatResult>(`/api/agents/${id}/run`, { prompt, workspaceId }),
-    /** Same setup, fresh memory, no chats or automations. One that reads secrets in plain text is copied on the computer. */
-    duplicate: (id: string) => post<Agent>(`/api/agents/${id}/duplicate`, {}),
+    /** Same setup, fresh memory, no chats or automations. One that reads secrets in plain text takes full access and a `grant`. */
+    duplicate: (id: string, grant?: string) => request<Agent>("POST", `/api/agents/${id}/duplicate`, {}, 0, grant ? { "x-godmode-grant": grant } : undefined),
     /** Its chats, automations and memory go with it; never the built-in agent. */
     remove: (id: string) => del<{ ok: true }>(`/api/agents/${id}`),
     /** Every change to its files, newest first. */
@@ -591,8 +604,8 @@ export const api = {
 
   models: (refresh = false) => get<ModelCatalog>("/api/models", refresh ? { refresh: 1 } : {}),
 
-  /** Chats, messages and tickets by their words; agents' notes are searched on the computer. */
-  search: (q: string, limit = 20) => get<import("@godmode/shared").SearchResults>("/api/search", { q, limit, notes: 0 }),
+  /** Chats, messages and tickets by their words; with `notes` (full access) also agents' notes. */
+  search: (q: string, notes = false, limit = 20) => get<import("@godmode/shared").SearchResults>("/api/search", notes ? { q, limit } : { q, limit, notes: 0 }),
 
   voice: {
     /** The computer writes down what was said, with its own key or Hex (400 `voice_not_set_up` when it has neither). */
@@ -620,6 +633,9 @@ export const api = {
     },
     /** The page of messages before `before`. */
     messages: (id: string, before: string, limit: number) => get<MessagePage>(`/api/conversations/${id}/messages`, { before, limit, lite: 1 }),
+    /** One tool call with its whole output: light messages cut long ones. */
+    toolCall: (id: string, messageId: string, toolId: string) =>
+      get<Extract<import("@godmode/shared").MessageBlock, { type: "tool_use" }>>(`/api/conversations/${id}/messages/${messageId}/tools/${encodeURIComponent(toolId)}`),
     /** While the agent works in the chat the message joins its queue (`queued`) instead of starting a run. */
     send: (id: string, input: { content: string; attachments: UploadFile[]; queueId: string }) =>
       post<SendMessageOutcome | AnswerQuestionResult>(`/api/conversations/${id}/messages`, {
@@ -628,7 +644,7 @@ export const api = {
         queue: true,
         queueId: input.queueId,
       }),
-    update: (id: string, input: { title?: string; pinned?: boolean; archived?: boolean } & ModelChoicePatch & ChatPlacePatch) => patch<Conversation>(`/api/conversations/${id}`, input),
+    update: (id: string, input: { title?: string; pinned?: boolean; archived?: boolean } & ModelChoicePatch & ChatPlacePatch & ChatWorkPatch) => patch<Conversation>(`/api/conversations/${id}`, input),
     queue: {
       edit: (id: string, messageId: string, content: string) => patch<QueuedMessage>(`/api/conversations/${id}/queue/${messageId}`, { content }),
       remove: (id: string, messageId: string) => del<{ ok: true }>(`/api/conversations/${id}/queue/${messageId}`),
@@ -680,13 +696,15 @@ export const api = {
       type?: TaskType;
       status?: TaskStatus;
       agentId?: string | null;
-    }) => withProject(input, (body) => post<Task>("/api/tasks", body)),
+      /** A part of this ticket (it waits for it); a part is always in its ticket's workspace. */
+      parentId?: string;
+    } & Pick<import("@godmode/shared").TaskPatch, "repoUrl" | "repoPath" | "baseBranch">) => withProject(input, (body) => post<Task>("/api/tasks", body)),
     /** Moving to To do starts the agent; moving away from In progress stops it. Archived tasks are off the board. */
     update: (
       id: string,
       input: { title?: string; description?: string; status?: TaskStatus; agentId?: string | null; archived?: boolean; projectId?: string | null } & Pick<
         import("@godmode/shared").TaskPatch,
-        "priority" | "dueDate" | "labels" | "goalId" | "waitsFor" | "blockedReason"
+        "beforeId" | "priority" | "dueDate" | "labels" | "goalId" | "waitsFor" | "blockedReason" | "type" | "repoUrl" | "baseBranch" | "autoMerge"
       >,
     ) => patch<Task>(`/api/tasks/${id}`, input),
     /** Off the board, never deleted. */

@@ -2,12 +2,14 @@ import { DatePicker, Host } from "@expo/ui/swift-ui";
 import { datePickerStyle, labelsHidden } from "@expo/ui/swift-ui/modifiers";
 import { Cron } from "croner";
 import { format } from "date-fns";
-import { useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Pressable, StyleSheet, TextInput, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import {
   formatMinutes,
+  formatTime,
   MAX_START_WINDOW_MINUTES,
+  MIN_MINUTES_PER_RUN,
   ordinal,
   parseCron,
   scheduleToHuman,
@@ -15,21 +17,26 @@ import {
   startWindowTooLong,
   validateCron,
   type CronDraft,
+  type SeveralMode,
 } from "@godmode/shared";
-import { Group, PickerRow, StepperRow, SwitchRow } from "./form";
+import { Group, PickerRow, SegmentRow, StepperRow, SwitchRow } from "./form";
 import { Icon } from "./icon";
 import { T, tap } from "./ui";
-import { currentLanguage, dateLocale, uses12Hour } from "@/lib/i18n";
-import { fonts, radius, space, useColors, useIsDark } from "@/lib/theme";
+import { buildCron, SEVERAL_EVERY, SEVERAL_TIMES, severalSpan, severalStarts, severalWindow } from "@/lib/cron-draft";
+import { currentLanguage, dateLocale, t as translate, uses12Hour } from "@/lib/i18n";
+import { alpha, fonts, radius, space, useColors, useIsDark } from "@/lib/theme";
 
-type Kind = "hourly" | "daily" | "weekdays" | "weekly" | "monthly" | "custom";
+type Kind = "hourly" | "several" | "daily" | "weekdays" | "weekly" | "monthly" | "custom";
 
-const KINDS: Kind[] = ["hourly", "daily", "weekdays", "weekly", "monthly", "custom"];
+const KINDS: Kind[] = ["hourly", "several", "daily", "weekdays", "weekly", "monthly", "custom"];
 
 // Monday-first order reads more naturally in a picker
 const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0];
 const MINUTES = Array.from({ length: 12 }, (_, i) => i * 5);
 const DAYS_OF_MONTH = Array.from({ length: 31 }, (_, i) => i + 1);
+const DAY = 24 * 60;
+/** Android has no time picker here: quarter hours, and the end of the day. */
+const QUARTERS = [...Array.from({ length: 96 }, (_, i) => i * 15), DAY - 1];
 
 const CUSTOM_EXAMPLES = [
   { cron: "*/15 * * * *", labelKey: "cronBuilder.examples.every15Minutes" },
@@ -41,33 +48,19 @@ const CUSTOM_EXAMPLES = [
 export const START_WINDOW_PRESETS = [15, 30, 60, 90, 120, 180];
 
 const pad = (n: number) => String(n).padStart(2, "0");
-const clamp = (n: number, min: number, max: number) => (Number.isFinite(n) ? Math.min(max, Math.max(min, Math.round(n))) : min);
-const tidy = (cron: string) => cron.trim().replace(/\s+/g, " ");
+const clock = (minutes: number) => formatTime(Math.floor(minutes / 60) % 24, minutes % 60, currentLanguage(), uses12Hour());
 
-/** The preset an expression reads as; a schedule the phone has no preset for ("several times a day") is edited as cron. */
-function draftOf(cron: string): CronDraft {
-  const d = parseCron(cron);
-  return d.kind === "several" ? { ...d, kind: "custom", custom: tidy(cron) } : d;
-}
-
-/** The expression of a preset (desktop: buildCron). */
-function buildCron(d: CronDraft): string {
-  const m = clamp(d.minute, 0, 59);
-  const h = clamp(d.hour, 0, 23);
-  switch (d.kind) {
-    case "hourly":
-      return `${m} * * * *`;
-    case "daily":
-      return `${m} ${h} * * *`;
-    case "weekdays":
-      return `${m} ${h} * * 1-5`;
-    case "weekly":
-      return `${m} ${h} * * ${clamp(d.weekday, 0, 6)}`;
-    case "monthly":
-      return `${m} ${h} ${clamp(d.monthDay, 1, 31)} * *`;
-    default:
-      return tidy(d.custom);
+/** What is wrong with a "several" draft, or null (desktop: severalProblem). */
+function severalProblem(d: CronDraft): string | null {
+  if (d.kind !== "several") return null;
+  if (!d.days.length) return translate("components:cronBuilder.problems.pickDay");
+  const span = severalSpan(d);
+  if (span <= 0) return translate("components:cronBuilder.problems.endAfterStart");
+  if (d.mode === "random" && span / d.times < MIN_MINUTES_PER_RUN) {
+    return translate("components:cronBuilder.problems.tooManyRuns", { times: d.times, minutes: formatMinutes(d.times * MIN_MINUTES_PER_RUN, currentLanguage()) });
   }
+  if (d.mode === "interval" && severalStarts(d).length < 2) return translate("components:cronBuilder.problems.onlyOneRun", { hours: d.every });
+  return null;
 }
 
 /** Longest random start window the schedule leaves room for (same rule as the core and the desktop). */
@@ -95,39 +88,62 @@ function weekdayName(day: number, short = false): string {
 /**
  * Friendly schedule editor (desktop: cron-builder.tsx): presets with a time, or a cron expression, and the schedule in
  * words below. Emits the expression through `onChange`; the caller checks it with validateCron before saving.
+ * With `onWindowChange` it also offers random runs spread over a time range: the builder then owns the start window and
+ * the runs per window, and hides `children` (the start window field) while that mode is on.
  */
 export function CronBuilder({
   value,
   onChange,
   startWindowMinutes = 0,
   runsPerWindow = 1,
+  onWindowChange,
+  onProblemChange,
   zone,
   problem,
+  children,
 }: {
   value: string;
   onChange: (cron: string) => void;
   startWindowMinutes?: number;
   runsPerWindow?: number;
+  onWindowChange?: (window: { startWindowMinutes: number; runsPerWindow: number }) => void;
+  /** Problems the cron can't show (an end before the start): the caller blocks saving while there is one. */
+  onProblemChange?: (problem: string | null) => void;
   /** Shown after the schedule when it runs in another timezone than the phone's. */
   zone?: string | null;
   /** A problem the expression can't show (a start window that doesn't fit). */
   problem?: string | null;
+  children?: ReactNode;
 }) {
   const c = useColors();
   const { t } = useTranslation("components");
-  const [draft, setDraft] = useState<CronDraft>(() => draftOf(value));
+  const [draft, setDraft] = useState<CronDraft>(() => parseCron(value, startWindowMinutes, runsPerWindow));
   const cron = buildCron(draft);
   const lang = currentLanguage();
-  const error = validateCron(cron, lang) ?? problem ?? null;
+  const draftProblem = severalProblem(draft);
+  const error = validateCron(cron, lang) ?? draftProblem ?? problem ?? null;
   const timed = draft.kind === "daily" || draft.kind === "weekdays" || draft.kind === "weekly" || draft.kind === "monthly";
+  const several = draft.kind === "several";
+  const randomRuns = several && draft.mode === "random";
   const ios = process.env.EXPO_OS === "ios";
+  useEffect(() => onProblemChange?.(draftProblem), [draftProblem, onProblemChange]);
 
   const update = (patch: Partial<CronDraft>) => {
     const next = { ...draft, ...patch };
+    if (!onWindowChange && next.kind === "several") next.mode = "interval";
+    if (patch.kind === "several" && severalSpan(next) < 120) Object.assign(next, { hour: 9, minute: 0, untilHour: 21, untilMinute: 0 });
     // Carry the current expression into the custom editor when switching to it
     if (patch.kind === "custom" && draft.kind !== "custom") next.custom = buildCron(draft);
     setDraft(next);
     onChange(buildCron(next));
+    const window = severalWindow(next);
+    if (window) onWindowChange?.(window);
+    else if (severalWindow(draft)) onWindowChange?.({ startWindowMinutes: 0, runsPerWindow: 1 });
+  };
+
+  const toggleDay = (day: number) => {
+    const days = draft.days.includes(day) ? draft.days.filter((d) => d !== day) : [...draft.days, day].sort((a, b) => a - b);
+    if (days.length) update({ days });
   };
 
   return (
@@ -137,7 +153,66 @@ export function CronBuilder({
         {draft.kind === "hourly" ? (
           <StepperRow title={t("cronBuilder.atMinute")} value={draft.minute} min={0} max={59} steps={MINUTES} format={(m) => `:${pad(m)}`} onChange={(minute) => update({ minute })} />
         ) : null}
-        {draft.kind === "weekly" ? <WeekdayRow value={draft.weekday} onChange={(weekday) => update({ weekday })} /> : null}
+        {several && onWindowChange ? (
+          <SegmentRow<SeveralMode>
+            title={t("cronBuilder.timing")}
+            value={draft.mode}
+            options={[
+              { value: "random", label: t("cronBuilder.randomTimes") },
+              { value: "interval", label: t("cronBuilder.fixedInterval") },
+            ]}
+            onChange={(mode) => update({ mode })}
+          />
+        ) : null}
+        {randomRuns ? (
+          <StepperRow
+            title={t("cronBuilder.runsPerDay")}
+            value={draft.times}
+            min={SEVERAL_TIMES[0]!}
+            max={SEVERAL_TIMES[SEVERAL_TIMES.length - 1]!}
+            steps={SEVERAL_TIMES}
+            format={(count) => t("cronBuilder.times", { count })}
+            onChange={(times) => update({ times })}
+          />
+        ) : null}
+        {several && !randomRuns ? (
+          <StepperRow
+            title={t("cronBuilder.every")}
+            value={draft.every}
+            min={SEVERAL_EVERY[0]!}
+            max={SEVERAL_EVERY[SEVERAL_EVERY.length - 1]!}
+            steps={SEVERAL_EVERY}
+            format={(count) => t("cronBuilder.hours", { count })}
+            onChange={(every) => update({ every })}
+          />
+        ) : null}
+        {several && ios ? <TimeRow title={randomRuns ? t("cronBuilder.between") : t("cronBuilder.from")} hour={draft.hour} minute={draft.minute} onChange={(hour, minute) => update({ hour, minute })} /> : null}
+        {several && ios ? <TimeRow title={randomRuns ? t("cronBuilder.and") : t("cronBuilder.until")} hour={draft.untilHour} minute={draft.untilMinute} onChange={(untilHour, untilMinute) => update({ untilHour, untilMinute })} /> : null}
+        {several && !ios ? (
+          <StepperRow
+            title={randomRuns ? t("cronBuilder.between") : t("cronBuilder.from")}
+            value={draft.hour * 60 + draft.minute}
+            min={0}
+            max={DAY - 1}
+            steps={QUARTERS}
+            format={clock}
+            onChange={(m) => update({ hour: Math.floor(m / 60), minute: m % 60 })}
+          />
+        ) : null}
+        {several && !ios ? (
+          <StepperRow
+            title={randomRuns ? t("cronBuilder.and") : t("cronBuilder.until")}
+            value={draft.untilHour * 60 + draft.untilMinute}
+            min={0}
+            max={DAY - 1}
+            steps={QUARTERS}
+            format={clock}
+            onChange={(m) => update({ untilHour: Math.floor(m / 60), untilMinute: m % 60 })}
+          />
+        ) : null}
+        {several ? <WeekdayRow selected={draft.days} onPress={toggleDay} /> : null}
+        {several ? <DayTimeline draft={draft} /> : null}
+        {draft.kind === "weekly" ? <WeekdayRow selected={[draft.weekday]} onPress={(weekday) => update({ weekday })} /> : null}
         {draft.kind === "monthly" ? (
           <StepperRow title={t("cronBuilder.onDay")} value={draft.monthDay} min={1} max={31} steps={DAYS_OF_MONTH} format={(n) => ordinal(n, lang)} onChange={(monthDay) => update({ monthDay })} />
         ) : null}
@@ -148,6 +223,7 @@ export function CronBuilder({
         {timed && !ios ? <StepperRow title={t("cronBuilder.minute")} value={draft.minute} min={0} max={59} steps={MINUTES} format={pad} onChange={(minute) => update({ minute })} /> : null}
         {draft.kind === "custom" ? <CustomCronRow value={draft.custom} invalid={!!validateCron(cron)} onChange={(custom) => update({ custom })} /> : null}
       </Group>
+      {randomRuns ? null : children}
       <View
         accessibilityLiveRegion="polite"
         style={[styles.summary, { backgroundColor: error ? c.dangerSoft : c.surfaceAlt, borderColor: error ? c.danger : c.border }]}
@@ -166,7 +242,7 @@ export function CronBuilder({
   );
 }
 
-function WeekdayRow({ value, onChange }: { value: number; onChange: (weekday: number) => void }) {
+function WeekdayRow({ selected, onPress }: { selected: number[]; onPress: (weekday: number) => void }) {
   const c = useColors();
   const { t } = useTranslation("components");
   return (
@@ -176,7 +252,7 @@ function WeekdayRow({ value, onChange }: { value: number; onChange: (weekday: nu
       </T>
       <View style={{ flexDirection: "row", gap: 4 }}>
         {WEEK_ORDER.map((d) => {
-          const active = d === value;
+          const active = selected.includes(d);
           return (
             <Pressable
               key={d}
@@ -184,9 +260,8 @@ function WeekdayRow({ value, onChange }: { value: number; onChange: (weekday: nu
               accessibilityLabel={weekdayName(d)}
               accessibilityState={{ selected: active }}
               onPress={() => {
-                if (active) return;
                 tap();
-                onChange(d);
+                onPress(d);
               }}
               style={[styles.day, { backgroundColor: active ? c.primary : c.sunken }]}
             >
@@ -201,14 +276,57 @@ function WeekdayRow({ value, onChange }: { value: number; onChange: (weekday: nu
   );
 }
 
-/** "At" with the system's time picker. */
-function TimeRow({ hour, minute, onChange }: { hour: number; minute: number; onChange: (hour: number, minute: number) => void }) {
+/** 24 h strip: the time range, and where the runs fall in it (random: one part per run, interval: a tick per run). */
+function DayTimeline({ draft }: { draft: CronDraft }) {
+  const c = useColors();
+  const { t } = useTranslation("components");
+  const starts = severalStarts(draft);
+  if (!starts.length) return null;
+  const from = draft.hour * 60 + draft.minute;
+  const span = severalSpan(draft);
+  const part = span / Math.max(1, draft.times);
+  const random = draft.mode === "random";
+  const pct = (minutes: number) => `${(Math.min(Math.max(minutes, 0), DAY) / DAY) * 100}%` as const;
+  return (
+    <View style={styles.stackedRow}>
+      <View importantForAccessibility="no-hide-descendants" accessibilityElementsHidden style={{ gap: 4 }}>
+        <View style={[styles.strip, { backgroundColor: c.sunken }]}>
+          {[6, 12, 18].map((h) => (
+            <View key={h} style={[styles.stripMark, { left: pct(h * 60), backgroundColor: c.border }]} />
+          ))}
+          <View style={[styles.stripRange, { left: pct(from), width: pct(span), backgroundColor: alpha(c.primary, 0.12) }]} />
+          {starts.map((s) => (
+            <View
+              key={s}
+              style={random ? [styles.stripPart, { left: pct(s), width: pct(part), backgroundColor: alpha(c.primary, 0.3), borderColor: c.surface }] : [styles.stripTick, { left: pct(s), backgroundColor: c.primary }]}
+            />
+          ))}
+        </View>
+        <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+          {[0, 6, 12, 18, 24].map((h) => (
+            <T key={h} variant="caption" muted style={{ fontSize: 10, fontVariant: ["tabular-nums"] }}>
+              {clock(h * 60)}
+            </T>
+          ))}
+        </View>
+      </View>
+      <T variant="footnote" muted>
+        {random
+          ? t("cronBuilder.timeline.random", { count: draft.times })
+          : t(starts.length > 8 ? "cronBuilder.timeline.intervalMore" : "cronBuilder.timeline.interval", { count: starts.length, times: starts.slice(0, 8).map(clock).join(", "), more: starts.length - 8 })}
+      </T>
+    </View>
+  );
+}
+
+/** A time with the system's picker; "At" unless it says otherwise. */
+function TimeRow({ title, hour, minute, onChange }: { title?: string; hour: number; minute: number; onChange: (hour: number, minute: number) => void }) {
   const dark = useIsDark();
   const { t } = useTranslation("components");
   return (
     <View style={styles.row}>
       <T variant="callout" style={{ flex: 1, fontWeight: "500" }}>
-        {t("cronBuilder.at")}
+        {title ?? t("cronBuilder.at")}
       </T>
       <Host matchContents colorScheme={dark ? "dark" : "light"}>
         <DatePicker
@@ -330,6 +448,38 @@ const styles = StyleSheet.create({
     gap: space.sm,
     paddingHorizontal: space.lg,
     paddingVertical: 11,
+  },
+  strip: {
+    height: 26,
+    borderRadius: radius.sm,
+    borderCurve: "continuous",
+    overflow: "hidden",
+  },
+  stripMark: {
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    width: StyleSheet.hairlineWidth,
+  },
+  stripRange: {
+    position: "absolute",
+    top: 3,
+    bottom: 3,
+    borderRadius: 4,
+  },
+  stripPart: {
+    position: "absolute",
+    top: 6,
+    bottom: 6,
+    borderRadius: 3,
+    borderLeftWidth: 1,
+  },
+  stripTick: {
+    position: "absolute",
+    top: 3,
+    bottom: 3,
+    width: 2,
+    borderRadius: 1,
   },
   day: {
     flex: 1,

@@ -4,10 +4,13 @@ import { router } from "expo-router";
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import { fileRefs, type ChatFile, type ChatFiles } from "@godmode/shared";
+import { canShowOnComputer, showOnComputer } from "./file-actions";
 import { Icon } from "./icon";
+import { PictureViewer } from "./picture-viewer";
 import { RemoteImage } from "./remote-image";
 import { tap } from "./ui";
-import { request } from "@/lib/api";
+import { servedCopy, shareFile } from "@/lib/agent-files";
+import { errorText, request } from "@/lib/api";
 import { t } from "@/lib/i18n";
 import { fonts, radius, space, type, useColors } from "@/lib/theme";
 
@@ -114,19 +117,52 @@ export function openChatFile(file: ChatFile, agentId: string | null) {
     return router.push({ pathname: "/chat-file", params: { agent: agentId, path: file.agentPath } });
   }
   const shown = served(file);
-  if (shown) return router.push({ pathname: "/chat-file", params: { ...shown, name: file.name } });
+  const reveal = !file.remote && canShowOnComputer();
+  if (shown) return router.push({ pathname: "/chat-file", params: { ...shown, name: file.name, ...(reveal ? { computerPath: file.path } : {}) } });
   void Clipboard.setStringAsync(file.path);
-  Alert.alert(t("chat:files.pathCopied"), file.path);
+  Alert.alert(
+    t("chat:files.pathCopied"),
+    file.path,
+    reveal ? [{ text: t("common:actions.done"), style: "cancel" }, { text: t("files:reveal.action"), onPress: () => void showOnComputer(file.path) }] : undefined,
+  );
 }
 
-/** A picture a message names, right in the chat: a tap opens it, with sharing and zoom. */
-export function ChatPicture({ file, agentId }: { file: ChatFile; agentId: string | null }) {
+/** A long press on a file in a chat: what a tap does, or showing it on the computer. Nothing to pick from without that. */
+export function chatFileMenu(file: ChatFile, agentId: string | null) {
+  if (file.remote || !canShowOnComputer()) return;
+  tap();
+  Alert.alert(file.name, undefined, [
+    { text: t("common:actions.open"), onPress: () => openChatFile(file, agentId) },
+    { text: t("files:reveal.action"), onPress: () => void showOnComputer(file.path) },
+    { text: t("common:actions.cancel"), style: "cancel" },
+  ]);
+}
+
+function sharePicture(file: ChatFile) {
+  servedCopy(file.image!, file.name, "chat-pictures")
+    .then((copy) => shareFile(copy))
+    .catch((err: unknown) => Alert.alert(t("files:preview.shareFailed"), errorText(err)));
+}
+
+/**
+ * A picture a message names, right in the chat: a tap opens it, with sharing and zoom. `gallery`: all the pictures of the
+ * message, to swipe through.
+ */
+export function ChatPicture({ file, agentId, gallery = [] }: { file: ChatFile; agentId: string | null; gallery?: ChatFile[] }) {
   const c = useColors();
+  const [at, setAt] = useState<number | null>(null);
+  const many = gallery.length > 1;
   return (
+    <>
     <Pressable
       accessibilityRole="imagebutton"
       accessibilityLabel={t("chat:files.openNamed", { name: file.name })}
-      onPress={() => openChatFile(file, agentId)}
+      onPress={() => {
+        if (!many) return openChatFile(file, agentId);
+        tap();
+        setAt(Math.max(0, gallery.findIndex((p) => p.path === file.path)));
+      }}
+      onLongPress={() => chatFileMenu(file, agentId)}
       style={({ pressed }) => [styles.tile, { borderColor: c.border, backgroundColor: c.surface }, pressed && { opacity: 0.8 }]}
     >
       <RemoteImage path={file.image!} alt={file.name} style={styles.picture} />
@@ -137,14 +173,16 @@ export function ChatPicture({ file, agentId }: { file: ChatFile; agentId: string
         <Icon name="expand" size={13} color={c.textFaint} />
       </View>
     </Pressable>
+    {at !== null ? <PictureViewer pictures={gallery.map((p) => ({ url: p.image!, name: p.name }))} start={at} onClose={() => setAt(null)} onShare={(i) => sharePicture(gallery[i]!)} /> : null}
+    </>
   );
 }
 
-export function ChatPictures({ pictures, agentId }: { pictures: ChatFile[]; agentId: string | null }) {
+export function ChatPictures({ pictures, agentId, gallery = pictures }: { pictures: ChatFile[]; agentId: string | null; gallery?: ChatFile[] }) {
   return (
     <View style={styles.pictures}>
       {pictures.map((p) => (
-        <ChatPicture key={p.path} file={p} agentId={agentId} />
+        <ChatPicture key={p.path} file={p} agentId={agentId} gallery={gallery} />
       ))}
     </View>
   );

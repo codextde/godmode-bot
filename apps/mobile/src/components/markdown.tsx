@@ -3,7 +3,7 @@ import { marked, type Token, type Tokens } from "marked";
 import { memo, useMemo, type ReactNode } from "react";
 import { Alert, Linking, StyleSheet, View } from "react-native";
 import { barePaths, linkedPath, parsePullRequestUrl, TASK_ATTACHMENT_PATH, type ChatFile } from "@godmode/shared";
-import { ChatPicture, ChatPictures, openChatFile, useMessageFiles } from "./chat-files";
+import { ChatPicture, ChatPictures, chatFileMenu, openChatFile, useMessageFiles } from "./chat-files";
 import { CodeBlock, PaymentCard, TableBlock, Text } from "./markdown-parts";
 import { RemoteImage } from "./remote-image";
 import { tap } from "./ui";
@@ -13,7 +13,7 @@ import { qk, queryClient } from "@/lib/query";
 import { alpha, fonts, space, type, useColors, type Colors } from "@/lib/theme";
 
 /** The files a message names, and the pictures already shown in its text. */
-type Files = { byRef: ReadonlyMap<string, ChatFile>; agentId: string | null; shown: Set<string> } | null;
+type Files = { byRef: ReadonlyMap<string, ChatFile>; agentId: string | null; shown: Set<string>; pictures: ChatFile[] } | null;
 
 /**
  * Agent answers: Markdown rendered with native text (paragraphs, lists, code, quotes, tables, links, task pictures); every
@@ -24,13 +24,13 @@ export const Markdown = memo(function Markdown({ text, color }: { text: string; 
   const c = useColors();
   const tokens = useMemo(() => marked.lexer(text, { gfm: true }), [text]);
   const named = useMessageFiles(text);
-  const files: Files = named && { byRef: named.byRef, agentId: named.agentId, shown: new Set() };
+  const files: Files = named && { byRef: named.byRef, agentId: named.agentId, shown: new Set(), pictures: named.pictures };
   const rendered = blocks(tokens, c, color ?? c.text, files);
   const below = named?.pictures.filter((p) => !files?.shown.has(p.path)) ?? [];
   return (
     <View style={{ gap: 10 }}>
       {rendered}
-      {below.length ? <ChatPictures pictures={below} agentId={named?.agentId ?? null} /> : null}
+      {below.length ? <ChatPictures pictures={below} agentId={named?.agentId ?? null} gallery={named?.pictures} /> : null}
     </View>
   );
 });
@@ -53,7 +53,7 @@ function solePicture(tokens: Token[] | undefined, files: Files): ChatFile | null
 
 function picture(file: ChatFile, key: number, files: NonNullable<Files>): ReactNode {
   files.shown.add(file.path);
-  return <ChatPicture key={key} file={file} agentId={files.agentId} />;
+  return <ChatPicture key={key} file={file} agentId={files.agentId} gallery={files.pictures} />;
 }
 
 function block(t: Token, key: number, c: Colors, color: string, files: Files): ReactNode {
@@ -172,6 +172,7 @@ function fileLink(file: ChatFile, key: number, c: Colors, files: NonNullable<Fil
       accessibilityRole="link"
       style={[{ color: c.brandStrong, textDecorationLine: "underline" }, code && [type.mono, { fontSize: 14, backgroundColor: c.sunken }]]}
       onPress={() => openChatFile(file, files.agentId)}
+      onLongPress={() => chatFileMenu(file, files.agentId)}
     >
       {children}
     </Text>

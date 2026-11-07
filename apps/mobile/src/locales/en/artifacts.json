@@ -82,7 +82,10 @@
     "saveError": "Couldn't save it",
     "reviewSent": "Sent to {{agent}}",
     "saveFailed": "Couldn't save it",
-    "renameError": "Couldn't rename it"
+    "renameError": "Couldn't rename it",
+    "downloadHtml": "Download as HTML",
+    "downloadLeftOut_one": "{{count}} file isn't in the download",
+    "downloadLeftOut_other": "{{count}} files aren't in the download"
   },
   "versions": {
     "title": "Versions",
@@ -104,5 +107,17 @@
   "renameSheet": {
     "title": "Rename",
     "save": "Save"
+  },
+  "tabs": {
+    "label": "View",
+    "preview": "Preview",
+    "files": "Files"
+  },
+  "files": {
+    "download": "Download",
+    "previous": "Previous",
+    "next": "Next",
+    "noPreview": "No preview for this file type",
+    "actionError": "That didn't work"
   }
 }

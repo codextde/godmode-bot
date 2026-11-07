@@ -240,7 +240,10 @@ export async function localCopy(agentId: string, path: string, slot: string): Pr
 export async function servedCopy(url: string, name: string, slot: string): Promise<File> {
   const connection = useSession.getState().connection;
   if (!connection) throw new ApiError(401, t("system:api.notPaired"), "not_paired");
-  const target = new File(folder(slot), name);
+  // `base + url` with anything but a path of the computer would send this phone's key to another host.
+  if (!/^\/[^/\\]/.test(url)) throw new ApiError(400, t("system:api.offline"), "bad_url");
+  const leaf = name.replace(/^.*[\\/]/, "");
+  const target = new File(folder(slot), leaf && leaf !== "." && leaf !== ".." ? leaf : "file");
   let last: unknown = null;
   for (const base of pictureBases(connection)) {
     try {
@@ -297,7 +300,7 @@ export function forgetLocalCopies(slot?: string) {
 export async function shareFile(file: File, text?: string): Promise<void> {
   if (process.env.EXPO_OS === "ios") await Share.share({ url: file.uri });
   else if (text !== undefined) await Share.share({ message: text, title: file.name });
-  else await saveOrShareFile(file);
+  else await saveOrShareFile(file, /\.pdf$/i.test(file.name) ? "application/pdf" : undefined);
 }
 
 /** The headings of a Markdown text (levels 1 to 3), with their lines; what is in a code fence isn't one. */

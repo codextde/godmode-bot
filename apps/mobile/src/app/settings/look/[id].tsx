@@ -1,7 +1,7 @@
 import { router, Stack, useLocalSearchParams, useNavigation } from "expo-router";
 import { usePreventRemove } from "expo-router/react-navigation";
 import { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import {
   AGENT_COLORS,
@@ -76,6 +76,7 @@ function Studio({ agent }: { agent: Agent }) {
   const navigation = useNavigation();
   const [start] = useState<Look>(() => ({ character: agentCharacter(agent), color: agent.color, avatar: agent.avatar || "🤖" }));
   const [look, setLook] = useState<Look>(start);
+  const [ownEmoji, setOwnEmoji] = useState(() => (AGENT_EMOJIS.includes(start.avatar) ? "" : start.avatar));
   const [part, setPart] = useState<Part>("body");
   const [saving, setSaving] = useState(false);
   const [cheer, setCheer] = useState(false);
@@ -115,7 +116,7 @@ function Studio({ agent }: { agent: Agent }) {
   };
 
   return (
-    <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content}>
+    <ScrollView contentInsetAdjustmentBehavior="automatic" keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive" automaticallyAdjustKeyboardInsets contentContainerStyle={styles.content}>
       <Stack.Screen options={{ title: t("look.title"), headerLargeTitleEnabled: false }} />
       <CloseButton />
       {dirty ? <HeaderActions actions={[{ icon: "check", label: t("common:actions.save"), prominent: true, onPress: () => void save() }]} /> : null}
@@ -185,22 +186,40 @@ function Studio({ agent }: { agent: Agent }) {
 
       <View>
         <SectionTitle title={t("look.emoji")} />
-        <View style={[styles.emojis, { backgroundColor: c.surface, borderColor: c.border }]}>
-          {AGENT_EMOJIS.map((e) => (
-            <Pressable
-              key={e}
-              accessibilityRole="radio"
-              accessibilityState={{ checked: e === look.avatar }}
-              accessibilityLabel={e}
-              onPress={() => {
-                tap();
-                setLook((l) => ({ ...l, avatar: e }));
-              }}
-              style={({ pressed }) => [styles.emoji, { backgroundColor: e === look.avatar ? c.brandSoft : pressed ? c.sunken : "transparent" }]}
-            >
-              <T style={{ fontSize: 24 }}>{e}</T>
-            </Pressable>
-          ))}
+        <View style={[styles.emojiCard, { backgroundColor: c.surface, borderColor: c.border }]}>
+          <View style={styles.emojis}>
+            {AGENT_EMOJIS.map((e) => (
+              <Pressable
+                key={e}
+                accessibilityRole="radio"
+                accessibilityState={{ checked: e === look.avatar }}
+                accessibilityLabel={e}
+                onPress={() => {
+                  tap();
+                  setOwnEmoji("");
+                  setLook((l) => ({ ...l, avatar: e }));
+                }}
+                style={({ pressed }) => [styles.emoji, { backgroundColor: e === look.avatar ? c.brandSoft : pressed ? c.sunken : "transparent" }]}
+              >
+                <T style={{ fontSize: 24 }}>{e}</T>
+              </Pressable>
+            ))}
+          </View>
+          <TextInput
+            accessibilityLabel={t("look.customEmoji")}
+            value={ownEmoji}
+            onChangeText={(text) => {
+              setOwnEmoji(text);
+              const emoji = [...text.trim()].slice(0, 2).join("");
+              if (emoji) setLook((l) => ({ ...l, avatar: emoji }));
+            }}
+            placeholder={t("look.customEmojiPlaceholder")}
+            placeholderTextColor={c.textFaint}
+            maxLength={8}
+            autoCorrect={false}
+            returnKeyType="done"
+            style={[styles.ownEmoji, { color: c.text, borderTopColor: c.border }]}
+          />
         </View>
       </View>
     </ScrollView>
@@ -254,17 +273,25 @@ const styles = StyleSheet.create({
     borderCurve: "continuous",
     borderWidth: StyleSheet.hairlineWidth,
   },
-  emojis: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    padding: space.sm,
+  emojiCard: {
     borderRadius: radius.lg,
     borderCurve: "continuous",
     borderWidth: StyleSheet.hairlineWidth,
   },
+  emojis: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    padding: space.sm,
+  },
+  ownEmoji: {
+    fontSize: 15,
+    paddingHorizontal: space.lg,
+    paddingVertical: space.md,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
   emoji: {
     width: "12.5%",
-    aspectRatio: 1,
+    height: 44,
     alignItems: "center",
     justifyContent: "center",
     borderRadius: radius.md,

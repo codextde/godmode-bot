@@ -98,7 +98,7 @@
     "newCode": "Neuer Code",
     "waitingOn": "Wartet auf {{address}}",
     "connected": "{{name}} ist verbunden",
-    "connectedBody": "Es kann Godmode jetzt nutzen. Vollen Zugriff gibst du auf deinem Computer."
+    "connectedBody": "Vollen Zugriff gibst du auf deinem Computer."
   },
   "passwords": {
     "changeTitle": "Godmode-Passwort",
@@ -116,7 +116,7 @@
     "changedBody": "Nutze beim nächsten Entsperren das neue Passwort.",
     "dashboardSetTitle": "Dashboard-Passwort",
     "dashboardChangeTitle": "Dashboard-Passwort",
-    "dashboardFooter": "Für das Browser-Dashboard. Nimm ein anderes als dein Godmode-Passwort.",
+    "dashboardFooter": "Nimm ein anderes als dein Godmode-Passwort.",
     "dashboardSet": "Dashboard-Passwort gesetzt",
     "dashboardChanged": "Dashboard-Passwort geändert",
     "dashboardSessions": "Andere angemeldete Dashboard-Sitzungen müssen sich neu anmelden.",
@@ -131,7 +131,7 @@
     "days_other": "{{count}} Tage",
     "vault": {
       "title": "Tresor",
-      "open": "Tresor",
+      "open": "Passwörter",
       "unlocked": "Entsperrt",
       "locked": "Gesperrt",
       "passphrase": "Godmode-Passwort ändern",
@@ -145,7 +145,6 @@
       "fillDetail": "Godmode tippt Passwörter und 2FA-Codes in die Seite. Die KI sieht sie nie.",
       "revealDetail": "Die KI darf Passwörter und Codes im Klartext lesen. Jedes Anzeigen wird protokolliert.",
       "agents": "Agenten mit Klartext-Zugriff",
-      "agentsFooter": "Gibst du einem Agenten diesen Zugriff, fragt Godmode nach deinem Godmode-Passwort.",
       "redact": "Geheimnisse schwärzen",
       "icons": "Website-Icons laden",
       "iconsDetail": "Über Googles Icon-Dienst",
@@ -182,22 +181,8 @@
       "originsHint": "Eine pro Zeile"
     }
   },
-  "license": {
-    "keyTitle": "Lizenzschlüssel",
-    "key": "Schlüssel",
-    "save": "Schlüssel speichern",
-    "add": "Lizenzschlüssel eingeben",
-    "change": "Lizenzschlüssel ändern",
-    "refresh": "Erneut prüfen",
-    "remove": "Schlüssel entfernen",
-    "removeTitle": "Lizenzschlüssel entfernen?",
-    "removeEnforced": "Godmode startet auf diesem Computer keine neue Arbeit mehr, bis wieder ein Schlüssel hinzugefügt wird. An deinem Abo selbst ändert sich nichts.",
-    "removeFree": "An deinem Abo selbst ändert sich nichts; du kannst den Schlüssel jederzeit wieder hinzufügen.",
-    "failed": "Lizenz konnte nicht geändert werden"
-  },
   "calls": {
     "ownerTitle": "Anrufe an dich",
-    "ownerFooter": "Mit Ländervorwahl. Lass sie leer, dann rufen Agenten dich nie an.",
     "number": "Deine Nummer",
     "allow": "Agenten dürfen dich anrufen",
     "invalidNumber": "Diese Telefonnummer kann Godmode nicht anrufen",
@@ -270,10 +255,6 @@
     "takeBackTitle": "{{name}} den vollen Zugriff entziehen?",
     "takeBackBody": "Das Handy darf dann wieder nur, was Handys dürfen. Nur dein Computer kann vollen Zugriff wieder geben."
   },
-  "billingExtra": {
-    "invoices": "Rechnungen",
-    "portal": "Abrechnung und Zahlung"
-  },
   "browserExtra": {
     "captcha": "CAPTCHA-Lösen",
     "local": "Checkboxen durchklicken",
@@ -300,16 +281,5 @@
   },
   "logsExtra": {
     "shareFull": "Ganzes Protokoll teilen"
-  },
-  "licenseExtra": {
-    "manage": "Abo verwalten",
-    "remindersTitle": "Erinnerungen zur Testphase",
-    "reminderEmail": "E-Mail",
-    "reminderPlaceholder": "du@beispiel.de",
-    "reminderInvalid": "Das ist keine E-Mail-Adresse",
-    "reminderFailed": "Adresse konnte nicht gespeichert werden",
-    "reminderOn": "Erinnerungen gehen an {{email}}",
-    "reminderRemove": "Erinnerungen beenden",
-    "reminderFooter": "Ein Hinweis, bevor die kostenlose Testphase endet, und ein paar Tipps."
   }
 }

@@ -4,13 +4,16 @@ import { Stack, useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, useWindowDimensions, View } from "react-native";
 import { useTranslation } from "react-i18next";
+import { revealItem } from "@/components/file-actions";
 import { HeaderActions } from "@/components/header-actions";
 import { Markdown } from "@/components/markdown";
 import { PdfPage } from "@/components/pdf-page";
 import { ErrorState, T } from "@/components/ui";
+import { zoomImage, ZoomView } from "@/components/zoom-view";
 import FilePreview from "./settings/files/preview";
 import { forgetLocalCopies, servedCopy, shareFile } from "@/lib/agent-files";
 import { errorText } from "@/lib/api";
+import { FILES_SAVE_TO_FOLDER } from "@/lib/save-file";
 import { fonts, space, useColors } from "@/lib/theme";
 
 const MAX_SHOWN = 200_000;
@@ -25,8 +28,8 @@ export default function ChatFile() {
 
 function ServedFile() {
   const c = useColors();
-  const { t } = useTranslation("files");
-  const { url, kind, name } = useLocalSearchParams<{ url: string; kind: Kind; name: string }>();
+  const { t } = useTranslation(["files", "common"]);
+  const { url, kind, name, computerPath } = useLocalSearchParams<{ url: string; kind: Kind; name: string; computerPath?: string }>();
   const { width, height } = useWindowDimensions();
   const [slot] = useState(() => Math.random().toString(36).slice(2, 10));
   useEffect(() => () => forgetLocalCopies(slot), [slot]);
@@ -47,7 +50,16 @@ function ServedFile() {
   return (
     <>
       <Stack.Screen options={{ title: name, headerLargeTitleEnabled: false }} />
-      <HeaderActions actions={copy.data ? [{ icon: "share", label: t("preview.share"), onPress: () => !share.isPending && share.mutate() }] : []} />
+      <HeaderActions
+        actions={
+          copy.data
+            ? [FILES_SAVE_TO_FOLDER && copy.data.text === null
+                ? { icon: "download", label: t("common:actions.save"), onPress: () => !share.isPending && share.mutate() }
+                : { icon: "share", label: t("preview.share"), onPress: () => !share.isPending && share.mutate() }]
+            : []
+        }
+        menu={computerPath ? [revealItem(computerPath)] : []}
+      />
       {copy.isLoading ? (
         <View style={styles.center}>
           <ActivityIndicator />
@@ -57,18 +69,9 @@ function ServedFile() {
           <ErrorState title={t("preview.loadFailed")} error={errorText(copy.error)} onRetry={() => void copy.refetch()} />
         </View>
       ) : kind === "image" ? (
-        <ScrollView
-          contentInsetAdjustmentBehavior="automatic"
-          maximumZoomScale={5}
-          minimumZoomScale={1}
-          centerContent
-          bouncesZoom
-          showsHorizontalScrollIndicator={false}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.zoom}
-        >
-          <Image source={{ uri }} accessibilityLabel={name} contentFit="contain" style={{ width, height: height * 0.75 }} />
-        </ScrollView>
+        <ZoomView max={5} contentInsetAdjustmentBehavior="automatic" centerContent bouncesZoom showsHorizontalScrollIndicator={false} showsVerticalScrollIndicator={false} contentContainerStyle={styles.zoom}>
+          <Image source={{ uri }} accessibilityLabel={name} contentFit="contain" style={{ width, height: height * 0.75 }} {...zoomImage} />
+        </ZoomView>
       ) : kind === "pdf" ? (
         <PdfPage file={copy.data.file} />
       ) : (

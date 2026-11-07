@@ -1,12 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Alert, StyleSheet, Switch } from "react-native";
+import { Alert } from "react-native";
 import { useTranslation } from "react-i18next";
+import { SwitchRow } from "@/components/form";
 import { useFullAccess } from "@/components/full-access";
-import { Icon } from "@/components/icon";
-import { Row, T, tap } from "@/components/ui";
+import { InfoRow } from "@/components/status-rows";
 import { api, errorText } from "@/lib/api";
 import { qk } from "@/lib/query";
-import { space, useColors } from "@/lib/theme";
 
 /** A phone without full access reads, but doesn't change, what an agent that reads raw secrets is told and remembers. */
 export function useRevealLocked(agent: { permissions: { secretAccess: string } } | undefined): boolean {
@@ -19,7 +18,6 @@ export function useRevealLocked(agent: { permissions: { secretAccess: string } }
  * it on). One row of a Group.
  */
 export function ThisPhoneAccess() {
-  const c = useColors();
   const { t } = useTranslation(["settings", "common"]);
   const qc = useQueryClient();
   const me = useQuery({ queryKey: qk.me, queryFn: api.me });
@@ -40,41 +38,8 @@ export function ThisPhoneAccess() {
       { text: t("overview.fullAccess.offConfirm"), style: "destructive", onPress: () => off.mutate() },
     ]);
 
-  return (
-    <Row style={styles.row}>
-      <Icon name={full ? "lockOpen" : "lock"} size={18} color={c.textMuted} />
-      <T variant="subhead" style={{ flex: 1 }}>
-        {t("overview.fullAccess.title")}
-      </T>
-      {full ? (
-        <Switch
-          accessibilityLabel={t("overview.fullAccess.title")}
-          value={!off.isPending}
-          disabled={off.isPending}
-          onValueChange={(next) => {
-            if (next) return;
-            tap();
-            confirm();
-          }}
-          trackColor={{ true: c.brand, false: c.sunken }}
-          style={{ alignSelf: "center" }}
-        />
-      ) : full === false ? (
-        <T variant="subhead" muted>
-          {t("common:status.off")}
-        </T>
-      ) : null}
-    </Row>
-  );
+  if (full) {
+    return <SwitchRow icon="lockOpen" title={t("overview.fullAccess.title")} value={!off.isPending} disabled={off.isPending} onChange={(next) => !next && confirm()} />;
+  }
+  return <InfoRow icon="lock" label={t("overview.fullAccess.title")} value={full === false ? t("common:status.off") : undefined} />;
 }
-
-const styles = StyleSheet.create({
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space.md,
-    minHeight: 48,
-    paddingHorizontal: space.lg,
-    paddingVertical: 8,
-  },
-});

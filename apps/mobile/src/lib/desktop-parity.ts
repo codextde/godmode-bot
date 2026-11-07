@@ -1,7 +1,8 @@
 import { differenceInCalendarDays, format, isToday, isYesterday } from "date-fns";
-import type { Agent, AgentQuestion, AttentionItem, Conversation, HumanTask, MissingLogin, Routine, RunPause, Task, TaskBlockedKind, TaskPriority } from "@godmode/shared";
+import type { Agent, AgentQuestion, AttentionItem, Conversation, HumanTask, MissingLogin, Routine, RunPause, Task, TaskBlockedKind, TaskPriority, Workspace, WorkspaceSource } from "@godmode/shared";
 import type { IconName } from "@/components/icon";
 import { dateLocale, t } from "@/lib/i18n";
+import { blockedReasonText } from "@/lib/license-text";
 
 /** The desktop's greeting: "Working late" before five, "Good night" from ten. */
 export function greeting(date = new Date()): string {
@@ -148,9 +149,24 @@ export function taskRepoLabel(task: Pick<Task, "repoPath" | "repoUrl">): string 
   return task.repoUrl ? repoLabel(task.repoUrl) : "";
 }
 
+/** The repositories a coding ticket can work in: the project's first, then the workspace's. */
+export function workspaceRepos(workspace: Workspace | null | undefined, projectId: string | null = null): WorkspaceSource[] {
+  const project = projectId ? workspace?.projects?.find((p) => p.id === projectId) : undefined;
+  return [...(project?.sources ?? []), ...(workspace?.sources ?? [])].filter((s) => s.git && (s.kind === "folder" || !!s.url));
+}
+
+export function sourceLabel(source: WorkspaceSource): string {
+  return source.kind === "git" && source.url ? repoLabel(source.url) : source.name;
+}
+
 /** The run is queued or running (the agent is on it). */
 export function isWorking(task: Task): boolean {
   return task.status === "in_progress" && !task.pause && (task.runStatus === "queued" || task.runStatus === "running" || !!task.activity);
+}
+
+/** Moving it or changing its agent ends something: the desktop asks first. */
+export function needsConfirm(task: Task): boolean {
+  return task.status === "in_progress" && (isWorking(task) || !!task.pause || !!task.followup);
 }
 
 export const isFailingRoutine = (r: Routine) => r.lastStatus === "failed" || r.triggerStatus.state === "error";
@@ -260,7 +276,7 @@ export function needsYou(input: {
       kind: review ? "review" : "blocked",
       agentId: task.agentId,
       title: review ? t("system:needs.readyForReview", { number: task.number, title: task.title }) : t("system:needs.isBlocked", { number: task.number, title: task.title }),
-      detail: review ? (task.agentId ? t("system:needs.delivered", { agent: nameOf(task.agentId) }) : "") : shorten(task.blockedReason ?? ""),
+      detail: review ? (task.agentId ? t("system:needs.delivered", { agent: nameOf(task.agentId) }) : "") : shorten(blockedReasonText(task) ?? ""),
       since: task.updatedAt,
       workspaceId: task.workspaceId,
       task,

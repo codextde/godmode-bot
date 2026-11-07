@@ -7,9 +7,6 @@
   "emptyBody": "Füge MCP-Server, API-Schlüssel und Apps in Godmode auf deinem Computer hinzu.",
   "on": "An",
   "off": "Aus",
-  "links": {
-    "group": "Werkzeuge und Zugänge"
-  },
   "mcp": {
     "title": "MCP-Server",
     "local": "Programm auf deinem Computer",
@@ -18,7 +15,12 @@
   "apiTools": {
     "title": "API-Schlüssel",
     "noAddress": "Nur Schlüssel",
-    "noKey": "Kein Schlüssel gespeichert"
+    "noKey": "Kein Schlüssel gespeichert",
+    "docs": "Doku",
+    "docsLink": "Doku-Link",
+    "noDocs": "Keine Doku",
+    "usedAgo": "Genutzt {{ago}}",
+    "notUsed": "Noch nicht genutzt"
   },
   "composio": {
     "title": "Composio-Apps",

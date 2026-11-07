@@ -36,7 +36,7 @@ export default function ReviewScreen() {
       <View style={styles.center}>
         <Stack.Screen options={{ title: t("detail.title") }} />
         {isOutdated(review.error) ? (
-          <EmptyState icon="review" title={t("settings:phone.outdatedTitle")} body={t("settings:phone.outdatedBody")} />
+          <EmptyState icon="review" title={t("settings:phone.outdatedTitle")} />
         ) : review.isError ? (
           <ErrorState title={t("detail.openFailed")} error={errorText(review.error)} onRetry={() => void review.refetch()} />
         ) : (

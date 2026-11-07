@@ -8,6 +8,7 @@ import { CharacterAvatar } from "@/components/character";
 import { Group, PickerRow } from "@/components/form";
 import { NeedsFullAccess, useFullAccess } from "@/components/full-access";
 import { Icon } from "@/components/icon";
+import { LinkPickerRow, type LinkPickerItem } from "@/components/link-picker";
 import { PasswordGenerator, StrengthBar } from "@/components/password-generator";
 import { FieldCard, IconButton, InputRow, SheetHeader } from "@/components/secret-parts";
 import { Card, ErrorState, LoadingState, Row, T, tap } from "@/components/ui";
@@ -15,7 +16,7 @@ import { api, errorText } from "@/lib/api";
 import { useAgents } from "@/lib/hooks";
 import { qk, queryClient } from "@/lib/query";
 import { isCancelled, reveal } from "@/lib/secrets";
-import { domainFromUrl, fullVaultApi, isDomain, normalizeUrl, prettyName, refreshVault, useLogins, useTotp, withDomains } from "@/lib/vault";
+import { domainFromUrl, fullVaultApi, isDomain, issuerDomain, normalizeUrl, prettyName, refreshVault, rootDomain, useLogins, useTotp, withDomains } from "@/lib/vault";
 import { fonts, space, useColors } from "@/lib/theme";
 
 const tagsOf = (text: string) => [...new Set(text.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean))];
@@ -81,15 +82,16 @@ function LoginForm({ login, report }: { login: Credential | null; report: Missin
   const [notesEditable, setNotesEditable] = useState(!login);
   const [revealingNotes, setRevealingNotes] = useState(false);
 
-  const totpOptions = useMemo(
-    () => [
-      { value: "", label: t("loginEdit.noCode") },
-      ...[...(totp.data ?? [])]
-        .sort((a, b) => a.issuer.localeCompare(b.issuer))
-        .map((e) => ({ value: e.id, label: e.issuer || e.accountName || t("totp.unnamed"), detail: e.issuer ? e.accountName : undefined })),
-    ],
-    [totp.data, t],
-  );
+  const primaryDomain = domains[0] ?? domainFromUrl(url);
+  const totpItems = useMemo((): LinkPickerItem[] => {
+    const root = primaryDomain ? rootDomain(primaryDomain) : "";
+    return [...(totp.data ?? [])]
+      .sort((a, b) => a.issuer.localeCompare(b.issuer))
+      .map((e) => {
+        const domain = issuerDomain(e.issuer);
+        return { id: e.id, title: e.issuer || e.accountName || t("totp.unnamed"), subtitle: e.issuer ? e.accountName : undefined, domain, suggested: !!root && !!domain && rootDomain(domain) === root };
+      });
+  }, [totp.data, primaryDomain, t]);
   const workspaceOptions = useMemo(
     () => [{ value: "", label: t("loginEdit.allWorkspaces") }, ...(workspaces.data ?? []).map((w) => ({ value: w.id, label: w.name }))],
     [workspaces.data, t],
@@ -214,7 +216,7 @@ function LoginForm({ login, report }: { login: Credential | null; report: Missin
       </View>
 
       <Group>
-        <PickerRow icon="shield" title={t("login.code")} value={totpId} options={totpOptions} onChange={setTotpId} />
+        <LinkPickerRow icon="shield" title={t("login.code")} value={totpId} onChange={setTotpId} items={totpItems} loading={totp.isLoading} noneLabel={t("loginEdit.noCode")} searchPlaceholder={t("totp.search")} noun="code" />
         <PickerRow icon="layers" title={t("loginEdit.availableTo")} value={workspaceId} options={workspaceOptions} onChange={setWorkspaceId} />
       </Group>
 

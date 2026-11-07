@@ -1,11 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
 import { router, Stack } from "expo-router";
-import { Alert, RefreshControl, ScrollView, StyleSheet } from "react-native";
+import { Alert, RefreshControl, StyleSheet } from "react-native";
 import { useTranslation } from "react-i18next";
 import type { MobileDevice, MobileStatus } from "@godmode/shared";
 import { AdminQueryState, FullAccessGate, isRefused } from "@/components/admin";
 import { CloseButton } from "@/components/close-button";
 import { FieldRow, Group, LinkRow, SwitchRow } from "@/components/form";
+import { SettingsScroll } from "@/components/settings-scroll";
 import { ago, InfoRow } from "@/components/status-rows";
 import { adminApi, ak } from "@/lib/admin";
 import { api, errorText } from "@/lib/api";
@@ -23,7 +24,7 @@ export default function Phones() {
   });
 
   return (
-    <ScrollView contentInsetAdjustmentBehavior="automatic" keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content} refreshControl={<RefreshControl {...pull} />}>
+    <SettingsScroll contentInsetAdjustmentBehavior="automatic" keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content} refreshControl={<RefreshControl {...pull} />}>
       <Stack.Screen options={{ title: t("phones.title") }} />
       <CloseButton />
       <FullAccessGate>
@@ -31,7 +32,7 @@ export default function Phones() {
           {(s) => <PhonesList status={s} />}
         </AdminQueryState>
       </FullAccessGate>
-    </ScrollView>
+    </SettingsScroll>
   );
 }
 

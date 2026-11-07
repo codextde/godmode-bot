@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { parsePairingLink, type Agent, type ChatFile, type ChatFiles, type MobilePairResult, type MobilePairingOffer, type Task } from "@godmode/shared";
 import { loadConfig } from "../src/config";
 import { closeDb, openDb } from "../src/db";
@@ -14,7 +14,8 @@ import { createApp } from "../src/server/app";
 import { checkDashboardPassword, getAccessToken } from "../src/server/auth";
 import { websocketHandler } from "../src/server/ws";
 import { listAudit } from "../src/services/audit";
-import { createConversation } from "../src/services/conversations";
+import { __setFileManagerForTests } from "../src/services/chatFiles";
+import { addMessage, createConversation } from "../src/services/conversations";
 import { resetSettingsCache, updateSettings } from "../src/services/settings";
 import { createAgent } from "../src/agents/service";
 import { createTask, getTask } from "../src/tasks/service";
@@ -210,6 +211,54 @@ describe("the files a chat names, on a phone", () => {
   });
 });
 
+describe("showing a file on the computer from a phone", () => {
+  const reveal = (path: string) => send("POST", { path });
+  const launched: string[][] = [];
+  let file: string;
+  beforeAll(() => {
+    __setFileManagerForTests((command) => launched.push(command));
+    file = join(agent.repoPath, "workspace", "report.pdf");
+  });
+  afterAll(() => __setFileManagerForTests(null));
+
+  test("a phone with full access shows it there", async () => {
+    expect((await phone(full, "/api/files/reveal", reveal(file))).status).toBe(200);
+    // macOS selects the file; other systems open the folder it is in.
+    expect(launched.at(-1)?.at(-1)).toBe(process.platform === "darwin" ? file : dirname(file));
+  });
+
+  test("a file that is gone is a 404, a relative path a 400", async () => {
+    launched.length = 0;
+    expect((await phone(full, "/api/files/reveal", reveal(join(agent.repoPath, "workspace", "gone.pdf")))).status).toBe(404);
+    expect((await phone(full, "/api/files/reveal", reveal("workspace/report.pdf"))).status).toBe(400);
+    expect(launched).toEqual([]);
+  });
+
+  test("a limited phone, the cloud and another computer calling itself a phone can't", async () => {
+    launched.length = 0;
+    const refused = await phone(limited, "/api/files/reveal", reveal(file));
+    expect([refused.status, await code(refused)]).toEqual([403, "device_forbidden"]);
+
+    const cloud = await relayed("/api/files/reveal", reveal(file));
+    expect([cloud.status, await code(cloud)]).toEqual([403, "cloud_forbidden"]);
+
+    const throughGateway = await app.fetch(
+      new Request("http://cloud.link/api/files/reveal", { ...reveal(file), headers: { "content-type": "application/json", authorization: `Bearer ${full.token}` } }),
+      { channel: "mobile", cloud: { user: { id: "usr_1", email: "owner@example.com", name: "Owner", role: "owner" }, ip: "203.0.113.9" } },
+    );
+    expect([throughGateway.status, await code(throughGateway)]).toEqual([403, "cloud_forbidden"]);
+
+    for (const header of ["1", "full"]) {
+      const res = await app.fetch(
+        new Request("http://link/api/files/reveal", { ...reveal(file), headers: { "content-type": "application/json", authorization: `Bearer ${token}`, "x-godmode-phone": header } }),
+        { channel: "runner-link" },
+      );
+      expect([header, res.status]).toEqual([header, 403]);
+    }
+    expect(launched).toEqual([]);
+  });
+});
+
 describe("the dashboard password from a phone", () => {
   const route = "/api/settings/dashboard-password";
 
@@ -268,5 +317,42 @@ describe("archiving a column of the board", () => {
     const res = await phone(limited, "/api/tasks/archive", send("POST", { ids: [task.id] }));
     expect(res.status).toBe(200);
     expect(getTask(task.id).archivedAt).toBeTruthy();
+  });
+});
+
+describe("a whole tool call", () => {
+  test("a phone reads it on demand and nothing next to it", async () => {
+    const output = "x".repeat(9000);
+    const message = addMessage({
+      conversationId: chatId,
+      role: "assistant",
+      content: "",
+      blocks: [{ type: "tool_use", id: "toolu_long", name: "Bash", input: { command: "cat big" }, result: output }, { type: "tool_use", id: "toolu_shot", name: "screenshot", input: {}, result: "", image: PNG.toString("base64") }],
+    } as never);
+    const route = `/api/conversations/${chatId}/messages/${message.id}/tools`;
+
+    const page = (await (await phone(limited, `/api/conversations/${chatId}/messages?lite=1`)).json()) as { messages: { id: string; blocks: { id: string; result?: string; resultTruncated?: boolean }[] }[] };
+    const cut = page.messages.find((m) => m.id === message.id)!.blocks.find((b) => b.id === "toolu_long")!;
+    expect(cut.resultTruncated).toBe(true);
+    expect(cut.result!.length).toBeLessThan(output.length);
+
+    for (const device of [limited, full]) {
+      const whole = (await (await phone(device, `${route}/toolu_long`)).json()) as { input: unknown; result: string; resultTruncated?: boolean };
+      expect(whole).toMatchObject({ input: { command: "cat big" }, result: output });
+      expect(whole.resultTruncated).toBeUndefined();
+    }
+    const shot = (await (await phone(limited, `${route}/toolu_shot`)).json()) as { image?: string; imageUrl?: string };
+    expect(shot.image).toBeUndefined();
+    expect(shot.imageUrl).toBe(`/api/conversations/${chatId}/messages/${message.id}/images/toolu_shot`);
+
+    expect((await phone(limited, `${route}/toolu_missing`)).status).toBe(404);
+    const other = createConversation({ agentId: agent.id } as never).id;
+    expect((await phone(limited, `/api/conversations/${other}/messages/${message.id}/tools/toolu_long`)).status).toBe(404);
+
+    expect(deviceMayCall("GET", "/api/conversations/c/messages/m/tools/t")).toBe(true);
+    expect(deviceMayCall("GET", "/api/conversations/c/messages/m/tools")).toBe(false);
+    expect(deviceMayCall("GET", "/api/conversations/c/messages/m/tools/t/x")).toBe(false);
+    expect(deviceMayCall("POST", "/api/conversations/c/messages/m/tools/t")).toBe(false);
+    expect(deviceMayCall("DELETE", "/api/conversations/c/messages/m/tools/t")).toBe(false);
   });
 });

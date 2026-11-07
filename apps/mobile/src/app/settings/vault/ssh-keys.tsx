@@ -1,5 +1,6 @@
 import { router } from "expo-router";
-import { Alert, Pressable } from "react-native";
+import { useMemo, useState } from "react";
+import { Alert, Pressable, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import type { SshManagedKey } from "@godmode/shared";
 import { useFullAccess } from "@/components/full-access";
@@ -7,12 +8,15 @@ import { HeaderActions } from "@/components/header-actions";
 import { Icon } from "@/components/icon";
 import { ListRow, ReadonlyList } from "@/components/readonly-list";
 import { confirmDelete, RowMenu, type MenuItem } from "@/components/secret-parts";
-import { Badge, tap } from "@/components/ui";
+import { TextPrompt } from "@/components/text-prompt";
+import { Badge, Row, T, tap } from "@/components/ui";
 import { ApiError, errorText } from "@/lib/api";
 import { queryClient } from "@/lib/query";
 import { copyPlain } from "@/lib/secrets";
 import { fullVaultApi, useSshKeys, vk } from "@/lib/vault";
-import { useColors } from "@/lib/theme";
+import { space, useColors } from "@/lib/theme";
+
+const SEARCH_ABOVE = 6;
 
 const refresh = () => void queryClient.invalidateQueries({ queryKey: vk.sshKeys });
 
@@ -22,10 +26,18 @@ const refresh = () => void queryClient.invalidateQueries({ queryKey: vk.sshKeys 
  */
 export default function SshKeys() {
   const { t } = useTranslation(["vault", "common"]);
+  const [asking, setAsking] = useState<SshManagedKey | null>(null);
   const c = useColors();
   const { fullAccess } = useFullAccess();
   const overview = useSshKeys();
   const agentOn = !!overview.data?.agent.available;
+  const [search, setSearch] = useState("");
+  const keys = overview.data?.keys;
+  const shown = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const hits = q ? (keys ?? []).filter((k) => [k.name, k.comment, k.fingerprint ?? "", ...k.hosts].some((v) => v.toLowerCase().includes(q))) : (keys ?? []);
+    return [...hits].sort((a, b) => Number(b.enabled) - Number(a.enabled));
+  }, [keys, search]);
 
   const copy = async (key: SshManagedKey) => {
     if (!key.publicKey) return;
@@ -38,6 +50,7 @@ export default function SshKeys() {
 
   const load = (key: SshManagedKey, loaded: boolean, passphrase?: string) =>
     fullVaultApi.setSshKeyLoaded(key.name, loaded, passphrase).then(refresh, (err: unknown) => {
+      if (err instanceof ApiError && err.code === "ssh_key_passphrase_required" && process.env.EXPO_OS === "android") return setAsking(key);
       if (err instanceof ApiError && err.code === "ssh_key_passphrase_required" && process.env.EXPO_OS === "ios") {
         Alert.prompt(t("sshKeys.passphraseTitle", { name: key.name }), undefined, [
           { text: t("common:actions.cancel"), style: "cancel" },
@@ -77,6 +90,17 @@ export default function SshKeys() {
 
   return (
     <>
+      <TextPrompt
+        open={!!asking}
+        title={t("sshKeys.passphraseTitle", { name: asking?.name ?? "" })}
+        label={t("sshKeys.load")}
+        secure
+        onSubmit={(value) => {
+          setAsking(null);
+          if (asking && value) void load(asking, true, value);
+        }}
+        onClose={() => setAsking(null)}
+      />
       {fullAccess ? (
         <HeaderActions
           actions={[{ icon: "plus", label: t("sshKeys.newKey"), onPress: () => router.push("/vault/ssh-key-new") }]}
@@ -86,18 +110,37 @@ export default function SshKeys() {
       <ReadonlyList<SshManagedKey>
         title={t("sshKeys.title")}
         query={overview}
-        items={overview.data?.keys ?? []}
+        items={shown}
         keyOf={(k) => k.name}
         extraData={[fullAccess, agentOn]}
+        search={(keys?.length ?? 0) > SEARCH_ABOVE ? { placeholder: t("sshKeys.search"), value: search, onChange: setSearch } : undefined}
         icon="sshKey"
         emptyTitle={t("sshKeys.emptyTitle")}
         failedTitle={t("sshKeys.loadFailed")}
         offTitle={t("sshKeys.off")}
+        header={
+          overview.data ? (
+            <Row style={{ gap: space.sm }}>
+              <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: agentOn ? c.success : c.textFaint }} />
+              <T variant="footnote" muted>
+                {agentOn ? t("sshKeys.agentLoaded", { count: overview.data.agent.loaded }) : t("sshKeys.agentOff")}
+              </T>
+            </Row>
+          ) : undefined
+        }
         renderRow={(k) => (
           <ListRow
             icon="sshKey"
             title={k.name}
             lines={[[k.algorithm === "unknown" ? null : k.algorithm.toUpperCase(), k.bits ? t("sshKeys.bits", { bits: k.bits }) : null, k.comment || null].filter(Boolean).join(" · "), k.fingerprint]}
+            badges={
+              !k.hasPrivate || k.format === "putty" ? (
+                <>
+                  {k.hasPrivate ? null : <Badge label={t("sshKeys.publicOnly")} dot={false} />}
+                  {k.format === "putty" ? <Badge label="PuTTY" dot={false} /> : null}
+                </>
+              ) : null
+            }
             trailing={
               <>
                 {!k.enabled ? <Badge label={t("sshKeys.parked")} dot={false} /> : k.inAgent ? <Badge label={t("sshKeys.loaded")} tone="success" dot={false} /> : null}

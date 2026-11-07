@@ -42,9 +42,15 @@
     "binCount": "Zuletzt gelöscht ({{count}})",
     "dreaming": "{{name}} träumt. Änderungen warten, bis das Träumen endet."
   },
+  "reveal": {
+    "action": "Auf dem Computer zeigen",
+    "done": "Auf dem Computer gezeigt",
+    "failed": "Konnte nicht auf dem Computer gezeigt werden"
+  },
   "preview": {
     "share": "Teilen",
-    "pdfElsewhere": "Android zeigt PDFs nicht in der App. Speichere die Datei und öffne sie mit einer PDF-App.",
+    "pdfLocked": "Dieses PDF hat ein Passwort. Speichere die Datei und öffne sie mit einer PDF-App.",
+    "pdfFailed": "Dieses PDF konnte nicht angezeigt werden. Speichere die Datei und öffne sie mit einer PDF-App.",
     "shareFailed": "Datei konnte nicht geteilt werden",
     "loadFailed": "Datei konnte nicht geöffnet werden",
     "empty": "Diese Datei ist leer",

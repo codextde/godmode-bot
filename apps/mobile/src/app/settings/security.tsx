@@ -1,10 +1,11 @@
 import { router, Stack } from "expo-router";
-import { Alert, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
+import { Alert, RefreshControl, StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import type { SecretAccessMode, Settings } from "@godmode/shared";
 import { FullAccessGate } from "@/components/admin";
 import { CloseButton } from "@/components/close-button";
 import { ChoiceRow, FieldRow, Group, LinkRow, StepperRow, SwitchRow, TextEditor } from "@/components/form";
+import { SettingsScroll } from "@/components/settings-scroll";
 import { FormSkeleton } from "@/components/settings-state";
 import { ErrorState, SectionTitle } from "@/components/ui";
 import { adminApi, patchAnySettings, withVaultGrant } from "@/lib/admin";
@@ -36,7 +37,7 @@ export default function Security() {
   const pull = usePullRefresh(() => Promise.all([settings.refetch(), vault.refetch()]));
   const s = settings.data;
   return (
-    <ScrollView contentInsetAdjustmentBehavior="automatic" keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content} refreshControl={<RefreshControl {...pull} />}>
+    <SettingsScroll contentInsetAdjustmentBehavior="automatic" keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content} refreshControl={<RefreshControl {...pull} />}>
       <Stack.Screen options={{ title: t("security.title") }} />
       <CloseButton />
       <FullAccessGate skeleton={<FormSkeleton groups={3} rows={4} />}>
@@ -50,7 +51,7 @@ export default function Security() {
           <Sections settings={s} remember={vault.data?.rememberDevice} unlocked={vault.data?.unlocked} />
         )}
       </FullAccessGate>
-    </ScrollView>
+    </SettingsScroll>
   );
 }
 

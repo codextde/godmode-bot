@@ -28,6 +28,7 @@ export * from "./license";
 export * from "./heartbeat";
 export * from "./humanTasks";
 export * from "./cards";
+export * from "./otp";
 export * from "./calls";
 export * from "./devices";
 export * from "./chatContext";

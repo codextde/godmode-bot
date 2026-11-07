@@ -4,7 +4,7 @@ import { useState } from "react";
 import { ActivityIndicator, Alert, Pressable, StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import Animated, { FadeIn, FadeOut, LinearTransition } from "react-native-reanimated";
-import type { Offer } from "@godmode/shared";
+import type { Agent, Offer } from "@godmode/shared";
 import { CharacterAvatar } from "./character";
 import { Icon } from "./icon";
 import { Card, Hairline, Row, T, tap } from "./ui";
@@ -14,14 +14,11 @@ import { qk, queryClient } from "@/lib/query";
 import { useWorkspace } from "@/lib/workspace";
 import { radius, space, useColors } from "@/lib/theme";
 
-const LONG = 140;
-
 /**
- * What the main agent offers to take off the human's plate, spotted while it dreamt. "Do it" starts the chat that does
- * it; "No thanks" declines, and the next dream learns from both. Nothing shows on an older computer.
+ * What the main agent offers to take off the human's plate, spotted while it dreamt: a line each on Home. "Do it" starts
+ * the chat that does it; "No thanks" declines, and the next dream learns from both. Nothing shows on an older computer.
  */
 export function OffersCard() {
-  const c = useColors();
   const { t } = useTranslation("tabs");
   const { id: workspaceId } = useWorkspace();
   const { byId } = useAgents();
@@ -71,21 +68,15 @@ export function OffersCard() {
 
   const list = offers.data ?? [];
   if (!list.length) return null;
-  const owner = byId.get(list[0]!.agentId);
   return (
-    <Animated.View layout={LinearTransition} style={styles.section}>
-      <Row style={styles.head}>
-        {owner ? <CharacterAvatar agent={owner} size={18} /> : <Icon name="sparkles" size={13} color={c.textMuted} />}
-        <T variant="eyebrow" muted numberOfLines={1} style={{ flexShrink: 1 }}>
-          {owner ? t("home.offers.titleOwner", { name: owner.name }) : t("home.offers.title")}
-        </T>
-      </Row>
+    <Animated.View layout={LinearTransition}>
       <Card>
         {list.map((o, i) => (
           <Animated.View key={o.id} entering={FadeIn} exiting={FadeOut.duration(160)} layout={LinearTransition}>
             {i > 0 && <Hairline inset={space.lg} />}
             <OfferRow
               offer={o}
+              owner={byId.get(o.agentId)}
               pending={busy === o.id}
               disabled={busy !== null}
               onAccept={() => {
@@ -104,45 +95,35 @@ export function OffersCard() {
   );
 }
 
-function OfferRow({ offer, pending, disabled, onAccept, onDismiss }: { offer: Offer; pending: boolean; disabled: boolean; onAccept: () => void; onDismiss: () => void }) {
+/** One line: who offers what, No thanks and Do it. A tap shows why and the words it would start with. */
+function OfferRow({ offer, owner, pending, disabled, onAccept, onDismiss }: { offer: Offer; owner?: Agent; pending: boolean; disabled: boolean; onAccept: () => void; onDismiss: () => void }) {
   const c = useColors();
   const { t } = useTranslation("tabs");
   const [open, setOpen] = useState(false);
-  const long = offer.prompt.length > LONG || offer.prompt.includes("\n");
   return (
-    <View style={styles.row}>
-      <View style={{ gap: 2 }}>
-        <T variant="subhead" style={{ fontWeight: "600" }}>
-          {offer.title}
-        </T>
-        {offer.why ? (
-          <T variant="footnote" muted>
-            {offer.why}
-          </T>
-        ) : null}
-      </View>
-      <Pressable
-        disabled={!long}
-        accessibilityRole={long ? "button" : undefined}
-        accessibilityState={long ? { expanded: open } : undefined}
-        onPress={() => setOpen((v) => !v)}
-        style={[styles.prompt, { backgroundColor: c.sunken, borderLeftColor: c.borderStrong }]}
-      >
-        <T variant="footnote" numberOfLines={long && !open ? 2 : undefined}>
-          {offer.prompt}
-        </T>
-      </Pressable>
-      <Row style={{ gap: space.sm, justifyContent: "flex-end" }}>
+    <View>
+      <Row style={styles.row}>
         <Pressable
           accessibilityRole="button"
-          disabled={disabled}
-          hitSlop={6}
-          onPress={onDismiss}
-          style={({ pressed }) => [styles.action, { opacity: disabled ? 0.4 : pressed ? 0.6 : 1 }]}
+          accessibilityLabel={`${owner ? t("home.offers.titleOwner", { name: owner.name }) : t("home.offers.title")}: ${offer.title}`}
+          accessibilityState={{ expanded: open }}
+          onPress={() => setOpen((v) => !v)}
+          style={({ pressed }) => [styles.main, { opacity: pressed ? 0.6 : 1 }]}
         >
-          <T variant="footnote" muted style={{ fontWeight: "600" }}>
-            {t("home.offers.decline")}
+          {owner ? <CharacterAvatar agent={owner} size={24} /> : <Icon name="sparkles" size={15} color={c.textMuted} />}
+          <T variant="subhead" numberOfLines={open ? undefined : 1} style={{ flex: 1, fontWeight: "600" }}>
+            {offer.title}
           </T>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t("home.offers.decline")}
+          disabled={disabled}
+          hitSlop={8}
+          onPress={onDismiss}
+          style={({ pressed }) => [styles.decline, { opacity: disabled ? 0.4 : pressed ? 0.5 : 1 }]}
+        >
+          <Icon name="close" size={12} color={c.textMuted} weight="semibold" />
         </Pressable>
         <Pressable
           accessibilityRole="button"
@@ -150,30 +131,63 @@ function OfferRow({ offer, pending, disabled, onAccept, onDismiss }: { offer: Of
           accessibilityState={{ busy: pending, disabled }}
           disabled={disabled}
           onPress={onAccept}
-          style={({ pressed }) => [styles.action, styles.accept, { backgroundColor: c.primary, opacity: disabled && !pending ? 0.4 : pressed ? 0.8 : 1 }]}
+          style={({ pressed }) => [styles.accept, { backgroundColor: c.primary, opacity: disabled && !pending ? 0.4 : pressed ? 0.8 : 1 }]}
         >
+          {pending ? <ActivityIndicator size="small" color={c.onPrimary} /> : null}
           <T variant="footnote" color={c.onPrimary} style={{ fontWeight: "600" }}>
             {t("home.offers.accept")}
           </T>
-          {pending ? <ActivityIndicator size="small" color={c.onPrimary} /> : <Icon name="send" size={11} color={c.onPrimary} weight="bold" style={{ transform: [{ rotate: "90deg" }] }} />}
         </Pressable>
       </Row>
+      {open ? (
+        <View style={styles.more}>
+          {offer.why ? (
+            <T variant="footnote" muted>
+              {offer.why}
+            </T>
+          ) : null}
+          <View style={[styles.prompt, { backgroundColor: c.sunken, borderLeftColor: c.borderStrong }]}>
+            <T variant="footnote">{offer.prompt}</T>
+          </View>
+        </View>
+      ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  section: {
-    marginTop: space.sm,
-  },
-  head: {
-    gap: space.sm,
-    paddingHorizontal: 4,
-    marginBottom: space.sm,
-  },
   row: {
+    gap: space.sm,
+    paddingLeft: space.lg,
+    paddingRight: space.md,
+    minHeight: 52,
+  },
+  main: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
     gap: space.md,
-    padding: space.lg,
+    paddingVertical: space.md,
+  },
+  decline: {
+    width: 30,
+    height: 30,
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  accept: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    height: 32,
+    paddingHorizontal: 14,
+    borderRadius: radius.pill,
+  },
+  more: {
+    gap: space.sm,
+    paddingHorizontal: space.lg,
+    paddingBottom: space.md,
   },
   prompt: {
     paddingHorizontal: space.md,
@@ -181,16 +195,5 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     borderCurve: "continuous",
     borderLeftWidth: 2,
-  },
-  action: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    height: 32,
-    paddingHorizontal: 12,
-    borderRadius: radius.pill,
-  },
-  accept: {
-    paddingHorizontal: 14,
   },
 });

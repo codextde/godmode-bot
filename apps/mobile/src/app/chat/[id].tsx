@@ -3,8 +3,9 @@ import { useQuery } from "@tanstack/react-query";
 import { router, Stack, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useHeaderHeight } from "expo-router/react-navigation";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, Switch, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, Switch, View, type NativeScrollEvent, type NativeSyntheticEvent } from "react-native";
 import { useTranslation } from "react-i18next";
+import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
 import { KeyboardAvoidingView, useKeyboardState } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
@@ -16,26 +17,27 @@ import {
   type Message,
   type MessageBlock,
   type QueuedMessage,
-  type RetryMode,
   type RunPause,
-  retryHelps,
-  retryModeOf,
-  runEndOf,
 } from "@godmode/shared";
 import { CharacterAvatar } from "@/components/character";
 import { ChatFilesScope } from "@/components/chat-files";
 import { ChatMoveCard } from "@/components/chat-move-card";
+import { DreamLogNote } from "@/components/dream-log-note";
+import { followupTimes } from "@/components/followup-row";
 import { Composer, ComposerDock, type ComposerHandle, type SendOptions } from "@/components/composer";
 import { useFullAccess } from "@/components/full-access";
+import { Glass } from "@/components/glass";
 import { HeaderActions, MenuSheet, type HeaderMenuItem } from "@/components/header-actions";
 import { LiveStrip } from "@/components/live-strip";
 import { AssistantMessage, UserMessage } from "@/components/message";
 import { Icon } from "@/components/icon";
+import { ModalTextInput } from "@/components/modal-field";
 import { ModelButton } from "@/components/model-button";
 import { ContextRing } from "@/components/context-ring";
 import { ChatScope, type ChatScopeValue } from "@/components/question-card";
 import { QueueTray } from "@/components/queue-tray";
 import { RunnerOfflineBar } from "@/components/runner-offline-bar";
+import { EndedStrip, useEndedTurn } from "@/components/turn-end";
 import { Button, ErrorState, Skeleton, T, tap } from "@/components/ui";
 import { openHumanTask } from "@/components/human-task-row";
 import { ApiError, api, errorText, updateDesktopMessage } from "@/lib/api";
@@ -47,7 +49,7 @@ import { useChatPrefs } from "@/lib/chat-prefs";
 import { isCompressCommand, useContextGauge } from "@/lib/chat-memory";
 import { setQueue } from "@/lib/composer";
 import { askHandoff, canHandoff, handoffChatIn, isHandoffCommand, takeHandoff } from "@/lib/handoff";
-import { whenText } from "@/lib/format";
+import { dayLabel, whenText } from "@/lib/format";
 import { newQueueId, pendingQueued, withPending } from "@/lib/pending-queue";
 import { useAgents, useNow } from "@/lib/hooks";
 import { useChatRun, useLive, useRunActivity } from "@/lib/live";
@@ -63,13 +65,16 @@ type Item =
   | { key: string; role: "intro" }
   | { key: string; role: "earlier" }
   | { key: string; role: "user"; message: Message }
-  | { key: string; role: "assistant"; blocks: MessageBlock[]; content: string; streaming: boolean }
+  | { key: string; role: "assistant"; blocks: MessageBlock[]; content: string; streaming: boolean; runId?: string | null }
+  | { key: string; role: "day"; label: string }
   | { key: string; role: "live" }
   | { key: string; role: "note"; content: string }
   | { key: string; role: "origin" }
   | { key: string; role: "private" };
 
 const NO_BLOCKS: MessageBlock[] = [];
+/** Further from the end than this, the way back to it shows. */
+const JUMP_AWAY = 240;
 /** What marks a place in the chat where it went on without the human writing. */
 const MARKERS = new Set<MessageBlock["type"]>(["human_task", "followup", "retry", "call", "moved"]);
 
@@ -80,7 +85,7 @@ function itemOf(m: Message): Item | null {
   let item = settled.get(m);
   if (item !== undefined) return item;
   if (m.role === "user") item = { key: m.id, role: "user", message: m };
-  else if (m.role === "assistant") item = { key: m.id, role: "assistant", blocks: m.blocks, content: m.content, streaming: false };
+  else if (m.role === "assistant") item = { key: m.id, role: "assistant", blocks: m.blocks, content: m.content, streaming: false, runId: m.runId };
   else {
     const markers = m.blocks.filter((b) => MARKERS.has(b.type));
     item = markers.length
@@ -157,10 +162,14 @@ export default function Chat() {
     if (isPrivate) out.push({ key: "private", role: "private" });
     if (hasOrigin) out.push({ key: "origin", role: "origin" });
     let answered = false;
+    let lastDay = "";
     for (const m of messages ?? []) {
       if (m.id === liveMessageId) continue;
       const item = itemOf(m);
       if (!item) continue;
+      const day = dayLabel(m.createdAt);
+      if (day && day !== lastDay) out.push({ key: `day-${day}`, role: "day", label: day });
+      lastDay = day || lastDay;
       if (runId && m.role === "assistant" && m.runId === runId) {
         answered = true;
         out.push({ ...item, streaming: true } as Item);
@@ -193,14 +202,15 @@ export default function Chat() {
   const [compressHiddenAt, setCompressHiddenAt] = useState<number | null>(null);
   const handoffQueued = queue.some((m) => isHandoffCommand(m.content));
   // A switched-off agent answers nothing: the composer keeps a draft and the strip offers the way back.
-  const off = !!agent && (!agent.enabled || agent.archived) && conversation.data?.origin !== "dream";
+  const dreamLog = conversation.data?.origin === "dream" || conversation.data?.origin === "review";
+  const off = !!agent && (!agent.enabled || agent.archived) && !dreamLog;
   const handoffOk = canHandoff(conversation.data) && !off;
   const longChat =
-    !!gauge && gauge.tone !== "calm" && gauge.compressible && !compressing && !handoffQueued && (compressHiddenAt === null || gauge.tokens > compressHiddenAt * 1.2) ? gauge : null;
+    !!gauge && gauge.tone !== "calm" && gauge.compressible && !compressing && !handoffQueued && !dreamLog && (compressHiddenAt === null || gauge.tokens > compressHiddenAt * 1.2) ? gauge : null;
 
   const scope = useMemo<ChatScopeValue>(
-    () => ({ conversationId: id, agentName: agent?.name ?? t("thread.theAgent"), openQuestionId: (pause?.reason === "question" && pause.question?.id) || null }),
-    [id, agent?.name, pause, t],
+    () => ({ conversationId: id, agentName: agent?.name ?? t("thread.theAgent"), openQuestionId: (pause?.reason === "question" && pause.question?.id) || null, readOnly: dreamLog }),
+    [id, agent?.name, pause, dreamLog, t],
   );
 
   const followUp = useChatPrefs((s) => s.followUp);
@@ -274,6 +284,12 @@ export default function Chat() {
 
   const onLost = useCallback((text: string) => composer.current?.insert(text), []);
 
+  const [away, setAway] = useState(false);
+  const onScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const { contentOffset, contentSize, contentInset, layoutMeasurement } = e.nativeEvent;
+    setAway(contentSize.height + contentInset.bottom - layoutMeasurement.height - contentOffset.y > JUMP_AWAY);
+  }, []);
+
   // Go on in a fresh chat: the agent writes the brief, and the new chat opens once it exists.
   const handoff = () => {
     tap();
@@ -294,13 +310,13 @@ export default function Chat() {
 
   // The latest turn ended early (failed, stopped, cut off): one tap picks it up — when nothing else would happen first.
   const [retrying, setRetrying] = useState(false);
-  const ended = !run && !paused && conversation.data && agent?.enabled !== false ? endedTurn(conversation.data) : null;
+  const ended = useEndedTurn(conversation.data, !run && !paused && !awayPlace && agent?.enabled !== false);
   const retry = () => {
     if (!ended || retrying) return;
     tap();
     setRetrying(true);
     api.conversations
-      .retry(id, ended.runId)
+      .retry(id, ended.run.id)
       .then((result) => {
         queryClient.setQueryData<ConversationWithMessages>(qk.conversation(id), (old) =>
           old && !old.messages.some((m) => m.id === result.message.id) ? { ...old, messages: [...old.messages, result.message] } : old,
@@ -360,8 +376,8 @@ export default function Chat() {
           ? [{ icon: "pause" as const, title: t("thread.menu.pause"), onPress: () => void api.conversations.pause(id).catch((err) => Alert.alert(t("thread.pauseFailed"), errorText(err))) }]
           : []),
         ...(handoffOk && !handoffQueued ? [{ icon: "handoff" as const, title: t("conv.handoff"), onPress: handoff }] : []),
-        ...(settings.data?.voice.enabled !== false ? [{ icon: "waveform" as const, title: t("voiceMode.title"), onPress: () => router.push({ pathname: "/voice-mode", params: { conversationId: id } }) }] : []),
-        { icon: "slider", title: t("conv.settings"), onPress: () => router.push({ pathname: "/chat-options", params: { conversationId: id } }) },
+        ...(settings.data?.voice.enabled !== false && !dreamLog ? [{ icon: "waveform" as const, title: t("voiceMode.title"), onPress: () => router.push({ pathname: "/voice-mode", params: { conversationId: id } }) }] : []),
+        ...(dreamLog ? [] : [{ icon: "slider" as const, title: t("conv.settings"), onPress: () => router.push({ pathname: "/chat-options", params: { conversationId: id } }) }]),
         ...(fullAccess && !data.private ? [{ icon: "share" as const, title: t("share.menu"), onPress: () => router.push({ pathname: "/chat-share", params: { conversationId: id } }) }] : []),
         ...(fullAccess && !data.private && moveTargets(places, data.runnerId).length
           ? [{ icon: "laptop" as const, title: t("move.menu"), onPress: () => router.push({ pathname: "/chat-move", params: { conversationId: id } }) }]
@@ -392,12 +408,14 @@ export default function Chat() {
           return <LiveMessage conversationId={id} runId={runId} agent={agent} />;
         case "note":
           return <SystemNote content={item.content} />;
+        case "day":
+          return <DayDivider label={item.label} />;
         case "origin":
           return <OriginLine continuedFrom={continuedFrom} delegatedFrom={delegatedFrom} />;
         case "private":
           return <PrivateNote />;
         default:
-          return <AssistantMessage id={item.key} blocks={item.blocks} content={item.content} streaming={item.streaming} agent={agent} />;
+          return <AssistantMessage id={item.key} runId={item.runId} blocks={item.blocks} content={item.content} streaming={item.streaming} agent={agent} />;
       }
     },
     [agent, id, runId, continuedFrom, delegatedFrom],
@@ -425,20 +443,25 @@ export default function Chat() {
         ) : (
           <ChatScope.Provider value={scope}>
             <ChatFilesScope conversationId={id} runnerId={conversation.data.runnerId}>
-              <FlashList
-                ref={list}
-                data={items}
-                keyExtractor={(item) => item.key}
-                contentInsetAdjustmentBehavior="automatic"
-                keyboardDismissMode="interactive"
-                maintainVisibleContentPosition={{ startRenderingFromBottom: true, autoscrollToBottomThreshold: 0.25 }}
-                onStartReached={() => void loadEarlier(id).catch(() => undefined)}
-                onStartReachedThreshold={0.6}
-                contentContainerStyle={styles.list}
-                ItemSeparatorComponent={Gap}
-                renderItem={renderItem}
-                getItemType={(item) => item.role}
-              />
+              <View style={{ flex: 1 }}>
+                <FlashList
+                  ref={list}
+                  data={items}
+                  keyExtractor={(item) => item.key}
+                  contentInsetAdjustmentBehavior="automatic"
+                  keyboardDismissMode="interactive"
+                  maintainVisibleContentPosition={{ startRenderingFromBottom: true, autoscrollToBottomThreshold: 0.25 }}
+                  onStartReached={() => void loadEarlier(id).catch(() => undefined)}
+                  onStartReachedThreshold={0.6}
+                  onScroll={onScroll}
+                  scrollEventThrottle={100}
+                  contentContainerStyle={styles.list}
+                  ItemSeparatorComponent={Gap}
+                  renderItem={renderItem}
+                  getItemType={(item) => item.role}
+                />
+                {away && items.length ? <JumpButton live={!!run} onPress={() => list.current?.scrollToEnd({ animated: true })} /> : null}
+              </View>
             </ChatFilesScope>
           </ChatScope.Provider>
         )}
@@ -448,7 +471,7 @@ export default function Chat() {
         {paused?.reason === "question" ? null : paused ? (
           <PausedStrip conversationId={id} pause={paused} onContinue={resume} />
         ) : ended ? (
-          <EndedStrip mode={ended.mode} onRetry={retry} busy={retrying} />
+          <EndedStrip ended={ended} conversationId={id} agentId={agent?.id} agentName={agent?.name ?? t("thread.theAgent")} onRetry={retry} onCompress={() => void send("/compress", []).catch(() => undefined)} busy={retrying} />
         ) : followup ? (
           <FollowupStrip conversationId={id} followup={followup} agentName={agent?.name ?? t("thread.theAgent")} />
         ) : longChat ? (
@@ -470,6 +493,9 @@ export default function Chat() {
           paused={paused?.reason ?? null}
           onLost={onLost}
         />
+        {dreamLog ? (
+          <DreamLogNote agentId={conversation.data?.agentId ?? ""} name={agent?.name ?? t("thread.theAgent")} review={conversation.data?.origin === "review"} />
+        ) : (
         <ComposerDock>
           <Composer
             ref={composer}
@@ -516,6 +542,7 @@ export default function Chat() {
             }
           />
         </ComposerDock>
+        )}
         <View style={{ height: keyboardOpen ? space.sm : Math.max(insets.bottom, space.md) }} />
       </KeyboardAvoidingView>
       <RenameDialog open={renaming} title={conversation.data?.title ?? ""} onClose={() => setRenaming(false)} onSave={(text) => void change({ title: text })} />
@@ -529,8 +556,51 @@ const LiveMessage = memo(function LiveMessage({ conversationId, runId, agent }: 
     const draft = s.drafts[conversationId];
     return draft && draft.runId === runId ? draft.blocks : NO_BLOCKS;
   });
-  return <AssistantMessage blocks={blocks} streaming agent={agent} />;
+  const messageId = useLive((s) => (s.drafts[conversationId]?.runId === runId ? s.drafts[conversationId]?.messageId : undefined));
+  return <AssistantMessage id={messageId} blocks={blocks} streaming agent={agent} />;
 });
+
+/** Where a new day starts in the chat: quiet, like the desktop's. */
+function DayDivider({ label }: { label: string }) {
+  const c = useColors();
+  return (
+    <View style={styles.day} accessibilityRole="header">
+      <View style={[styles.dayLine, { backgroundColor: c.border }]} />
+      <T variant="caption" muted>
+        {label}
+      </T>
+      <View style={[styles.dayLine, { backgroundColor: c.border }]} />
+    </View>
+  );
+}
+
+/** Back to the end of the chat after scrolling away from it. */
+function JumpButton({ live, onPress }: { live: boolean; onPress: () => void }) {
+  const c = useColors();
+  const { t } = useTranslation("chat");
+  const label = live ? t("thread.jumpToLive") : t("thread.jumpToLatest");
+  return (
+    <Animated.View entering={FadeIn.duration(140)} exiting={FadeOut.duration(140)} style={styles.jump} pointerEvents="box-none">
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={label}
+        hitSlop={8}
+        onPress={() => {
+          tap();
+          onPress();
+        }}
+        style={({ pressed }) => pressed && { opacity: 0.7 }}
+      >
+        <Glass interactive fallback={c.surface} style={styles.jumpPill}>
+          <Icon name="down" size={11} weight="semibold" color={c.textMuted} />
+          <T variant="footnote" style={{ fontWeight: "500" }}>
+            {label}
+          </T>
+        </Glass>
+      </Pressable>
+    </Animated.View>
+  );
+}
 
 function ChatLiveStrip({ screen, runId }: { screen: LiveScreen; runId: string }) {
   return <LiveStrip screen={screen} activity={useRunActivity(runId)} />;
@@ -580,8 +650,7 @@ function RenameDialog({ open, title, onClose, onSave }: { open: boolean; title: 
       <View style={styles.dialogWrap} pointerEvents="box-none">
         <View style={[styles.dialog, { backgroundColor: c.surface }]} accessibilityViewIsModal>
           <T variant="headline">{t("thread.rename")}</T>
-          <TextInput
-            autoFocus
+          <ModalTextInput
             value={text}
             onChangeText={setText}
             onSubmitEditing={save}
@@ -613,12 +682,6 @@ function FollowupStrip({ conversationId, followup, agentName }: { conversationId
   const failed = (title: string) => (err: unknown) =>
     Alert.alert(title, err instanceof ApiError && err.code === "device_forbidden" ? t("thread.followup.updateDesktop") : errorText(err));
   const move = (dueAt: Date) => void api.conversations.followup.move(conversationId, dueAt.toISOString()).then(refresh).catch(failed(t("thread.followup.moveFailed")));
-  const tomorrowAt9 = () => {
-    const at = new Date();
-    at.setDate(at.getDate() + 1);
-    at.setHours(9, 0, 0, 0);
-    return at;
-  };
   const items: HeaderMenuItem[] = [
     {
       icon: "play",
@@ -632,8 +695,7 @@ function FollowupStrip({ conversationId, followup, agentName }: { conversationId
           })
           .catch(failed(t("thread.followup.continueNowFailed"))),
     },
-    { icon: "clock", title: t("thread.followup.inAnHour"), onPress: () => move(new Date(Date.now() + 3600_000)) },
-    { icon: "clock", title: t("thread.followup.tomorrow"), onPress: () => move(tomorrowAt9()) },
+    ...followupTimes(conversationId, followup.dueAt, move),
     {
       icon: "close",
       title: t("thread.followup.cancel"),
@@ -931,20 +993,6 @@ function handoffAfterAsk(messages: Message[] | undefined): string | null {
   return null;
 }
 
-/**
- * The chat's last turn, when it ended early and trying again can help: not in a ticket's, an automation's or a chat
- * platform's chat (those go on from there), nor while messages wait in the chat (they'd go along unasked).
- */
-function endedTurn(conv: ConversationWithMessages): { runId: string; mode: RetryMode } | null {
-  if (["task", "routine", "dream", "review", "slack", "telegram", "teams"].includes(conv.origin) || conv.queue.length > 0) return null;
-  const last = conv.messages[conv.messages.length - 1];
-  if (last?.role !== "assistant" || !last.runId) return null;
-  const end = last.blocks[last.blocks.length - 1];
-  const text = end?.type === "error" ? end.text : end?.type === "notice" && runEndOf(end.text) ? end.text : null;
-  if (text === null || !retryHelps(runEndOf(text))) return null;
-  return { runId: last.runId, mode: retryModeOf(last.blocks) === "continue" && conv.claudeSessionId ? "continue" : "again" };
-}
-
 /** Above the composer once the chat gets long: compress it, or go on in a fresh chat. */
 function LongChatStrip({ pct, full, onCompress, onHandoff, onHide }: { pct: number | null; full: boolean; onCompress: () => void; onHandoff?: () => void; onHide: () => void }) {
   const c = useColors();
@@ -974,33 +1022,6 @@ function LongChatStrip({ pct, full, onCompress, onHandoff, onHide }: { pct: numb
   );
 }
 
-/** Above the composer when the last turn ended early. */
-function EndedStrip({ mode, onRetry, busy }: { mode: RetryMode; onRetry: () => void; busy: boolean }) {
-  const c = useColors();
-  const { t } = useTranslation(["chat", "common"]);
-  return (
-    <View style={[styles.paused, { backgroundColor: c.surface, borderColor: c.border }]}>
-      <Icon name="warning" size={15} color={c.textMuted} />
-      <T variant="footnote" muted style={{ flex: 1 }} numberOfLines={2}>
-        {mode === "continue" ? t("thread.ended.stopped") : t("thread.ended.failed")}
-      </T>
-      <Pressable
-        onPress={onRetry}
-        disabled={busy}
-        hitSlop={10}
-        accessibilityRole="button"
-        accessibilityLabel={mode === "continue" ? t("common:actions.continue") : t("common:actions.tryAgain")}
-        accessibilityState={{ busy, disabled: busy }}
-        style={{ opacity: busy ? 0.5 : 1 }}
-      >
-        <T variant="footnote" color={c.primary} style={{ fontWeight: "600" }}>
-          {mode === "continue" ? t("common:actions.continue") : t("common:actions.tryAgain")}
-        </T>
-      </Pressable>
-    </View>
-  );
-}
-
 /** An empty chat: who it is with. */
 function Intro({ agent, running }: { agent: Agent; running: boolean }) {
   return (
@@ -1023,6 +1044,28 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.lg,
     paddingTop: space.md,
     paddingBottom: space.xl,
+  },
+  day: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  dayLine: {
+    flex: 1,
+    height: StyleSheet.hairlineWidth,
+  },
+  jump: {
+    position: "absolute",
+    bottom: space.sm,
+    alignSelf: "center",
+  },
+  jumpPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: radius.pill,
   },
   paused: {
     flexDirection: "row",

@@ -12,17 +12,21 @@ import {
   type AgentHeartbeatState,
   type HeartbeatBeat,
   type HeartbeatOutcome,
+  type HeartbeatWake,
+  type WatchdogEvent,
+  type WatchdogKind,
 } from "@godmode/shared";
 import { upcomingWhen } from "./dream-parts";
 import { Group, LinkRow } from "./form";
-import { Icon } from "./icon";
+import { Icon, type IconName } from "./icon";
 import { openChat } from "./rows";
-import { Button, Card, Hairline, SectionTitle, SkeletonRows, T, tap } from "./ui";
+import { openTask } from "./task-row";
+import { Badge, Button, Card, Hairline, SectionTitle, SkeletonRows, T, tap } from "./ui";
 import { api, ApiError, errorText } from "@/lib/api";
 import { useNow } from "@/lib/hooks";
 import { dateLocale, t } from "@/lib/i18n";
 import { qk, queryClient } from "@/lib/query";
-import { alpha, radius, space, useColors, type Colors } from "@/lib/theme";
+import { alpha, fonts, radius, space, useColors, type Colors } from "@/lib/theme";
 
 const BEATS_PREVIEW = 5;
 
@@ -30,6 +34,15 @@ const BEATS_PREVIEW = 5;
 const refused = (err: unknown) => err instanceof ApiError && (err.status === 403 || err.status === 404);
 
 const openSettings = (agent: Agent) => router.push({ pathname: "/settings/agent/[id]", params: { id: agent.id } });
+
+function useHeartbeatState(agentId: string) {
+  return useQuery({
+    queryKey: qk.heartbeat(agentId),
+    queryFn: () => api.agents.heartbeat(agentId),
+    refetchInterval: 60_000,
+    retry: (count, err) => !refused(err) && count < 2,
+  });
+}
 
 /**
  * The desktop's heartbeat tab, read-only apart from "Wake now": where it stands, when it beats next and its last beats.
@@ -58,12 +71,7 @@ function HeartbeatOn({ agent, hb }: { agent: Agent; hb: AgentHeartbeat }) {
   const { t } = useTranslation(["components", "common"]);
   const now = useNow(30_000);
   const [showAll, setShowAll] = useState(false);
-  const q = useQuery({
-    queryKey: qk.heartbeat(agent.id),
-    queryFn: () => api.agents.heartbeat(agent.id),
-    refetchInterval: 60_000,
-    retry: (count, err) => !refused(err) && count < 2,
-  });
+  const q = useHeartbeatState(agent.id);
   const next = q.data?.nextAt ?? null;
   // Refetch right after the next beat.
   useEffect(() => {
@@ -136,6 +144,9 @@ function HeartbeatOn({ agent, hb }: { agent: Agent; hb: AgentHeartbeat }) {
         </View>
 
         <Hairline />
+        <BoardStrip agentId={agent.id} board={q.data?.board} />
+
+        <Hairline />
         <T variant="eyebrow" muted style={styles.eyebrow}>
           {t("heartbeatCard.recentBeats")}
         </T>
@@ -175,6 +186,46 @@ function HeartbeatOn({ agent, hb }: { agent: Agent; hb: AgentHeartbeat }) {
   );
 }
 
+const BOARD = [
+  { key: "working", label: "heartbeatCard.board.working" },
+  { key: "waiting", label: "heartbeatCard.board.waiting" },
+  { key: "waitingOnYou", label: "heartbeatCard.board.waitingOnYou", tone: "warning" },
+  { key: "blocked", label: "heartbeatCard.board.blocked", tone: "danger" },
+] as const satisfies readonly { key: keyof AgentHeartbeatState["board"]; label: string; tone?: "warning" | "danger" }[];
+
+/** The agent's open tickets by where they stand; each cell opens its tickets on the board. */
+function BoardStrip({ agentId, board }: { agentId: string; board: AgentHeartbeatState["board"] | undefined }) {
+  const c = useColors();
+  const { t } = useTranslation("components");
+  return (
+    <View style={styles.board}>
+      {BOARD.map((b) => {
+        const n = board?.[b.key];
+        const color = !n ? c.textFaint : "tone" in b ? c[b.tone] : c.text;
+        return (
+          <Pressable
+            key={b.key}
+            accessibilityRole="button"
+            accessibilityLabel={`${t(b.label)}: ${n ?? "–"}`}
+            onPress={() => {
+              tap();
+              router.navigate({ pathname: "/tasks", params: { agent: agentId } });
+            }}
+            style={({ pressed }) => [styles.boardCell, pressed && { backgroundColor: c.sunken }]}
+          >
+            <T variant="title" color={color} style={styles.boardCount}>
+              {n ?? "–"}
+            </T>
+            <T variant="caption" muted numberOfLines={2}>
+              {t(b.label)}
+            </T>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
 /** "Beats every hour · 08:00–18:00 · weekdays · next at 10:30". */
 function statusLine(agent: Agent, hb: AgentHeartbeat, state: AgentHeartbeatState | undefined, now: number): string {
   const parts = [t("components:heartbeatCard.beats", { interval: intervalText(hb.intervalMinutes) })];
@@ -200,8 +251,9 @@ function nextLabel(iso: string, now: number): string {
   return isToday(d) ? t("components:heartbeatCard.nextAt", { time: format(d, "p", { locale: dateLocale() }) }) : t("components:heartbeatCard.next", { when: upcomingWhen(iso, now) });
 }
 
-function hourLabel(hour: number): string {
-  return `${String(hour % 24).padStart(2, "0")}:00`;
+/** An hour of the day in the phone's clock format; 24 is the midnight a range ends at. */
+export function hourLabel(hour: number): string {
+  return format(new Date(2000, 0, 1, hour % 24), "p", { locale: dateLocale() });
 }
 
 /** "10:30" today, "Yesterday, 10:30", "Mon, Oct 5, 10:30". */
@@ -220,6 +272,7 @@ const OUTCOME: Record<HeartbeatOutcome, { dot: (c: Colors) => string }> = {
 };
 
 const RUN_STATES = ["queued", "running", "paused", "failed", "cancelled"] as const;
+const WHY: readonly string[] = ["stalled", "unstarted", "retry"];
 
 type BeatItem = { kind: "beat"; beat: HeartbeatBeat } | { kind: "quiet"; beats: HeartbeatBeat[] };
 
@@ -282,6 +335,9 @@ function BeatRow({ beat: b }: { beat: HeartbeatBeat }) {
             {t("heartbeatCard.changesSince", { count: b.changes })}
           </T>
         ) : null}
+        {b.wakes?.map((w) => (
+          <WakeChip key={w.taskId} wake={w} />
+        ))}
         {checklist ? (
           <View style={[styles.checklist, { backgroundColor: c.sunken }]}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
@@ -303,6 +359,28 @@ function BeatRow({ beat: b }: { beat: HeartbeatBeat }) {
   );
 }
 
+/** The ticket a beat woke the agent on, why, and what changed on it. Opens the ticket. */
+function WakeChip({ wake: w }: { wake: HeartbeatWake }) {
+  const c = useColors();
+  const { t } = useTranslation("components");
+  const why = t(WHY.includes(w.why) ? `heartbeatCard.why.${w.why}` : "heartbeatCard.why.default");
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={() => openTask(w.taskId)}
+      style={({ pressed }) => [styles.checklist, { backgroundColor: pressed ? c.accent : c.sunken }]}
+    >
+      <T variant="caption" numberOfLines={1} style={{ fontWeight: "500" }}>
+        <T variant="caption" muted style={{ fontFamily: fonts.mono }}>{`#${w.number}`}</T>
+        {` ${w.title}`}
+      </T>
+      <T variant="caption" muted numberOfLines={2}>
+        {w.changes > 0 ? `${why} · ${t("heartbeatCard.changesSinceWork", { count: w.changes })}` : why}
+      </T>
+    </Pressable>
+  );
+}
+
 function QuietRow({ beats }: { beats: HeartbeatBeat[] }) {
   const c = useColors();
   const { t } = useTranslation("components");
@@ -318,6 +396,94 @@ function QuietRow({ beats }: { beats: HeartbeatBeat[] }) {
         </T>
         {` · ${t("heartbeatCard.beatCount", { count: beats.length })} · ${beatTime(oldest)}–${sameDay ? format(newest, "p", { locale: dateLocale() }) : beatTime(beats[0]!.createdAt)}`}
       </T>
+    </View>
+  );
+}
+
+const KIND: Record<WatchdogKind, { label: "heartbeatCard.watchdog.kind.stalled" | "heartbeatCard.watchdog.kind.looping"; icon: IconName }> = {
+  stalled: { label: "heartbeatCard.watchdog.kind.stalled", icon: "hourglass" },
+  looping: { label: "heartbeatCard.watchdog.kind.looping", icon: "repeat" },
+};
+
+const ACTION: Record<WatchdogEvent["action"], { label: "heartbeatCard.watchdog.action.retry" | "heartbeatCard.watchdog.action.escalated"; icon: IconName }> = {
+  retry: { label: "heartbeatCard.watchdog.action.retry", icon: "refresh" },
+  escalated: { label: "heartbeatCard.watchdog.action.escalated", icon: "bell" },
+};
+
+/** The desktop's watchdog panel: where it stepped in on this agent's runs, whatever the heartbeat is set to. */
+export function WatchdogCard({ agent }: { agent: Agent }) {
+  const c = useColors();
+  const { t } = useTranslation(["components", "common"]);
+  const q = useHeartbeatState(agent.id);
+  const boot = useQuery({ queryKey: qk.bootstrap, queryFn: api.bootstrap });
+  const on = boot.data?.settings.runner.watchdog ?? true;
+  if (q.isError && refused(q.error)) return null;
+  const events = q.data?.watchdog ?? [];
+  return (
+    <View>
+      <SectionTitle title={t("heartbeatCard.watchdog.title")} action={t("heartbeatCard.watchdog.setUp")} onAction={() => router.push("/settings/ai")} />
+      <Card style={{ overflow: "hidden" }}>
+        {q.isLoading ? (
+          <SkeletonRows count={1} avatar={0} />
+        ) : q.isError ? (
+          <View style={{ padding: space.lg, gap: space.md }}>
+            <T variant="footnote" color={c.danger}>
+              {t("heartbeatCard.watchdog.loadFailed", { error: errorText(q.error) })}
+            </T>
+            <Button title={t("common:actions.tryAgain")} icon="refresh" variant="outline" onPress={() => void q.refetch()} />
+          </View>
+        ) : events.length ? (
+          events.map((e, i) => (
+            <View key={e.id}>
+              {i > 0 && <Hairline inset={space.lg} />}
+              <WatchdogRow event={e} />
+            </View>
+          ))
+        ) : (
+          <T variant="subhead" muted style={{ padding: space.lg }}>
+            {on ? t("heartbeatCard.watchdog.emptyOn") : t("heartbeatCard.watchdog.off")}
+          </T>
+        )}
+      </Card>
+    </View>
+  );
+}
+
+function WatchdogRow({ event: e }: { event: WatchdogEvent }) {
+  const c = useColors();
+  const { t } = useTranslation("components");
+  const kind = KIND[e.kind] ?? KIND.stalled;
+  const action = ACTION[e.action] ?? ACTION.escalated;
+  const escalated = e.action === "escalated";
+  return (
+    <View style={styles.watchdog}>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
+        <Badge label={t(kind.label)} tone="warning" icon={<Icon name={kind.icon} size={11} color={c.warning} />} />
+        <T variant="caption" muted style={{ fontVariant: ["tabular-nums"] }}>
+          {beatTime(e.createdAt)}
+        </T>
+      </View>
+      <T variant="footnote">{e.report}</T>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: space.md }}>
+        <View style={{ flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 4 }}>
+          <Icon name={action.icon} size={11} color={escalated ? c.text : c.textMuted} />
+          <T variant="caption" muted={!escalated} numberOfLines={1} style={escalated ? { flexShrink: 1, fontWeight: "500" } : { flexShrink: 1 }}>
+            {t(action.label)}
+          </T>
+        </View>
+        {e.taskId ? (
+          <Pressable accessibilityRole="button" hitSlop={8} onPress={() => openTask(e.taskId!)}>
+            <T variant="caption" style={{ fontWeight: "500" }}>
+              {`${t("heartbeatCard.watchdog.ticket")} #${e.taskNumber}`}
+            </T>
+          </Pressable>
+        ) : null}
+        <Pressable accessibilityRole="button" hitSlop={8} onPress={() => openChat(e.conversationId)}>
+          <T variant="caption" style={{ fontWeight: "500" }}>
+            {t("heartbeatCard.openChat")}
+          </T>
+        </Pressable>
+      </View>
     </View>
   );
 }
@@ -344,6 +510,27 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
+  },
+  board: {
+    flexDirection: "row",
+    paddingHorizontal: space.sm,
+    paddingVertical: space.xs,
+  },
+  boardCell: {
+    flex: 1,
+    minWidth: 0,
+    gap: 1,
+    paddingHorizontal: space.sm,
+    paddingVertical: space.sm,
+    borderRadius: radius.sm,
+    borderCurve: "continuous",
+  },
+  boardCount: {
+    fontVariant: ["tabular-nums"],
+  },
+  watchdog: {
+    gap: space.sm,
+    padding: space.lg,
   },
   eyebrow: {
     paddingHorizontal: space.lg,

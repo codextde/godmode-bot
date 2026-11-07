@@ -7,7 +7,10 @@
  * Nothing here ever leaves the device — decoding runs locally in the webview.
  */
 import jsQR from "jsqr";
+import { parseOtpUri as parseOtp, type OtpProblem, type ParsedOtpLink } from "@godmode/shared";
 import { t } from "@/i18n";
+
+export { isOtpUri, isValidBase32, normalizeBase32 } from "@godmode/shared";
 
 type Drawable = ImageBitmap | HTMLImageElement | HTMLCanvasElement | HTMLVideoElement;
 export type QrSource = Blob | Drawable;
@@ -155,184 +158,18 @@ export function scanVideoFrame(video: HTMLVideoElement, canvas: HTMLCanvasElemen
 }
 
 /* ------------------------------------------------------------------ */
-/* otpauth parsing (preview only — the core does the real import)      */
+/* otpauth parsing lives in @godmode/shared, the phone reads links too   */
 /* ------------------------------------------------------------------ */
 
-export function isOtpUri(s: string): boolean {
-  return /^otpauth(-migration)?:\/\//i.test(s.trim());
-}
+const OTP_PROBLEMS: Record<OtpProblem, () => string> = {
+  migration_no_data: () => t("system:qr.migrationNoData"),
+  migration_unreadable: () => t("system:qr.migrationUnreadable"),
+  not_two_factor: () => t("system:qr.notTwoFactor"),
+};
 
-export interface OtpPreview {
-  type: "totp" | "hotp";
-  issuer: string;
-  account: string;
-  algorithm: string;
-  digits: number;
-  period: number;
-  validSecret: boolean;
-}
-
-export interface MigrationPreview {
-  accounts: { issuer: string; account: string; type: "totp" | "hotp" | "unknown"; algorithm: string; digits: number }[];
-  batchIndex: number;
-  batchSize: number;
-  batchId: number;
-}
-
-export type ParsedOtp =
-  | { kind: "otpauth"; uri: string; preview: OtpPreview }
-  | { kind: "migration"; uri: string; preview: MigrationPreview }
-  | { kind: "invalid"; uri: string; error: string };
-
-export function normalizeBase32(secret: string): string {
-  return secret.replace(/[\s-]/g, "").replace(/=+$/, "").toUpperCase();
-}
-
-export function isValidBase32(secret: string): boolean {
-  const s = normalizeBase32(secret);
-  return s.length >= 16 && /^[A-Z2-7]+$/.test(s);
-}
-
-function safeDecode(s: string): string {
-  try {
-    return decodeURIComponent(s);
-  } catch {
-    return s;
-  }
-}
-
-function parseQuery(q: string): Map<string, string> {
-  const map = new Map<string, string>();
-  for (const part of q.split("&")) {
-    if (!part) continue;
-    const eq = part.indexOf("=");
-    const k = safeDecode(eq === -1 ? part : part.slice(0, eq)).toLowerCase();
-    // Keep "+" literal (base64 in migration payloads); only decode percent escapes.
-    const v = eq === -1 ? "" : safeDecode(part.slice(eq + 1));
-    map.set(k, v);
-  }
-  return map;
-}
+export type ParsedOtp = ParsedOtpLink | { kind: "invalid"; uri: string; error: string };
 
 export function parseOtpUri(raw: string): ParsedOtp {
-  const uri = raw.trim();
-  const m = /^otpauth:\/\/(totp|hotp)\/([^?]*)(?:\?(.*))?$/i.exec(uri);
-  if (m) {
-    const label = safeDecode(m[2]);
-    const q = parseQuery(m[3] ?? "");
-    const [labelIssuer, ...rest] = label.includes(":") ? label.split(":") : ["", label];
-    const account = (rest.length ? rest.join(":") : label).trim();
-    const secret = q.get("secret") ?? "";
-    return {
-      kind: "otpauth",
-      uri,
-      preview: {
-        type: m[1].toLowerCase() as "totp" | "hotp",
-        issuer: (q.get("issuer") || labelIssuer || "").trim() || account.split("@")[1] || "Unknown",
-        account,
-        algorithm: (q.get("algorithm") || "SHA1").toUpperCase(),
-        digits: Number(q.get("digits") || 6),
-        period: Number(q.get("period") || 30),
-        validSecret: isValidBase32(secret) || normalizeBase32(secret).length >= 8,
-      },
-    };
-  }
-  const mm = /^otpauth-migration:\/\/[^?]*\?(.*)$/i.exec(uri);
-  if (mm) {
-    const data = parseQuery(mm[1]).get("data");
-    if (!data) return { kind: "invalid", uri, error: t("system:qr.migrationNoData") };
-    try {
-      return { kind: "migration", uri, preview: decodeMigrationPayload(data.replace(/ /g, "+")) };
-    } catch {
-      return { kind: "invalid", uri, error: t("system:qr.migrationUnreadable") };
-    }
-  }
-  return { kind: "invalid", uri, error: t("system:qr.notTwoFactor") };
-}
-
-/* Minimal protobuf reader for Google Authenticator's MigrationPayload */
-
-function b64ToBytes(b64: string): Uint8Array {
-  const std = b64.replace(/-/g, "+").replace(/_/g, "/");
-  const padded = std + "===".slice((std.length + 3) % 4);
-  const bin = atob(padded);
-  const out = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-  return out;
-}
-
-class PbReader {
-  pos = 0;
-  constructor(private buf: Uint8Array) {}
-  get done() {
-    return this.pos >= this.buf.length;
-  }
-  varint(): number {
-    let result = 0;
-    let mul = 1;
-    for (let i = 0; i < 10; i++) {
-      if (this.pos >= this.buf.length) throw new Error("truncated varint");
-      const b = this.buf[this.pos++];
-      result += (b & 0x7f) * mul;
-      if (!(b & 0x80)) return result;
-      mul *= 128;
-    }
-    throw new Error("varint too long");
-  }
-  bytes(): Uint8Array {
-    const len = this.varint();
-    if (this.pos + len > this.buf.length) throw new Error("truncated field");
-    const out = this.buf.subarray(this.pos, this.pos + len);
-    this.pos += len;
-    return out;
-  }
-  skip(wire: number) {
-    if (wire === 0) this.varint();
-    else if (wire === 1) this.pos += 8;
-    else if (wire === 2) this.bytes();
-    else if (wire === 5) this.pos += 4;
-    else throw new Error(`unsupported wire type ${wire}`);
-  }
-}
-
-const utf8 = new TextDecoder();
-const ALGORITHMS = ["SHA1", "SHA1", "SHA256", "SHA512", "MD5"];
-
-function decodeMigrationPayload(b64: string): MigrationPreview {
-  const r = new PbReader(b64ToBytes(b64));
-  const out: MigrationPreview = { accounts: [], batchIndex: 0, batchSize: 1, batchId: 0 };
-  while (!r.done) {
-    const tag = r.varint();
-    const field = Math.floor(tag / 8);
-    const wire = tag & 7;
-    if (field === 1 && wire === 2) {
-      const p = new PbReader(r.bytes());
-      let name = "";
-      let issuer = "";
-      let algorithm = "SHA1";
-      let digits = 6;
-      let type: "totp" | "hotp" | "unknown" = "totp";
-      while (!p.done) {
-        const t = p.varint();
-        const f = Math.floor(t / 8);
-        const w = t & 7;
-        if (f === 2 && w === 2) name = utf8.decode(p.bytes());
-        else if (f === 3 && w === 2) issuer = utf8.decode(p.bytes());
-        else if (f === 4 && w === 0) algorithm = ALGORITHMS[p.varint()] ?? "SHA1";
-        else if (f === 5 && w === 0) digits = p.varint() === 2 ? 8 : 6;
-        else if (f === 6 && w === 0) {
-          const v = p.varint();
-          type = v === 1 ? "hotp" : v === 2 ? "totp" : "unknown";
-        } else p.skip(w);
-      }
-      let account = name;
-      if (!issuer && name.includes(":")) [issuer, account] = [name.split(":")[0], name.split(":").slice(1).join(":")];
-      else if (issuer && name.startsWith(`${issuer}:`)) account = name.slice(issuer.length + 1);
-      out.accounts.push({ issuer: issuer.trim() || "Unknown", account: account.trim(), type, algorithm, digits });
-    } else if (field === 3 && wire === 0) out.batchSize = r.varint();
-    else if (field === 4 && wire === 0) out.batchIndex = r.varint();
-    else if (field === 5 && wire === 0) out.batchId = r.varint();
-    else r.skip(wire);
-  }
-  return out;
+  const parsed = parseOtp(raw);
+  return parsed.kind === "invalid" ? { kind: "invalid", uri: parsed.uri, error: OTP_PROBLEMS[parsed.problem]() } : parsed;
 }

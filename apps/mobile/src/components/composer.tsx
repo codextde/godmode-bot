@@ -9,14 +9,16 @@ import { CHAT_SHARE_CODE_PREFIX, parseSlashCommand } from "@godmode/shared";
 import { AttachmentTray } from "./attachments";
 import { useFullAccess } from "./full-access";
 import { Glass } from "./glass";
-import { MenuSheet } from "./header-actions";
+import { MenuSheet, useMenuSheet } from "./header-actions";
 import { Icon } from "./icon";
 import { T, tap } from "./ui";
 import { VoiceButton } from "./voice-button";
 import { errorText } from "@/lib/api";
-import { addFiles, canScanDocuments, chooseCameraMode, fromPasted, MAX_FILES, pickFrom, type FileSource, type PendingFile } from "@/lib/attachments";
+import { addFiles, canScanDocuments, chooseCameraMode, formatBytes, fromPasted, MAX_FILES, pastedTextFile, pickFrom, type FileSource, type PendingFile } from "@/lib/attachments";
 import { isChatFile, openChatFile, openChatImport } from "@/lib/chat-extras";
-import { findCommand, rankCommands, useDraft, useDrafts, useSlashCommands } from "@/lib/composer";
+import { useChatPrefs } from "@/lib/chat-prefs";
+import { findCommand, rankCommands, useComposerFocus, useDraft, useDrafts, useSlashCommands } from "@/lib/composer";
+import { fitsInMessage, largePaste } from "@/lib/large-paste";
 import { fonts, radius, space, textScale, type, useColors } from "@/lib/theme";
 import { addPasteListener, setPasteActive } from "../../modules/paste-input";
 
@@ -96,8 +98,24 @@ export function Composer({
   // The run ended under the open menu: nothing may pop up by itself with the next one.
   if (otherOpen && !otherSend) setOtherOpen(false);
   const dictated = useRef(false);
+  const [pastedAs, setPastedAs] = useState<{ id: string; text: string; size: number } | null>(null);
   const { fullAccess } = useFullAccess();
   const commands = useSlashCommands(agentId);
+  // A quote went in from outside the field: a new field measures all its lines, then the caret goes below the quote.
+  const focusAt = useComposerFocus((s) => (s.key === draftKey ? s.at : 0));
+  const focusedAt = useRef(focusAt);
+  const [field, setField] = useState(0);
+  useEffect(() => {
+    if (!focusAt || focusAt === focusedAt.current) return;
+    focusedAt.current = focusAt;
+    setField((n) => n + 1);
+    const timer = setTimeout(() => {
+      const end = (useDrafts.getState().drafts[draftKey]?.text ?? "").length;
+      input.current?.focus();
+      input.current?.setSelection(end, end);
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [focusAt, draftKey]);
 
   useImperativeHandle(ref, () => ({
     focus: () => input.current?.focus(),
@@ -160,9 +178,40 @@ export function Composer({
       openChatImport(pasted);
       return;
     }
+    const big = allowFiles && useChatPrefs.getState().largePasteAsFile ? largePaste(text, next) : null;
+    if (big && attachPaste(big.pasted, big.rest)) return;
     setText(next);
     setMenuForced(false);
   };
+
+  // Over the size the desktop takes as a file: the text stays out of the message, and the agent reads what it needs.
+  const attachPaste = (pasted: string, rest: string) => {
+    let file: PendingFile;
+    try {
+      file = pastedTextFile(pasted);
+    } catch {
+      return false;
+    }
+    const kept = addFiles(useDrafts.getState().drafts[draftKey]?.files ?? [], [file]);
+    if (!kept.some((f) => f.id === file.id)) return false;
+    setDraft(draftKey, { files: kept, text: rest });
+    setPastedAs({ id: file.id, text: pasted, size: file.size });
+    return true;
+  };
+
+  const pasteAsText = () => {
+    if (!pastedAs) return;
+    tap();
+    const draft = useDrafts.getState().drafts[draftKey];
+    setDraft(draftKey, { files: (draft?.files ?? []).filter((f) => f.id !== pastedAs.id), text: (draft?.text ?? "") + pastedAs.text });
+    setPastedAs(null);
+  };
+
+  useEffect(() => {
+    if (!pastedAs) return;
+    const timer = setTimeout(() => setPastedAs(null), 8000);
+    return () => clearTimeout(timer);
+  }, [pastedAs]);
 
   const pasteOn = !!allowFiles && focused && !disabled;
   useEffect(() => {
@@ -218,8 +267,23 @@ export function Composer({
       {menuOpen ? <SlashMenu items={menuItems} grouped={!menuQuery} loading={commands.isLoading} error={commands.error} onPick={pickCommand} /> : null}
       <Glass style={styles.capsule} fallback={c.surface}>
         {files.length > 0 ? <AttachmentTray files={files} onRemove={removeFile} /> : null}
+        {pastedAs && files.some((f) => f.id === pastedAs.id) ? (
+          <Animated.View entering={FadeIn.duration(160)} exiting={FadeOut.duration(160)} style={styles.pasted}>
+            <T variant="caption" muted numberOfLines={2} style={{ flex: 1 }}>
+              {tr("composer.pastedAsFile", { size: formatBytes(pastedAs.size) })}
+            </T>
+            {fitsInMessage(text, pastedAs.text) ? (
+              <Pressable accessibilityRole="button" hitSlop={10} onPress={pasteAsText}>
+                <T variant="caption" style={{ fontWeight: "600" }}>
+                  {tr("composer.pasteInline")}
+                </T>
+              </Pressable>
+            ) : null}
+          </Animated.View>
+        ) : null}
         {hint ? <SlashHint command={hint} /> : null}
         <TextInput
+          key={field}
           ref={input}
           value={text}
           onChangeText={onChange}
@@ -294,10 +358,11 @@ export function ComposerDock({ children }: { children: ReactNode }) {
   return <View style={styles.dock}>{children}</View>;
 }
 
-/** Photos, camera, document scan and files: the system menu on iOS, a choice dialog on Android. */
+/** Photos, camera, document scan and files: the system menu on iOS, a sheet on Android. */
 function AttachButton({ onPick, disabled }: { onPick: (source: FileSource) => void; disabled?: boolean }) {
   const c = useColors();
   const { t } = useTranslation("components");
+  const menu = useMenuSheet();
   if (process.env.EXPO_OS === "ios") {
     return (
       <View style={[styles.tool, disabled && { opacity: 0.4 }]} pointerEvents={disabled ? "none" : "auto"}>
@@ -323,22 +388,25 @@ function AttachButton({ onPick, disabled }: { onPick: (source: FileSource) => vo
     );
   }
   return (
+    <>
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={t("composer.attach")}
       disabled={disabled}
       onPress={() => {
         tap();
-        Alert.alert(t("composer.attach"), t("composer.attachMessage"), [
-          { text: t("composer.photos"), onPress: () => onPick("library") },
-          { text: t("composer.camera"), onPress: () => void chooseCameraMode().then((mode) => mode && onPick(mode)) },
-          { text: t("composer.files"), onPress: () => onPick("files") },
-        ], { cancelable: true });
+        menu.show([
+          { icon: "photo", title: t("composer.photos"), onPress: () => onPick("library") },
+          { icon: "camera", title: t("composer.camera"), onPress: () => void chooseCameraMode().then((mode) => mode && onPick(mode)) },
+          { icon: "folder", title: t("composer.files"), onPress: () => onPick("files") },
+        ]);
       }}
       style={({ pressed }) => [styles.tool, { backgroundColor: c.sunken, opacity: disabled ? 0.4 : pressed ? 0.6 : 1 }]}
     >
       <Icon name="plus" size={17} color={c.textMuted} weight="semibold" />
     </Pressable>
+    {menu.sheet}
+    </>
   );
 }
 
@@ -428,6 +496,13 @@ function SlashMenu({
 const styles = StyleSheet.create({
   root: {
     position: "relative",
+  },
+  pasted: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+    paddingHorizontal: space.lg,
+    paddingTop: 4,
   },
   capsule: {
     borderRadius: radius.xl,

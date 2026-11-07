@@ -109,6 +109,8 @@ export const settingsApi = {
   license: {
     get: () => get<LicenseState>("/api/license"),
     usage: () => get<LicenseUsage>("/api/license/usage"),
+    /** Asks the licence server again; nothing to buy or enter. */
+    refresh: () => post<LicenseState>("/api/license/refresh", {}, 30_000),
   },
 
   usage: (days = 30) => get<UsageSummary>("/api/usage", { days }),

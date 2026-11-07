@@ -1,6 +1,5 @@
 {
   "tabs": {
-    "open": "Open",
     "resolved": "Resolved",
     "dismissed": "Dismissed"
   },
@@ -14,8 +13,6 @@
   },
   "title": "Inbox",
   "anAgent": "An agent",
-  "attention": "Needs your attention",
-  "attentionCount": "Needs your attention · {{count}}",
   "allClear": "All clear",
   "allClearBody": "When an agent needs a decision, your OK or a login, it lands here.",
   "search": "Search",

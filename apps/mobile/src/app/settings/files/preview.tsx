@@ -8,7 +8,7 @@ import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, TextInput,
 import { useTranslation } from "react-i18next";
 import { KeyboardAvoidingView, useKeyboardState } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { entryActions, useDreamingNow } from "@/components/file-actions";
+import { entryActions, revealItem, useCanShowOnComputer, useDreamingNow } from "@/components/file-actions";
 import { useFullAccess } from "@/components/full-access";
 import { HeaderActions, MenuSheet, type HeaderMenuItem } from "@/components/header-actions";
 import { Icon } from "@/components/icon";
@@ -16,6 +16,7 @@ import { Markdown } from "@/components/markdown";
 import { MemoryBudget } from "@/components/memory-budget";
 import { PdfPage } from "@/components/pdf-page";
 import { EmptyState, ErrorState, T } from "@/components/ui";
+import { zoomImage, ZoomView } from "@/components/zoom-view";
 import { api, ApiError, errorText, pictureBases } from "@/lib/api";
 import {
   fileKind,
@@ -41,6 +42,7 @@ import {
 import { useAgents } from "@/lib/hooks";
 import { intlLocale } from "@/lib/i18n";
 import { qk, queryClient } from "@/lib/query";
+import { FILES_SAVE_TO_FOLDER } from "@/lib/save-file";
 import { useSession } from "@/lib/session";
 import { fonts, space, useColors } from "@/lib/theme";
 
@@ -63,8 +65,10 @@ export default function FilePreview() {
   const keyboardOpen = useKeyboardState((s) => s.isVisible);
   const { agent, path = "", edit } = useLocalSearchParams<{ agent: string; path?: string; edit?: string }>();
   const kind = fileKind({ path, type: "file" });
-  const agentName = useAgents().byId.get(agent)?.name ?? t("folder.theAgent");
+  const owner = useAgents().byId.get(agent);
+  const agentName = owner?.name ?? t("folder.theAgent");
   const { fullAccess } = useFullAccess();
+  const canShow = useCanShowOnComputer();
   const frozen = useDreamingNow(agent);
   // This screen's own folder in the cache: what it fetched to show or share leaves the phone with it.
   const [slot] = useState(() => Math.random().toString(36).slice(2, 10));
@@ -122,6 +126,7 @@ export default function FilePreview() {
     onError: (err) => Alert.alert(t("preview.shareFailed"), errorText(err)),
   });
   const canShare = viewable(kind) || !!text.data;
+  const canSave = canShare && FILES_SAVE_TO_FOLDER && !text.data;
 
   const save = useMutation({
     mutationFn: async ({ value, base }: { value: string; base: string | null }) => {
@@ -192,7 +197,8 @@ export default function FilePreview() {
         { icon: "close", title: dirty ? t("editor.discardChanges") : t("editor.stopEditing"), destructive: dirty, onPress: stopEditing },
       ]
     : [
-        ...(canShare ? [{ icon: "share" as const, title: t("preview.share"), onPress: () => !share.isPending && share.mutate() }] : []),
+        ...(canShare && !canSave ? [{ icon: "share" as const, title: t("preview.share"), onPress: () => !share.isPending && share.mutate() }] : []),
+        ...(canShow && owner && path ? [revealItem(`${owner.repoPath}/${path}`)] : []),
         ...(fullAccess && path ? entryActions(agent, path, frozen) : []),
       ];
 
@@ -208,7 +214,13 @@ export default function FilePreview() {
           menu={menu}
         />
       ) : (
-        <HeaderActions actions={canEdit ? [{ icon: "pencil", label: t("common:actions.edit"), onPress: () => setDraft({ text: content!, base: content! }) }] : []} menu={menu} />
+        <HeaderActions
+          actions={[
+            ...(canEdit ? [{ icon: "pencil" as const, label: t("common:actions.edit"), onPress: () => setDraft({ text: content!, base: content! }) }] : []),
+            ...(canSave ? [{ icon: "download" as const, label: t("common:actions.save"), onPress: () => !share.isPending && share.mutate() }] : []),
+          ]}
+          menu={menu}
+        />
       )}
       {kind === "image" ? (
         <ImageView agent={agent} path={path} />
@@ -346,10 +358,9 @@ function ImageView({ agent, path }: { agent: string; path: string }) {
     );
   }
   return (
-    <ScrollView
+    <ZoomView
+      max={5}
       contentInsetAdjustmentBehavior="automatic"
-      maximumZoomScale={5}
-      minimumZoomScale={1}
       centerContent
       bouncesZoom
       showsHorizontalScrollIndicator={false}
@@ -365,8 +376,9 @@ function ImageView({ agent, path }: { agent: string; path: string }) {
         cachePolicy="memory"
         transition={150}
         style={{ width, height: height * 0.75, backgroundColor: loaded ? undefined : c.sunken }}
+        {...zoomImage}
       />
-    </ScrollView>
+    </ZoomView>
   );
 }
 

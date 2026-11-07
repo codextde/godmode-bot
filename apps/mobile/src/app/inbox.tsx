@@ -6,7 +6,6 @@ import { useTranslation } from "react-i18next";
 import type { Agent, AppNotification, MissingLogin, MissingLoginKind, MissingLoginStatus } from "@godmode/shared";
 import { CharacterAvatar } from "@/components/character";
 import { FilterChips } from "@/components/filter-chips";
-import { Segmented } from "@/components/form";
 import { useFullAccess } from "@/components/full-access";
 import { HeaderActions } from "@/components/header-actions";
 import { openHumanTask } from "@/components/human-task-row";
@@ -66,8 +65,9 @@ export default function Inbox() {
   const notifications = useQuery({ queryKey: qk.notifications, queryFn: api.notifications.list });
   const pull = usePullRefresh(() => Promise.all([needs.refetch(), notifications.refetch()]));
   const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState<Filter>("all");
-  const [tab, setTab] = useState<"open" | ClosedStatus>("open");
+  // One row for what is open (by kind) and what was closed: Resolved and Dismissed come last.
+  const [filter, setFilter] = useState<Filter | ClosedStatus>("all");
+  const tab: "open" | ClosedStatus = filter === "resolved" || filter === "dismissed" ? filter : "open";
   const query = search.trim().toLowerCase();
 
   const agentName = useCallback((id: string | null) => (id ? (agents.get(id)?.name ?? "") : ""), [agents]);
@@ -109,32 +109,21 @@ export default function Inbox() {
         keyboardDismissMode="on-drag"
         refreshControl={<RefreshControl {...pull} />}
       >
-        <Segmented
-          value={tab}
-          onChange={setTab}
-          options={[
-            { value: "open", label: t("tabs.open") },
-            { value: "resolved", label: t("tabs.resolved") },
-            { value: "dismissed", label: t("tabs.dismissed") },
+        <FilterChips<Filter | ClosedStatus>
+          bleed={space.lg}
+          value={filter}
+          onChange={setFilter}
+          filters={[
+            { id: "all", label: t("filters.all"), count: searched.length + logins.length },
+            ...(counts.size > 1 ? SECTIONS.filter((s) => counts.has(s) || filter === s).map((s) => ({ id: s, label: t(`filters.${s}`), count: counts.get(s) ?? 0 })) : []),
+            { id: "resolved", label: t("tabs.resolved") },
+            { id: "dismissed", label: t("tabs.dismissed") },
           ]}
         />
 
         {tab !== "open" ? <ClosedList status={tab} query={query} /> : null}
 
-        {tab === "open" && total > 0 && counts.size > 1 ? (
-          <FilterChips
-            bleed={space.lg}
-            value={filter}
-            onChange={setFilter}
-            filters={[
-              { id: "all", label: t("filters.all"), count: searched.length + logins.length },
-              ...SECTIONS.filter((s) => counts.has(s) || filter === s).map((s) => ({ id: s, label: t(`filters.${s}`), count: counts.get(s) ?? 0 })),
-            ]}
-          />
-        ) : null}
-
         {tab === "open" ? <View>
-          <SectionTitle title={waiting ? t("attentionCount", { count: waiting }) : t("attention")} />
           {needs.loading ? (
             <Card>
               <SkeletonRows count={3} avatar={30} />

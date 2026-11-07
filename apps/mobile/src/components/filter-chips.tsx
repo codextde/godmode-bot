@@ -1,4 +1,6 @@
 import { Pressable, ScrollView, StyleSheet } from "react-native";
+import { useTranslation } from "react-i18next";
+import { Icon } from "./icon";
 import { T, tap } from "./ui";
 import { radius, space, textScale, useColors } from "@/lib/theme";
 
@@ -49,6 +51,29 @@ export function FilterChips<V extends string>({ filters, value, onChange, bleed 
   );
 }
 
+/** A filter picked in the header's filter menu, on the list's top line; tap to take it off. */
+export function ActiveFilterChip({ label, count, onClear }: { label: string; count?: number; onClear: () => void }) {
+  const c = useColors();
+  const { t } = useTranslation("components");
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${count ? `${label} ${count}` : label}. ${t("filterToolbar.clear")}`}
+      hitSlop={6}
+      onPress={() => {
+        tap();
+        onClear();
+      }}
+      style={({ pressed }) => [styles.chip, styles.active, { backgroundColor: c.brandSoft, opacity: pressed ? 0.7 : 1 }]}
+    >
+      <T variant="subhead" numberOfLines={1} maxScale={textScale.control} color={c.brandStrong} style={{ fontWeight: "600" }}>
+        {count ? `${label} ${count}` : label}
+      </T>
+      <Icon name="close" size={10} color={c.brandStrong} weight="bold" />
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
   row: {
     gap: space.sm,
@@ -60,5 +85,8 @@ const styles = StyleSheet.create({
     minHeight: 32,
     paddingHorizontal: 14,
     borderRadius: radius.pill,
+  },
+  active: {
+    paddingHorizontal: 12,
   },
 });

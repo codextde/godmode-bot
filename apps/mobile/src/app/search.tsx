@@ -5,33 +5,39 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { Pressable, StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import type { SearchBarCommands } from "react-native-screens";
-import { searchSegments, type Agent, type SearchChatHit, type SearchTaskHit } from "@godmode/shared";
+import { searchSegments, type Agent, type Routine, type SearchChatHit, type SearchNoteHit, type SearchTaskHit } from "@godmode/shared";
 import { CharacterAvatar } from "@/components/character";
 import { Tile } from "@/components/form";
+import { useFullAccess } from "@/components/full-access";
 import { EmptyState, ErrorState, Hairline, SectionTitle, SkeletonRows, T, tap } from "@/components/ui";
 import { ApiError, api, errorText } from "@/lib/api";
 import { shortTime } from "@/lib/format";
 import { useAgents } from "@/lib/hooks";
+import { qk } from "@/lib/query";
 import { radius, space, useColors } from "@/lib/theme";
 
 type Item =
   | { kind: "header"; key: string; title: string }
   | { kind: "agent"; key: string; agent: Agent; divided: boolean }
   | { kind: "chat"; key: string; hit: SearchChatHit; divided: boolean }
-  | { kind: "task"; key: string; hit: SearchTaskHit; divided: boolean };
+  | { kind: "task"; key: string; hit: SearchTaskHit; divided: boolean }
+  | { kind: "note"; key: string; hit: SearchNoteHit; divided: boolean }
+  | { kind: "automation"; key: string; routine: Routine; divided: boolean };
 
 const fold = (text: string) => text.normalize("NFKD").replace(/\p{M}/gu, "").toLowerCase();
 
-/** Every word of the query somewhere in the agent's name, role or description. */
-function agentMatches(agent: Agent, query: string): boolean {
-  const hay = fold(`${agent.name} ${agent.role ?? ""} ${agent.description ?? ""}`);
+/** Every word of the query somewhere in the text. */
+function matches(text: string, query: string): boolean {
+  const hay = fold(text);
   return fold(query)
     .split(/\s+/)
     .filter(Boolean)
     .every((word) => hay.includes(word));
 }
 
-/** Everything at once, like the desktop's command palette: chats and their messages, tasks and agents. */
+const agentMatches = (agent: Agent, query: string) => matches(`${agent.name} ${agent.role ?? ""} ${agent.description ?? ""}`, query);
+
+/** Everything at once, like the desktop's command palette: chats and their messages, tasks, agents, automations and, with full access, agents' notes. */
 export default function Search() {
   const { t } = useTranslation(["chat", "common"]);
   const params = useLocalSearchParams<{ q?: string }>();
@@ -51,7 +57,9 @@ export default function Search() {
   }, [params.q]);
 
   const searching = q.length >= 2;
-  const found = useQuery({ queryKey: ["search", q], queryFn: () => api.search(q), enabled: searching, placeholderData: keepPreviousData, staleTime: 5_000 });
+  const notes = useFullAccess().fullAccess === true;
+  const found = useQuery({ queryKey: ["search", q, notes], queryFn: () => api.search(q, notes), enabled: searching, placeholderData: keepPreviousData, staleTime: 5_000 });
+  const routines = useQuery({ queryKey: qk.allRoutines, queryFn: () => api.routines.list(), enabled: searching });
   const { data: agents = [], byId } = useAgents();
   const forbidden = found.error instanceof ApiError && found.error.code === "device_forbidden";
 
@@ -72,8 +80,17 @@ export default function Search() {
       out.push({ kind: "header", key: "h-tasks", title: t("search.tasks") });
       data.tasks.forEach((hit, i) => out.push({ kind: "task", key: `t-${hit.id}`, hit, divided: i > 0 }));
     }
+    if (data?.notes.length) {
+      out.push({ kind: "header", key: "h-notes", title: t("search.notes") });
+      data.notes.forEach((hit, i) => out.push({ kind: "note", key: `n-${hit.agentId}-${hit.path}`, hit, divided: i > 0 }));
+    }
+    const automations = (routines.data ?? []).filter((r) => matches(`${r.name} ${r.prompt}`, q)).slice(0, 6);
+    if (automations.length) {
+      out.push({ kind: "header", key: "h-automations", title: t("search.automations") });
+      automations.forEach((routine, i) => out.push({ kind: "automation", key: `r-${routine.id}`, routine, divided: i > 0 }));
+    }
     return out;
-  }, [searching, agents, q, found.data, t]);
+  }, [searching, agents, q, found.data, routines.data, t]);
 
   const renderItem: ListRenderItem<Item> = useCallback(
     ({ item }) => {
@@ -96,6 +113,20 @@ export default function Search() {
             <>
               {item.divided && <Hairline inset={68} />}
               <ChatHit hit={item.hit} agent={byId.get(item.hit.agentId)} />
+            </>
+          );
+        case "note":
+          return (
+            <>
+              {item.divided && <Hairline inset={68} />}
+              <NoteHit hit={item.hit} agent={byId.get(item.hit.agentId)} />
+            </>
+          );
+        case "automation":
+          return (
+            <>
+              {item.divided && <Hairline inset={68} />}
+              <AutomationHit routine={item.routine} />
             </>
           );
         default:
@@ -253,6 +284,39 @@ function TaskHit({ hit }: { hit: SearchTaskHit }) {
     >
       {hit.snippet ? <Marked text={hit.snippet} /> : null}
     </HitRow>
+  );
+}
+
+function NoteHit({ hit, agent }: { hit: SearchNoteHit; agent?: Agent }) {
+  return (
+    <HitRow
+      lead={
+        <View style={styles.lead}>
+          <Tile icon="doc" size={36} />
+        </View>
+      }
+      title={hit.heading || hit.path.split("/").pop() || hit.path}
+      meta={agent?.name}
+      onPress={() => router.push({ pathname: "/chat-file", params: { agent: hit.agentId, path: hit.path } })}
+    >
+      <Marked text={hit.snippet} />
+    </HitRow>
+  );
+}
+
+function AutomationHit({ routine }: { routine: Routine }) {
+  const { t } = useTranslation("chat");
+  return (
+    <HitRow
+      lead={
+        <View style={styles.lead}>
+          <Tile icon="workflow" size={36} />
+        </View>
+      }
+      title={routine.name}
+      meta={routine.enabled ? undefined : t("search.off")}
+      onPress={() => router.push({ pathname: "/automation/[id]", params: { id: routine.id } })}
+    />
   );
 }
 
