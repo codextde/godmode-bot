@@ -18,7 +18,7 @@ import { useTranslation } from "react-i18next";
 import Animated, { cancelAnimation, Easing, FadeIn, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from "react-native-reanimated";
 import { Glass } from "./glass";
 import { Icon, type IconName } from "./icon";
-import { alpha, radius, space, type, useColors, withFont, type Colors } from "@/lib/theme";
+import { alpha, radius, scaledText, space, textScale, type, useColors, useFontScale, variantScale, withFont, type Colors } from "@/lib/theme";
 
 type Variant = keyof typeof type;
 
@@ -29,12 +29,23 @@ export function T({
   color,
   style,
   muted,
+  maxScale,
+  numberOfLines,
   ...props
-}: TextProps & { variant?: Variant; color?: ColorValue; muted?: boolean }) {
+}: TextProps & {
+  variant?: Variant;
+  color?: ColorValue;
+  muted?: boolean;
+  /** How far Dynamic Type may grow it (`textScale`); controls set this and stay on their line. */
+  maxScale?: number;
+}) {
   const c = useColors();
+  const fontScale = useFontScale();
   const flat: TextStyle = StyleSheet.flatten([type[variant] as TextStyle, { color: color ?? (muted ? c.textMuted : c.text) }, style]) ?? {};
+  // Large text wraps: a title cut after two words says nothing.
+  const lines = numberOfLines && !maxScale && fontScale >= 1.35 ? numberOfLines * 3 : numberOfLines;
   // iOS Text only copies a whole block; a UITextView lets the human pick a range.
-  return <UITextView {...props} uiTextView style={withFont(flat)} />;
+  return <UITextView {...props} numberOfLines={lines} allowFontScaling={false} uiTextView style={scaledText(withFont(flat), fontScale, maxScale ?? variantScale(variant))} />;
 }
 
 export function tap(style: Haptics.ImpactFeedbackStyle = Haptics.ImpactFeedbackStyle.Light) {
@@ -63,12 +74,12 @@ export function SectionTitle({ title, action, onAction }: { title: string; actio
   const c = useColors();
   return (
     <View style={styles.sectionTitle}>
-      <T variant="eyebrow" muted>
+      <T variant="eyebrow" muted style={{ flexShrink: 1 }}>
         {title}
       </T>
       {action && onAction ? (
         <Pressable hitSlop={10} onPress={onAction}>
-          <T variant="footnote" color={c.textMuted} style={{ fontWeight: "500" }}>
+          <T variant="footnote" color={c.textMuted} numberOfLines={1} maxScale={textScale.control} style={{ fontWeight: "500" }}>
             {action}
           </T>
         </Pressable>
@@ -138,7 +149,7 @@ export function Badge({ label, tone = "neutral", live, icon, dot = true }: { lab
   return (
     <View style={[styles.badge, { backgroundColor: t.bg, borderColor: t.border }]}>
       {icon ?? (dot ? live ? <LiveDot size={6} color={t.dot} /> : <View style={[styles.badgeDot, { backgroundColor: t.dot }]} /> : null)}
-      <T variant="caption" color={t.fg} numberOfLines={1} style={styles.badgeText}>
+      <T variant="caption" color={t.fg} numberOfLines={1} maxScale={textScale.control} style={styles.badgeText}>
         {label}
       </T>
     </View>
@@ -197,9 +208,9 @@ export function Button({
   const height = size === "lg" ? 48 : 44;
   const corner = size === "lg" ? 10 : radius.md;
   const content = (
-    <View style={[styles.buttonInner, { height }]}>
+    <View style={[styles.buttonInner, { minHeight: height }]}>
       {loading ? <ActivityIndicator color={fg} /> : icon ? <Icon name={icon} size={16} color={fg} weight="medium" /> : null}
-      <T variant="callout" color={fg} style={{ fontWeight: "500", letterSpacing: -0.1 }}>
+      <T variant="callout" color={fg} maxScale={textScale.label} style={{ flexShrink: 1, textAlign: "center", fontWeight: "500", letterSpacing: -0.1 }}>
         {title}
       </T>
     </View>
@@ -369,11 +380,11 @@ export function LoadingState({ label: labelProp, style }: { label?: string; styl
 }
 
 /** Loading failed: say why and offer to try again instead of an empty screen. */
-export function ErrorState({ title, error, onRetry }: { title: string; error: string; onRetry?: () => void }) {
+export function ErrorState({ title, error, onRetry, icon = "wifi" }: { title: string; error: string; onRetry?: () => void; icon?: IconName }) {
   const { t } = useTranslation("common");
   return (
     <EmptyState
-      icon="wifi"
+      icon={icon}
       title={title}
       body={error}
       action={onRetry ? <Button title={t("actions.tryAgain")} icon="refresh" variant="outline" onPress={onRetry} /> : undefined}

@@ -64,7 +64,7 @@ export default function FilePreview() {
   const headerHeight = useHeaderHeight();
   const insets = useSafeAreaInsets();
   const keyboardOpen = useKeyboardState((s) => s.isVisible);
-  const { agent, path, edit } = useLocalSearchParams<{ agent: string; path: string; edit?: string }>();
+  const { agent, path = "", edit } = useLocalSearchParams<{ agent: string; path?: string; edit?: string }>();
   const kind = fileKind({ path, type: "file" });
   const agentName = useAgents().byId.get(agent)?.name ?? t("folder.theAgent");
   const { fullAccess } = useFullAccess();
@@ -146,6 +146,7 @@ export default function FilePreview() {
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       queryClient.setQueryData(fk.file(agent, path), { path, content: value });
       refreshFiles(agent);
+      setReading(false);
       setDraft(null);
     },
     onError: (err) => {
@@ -195,7 +196,7 @@ export default function FilePreview() {
       ]
     : [
         ...(canShare ? [{ icon: "share" as const, title: t("preview.share"), onPress: () => !share.isPending && share.mutate() }] : []),
-        ...(fullAccess ? entryActions(agent, path, frozen) : []),
+        ...(fullAccess && path ? entryActions(agent, path, frozen) : []),
       ];
 
   return (

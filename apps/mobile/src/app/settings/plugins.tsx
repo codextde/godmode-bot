@@ -5,10 +5,11 @@ import { ActivityIndicator, Alert, Switch } from "react-native";
 import { useTranslation } from "react-i18next";
 import type { Mod } from "@godmode/shared";
 import { useFullAccess } from "@/components/admin";
+import { Group, LinkRow } from "@/components/form";
 import { HeaderActions } from "@/components/header-actions";
 import { ListRow, ReadonlyList } from "@/components/readonly-list";
 import { pluginIcon } from "@/components/plugin-parts";
-import { Badge, T, tap } from "@/components/ui";
+import { Badge, tap } from "@/components/ui";
 import { errorText } from "@/lib/api";
 import { ik, integrationsApi, usePlugins } from "@/lib/integrations";
 import { queryClient } from "@/lib/query";
@@ -101,9 +102,9 @@ export default function Plugins() {
             />
           ) : null}
           {off ? (
-            <T variant="footnote" muted>
-              {t("plugins.allOff")}
-            </T>
+            <Group>
+              <LinkRow icon="power" title={t("plugins.allOff")} onPress={() => router.push("/settings/features")} />
+            </Group>
           ) : null}
         </>
       }
@@ -117,7 +118,8 @@ export default function Plugins() {
               {hasUpdate(m) ? <Badge label={t("tools:plugins.updateBadge")} tone="warning" /> : m.needsReview ? <Badge label={t("plugins.draft")} tone="warning" /> : null}
               <Switch
                 accessibilityLabel={t("tools:list.switch", { name })}
-                value={m.enabled}
+                value={m.enabled && !off}
+                disabled={off}
                 onValueChange={(next) => {
                   tap();
                   if (next) switchOn(m);
@@ -126,7 +128,7 @@ export default function Plugins() {
                 trackColor={{ true: c.brand, false: c.sunken }}
               />
             </>
-          ) : m.enabled ? (
+          ) : m.enabled && !off ? (
             <Switch
               accessibilityLabel={t("plugins.switchOff", { name })}
               value
@@ -146,6 +148,8 @@ export default function Plugins() {
             tint={m.enabled ? c.brandStrong : undefined}
             title={name}
             lines={[m.description, m.source ? [m.source.repo, m.source.version].filter(Boolean).join(" · ") : null]}
+            lineLimit={2}
+            chevron={false}
             trailing={trailing}
             onPress={admin ? () => openPlugin(m) : undefined}
             onLongPress={admin ? () => actions(m) : undefined}

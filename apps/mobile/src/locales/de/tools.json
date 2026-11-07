@@ -307,7 +307,7 @@
     "whatItCanDo": "Was es kann",
     "reachesOutside": "Wirkt über das Gespräch hinaus",
     "hooksInto": "Hängt sich ein in",
-    "nothingHooked": "Noch nichts – es hängt sich nicht in Claude Code ein.",
+    "nothingHooked": "Noch nichts. Es hängt sich nicht in Claude Code ein.",
     "notCheckedReadCode": "Noch nicht geprüft. Bis Claude Code es geprüft hat, lies den Code, um zu sehen, was dieses Plugin tut.",
     "noHooks": "Keine Hooks.",
     "hooksUnknown": "Unbekannt, bis Claude Code das Plugin prüft.",

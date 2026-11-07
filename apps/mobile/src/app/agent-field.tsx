@@ -15,7 +15,7 @@ import { ik, integrationsApi } from "@/lib/integrations";
 import { manageApi, mk, moveAgent, patchAgentSetup } from "@/lib/manage";
 import { qk } from "@/lib/query";
 import { sshAddress } from "@/lib/ssh-admin";
-import { useWorkspace } from "@/lib/workspace";
+import { useWorkspace, ownEmoji } from "@/lib/workspace";
 
 const TITLES: Record<AgentField, string> = {
   workspace: "agent.workspace",
@@ -97,7 +97,7 @@ function WorkspacePick({ agent }: { agent: Agent }) {
     <Group>
       <PickRow icon="globe" title={t("agent.global")} detail={t("agent.globalDetail")} selected={!agent.workspaceId} onPress={() => pick(null, t("agent.global"))} />
       {workspaces.map((w) => (
-        <PickRow key={w.id} emoji={w.icon || "🗂️"} title={w.name} detail={w.description || undefined} selected={agent.workspaceId === w.id} onPress={() => pick(w.id, w.name)} />
+        <PickRow key={w.id} emoji={ownEmoji(w.icon)} icon="layers" title={w.name} detail={w.description || undefined} selected={agent.workspaceId === w.id} onPress={() => pick(w.id, w.name)} />
       ))}
     </Group>
   );

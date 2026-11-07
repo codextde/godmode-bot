@@ -37,7 +37,7 @@
     "loadFailed": "Plugins konnten nicht geladen werden",
     "switchOff": "{{name}} ausschalten",
     "switchFailed": "Plugin konnte nicht ausgeschaltet werden",
-    "allOff": "Plugins sind auf deinem Computer ausgeschaltet.",
+    "allOff": "Plugins sind aus",
     "draft": "Entwurf"
   },
   "messaging": {

@@ -6,7 +6,7 @@
     "noMatch": "Keine passenden Automationen",
     "clearFilters": "Filter zurücksetzen",
     "emptyTitle": "Noch keine Automationen",
-    "emptyBody": "Richte selbst eine ein — eine Posteingangs-Zusammenfassung am Morgen, ein Antwortentwurf für jede Kundenmail, ein Blick auf die Preise der Konkurrenz."
+    "emptyBody": "Richte selbst eine ein: eine Posteingangs-Zusammenfassung am Morgen, ein Antwortentwurf für jede Kundenmail, ein Blick auf die Preise der Konkurrenz."
   },
   "describe": {
     "title": "Beschreib, was automatisiert werden soll",
@@ -118,7 +118,7 @@
       "conditionNext": "Die nächste Prüfung ist {{when}}.",
       "conditionBody": "Sobald eine Prüfung die Bedingung erfüllt findet, erscheint sie hier.",
       "webhookTitle": "Noch keine Aufrufe",
-      "webhookBody": "Ruf die Webhook-URL auf — oder sende ein Test-Ereignis — und es erscheint hier."
+      "webhookBody": "Ruf die Webhook-URL auf, oder sende ein Test-Ereignis, und es erscheint hier."
     }
   },
   "edit": {
@@ -145,7 +145,6 @@
     "loadFailed": "Automation konnte nicht geladen werden",
     "createFailed": "Automation konnte nicht erstellt werden",
     "updateFailed": "Automation konnte nicht aktualisiert werden",
-    "intro": "Wenn es passiert, legt der Agent los — auch wenn du nicht da bist.",
     "whenRun": "Wann soll sie laufen?",
     "when": "Wenn…",
     "conditionPlaceholder": "ein Konkurrent den Preis seines Pro-Plans ändert (acme.com/pricing)",
@@ -182,12 +181,6 @@
       "app": "der Absender ist ein Kunde oder der Betreff erwähnt eine Rechnung",
       "webhook": "die Bestellsumme liegt über 100 €"
     },
-    "triggerHint": {
-      "schedule": "Jeden Morgen, jeden Montag, am 1.…",
-      "condition": "Regelmäßig geprüft, in normaler Sprache",
-      "app": "Eine neue E-Mail, Slack-Nachricht, ein Termin…",
-      "webhook": "Jeder Dienst, der einen HTTP-POST senden kann"
-    },
     "notifyFooter": {
       "never": "Keine Mitteilungen. Eine fehlerhafte Automation erscheint trotzdem unter „Braucht dich“. Am Handy eingerichtet oder geändert, füllen ihre Läufe Logins aus, lesen aber nie Passwörter im Klartext.",
       "always": "Eine Mitteilung nach jedem Lauf, mit dem, was sie getan hat. Am Handy eingerichtet oder geändert, füllen ihre Läufe Logins aus, lesen aber nie Passwörter im Klartext.",
@@ -211,13 +204,13 @@
     "pickEvent": "Wähl das Ereignis, auf das reagiert werden soll",
     "loadingSettings": "Einstellungen des Ereignisses werden geladen…",
     "settingsFailed": "Einstellungen des Ereignisses konnten nicht geladen werden",
-    "settingsFailedHint": "{{problem}} – prüf Composio und versuch es dann erneut.",
+    "settingsFailedHint": "{{problem}}. Prüf Composio und versuch es dann erneut.",
     "composioFailed": "Composio-Einstellungen nicht erreichbar",
     "connectFirstTitle": "Verbinde zuerst deine Apps",
-    "connectFirstDescription": "App-Ereignisse kommen von Composio. Hinterleg deinen Composio-API-Key und verbinde Gmail, Slack, Kalender oder eine andere App – dann wähl, was diese Automation starten soll.",
+    "connectFirstDescription": "App-Ereignisse kommen von Composio. Hinterleg deinen Composio-API-Key und verbinde Gmail, Slack, Kalender oder eine andere App, dann wähl, was diese Automation starten soll.",
     "setUpComposio": "Composio einrichten",
     "accountsFailed": "Verbundene Konten konnten nicht geladen werden",
-    "chooseAgentFirst": "Wähl zuerst den Agenten – er kann nur Konten beobachten, auf die er Zugriff hat.",
+    "chooseAgentFirst": "Wähl zuerst den Agenten. Er kann nur Konten beobachten, auf die er Zugriff hat.",
     "noUsableTitle": "Kein Konto, das {{name}} nutzen kann",
     "noUsableDescription": "Die verbundenen Konten gehören anderen Agenten oder Workspaces. Verbinde eines für {{name}}, seinen Workspace oder global und wähl dann das Ereignis, das diese Automation startet.",
     "connectApp": "App verbinden",
@@ -239,7 +232,7 @@
     "pollHint": "Composio prüft {{app}} alle paar Minuten darauf, neue Ereignisse können also ein paar Minuten brauchen.",
     "needsSetup": "Braucht eine einmalige Einrichtung in {{app}}, bevor Ereignisse ankommen.",
     "eventsFailed": "{{app}}-Ereignisse konnten nicht geladen werden",
-    "noEvents": "{{app}} bietet keine Ereignisse, auf die reagiert werden kann. Versuch es stattdessen mit einer Bedingung – der Agent prüft sie regelmäßig.",
+    "noEvents": "{{app}} bietet keine Ereignisse, auf die reagiert werden kann. Versuch es stattdessen mit einer Bedingung. Der Agent prüft sie regelmäßig.",
     "searchPlaceholder": "{{app}}-Ereignisse suchen…",
     "searchLabel": "{{app}}-Ereignisse suchen",
     "noMatch": "Keine {{app}}-Ereignisse passen zu „{{query}}“.",
@@ -273,7 +266,7 @@
     "rotateTitle": "URL von „{{name}}“ erneuern?",
     "rotateDescription": "Godmode erstellt eine neue geheime URL. Was noch die alte aufruft, bekommt einen Fehler, bis du es aktualisierst.",
     "rotated": "Neue Webhook-URL erstellt",
-    "rotatedDescription": "Die alte URL funktioniert nicht mehr – aktualisiere die Dienste, die sie aufrufen.",
+    "rotatedDescription": "Die alte URL funktioniert nicht mehr. Aktualisiere die Dienste, die sie aufrufen.",
     "rotateFailed": "Webhook-URL konnte nicht erneuert werden",
     "title": "Webhook-URL",
     "urlLabel": "Geheime URL",

@@ -1,5 +1,6 @@
 {
   "list": {
+    "openFeatures": "Funktionen öffnen",
     "outdatedTitle": "Auf diesem Computer noch nicht da",
     "outdatedBody": "Aktualisiere Godmode auf deinem Computer, um das hier auf dem Handy zu sehen.",
     "noMatch": "Nichts passt zu „{{query}}“"
@@ -64,6 +65,7 @@
     "actionsFor": "Aktionen für {{site}}"
   },
   "sshKeys": {
+    "off": "SSH-Schlüssel sind ausgeschaltet",
     "title": "SSH-Schlüssel",
     "emptyTitle": "Keine SSH-Schlüssel",
     "loadFailed": "SSH-Schlüssel konnten nicht geladen werden",

@@ -119,9 +119,9 @@
     "chats_one": "{{count, number}} Chat",
     "chats_other": "{{count, number}} Chats",
     "reviewed": {
-      "nothingNewActive": "Nichts Neues zu lesen – räumt auf und aktualisiert Datumsangaben",
+      "nothingNewActive": "Nichts Neues zu lesen, räumt auf und aktualisiert Datumsangaben",
       "nothingNewEnded": "Wollte aufräumen und Datumsangaben aktualisieren",
-      "nothingNew": "Keine neuen Unterhaltungen – aufgeräumt und Datumsangaben aktualisiert",
+      "nothingNew": "Keine neuen Unterhaltungen, aufgeräumt und Datumsangaben aktualisiert",
       "active": "Sieht {{exchanges}} in {{chats}} durch",
       "ended": "Wollte {{exchanges}} in {{chats}} durchsehen",
       "done": "{{exchanges}} in {{chats}} durchgesehen"
@@ -174,38 +174,38 @@
   "dreamsCard": {
     "title": "Träumen",
     "startFailed": "Traum konnte nicht starten",
-    "offHint": "Träumen ist aus – schalte es unter Einstellungen → Gedächtnis ein",
+    "offHint": "Träumen ist aus. Schalte es unter Einstellungen → Gedächtnis ein",
     "loadFailed": "Träume konnten nicht geladen werden: {{error}}",
     "dreamNow": "Jetzt träumen",
     "journal": "Traumtagebuch",
     "showFewer": "Weniger anzeigen",
     "showOlder_one": "{{count, number}} älteren Traum anzeigen",
     "showOlder_other": "{{count, number}} ältere Träume anzeigen",
-    "journalEmpty": "Hier landet jeder Traum: was {{name}} durchgesehen hat, was sich im Gedächtnis geändert hat und warum – mit Zeile-für-Zeile-Diff.",
+    "journalEmpty": "Hier landet jeder Traum: was {{name}} durchgesehen hat, was sich im Gedächtnis geändert hat und warum, mit Zeile-für-Zeile-Diff.",
     "waitingToDream": "Wartet aufs Träumen…",
     "dreaming": "Träumt…",
     "startsSoon": "Startet, sobald {{name}} mit der aktuellen Arbeit fertig ist.",
     "last": {
       "failed": "Letzter Traum {{ago}} fehlgeschlagen",
       "cancelled": "Letzter Traum {{ago}} abgebrochen",
-      "pausedSize": "Letzter Traum {{ago}} pausiert – der nächste geplante Traum übernimmt",
-      "pausedIdle": "Letzter Traum {{ago}} pausiert – geht weiter, sobald {{name}} frei ist",
+      "pausedSize": "Letzter Traum {{ago}} pausiert. Der nächste geplante Traum übernimmt",
+      "pausedIdle": "Letzter Traum {{ago}} pausiert. Geht weiter, sobald {{name}} frei ist",
       "reverted": "Letzter Traum {{ago}} (rückgängig gemacht)",
       "default": "Letzter Traum {{ago}}"
     },
     "neverDreamt": "Hat noch nicht geträumt",
     "nextDream": "Nächster Traum {{when}}",
-    "noUpcoming": "Kein Traum geplant – prüfe den Zeitplan unter Einstellungen → Gedächtnis",
-    "agentOff": "{{name}} ist ausgeschaltet – schalte den Agenten ein, damit er träumen kann.",
+    "noUpcoming": "Kein Traum geplant. Prüfe den Zeitplan unter Einstellungen → Gedächtnis",
+    "agentOff": "{{name}} ist ausgeschaltet. Schalte den Agenten ein, damit er träumen kann.",
     "newExchanges_one": "{{count, number}} neue Gesprächsrunde",
     "newExchanges_other": "{{count, number}} neue Gesprächsrunden",
     "pending": "<b>{{exchanges}}</b> in {{chats}} warten",
-    "pendingBelowThreshold": "<b>{{exchanges}}</b> in {{chats}} warten – der nächste geplante Traum braucht {{threshold}}",
+    "pendingBelowThreshold": "<b>{{exchanges}}</b> in {{chats}} warten. Der nächste geplante Traum braucht {{threshold}}",
     "nothingNew": "Nichts Neues seit dem letzten Traum.",
-    "nothingYet": "Noch nichts zum Träumen – chatte zuerst mit dem Agenten.",
-    "attemptedPartly": "Versucht – wo möglich zurückgerollt",
-    "attemptedNothingKept": "Versucht – zurückgerollt, nichts wurde behalten",
-    "alreadyGood": "Das Gedächtnis war schon in gutem Zustand – nichts umzuschreiben.",
+    "nothingYet": "Noch nichts zum Träumen. Chatte zuerst mit dem Agenten.",
+    "attemptedPartly": "Versucht, wo möglich zurückgerollt",
+    "attemptedNothingKept": "Versucht, zurückgerollt, nichts wurde behalten",
+    "alreadyGood": "Das Gedächtnis war schon in gutem Zustand. Nichts umzuschreiben.",
     "dreamOf": "Traum: {{when}}",
     "consolidating": "Konsolidiere Gedächtnis…"
   },
@@ -228,16 +228,13 @@
     },
     "type": {
       "general": {
-        "label": "Aufgabe",
-        "hint": "Erledigt sie und berichtet zurück"
+        "label": "Aufgabe"
       },
       "coding": {
-        "label": "Coding",
-        "hint": "Eigener Branch, öffnet einen Pull Request"
+        "label": "Coding"
       },
       "research": {
-        "label": "Recherche",
-        "hint": "Recherchiert, schreibt einen Bericht"
+        "label": "Recherche"
       }
     },
     "blocked": {
@@ -252,7 +249,7 @@
     "needsAnswer": "Braucht deine Antwort",
     "paused": "Pausiert",
     "waiting": "Wartet",
-    "waitingContinues": "Wartet – weiter ab {{when}}",
+    "waitingContinues": "Wartet, weiter ab {{when}}",
     "waitingForParts_one": "Wartet auf {{count}} Teil",
     "waitingForParts_other": "Wartet auf {{count}} Teile",
     "waitingForPartsBlocked_one": "Wartet auf {{count}} Teil · {{blocked}} blockiert",
@@ -264,7 +261,7 @@
     "waitsFor": "Wartet auf {{tickets}}",
     "partsDone": "{{done}}/{{total}} Teile",
     "unassigned": "Nicht zugewiesen",
-    "queued": "In der Warteschlange – wartet, bis es weitergeht",
+    "queued": "In der Warteschlange, wartet, bis es weitergeht",
     "working": "Arbeitet…"
   },
   "runRow": {
@@ -301,7 +298,7 @@
     "label": "Ziele",
     "newGoal": "Neues Ziel",
     "addGoal": "Ziel hinzufügen",
-    "addHint": "Ziele sagen, wofür die Arbeit gut ist – Aufgaben, die einem Ziel dienen, sagen ihrem Agenten warum, und du siehst, wie weit es ist.",
+    "addHint": "Ziele sagen, wofür die Arbeit gut ist. Aufgaben, die einem Ziel dienen, sagen ihrem Agenten warum, und du siehst, wie weit es ist.",
     "goal": "Ziel",
     "hideFinished": "Abgeschlossene ausblenden",
     "finished_one": "{{count}} abgeschlossen",
@@ -348,7 +345,7 @@
     "cronHint": "Cron-Ausdruck (Minute Stunde Tag Monat Wochentag)",
     "cronLabel": "Cron-Ausdruck",
     "randomStart": "Zufällige Startzeit",
-    "randomStartHint": "Startet jedes Mal zu einem anderen Zeitpunkt – wie ein Kollege, der nicht auf die Minute genau einstempelt.",
+    "randomStartHint": "Startet jedes Mal zu einem anderen Zeitpunkt, wie ein Kollege, der nicht auf die Minute genau einstempelt.",
     "startWithin": "Start innerhalb von"
   },
   "routineRow": {
@@ -427,7 +424,7 @@
     "openRun": "Lauf öffnen",
     "recentRuns": "Letzte Läufe",
     "loadFailed": "Läufe konnten nicht geladen werden: {{error}}",
-    "empty": "Noch keine Läufe. Starte einen Chat oder gib dem Agenten eine Aufgabe – jeder Lauf erscheint hier.",
+    "empty": "Noch keine Läufe",
     "noPrompt": "(kein Prompt)",
     "rowLabel": "{{status}}: {{snippet}}",
     "waitingToStart": "Wartet auf Start"
@@ -438,7 +435,7 @@
       "delegation": "Übergeben",
       "heartbeat": "Heartbeat"
     },
-    "queued": "In der Warteschlange – wartet, bis es weitergeht",
+    "queued": "In der Warteschlange, wartet, bis es weitergeht",
     "needsOk": "Braucht dein OK",
     "needsAnswer": "Braucht deine Antwort",
     "paused": "Pausiert",
@@ -470,6 +467,8 @@
     },
     "payment": {
       "transfer": "Überweisung",
+      "scan": "Mit der Banking-App scannen",
+      "qrLabel": "Überweisungs-QR-Code (GiroCode)",
       "amount": "Betrag",
       "recipient": "Empfänger",
       "reference": "Verwendungszweck",
@@ -511,7 +510,7 @@
   },
   "queueTray": {
     "alreadyHas": "{{name}} hat diese Nachricht schon",
-    "wordingKept": "Deine neue Formulierung steht im Nachrichtenfeld – schick sie als Nachtrag.",
+    "wordingKept": "Deine neue Formulierung steht im Nachrichtenfeld. Schick sie als Nachtrag.",
     "editFailed": "Nachricht konnte nicht geändert werden",
     "removeFailed": "Nachricht konnte nicht entfernt werden",
     "sendFailed": "Warteschlange konnte nicht gesendet werden",
@@ -559,9 +558,10 @@
     "decline": "Ablehnen",
     "addNote": "Notiz hinzufügen",
     "finishingStep": "{{name}} beendet noch den aktuellen Schritt…",
-    "replyCountsAsAnswer": "Oder antworte unten: Deine Nachricht zählt als Antwort.",
-    "typeOwnAnswer": "Oder schreib unten deine eigene Antwort.",
-    "replyToAnswer": "Antworte unten.",
+    "tellInstead": "Oder sag {{name}}, was stattdessen zu tun ist…",
+    "ownWords": "Oder antworte in eigenen Worten…",
+    "answerPlaceholder": "{{name}} antworten…",
+    "sendAnswer": "Antwort senden",
     "settled": {
       "approved": "Du hast freigegeben",
       "approvedPhone": "Du hast vom Handy aus freigegeben",
@@ -674,16 +674,16 @@
         "other": "{{a}} wartet auf {{list}}"
       },
       "waitingContinues": {
-        "you": "{{a}} wartest – geht {{when}} weiter",
-        "other": "{{a}} wartet – geht {{when}} weiter"
+        "you": "{{a}} wartest, geht {{when}} weiter",
+        "other": "{{a}} wartet, geht {{when}} weiter"
       },
       "delivered": {
         "you": "{{a}} hast geliefert",
         "other": "{{a}} hat geliefert"
       },
       "deliveredPr": {
-        "you": "{{a}} hast geliefert – Pull Request #{{number}}",
-        "other": "{{a}} hat geliefert – Pull Request #{{number}}"
+        "you": "{{a}} hast geliefert, Pull Request #{{number}}",
+        "other": "{{a}} hat geliefert, Pull Request #{{number}}"
       },
       "needsInput": {
         "you": "{{a}} brauchst etwas",
@@ -742,10 +742,10 @@
         "other": "{{a}} hat abgelehnt"
       },
       "pickedUpSubtasks": {
-        "you_one": "{{a}} hast es wieder aufgegriffen – {{list}} ist fertig",
-        "you_other": "{{a}} hast es wieder aufgegriffen – {{list}} sind fertig",
-        "other_one": "{{a}} hat es wieder aufgegriffen – {{list}} ist fertig",
-        "other_other": "{{a}} hat es wieder aufgegriffen – {{list}} sind fertig"
+        "you_one": "{{a}} hast es wieder aufgegriffen, {{list}} ist fertig",
+        "you_other": "{{a}} hast es wieder aufgegriffen, {{list}} sind fertig",
+        "other_one": "{{a}} hat es wieder aufgegriffen, {{list}} ist fertig",
+        "other_other": "{{a}} hat es wieder aufgegriffen, {{list}} sind fertig"
       },
       "actor": {
         "you": "Du",
@@ -759,7 +759,7 @@
       "later": "später",
       "stoppedEarly": "Gestoppt, bevor es fertig war",
       "prOpened": "Pull Request #{{number}} geöffnet",
-      "branchPushed": "Branch gepusht – der Pull Request muss noch geöffnet werden",
+      "branchPushed": "Branch gepusht. Der Pull Request muss noch geöffnet werden",
       "prMergedAuto": "Pull Request #{{number}} automatisch gemergt",
       "prMerged": "Pull Request #{{number}} gemergt",
       "prClosed": "Pull Request #{{number}} ohne Merge geschlossen",
@@ -775,11 +775,11 @@
     "beatFailed": "Der Schlag konnte nicht starten",
     "wakeFailed": "{{name}} konnte nicht geweckt werden",
     "loadFailed": "Heartbeat konnte nicht geladen werden: {{error}}",
-    "description": "Weckt {{name}} im eigenen Rhythmus, um Aufgaben voranzubringen und die Checkliste abzuarbeiten – und hinterlässt eine Spur.",
+    "description": "Weckt {{name}} im eigenen Rhythmus, um Aufgaben voranzubringen und die Checkliste abzuarbeiten, und hinterlässt eine Spur.",
     "wakeNow": "Jetzt wecken",
     "switchOnFirst": "Schalte {{name}} zuerst ein",
     "recentBeats": "Letzte Schläge",
-    "noBeatsFirst": "Noch keine Schläge – der erste kommt {{when}}.",
+    "noBeatsFirst": "Noch keine Schläge. Der erste kommt {{when}}.",
     "noBeats": "Noch keine Schläge.",
     "showFewer": "Weniger anzeigen",
     "showOlder_one": "{{count}} älteren anzeigen",
@@ -845,8 +845,8 @@
     "files": "Dateien",
     "thisAgent": "Dieser Agent",
     "loadingCommands": "Claude-Code-Befehle werden geladen…",
-    "commandsFailed": "Befehle konnten nicht geladen werden – {{error}}",
-    "noMatch": "Kein passender Befehl – wird als Nachricht gesendet."
+    "commandsFailed": "Befehle konnten nicht geladen werden. {{error}}",
+    "noMatch": "Kein passender Befehl. Wird als Nachricht gesendet."
   },
   "runLog": {
     "loading": "Protokoll wird geladen",

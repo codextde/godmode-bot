@@ -215,7 +215,7 @@
       },
       "panes": {
         "label": "Draws panes and bands",
-        "detail": "These show in Claude Code's own terminal and desktop app — not in Godmode's chats."
+        "detail": "These show in Claude Code's own terminal and desktop app, not in Godmode's chats."
       },
       "model": {
         "label": "Calls the model",
@@ -307,7 +307,7 @@
     "whatItCanDo": "What it can do",
     "reachesOutside": "Reaches outside the conversation",
     "hooksInto": "Hooks into",
-    "nothingHooked": "Nothing yet — it doesn't hook into Claude Code.",
+    "nothingHooked": "Nothing yet. It doesn't hook into Claude Code.",
     "notCheckedReadCode": "Not checked yet. Until Claude Code has checked it, read the code to see what this plugin does.",
     "noHooks": "No hooks.",
     "hooksUnknown": "Not known until Claude Code checks the plugin.",

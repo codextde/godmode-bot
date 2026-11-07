@@ -1,4 +1,5 @@
-import { useColorScheme, type TextStyle, type ViewStyle } from "react-native";
+import { useSyncExternalStore } from "react";
+import { Dimensions, PixelRatio, useColorScheme, type TextStyle, type ViewStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { DarkTheme, DefaultTheme, type Theme } from "expo-router";
 import { DEFAULT_PALETTE, PALETTE_DEFS, type Palette, type PaletteMode, type Seeds } from "@godmode/shared";
@@ -152,6 +153,52 @@ export const type = {
   eyebrow: { fontFamily: fonts.medium, fontSize: 11, lineHeight: 16, letterSpacing: 1.32, textTransform: "uppercase" },
   mono: { fontFamily: fonts.mono, fontSize: 13 },
 } as const;
+
+/**
+ * How far Dynamic Type grows text, times its designed size. Controls keep their height, labels stay beside what they
+ * name, titles keep their words on a line, and what is read grows most and wraps.
+ */
+export const textScale = { control: 1.3, label: 1.7, title: 1.8, text: 2 } as const;
+
+const VARIANT_SCALE: Record<keyof typeof type, number> = {
+  largeTitle: textScale.title,
+  title: textScale.title,
+  headline: textScale.text,
+  body: textScale.text,
+  callout: textScale.text,
+  subhead: textScale.text,
+  footnote: textScale.label,
+  caption: textScale.label,
+  eyebrow: textScale.label,
+  mono: textScale.text,
+};
+
+const onFontScale = (changed: () => void) => {
+  const listener = Dimensions.addEventListener("change", changed);
+  return () => listener.remove();
+};
+
+/** The phone's Dynamic Type size (1 = standard). One listener for every text on screen. */
+export function useFontScale(): number {
+  return useSyncExternalStore(onFontScale, PixelRatio.getFontScale);
+}
+
+/** Text is large enough that one line no longer holds what it used to: rows stack and wrap. */
+export function useLargeText(): boolean {
+  return useFontScale() >= 1.35;
+}
+
+/**
+ * A style sized for Dynamic Type, up to `limit`. Done here because the selectable text view takes no
+ * `maxFontSizeMultiplier`: it draws with `allowFontScaling={false}` at this size.
+ */
+export function scaledText<S extends TextStyle>(style: S, fontScale: number, limit: number = VARIANT_SCALE.body): S {
+  const scale = Math.min(fontScale, limit);
+  if (scale === 1 || (style.fontSize == null && style.lineHeight == null)) return style;
+  return { ...style, ...(style.fontSize == null ? {} : { fontSize: style.fontSize * scale }), ...(style.lineHeight == null ? {} : { lineHeight: style.lineHeight * scale }) };
+}
+
+export const variantScale = (variant: keyof typeof type) => VARIANT_SCALE[variant];
 
 function rgb(hex: string): [number, number, number] {
   const n = parseInt(hex.slice(1), 16);

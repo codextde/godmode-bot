@@ -1,6 +1,6 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { router, useLocalSearchParams } from "expo-router";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { NeedsFullAccess, useFullAccess } from "@/components/full-access";
@@ -8,7 +8,7 @@ import { Icon } from "@/components/icon";
 import { SheetHeader } from "@/components/secret-parts";
 import { Card, Hairline, LoadingState, T, tap } from "@/components/ui";
 import { errorText } from "@/lib/api";
-import { fileChanged, filesApi, fk, joinPath, nameOf, parentOf, pinsAmong, refreshFiles, reservedPlace } from "@/lib/agent-files";
+import { filesApi, fk, moveEntries, nameOf, parentOf, pinsAmong, refreshFiles, reservedPlace } from "@/lib/agent-files";
 import { fonts, radius, space, useColors } from "@/lib/theme";
 
 const ROOTS = ["workspace", "memory"];
@@ -47,22 +47,10 @@ function MoveForm({ agent, paths }: { agent: string; paths: string[] }) {
   const info = useQuery({ queryKey: fk.inspect(agent, paths), queryFn: () => filesApi.inspect(agent, paths), gcTime: 0, staleTime: 0 });
   const pins = pinsAmong((info.data ?? []).flatMap((e) => e.namedBy));
   const already = paths.every((p) => parentOf(p) === picked);
+  const gone = useRef(new Set<string>());
 
   const move = useMutation({
-    mutationFn: async () => {
-      const done: { from: string; to: string; rewritten: string[] }[] = [];
-      try {
-        // One by one, like the desktop: what moved stays moved when a later one fails.
-        for (const from of paths) {
-          if (parentOf(from) === picked) continue;
-          const moved = await filesApi.move(agent, from, joinPath(picked, nameOf(from)));
-          done.push({ from, to: moved.path, rewritten: moved.rewritten });
-        }
-      } finally {
-        if (done.length) fileChanged({ agentId: agent, moves: done.map(({ from, to }) => ({ from, to })) });
-      }
-      return done;
-    },
+    mutationFn: () => moveEntries(agent, paths, picked, gone.current),
     onSuccess: (done) => {
       refreshFiles(agent);
       router.back();

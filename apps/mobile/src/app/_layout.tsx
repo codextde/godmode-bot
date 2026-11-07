@@ -3,15 +3,17 @@ import { GeistMono_400Regular, GeistMono_500Medium } from "@expo-google-fonts/ge
 import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { useFonts } from "expo-font";
 import { Image } from "expo-image";
-import { Stack, ThemeProvider } from "expo-router";
+import { Stack, ThemeProvider, type ErrorBoundaryProps } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { AppLock } from "@/components/app-lock";
 import { PushBridge } from "@/components/push-bridge";
+import { ErrorState } from "@/components/ui";
 import { rootScreenLayout } from "@/components/keyboard-room";
 import { forgetLocalCopies } from "@/lib/agent-files";
 import { api } from "@/lib/api";
@@ -34,6 +36,20 @@ const FONT_FILES = {
   [fonts.mono]: GeistMono_400Regular,
   [fonts.monoMedium]: GeistMono_500Medium,
 };
+
+/** What a screen throws while rendering: the app stays open and starts over from here. */
+export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
+  const c = useColors();
+  const { t } = useTranslation("common");
+  useEffect(() => {
+    void SplashScreen.hideAsync();
+  }, []);
+  return (
+    <View style={{ flex: 1, justifyContent: "center", backgroundColor: c.background }}>
+      <ErrorState icon="warning" title={t("errors.generic")} error={error.message} onRetry={() => void retry()} />
+    </View>
+  );
+}
 
 export default function RootLayout() {
   const { t } = useTranslation("onboarding");
@@ -138,6 +154,7 @@ export default function RootLayout() {
                 <Stack.Screen name="agent-history/[id]" options={{ headerTransparent: process.env.EXPO_OS === "ios", title: "" }} />
                 <Stack.Screen name="notes/[id]" options={{ headerTransparent: process.env.EXPO_OS === "ios", title: "" }} />
                 <Stack.Screen name="note" options={{ headerTransparent: process.env.EXPO_OS === "ios", title: "" }} />
+                <Stack.Screen name="chat-file" options={{ headerTransparent: process.env.EXPO_OS === "ios", title: "" }} />
                 <Stack.Screen name="agent-run" options={{ presentation: "formSheet", sheetAllowedDetents: [0.62, 1], sheetGrabberVisible: true, headerShown: false }} />
                 <Stack.Screen name="goal" options={{ presentation: "formSheet", sheetAllowedDetents: [0.62, 1], sheetGrabberVisible: true, headerShown: false }} />
                 <Stack.Screen name="vault/passphrase" options={{ presentation: "formSheet", sheetAllowedDetents: [0.4, 1], sheetGrabberVisible: true, headerShown: false }} />

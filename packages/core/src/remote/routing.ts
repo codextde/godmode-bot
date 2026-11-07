@@ -13,7 +13,7 @@ import { logger } from "../log";
 import { isLimitedPhone, isLocalRequest, isPhoneRequest } from "../server/auth";
 import { chatFilesBody } from "../server/routes/files";
 import { body } from "../server/validate";
-import { resolveChatFiles } from "../services/chatFiles";
+import { chatFilesForPhone, resolveChatFiles } from "../services/chatFiles";
 import { conversationExists, deleteConversation, emitConversationUpdated, getConversation, messageWindow, windowConversation } from "../services/conversations";
 import { HttpError, badRequest } from "../util";
 import { requireLicense } from "../license/license";
@@ -86,7 +86,7 @@ async function chatFiles(c: Context, runnerId: string, id: string): Promise<Resp
     const found = new Map([...(here[n] ?? []), ...(there[n] ?? []).map((f) => ({ ...f, remote: true }))].map((f) => [f.ref, f]));
     return [...new Set(refs)].flatMap((ref) => found.get(ref) ?? []);
   });
-  return c.json<ChatFiles>({ local: isLocalRequest(c), files });
+  return c.json<ChatFiles>({ local: isLocalRequest(c), ...(isPhoneRequest(c) ? chatFilesForPhone(id, files) : { files }) });
 }
 
 /** Forward the request as it is (method, path and query, content type, body) and answer with what the runner says. */

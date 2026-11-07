@@ -112,6 +112,8 @@ const ROUTES: [method: string, path: RegExp][] = [
   ["GET", new RegExp(`^/api/conversations/${ID}/messages/${ID}/images/${ID}$`)],
   // Pictures the human attached to a chat: only images from the agent's workspace/uploads (the core checks the path).
   ["GET", new RegExp(`^/api/conversations/${ID}/attachment$`)],
+  // Which paths a chat names exist: answered only for the folder of its agent (mobile/views.ts phoneChatFiles).
+  ["POST", new RegExp(`^/api/conversations/${ID}/files$`)],
   ["PATCH", new RegExp(`^/api/conversations/${ID}$`)],
   ["DELETE", new RegExp(`^/api/conversations/${ID}$`)],
   ["POST", new RegExp(`^/api/conversations/${ID}/messages$`)],
@@ -141,6 +143,8 @@ const ROUTES: [method: string, path: RegExp][] = [
   ["GET", new RegExp(`^/api/tasks/${ID}/events$`)],
   ["POST", /^\/api\/tasks$/],
   ["PATCH", new RegExp(`^/api/tasks/${ID}$`)],
+  // Clearing a column of the board, like archiving its tasks one by one.
+  ["POST", /^\/api\/tasks\/archive$/],
   ["POST", new RegExp(`^/api/tasks/${ID}/messages$`)],
   ["POST", new RegExp(`^/api/tasks/${ID}/approve$`)],
   // Deleting a ticket removes its worktree; a pushed branch and pull request stay. Pushing uses the ticket's own remote.
@@ -350,12 +354,14 @@ const BODIES: [method: string, path: RegExp, keys: string[]][] = [
   // A chat's project, browser profile and instructions; never its folder, screen, VM, servers or phones.
   ["PATCH", new RegExp(`^/api/conversations/${ID}$`), ["title", "pinned", "archived", "model", "effort", "ultracode", "projectId", "browserProfileId", "instructions"]],
   ["PATCH", new RegExp(`^/api/conversations/${ID}/pause$`), ["auto"]],
+  ["POST", new RegExp(`^/api/conversations/${ID}/files$`), ["messages"]],
   ["POST", new RegExp(`^/api/conversations/${ID}/messages$`), ["content", "attachments", "queue", "queueId"]],
   ["PATCH", new RegExp(`^/api/conversations/${ID}/queue/${ID}$`), ["content"]],
   ["POST", /^\/api\/chat$/, ["agentId", "content", "attachments", "workspaceId", "projectId", "model", "effort", "ultracode", "private", "browserProfileId", "instructions"]],
   // A task's repository and branch are picked on the computer: the phone never points an agent at another repository.
   ["POST", /^\/api\/tasks$/, ["workspaceId", "projectId", "title", "description", "type", "status", "agentId"]],
   ["PATCH", new RegExp(`^/api/tasks/${ID}$`), ["title", "description", "status", "agentId", "archived", "projectId", "priority", "dueDate", "labels", "goalId", "waitsFor", "blockedReason"]],
+  ["POST", /^\/api\/tasks\/archive$/, ["ids", "archived"]],
   ["POST", new RegExp(`^/api/tasks/${ID}/messages$`), ["content", "attachments"]],
   ["POST", new RegExp(`^/api/tasks/${ID}/approve$`), []],
   ["POST", /^\/api\/tasks\/tsk_[^/]+\/(push|pull-request)$/, []],

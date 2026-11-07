@@ -14,7 +14,7 @@
     "calls": "Calls",
     "artifacts": "Artifacts",
     "status": {
-      "connectedThrough": "Connected through {{computer}} — {{away}} is away",
+      "connectedThrough": "Connected through {{computer}}, {{away}} is away",
       "connected": "{{computer}} · connected",
       "connecting": "Connecting to {{computer}}…",
       "outOfReach": "{{computer}} is out of reach"
@@ -126,7 +126,6 @@
   "tasks": {
     "title": "Tasks",
     "myTasks": "My tasks",
-    "myTasksCount": "My tasks · {{count}}",
     "archived": "Archived tasks",
     "filterActive": "Active",
     "loadError": "Couldn't load the board",
@@ -140,6 +139,12 @@
       "title": "No tasks yet",
       "body": "Hand an agent a task and follow it here: it works on it, then asks you to review."
     },
+    "goals": "Goals",
+    "newGoal": "New goal",
+    "archiveAll": "Archive all",
+    "archiveAllTitle_one": "Archive {{count}} {{status}} task?",
+    "archiveAllTitle_other": "Archive all {{count}} {{status}} tasks?",
+    "archiveAllBody": "Off the board, never deleted.",
     "archiveFailed": "Couldn't archive the task",
     "stopDialog": {
       "title": "Stop the agent?",
@@ -186,7 +191,7 @@
     },
     "empty": {
       "title": "Create your first agent",
-      "body": "Agents are coworkers with their own instructions, memory and schedule — e.g. one that downloads your invoices every month."
+      "body": "Agents are coworkers with their own instructions, memory and schedule, e.g. one that downloads your invoices every month."
     }
   }
 }

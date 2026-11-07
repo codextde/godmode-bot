@@ -15,7 +15,7 @@ import { useAgents } from "@/lib/hooks";
 import { qk, queryClient } from "@/lib/query";
 import { patchProject } from "@/lib/setup";
 import { space } from "@/lib/theme";
-import { useWorkspace } from "@/lib/workspace";
+import { useWorkspace, ownEmoji } from "@/lib/workspace";
 
 const DEFAULT = "default";
 
@@ -72,10 +72,11 @@ export default function ProjectScreen() {
       <Stack.Screen options={{ title: p.name, headerLargeTitleEnabled: false }} />
       <CloseButton />
 
-      <Identity icon={p.icon} name={p.name} description={p.description} fallbackIcon="📁" onChange={(patch) => void patchProject(p.id, patch)} />
+      <Identity icon={p.icon} name={p.name} description={p.description} fallbackIcon="folder" onChange={(patch) => void patchProject(p.id, patch)} />
 
       <LinkRow
-        emoji={workspace.icon || "🗂️"}
+        emoji={ownEmoji(workspace.icon)}
+        icon="layers"
         title={workspace.name}
         detail={t("project.workspaceDetail")}
         onPress={() => router.push({ pathname: "/settings/workspace/[id]", params: { id: workspace.id } })}

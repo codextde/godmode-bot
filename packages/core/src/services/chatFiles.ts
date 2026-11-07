@@ -5,10 +5,22 @@
  */
 import { closeSync, constants, fstatSync, openSync, readFileSync, readSync, realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { basename, dirname, extname, isAbsolute, join, resolve } from "node:path";
+import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { Agent, ChatFile } from "@godmode/shared";
-import { MARKDOWN_NAME, MAX_CHAT_FILE_REFS, MAX_CHAT_MARKDOWN_BYTES, MAX_CHAT_TEXT_BYTES, MAX_TASK_ATTACHMENT_BYTES, chatImageUrl, chatMarkdownUrl, chatTextUrl, isPreviewableText } from "@godmode/shared";
+import type { Agent, ChatFile, ChatFiles } from "@godmode/shared";
+import {
+  MARKDOWN_NAME,
+  MAX_CHAT_FILE_REFS,
+  MAX_CHAT_MARKDOWN_BYTES,
+  MAX_CHAT_PDF_BYTES,
+  MAX_CHAT_TEXT_BYTES,
+  MAX_TASK_ATTACHMENT_BYTES,
+  chatImageUrl,
+  chatMarkdownUrl,
+  chatPdfUrl,
+  chatTextUrl,
+  isPreviewableText,
+} from "@godmode/shared";
 import { getAgent } from "../agents/service";
 import { get } from "../db";
 import { sniffType } from "../integrations/apiToolRequest";
@@ -19,6 +31,7 @@ import { chatSourcePaths } from "./projects";
 type Kind = ChatFile["kind"];
 
 const IMAGE_NAME = /\.(?:png|jpe?g|gif|webp|avif|bmp)$/i;
+const PDF_NAME = /\.pdf$/i;
 
 /** Where the relative paths of a chat start: its folder, the agent's repository (and its `workspace/`), the workspace's folders. */
 function chatFolders(conversationId: string): string[] {
@@ -96,6 +109,25 @@ function openImage(path: string, withData: boolean): { mime: string; version: nu
   }
 }
 
+/** A PDF a phone can open, by its name and its first bytes. */
+function openPdf(path: string, withData: boolean): { version: number; data: Buffer | null } | null {
+  if (!PDF_NAME.test(path) || kindOf(path) !== "file") return null;
+  let fd: number | null = null;
+  try {
+    if (!PDF_NAME.test(realpathSync(path))) return null;
+    fd = openSync(path, constants.O_RDONLY | (constants.O_NONBLOCK ?? 0));
+    const stat = fstatSync(fd);
+    if (!stat.isFile() || stat.size === 0 || stat.size > MAX_CHAT_PDF_BYTES) return null;
+    const head = Buffer.alloc(8);
+    if (sniffType(head.subarray(0, readSync(fd, head, 0, head.length, 0))) !== "application/pdf") return null;
+    return { version: stat.mtimeMs, data: withData ? readFileSync(fd) : null };
+  } catch {
+    return null;
+  } finally {
+    if (fd !== null) closeSync(fd);
+  }
+}
+
 /** A Markdown file the chat can open in its reader — by its name and the one a link leads to — not too long to read. */
 function openMarkdown(path: string, withText: boolean): { version: number; text: string | null } | null {
   if (!MARKDOWN_NAME.test(path) || kindOf(path) !== "file") return null;
@@ -139,6 +171,7 @@ function describe(ref: string, found: { path: string; kind: Kind }): ChatFile {
   const image = found.kind === "file" && IMAGE_NAME.test(found.path) ? openImage(found.path, false) : null;
   const markdown = found.kind === "file" ? openMarkdown(found.path, false) : null;
   const text = found.kind === "file" && !image && !markdown ? openText(found.path, false) : null;
+  const pdf = found.kind === "file" ? openPdf(found.path, false) : null;
   return {
     ref,
     ...found,
@@ -146,6 +179,7 @@ function describe(ref: string, found: { path: string; kind: Kind }): ChatFile {
     image: image && chatImageUrl(found.path, image.version),
     markdown: markdown && chatMarkdownUrl(found.path, markdown.version),
     ...(text ? { text: chatTextUrl(found.path, text.version) } : {}),
+    ...(pdf ? { pdf: chatPdfUrl(found.path, pdf.version) } : {}),
   };
 }
 
@@ -183,6 +217,18 @@ export function resolveChatFiles(conversationId: string, messages: string[][]): 
   return messages.map((refs) => resolveMessage(refs, folders));
 }
 
+/** For a phone: the chat's agent and where its files lie in the agent's folder, which is where a phone opens them. */
+export function chatFilesForPhone(conversationId: string, files: ChatFile[][]): Required<Pick<ChatFiles, "agentId">> & Pick<ChatFiles, "files"> {
+  const agentId = get<{ agent_id: string }>("SELECT agent_id FROM conversations WHERE id = ?", conversationId)?.agent_id;
+  const repo = agentId ? (get<{ repo_path: string }>("SELECT repo_path FROM agents WHERE id = ?", agentId)?.repo_path ?? null) : null;
+  if (!agentId || !repo) return { agentId: null, files };
+  const inRepo = (f: ChatFile): ChatFile => {
+    const rel = relative(repo, f.path);
+    return f.remote || rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel) ? f : { ...f, agentPath: rel.split(sep).join("/") };
+  };
+  return { agentId, files: files.map((list) => list.map(inRepo)) };
+}
+
 function absolute(input: string): string {
   const path = pathOf(input);
   if (!path || !isAbsolute(path)) throw badRequest("Use an absolute path");
@@ -201,6 +247,13 @@ export function readChatMarkdown(input: string): string {
   const file = openMarkdown(absolute(input), true);
   if (file?.text == null) throw notFound("Markdown file");
   return file.text;
+}
+
+/** A PDF on this computer, for a phone that opens what a chat names. Anything else stays unread. */
+export function readChatPdf(input: string): Buffer {
+  const file = openPdf(absolute(input), true);
+  if (!file?.data) throw notFound("PDF");
+  return file.data;
 }
 
 export function readChatText(input: string): string {

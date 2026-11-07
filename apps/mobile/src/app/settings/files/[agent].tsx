@@ -4,7 +4,7 @@ import { memo, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { formatBytes, type AgentFileEntry, type AgentFileSearchHit } from "@godmode/shared";
+import { formatBytes, type AgentFileEntry, type AgentFileSearchHit, type AgentFileSize } from "@godmode/shared";
 import { entryActions, openDeleteMany, openMoveMany, openNew, useDreamingNow } from "@/components/file-actions";
 import { useFullAccess } from "@/components/full-access";
 import { Glass } from "@/components/glass";
@@ -40,6 +40,9 @@ export default function AgentFolder() {
   const query = useDebounced(search.trim(), 300);
   const hits = useQuery({ queryKey: fk.search(agentId, query), queryFn: () => filesApi.search(agentId, query), enabled: query.length >= 2, placeholderData: keepPreviousData });
   const searching = query.length >= 2;
+  // What folders hold is counted on the computer: only full access reaches it.
+  const sizes = useQuery({ queryKey: [...fk.agent(agentId), "sizes", path], queryFn: () => filesApi.sizes(agentId, path), enabled: !!fullAccess, staleTime: 30_000 });
+  const sizeOf = useMemo(() => new Map((sizes.data ?? []).map((s) => [s.path, s])), [sizes.data]);
   // Only the counts: the review looks through every file, so it waits until it was asked for once.
   const bin = useQuery({ queryKey: fk.bin(agentId), queryFn: () => filesApi.deleted(agentId), enabled: !!fullAccess });
   /** Picking several at once: the set of paths, or null when not. */
@@ -85,7 +88,7 @@ export default function AgentFolder() {
       return next;
     });
   const menu: HeaderMenuItem[] = [
-    ...(pickable.length && !frozen ? [{ icon: "checkCircle" as const, title: t("select.start"), onPress: () => setPicked(new Set()) }] : []),
+    ...(fullAccess && pickable.length && !frozen ? [{ icon: "checkCircle" as const, title: t("select.start"), onPress: () => setPicked(new Set()) }] : []),
     ...(canCreate
       ? [
           { icon: "note" as const, title: t("folder.newNote"), onPress: () => openNew(agentId, "note", path) },
@@ -114,7 +117,7 @@ export default function AgentFolder() {
         query={searching ? { ...hits, isLoading: hits.isLoading && !hits.data } : list}
         items={items}
         keyOf={(i) => (i.kind === "entry" ? i.entry.path : `hit:${i.hit.path}`)}
-        extraData={`${editable}|${frozen}|${picked ? [...picked].join() : "off"}`}
+        extraData={`${editable}|${frozen}|${picked ? [...picked].join() : "off"}|${sizes.dataUpdatedAt}`}
         search={{ placeholder: t("folder.search"), value: search, onChange: setSearch }}
         icon="folder"
         emptyTitle={t("folder.emptyTitle")}
@@ -128,7 +131,7 @@ export default function AgentFolder() {
               agentId={agentId}
               path={i.entry.path}
               type={i.entry.type}
-              lines={[[i.entry.type === "file" ? formatBytes(i.entry.size) : null, shortTime(i.entry.modifiedAt)].filter(Boolean).join(" · ")]}
+              lines={[[bytesOf(i.entry, sizeOf.get(i.entry.path)), shortTime(i.entry.modifiedAt)].filter(Boolean).join(" · ")]}
               editable={editable}
               frozen={frozen}
               picking={picked ? !isLocked(i.entry.path) : undefined}
@@ -209,6 +212,12 @@ function Dreaming({ name }: { name: string }) {
       </T>
     </View>
   );
+}
+
+/** A file's size, or what a folder holds once the computer counted it (`partial`: at least this much). */
+function bytesOf(entry: AgentFileEntry, size: AgentFileSize | undefined): string | null {
+  if (entry.type === "file") return formatBytes(entry.size);
+  return size ? `${size.partial ? "> " : ""}${formatBytes(size.bytes)}` : null;
 }
 
 const hrefOf = (agent: string, path: string, type: "file" | "dir") =>

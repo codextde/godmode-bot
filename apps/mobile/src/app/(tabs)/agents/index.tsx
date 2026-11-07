@@ -17,7 +17,7 @@ import { useSettings } from "@/lib/setup";
 import { useRunCounts } from "@/lib/live";
 import { qk } from "@/lib/query";
 import { usePullRefresh } from "@/lib/use-pull-refresh";
-import { agentsFor, useWorkspace } from "@/lib/workspace";
+import { agentsFor, useWorkspace, ownEmoji } from "@/lib/workspace";
 import { radius, space, useColors } from "@/lib/theme";
 
 const NONE = { running: 0, queued: 0 };
@@ -94,7 +94,7 @@ export default function Agents() {
       .flatMap(([id, list]): Item[] => {
         const workspace: Workspace | undefined = workspaces.find((w) => w.id === id);
         const title = id ? (workspace?.name ?? t("agents.workspace")) : t("agents.global");
-        return [{ kind: "group", key: `g-${id ?? "global"}`, title, icon: id ? workspace?.icon || "🗂️" : null, count: list.length }, ...rows(list)];
+        return [{ kind: "group", key: `g-${id ?? "global"}`, title, icon: id ? (ownEmoji(workspace?.icon) ?? "") : null, count: list.length }, ...rows(list)];
       });
   }, [grouped, visible, workspaces, t]);
 
@@ -183,7 +183,7 @@ function GroupTitle({ title, icon, count }: { title: string; icon: string | null
   const c = useColors();
   return (
     <View style={styles.group}>
-      {icon ? <T style={{ fontSize: 13 }}>{icon}</T> : <Icon name="globe" size={12} color={c.textMuted} />}
+      {icon ? <T style={{ fontSize: 13 }}>{icon}</T> : <Icon name={icon === null ? "globe" : "layers"} size={12} color={c.textMuted} />}
       <T variant="eyebrow" muted numberOfLines={1} style={{ flexShrink: 1 }}>
         {title}
       </T>

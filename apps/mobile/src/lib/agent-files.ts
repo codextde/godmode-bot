@@ -5,7 +5,9 @@ import type {
   AgentFileInfo,
   AgentFileMoveResult,
   AgentFileRestoreResult,
-  AgentFileSearchHit, AgentNote,
+  AgentFileSearchHit,
+  AgentFileSize,
+  AgentNote,
   AgentFilesDeleteResult,
   AgentFilesOverview,
   DeletedAgentFile,
@@ -27,6 +29,7 @@ const q = encodeURIComponent;
 export const filesApi = {
   overview: () => request<AgentFilesOverview[]>("GET", "/api/files/overview"),
   list: (agentId: string, path: string) => request<AgentFileEntry[]>("GET", `/api/agents/${agentId}/files?path=${q(path)}`),
+  sizes: (agentId: string, path: string) => request<AgentFileSize[]>("GET", `/api/agents/${agentId}/files/sizes?path=${q(path)}`),
   read: (agentId: string, path: string) => request<{ path: string; content: string }>("GET", `/api/agents/${agentId}/file?path=${q(path)}`),
   search: (agentId: string, query: string) => request<AgentFileSearchHit[]>("GET", `/api/agents/${agentId}/files/search?q=${q(query)}`),
   notes: (agentId: string) => request<AgentNote[]>("GET", `/api/agents/${agentId}/files/notes`),
@@ -229,18 +232,42 @@ function folder(slot: string): Directory {
  * each of the computer's addresses in turn. Gone again with `forgetLocalCopies(slot)`.
  */
 export async function localCopy(agentId: string, path: string, slot: string): Promise<File> {
+  return servedCopy(rawPath(agentId, path), nameOf(path), slot);
+}
+
+/** The same for anything the computer serves at `url` (relative to its address). */
+export async function servedCopy(url: string, name: string, slot: string): Promise<File> {
   const connection = useSession.getState().connection;
   if (!connection) throw new ApiError(401, t("system:api.notPaired"), "not_paired");
-  const target = new File(folder(slot), nameOf(path));
+  const target = new File(folder(slot), name);
   let last: unknown = null;
   for (const base of pictureBases(connection)) {
     try {
-      return await File.downloadFileAsync(base + rawPath(agentId, path), target, { headers: { authorization: `Bearer ${connection.token}` }, idempotent: true });
+      return await File.downloadFileAsync(base + url, target, { headers: { authorization: `Bearer ${connection.token}` }, idempotent: true });
     } catch (err) {
       last = err;
     }
   }
   throw last instanceof Error ? last : new ApiError(0, t("system:api.offline"), "offline");
+}
+
+/**
+ * Moves entries into `to` one by one, like the desktop: what moved stays moved when a later one fails. `gone` remembers it
+ * between tries, so trying again goes on with the rest.
+ */
+export async function moveEntries(agentId: string, paths: string[], to: string, gone: Set<string>) {
+  const done: { from: string; to: string; rewritten: string[] }[] = [];
+  try {
+    for (const from of paths) {
+      if (parentOf(from) === to || gone.has(from)) continue;
+      const moved = await filesApi.move(agentId, from, joinPath(to, nameOf(from)));
+      gone.add(from);
+      done.push({ from, to: moved.path, rewritten: moved.rewritten });
+    }
+  } finally {
+    if (done.length) fileChanged({ agentId, moves: done.map((d) => ({ from: d.from, to: d.to })) });
+  }
+  return done;
 }
 
 /** A passing file in the folder swept at launch: gone even when the app closed before it was removed. */

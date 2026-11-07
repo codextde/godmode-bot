@@ -119,9 +119,9 @@
     "chats_one": "{{count, number}} chat",
     "chats_other": "{{count, number}} chats",
     "reviewed": {
-      "nothingNewActive": "Nothing new to read — tidying up and refreshing dates",
+      "nothingNewActive": "Nothing new to read, tidying up and refreshing dates",
       "nothingNewEnded": "Set out to tidy up and refresh dates",
-      "nothingNew": "No new conversations — tidied up and refreshed dates",
+      "nothingNew": "No new conversations, tidied up and refreshed dates",
       "active": "Reviewing {{exchanges}} in {{chats}}",
       "ended": "Set out to review {{exchanges}} in {{chats}}",
       "done": "Reviewed {{exchanges}} in {{chats}}"
@@ -174,38 +174,38 @@
   "dreamsCard": {
     "title": "Dreaming",
     "startFailed": "Couldn't start a dream",
-    "offHint": "Dreaming is off — turn it on in Settings → Memory",
+    "offHint": "Dreaming is off. Turn it on in Settings → Memory",
     "loadFailed": "Couldn't load dreams: {{error}}",
     "dreamNow": "Dream now",
     "journal": "Dream journal",
     "showFewer": "Show fewer",
     "showOlder_one": "Show {{count, number}} older dream",
     "showOlder_other": "Show {{count, number}} older dreams",
-    "journalEmpty": "Every dream lands here: what {{name}} reviewed, what it changed in its memory and why — with a line-by-line diff.",
+    "journalEmpty": "Every dream lands here: what {{name}} reviewed, what it changed in its memory and why, with a line-by-line diff.",
     "waitingToDream": "Waiting to dream…",
     "dreaming": "Dreaming…",
     "startsSoon": "Starts as soon as {{name}} has finished what it's doing.",
     "last": {
       "failed": "Last dream failed {{ago}}",
       "cancelled": "Last dream was cancelled {{ago}}",
-      "pausedSize": "Last dream paused {{ago}} — the next scheduled dream takes over",
-      "pausedIdle": "Last dream paused {{ago}} — it continues when {{name}} is idle",
+      "pausedSize": "Last dream paused {{ago}}. The next scheduled dream takes over",
+      "pausedIdle": "Last dream paused {{ago}}. It continues when {{name}} is idle",
       "reverted": "Last dream {{ago}} (undone)",
       "default": "Last dream {{ago}}"
     },
     "neverDreamt": "Hasn't dreamt yet",
     "nextDream": "Next dream {{when}}",
-    "noUpcoming": "No upcoming dream — check the schedule in Settings → Memory",
-    "agentOff": "{{name}} is switched off — switch it on to let it dream.",
+    "noUpcoming": "No upcoming dream. Check the schedule in Settings → Memory",
+    "agentOff": "{{name}} is switched off. Switch it on to let it dream.",
     "newExchanges_one": "{{count, number}} new exchange",
     "newExchanges_other": "{{count, number}} new exchanges",
     "pending": "<b>{{exchanges}}</b> in {{chats}} waiting",
-    "pendingBelowThreshold": "<b>{{exchanges}}</b> in {{chats}} waiting — the next scheduled dream needs {{threshold}}",
+    "pendingBelowThreshold": "<b>{{exchanges}}</b> in {{chats}} waiting. The next scheduled dream needs {{threshold}}",
     "nothingNew": "Nothing new since the last dream.",
-    "nothingYet": "Nothing to dream about yet — chat with the agent first.",
-    "attemptedPartly": "Attempted — rolled back where possible",
-    "attemptedNothingKept": "Attempted — rolled back, nothing was kept",
-    "alreadyGood": "Memory was already in good shape — nothing to rewrite.",
+    "nothingYet": "Nothing to dream about yet. Chat with the agent first.",
+    "attemptedPartly": "Attempted, rolled back where possible",
+    "attemptedNothingKept": "Attempted, rolled back, nothing was kept",
+    "alreadyGood": "Memory was already in good shape. Nothing to rewrite.",
     "dreamOf": "Dream of {{when}}",
     "consolidating": "Consolidating memory…"
   },
@@ -228,16 +228,13 @@
     },
     "type": {
       "general": {
-        "label": "Task",
-        "hint": "Does it and reports back"
+        "label": "Task"
       },
       "coding": {
-        "label": "Coding",
-        "hint": "Own branch, opens a pull request"
+        "label": "Coding"
       },
       "research": {
-        "label": "Research",
-        "hint": "Investigates, writes a report"
+        "label": "Research"
       }
     },
     "blocked": {
@@ -252,7 +249,7 @@
     "needsAnswer": "Needs your answer",
     "paused": "Paused",
     "waiting": "Waiting",
-    "waitingContinues": "Waiting — continues {{when}}",
+    "waitingContinues": "Waiting, continues {{when}}",
     "waitingForParts_one": "Waiting for {{count}} part",
     "waitingForParts_other": "Waiting for {{count}} parts",
     "waitingForPartsBlocked_one": "Waiting for {{count}} part · {{blocked}} blocked",
@@ -264,7 +261,7 @@
     "waitsFor": "Waits for {{tickets}}",
     "partsDone": "{{done}}/{{total}} parts",
     "unassigned": "Unassigned",
-    "queued": "Queued — waiting its turn",
+    "queued": "Queued, waiting its turn",
     "working": "Working…"
   },
   "runRow": {
@@ -301,7 +298,7 @@
     "label": "Goals",
     "newGoal": "New goal",
     "addGoal": "Add a goal",
-    "addHint": "Goals say what the work is for — tickets that serve one tell their agent why, and you see how far it is.",
+    "addHint": "Goals say what the work is for. Tickets that serve one tell their agent why, and you see how far it is.",
     "goal": "Goal",
     "hideFinished": "Hide finished",
     "finished_one": "{{count}} finished",
@@ -348,7 +345,7 @@
     "cronHint": "Cron expression (minute hour day month weekday)",
     "cronLabel": "Cron expression",
     "randomStart": "Random start time",
-    "randomStartHint": "Starts at a different moment every time — like a coworker who doesn't clock in on the dot.",
+    "randomStartHint": "Starts at a different moment every time, like a coworker who doesn't clock in on the dot.",
     "startWithin": "Start within"
   },
   "routineRow": {
@@ -427,7 +424,7 @@
     "openRun": "Open run",
     "recentRuns": "Recent runs",
     "loadFailed": "Couldn't load runs: {{error}}",
-    "empty": "No runs yet. Start a chat or give it a task — every run shows up here.",
+    "empty": "No runs yet",
     "noPrompt": "(no prompt)",
     "rowLabel": "{{status}}: {{snippet}}",
     "waitingToStart": "Waiting to start"
@@ -438,7 +435,7 @@
       "delegation": "Handed over",
       "heartbeat": "Heartbeat"
     },
-    "queued": "Queued — waiting its turn",
+    "queued": "Queued, waiting its turn",
     "needsOk": "Needs your OK",
     "needsAnswer": "Needs your answer",
     "paused": "Paused",
@@ -470,6 +467,8 @@
     },
     "payment": {
       "transfer": "Bank transfer",
+      "scan": "Scan with your banking app",
+      "qrLabel": "Payment QR code (GiroCode)",
       "amount": "Amount",
       "recipient": "Recipient",
       "reference": "Reference",
@@ -511,7 +510,7 @@
   },
   "queueTray": {
     "alreadyHas": "{{name}} already has that message",
-    "wordingKept": "Your new wording is in the message field — send it as a follow-up.",
+    "wordingKept": "Your new wording is in the message field. Send it as a follow-up.",
     "editFailed": "Couldn't change the message",
     "removeFailed": "Couldn't remove the message",
     "sendFailed": "Couldn't send the queue",
@@ -559,9 +558,10 @@
     "decline": "Decline",
     "addNote": "Add a note",
     "finishingStep": "{{name}} is finishing the step it was in…",
-    "replyCountsAsAnswer": "Or reply below: your message counts as the answer.",
-    "typeOwnAnswer": "Or type your own answer below.",
-    "replyToAnswer": "Reply below to answer.",
+    "tellInstead": "Or tell {{name}} what to do instead…",
+    "ownWords": "Or answer in your own words…",
+    "answerPlaceholder": "Answer {{name}}…",
+    "sendAnswer": "Send answer",
     "settled": {
       "approved": "You approved",
       "approvedPhone": "You approved from your phone",
@@ -674,16 +674,16 @@
         "other": "{{a}} is waiting for {{list}}"
       },
       "waitingContinues": {
-        "you": "{{a}} is waiting — continues {{when}}",
-        "other": "{{a}} is waiting — continues {{when}}"
+        "you": "{{a}} is waiting, continues {{when}}",
+        "other": "{{a}} is waiting, continues {{when}}"
       },
       "delivered": {
         "you": "{{a}} delivered",
         "other": "{{a}} delivered"
       },
       "deliveredPr": {
-        "you": "{{a}} delivered — pull request #{{number}}",
-        "other": "{{a}} delivered — pull request #{{number}}"
+        "you": "{{a}} delivered, pull request #{{number}}",
+        "other": "{{a}} delivered, pull request #{{number}}"
       },
       "needsInput": {
         "you": "{{a}} needs something from you",
@@ -742,10 +742,10 @@
         "other": "{{a}} declined"
       },
       "pickedUpSubtasks": {
-        "you_one": "{{a}} picked it up again — {{list}} is done",
-        "you_other": "{{a}} picked it up again — {{list}} are done",
-        "other_one": "{{a}} picked it up again — {{list}} is done",
-        "other_other": "{{a}} picked it up again — {{list}} are done"
+        "you_one": "{{a}} picked it up again, {{list}} is done",
+        "you_other": "{{a}} picked it up again, {{list}} are done",
+        "other_one": "{{a}} picked it up again, {{list}} is done",
+        "other_other": "{{a}} picked it up again, {{list}} are done"
       },
       "actor": {
         "you": "You",
@@ -759,7 +759,7 @@
       "later": "later",
       "stoppedEarly": "Stopped before it finished",
       "prOpened": "Pull request #{{number}} opened",
-      "branchPushed": "Branch pushed — the pull request still has to be opened",
+      "branchPushed": "Branch pushed. The pull request still has to be opened",
       "prMergedAuto": "Pull request #{{number}} merged automatically",
       "prMerged": "Pull request #{{number}} merged",
       "prClosed": "Pull request #{{number}} closed without merging",
@@ -775,11 +775,11 @@
     "beatFailed": "The beat couldn't start",
     "wakeFailed": "Couldn't wake {{name}}",
     "loadFailed": "Couldn't load the heartbeat: {{error}}",
-    "description": "Wakes {{name}} on its own rhythm to move its tickets forward and run its checklist — and leaves a trail.",
+    "description": "Wakes {{name}} on its own rhythm to move its tickets forward and run its checklist, and leaves a trail.",
     "wakeNow": "Wake now",
     "switchOnFirst": "Switch {{name}} on first",
     "recentBeats": "Recent beats",
-    "noBeatsFirst": "No beats yet — the first one comes {{when}}.",
+    "noBeatsFirst": "No beats yet. The first one comes {{when}}.",
     "noBeats": "No beats yet.",
     "showFewer": "Show fewer",
     "showOlder_one": "Show {{count}} older",
@@ -845,8 +845,8 @@
     "files": "Files",
     "thisAgent": "This agent",
     "loadingCommands": "Loading Claude Code commands…",
-    "commandsFailed": "Couldn't load commands — {{error}}",
-    "noMatch": "No matching command — it will be sent as a message."
+    "commandsFailed": "Couldn't load commands. {{error}}",
+    "noMatch": "No matching command. It will be sent as a message."
   },
   "runLog": {
     "loading": "Loading the log",

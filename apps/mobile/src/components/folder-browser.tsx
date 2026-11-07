@@ -55,7 +55,8 @@ export function FolderBrowser({
   const data = listing.data;
   const here = data && !listing.isPlaceholderData ? data : undefined;
   const atHome = !!data && data.path === data.home;
-  const recents = (recent.data ?? []).filter((p) => p !== data?.path).slice(0, 5);
+  // A switched-off query still answers from the cache: an SSH server shows no folders of the computer.
+  const recents = (source.recent ? (recent.data ?? []) : []).filter((p) => p !== data?.path).slice(0, 5);
   const entries = (data?.entries ?? []).filter((e) => !query || e.name.toLowerCase().includes(query));
   const open = (next: string) => {
     setFilter("");

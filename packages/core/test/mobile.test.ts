@@ -501,7 +501,7 @@ describe("device scope", () => {
     expect(deviceMayCall("POST", "/api/tasks/tsk_1/push")).toBe(true);
     expect(deviceMayCall("POST", "/api/tasks/tsk_1/pull-request")).toBe(true);
     expect(deviceMayCall("POST", "/api/tasks/tsk_1/merge")).toBe(false);
-    expect(deviceMayCall("POST", "/api/tasks/archive")).toBe(false);
+    expect(deviceMayCall("POST", "/api/tasks/archive")).toBe(true);
     expect(deviceMayCall("GET", "/api/automation-events")).toBe(true);
     expect(deviceMayCall("POST", "/api/automation-events")).toBe(false);
     expect(deviceMayCall("DELETE", "/api/automation-events")).toBe(false);

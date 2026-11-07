@@ -63,7 +63,8 @@ export function GodmodeOnServerGroup({ server }: { server: SshServer }) {
   }
   if (runner) {
     const updating = UPDATING.has(runner.update.state) || update.isPending;
-    const state = RUNNER_STATE[runner.state];
+    // A newer Godmode on the server may say something this app doesn't know yet.
+    const state = RUNNER_STATE[runner.state] ?? RUNNER_STATE.offline;
     const problem = runner.state !== "online" ? runner.error : runner.update.state === "failed" ? runner.update.detail : null;
     return (
       <Group title={t("godmode.title")} footer={problem ?? undefined}>

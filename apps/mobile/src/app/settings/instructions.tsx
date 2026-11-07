@@ -11,7 +11,7 @@ import { useAgents } from "@/lib/hooks";
 import { t } from "@/lib/i18n";
 import { firstLine, lineCount, patchSettings, useSettings } from "@/lib/setup";
 import { radius, space, useColors } from "@/lib/theme";
-import { useWorkspace } from "@/lib/workspace";
+import { useWorkspace, ownEmoji } from "@/lib/workspace";
 
 function summary(text: string, empty: string): string {
   if (!text.trim()) return empty;
@@ -67,7 +67,8 @@ export default function Instructions() {
           {workspaces.flatMap((w) => [
             <LinkRow
               key={w.id}
-              emoji={w.icon || "🗂️"}
+              emoji={ownEmoji(w.icon)}
+              icon="layers"
               title={w.name}
               detail={summary(w.instructions, t("instructions.workspaces.noContext"))}
               onPress={() => router.push({ pathname: "/settings/workspace/[id]", params: { id: w.id } })}
@@ -77,7 +78,7 @@ export default function Instructions() {
                 key={p.id}
                 lead={
                   <View style={styles.nested}>
-                    <Tile emoji={p.icon || "📁"} size={24} />
+                    <Tile emoji={ownEmoji(p.icon)} icon="folder" size={24} />
                   </View>
                 }
                 title={p.name}

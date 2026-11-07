@@ -59,6 +59,12 @@ export function askToListen() {
   return speech.requestPermissionsAsync();
 }
 
+/** Whether it may listen by now, without asking. */
+export function mayListen() {
+  if (!speech) return Promise.resolve({ granted: false, canAskAgain: false });
+  return speech.getPermissionsAsync();
+}
+
 const norm = (tag: string) => tag.replace(/_/g, "-").toLowerCase();
 /** The region a language means without one, where it isn't the language's own code (de-DE, fr-FR). */
 const HOME_REGION: Record<string, string> = { en: "us", pt: "br", ja: "jp", zh: "cn", ko: "kr", sv: "se", da: "dk", cs: "cz", el: "gr", uk: "ua" };

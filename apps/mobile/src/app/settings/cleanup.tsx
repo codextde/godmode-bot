@@ -221,7 +221,7 @@ function Items({ report, busy }: { report: CleanupReport; busy: boolean }) {
       </Group>
       {items.length && clean.length ? (
         <T variant="footnote" muted style={{ paddingHorizontal: 4 }}>
-          {t("cleanup.items.alreadyClean", { names: clean.map((i) => i.name).join(" · ") })}
+          {t("cleanup.items.alreadyClean", { count: clean.length })}
         </T>
       ) : null}
       {items.some(may) ? (

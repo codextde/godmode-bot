@@ -12,7 +12,7 @@ import { errorText } from "@/lib/api";
 import { useAgents } from "@/lib/hooks";
 import { useRunCounts } from "@/lib/live";
 import { usePullRefresh } from "@/lib/use-pull-refresh";
-import { agentsFor, useWorkspace } from "@/lib/workspace";
+import { agentsFor, useWorkspace, ownEmoji } from "@/lib/workspace";
 import { alpha, radius, space, useColors } from "@/lib/theme";
 
 interface Panel {
@@ -126,7 +126,7 @@ export default function OrgChart() {
 
 function PanelIcon({ panel }: { panel: Panel }) {
   const c = useColors();
-  if (panel.workspace) return <T style={{ fontSize: 14 }}>{panel.workspace.icon || "🗂️"}</T>;
+  if (panel.workspace) return ownEmoji(panel.workspace.icon) ? <T style={{ fontSize: 14 }}>{panel.workspace.icon}</T> : <Icon name="layers" size={14} color={c.textMuted} />;
   if (panel.lead) return <CharacterAvatar agent={panel.lead} size={20} />;
   return <Icon name={panel.key === "global" ? "globe" : "agents"} size={14} color={c.textMuted} />;
 }

@@ -7,7 +7,7 @@ import { HeaderActions } from "@/components/header-actions";
 import { EmptyState, Button } from "@/components/ui";
 import { useAgents } from "@/lib/hooks";
 import { space } from "@/lib/theme";
-import { useWorkspace } from "@/lib/workspace";
+import { useWorkspace, ownEmoji } from "@/lib/workspace";
 
 export default function Workspaces() {
   const { t } = useTranslation("settings");
@@ -32,7 +32,8 @@ export default function Workspaces() {
             return (
               <LinkRow
                 key={w.id}
-                emoji={w.icon || "🗂️"}
+                emoji={ownEmoji(w.icon)}
+                icon="layers"
                 title={w.name}
                 detail={facts.length ? facts.join(" · ") : w.description || t("workspaces.empty")}
                 onPress={() => router.push({ pathname: "/settings/workspace/[id]", params: { id: w.id } })}

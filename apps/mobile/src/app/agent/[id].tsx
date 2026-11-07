@@ -16,7 +16,7 @@ import { triggerText } from "@/components/routine-row";
 import { ConversationRow, openChat } from "@/components/rows";
 import { openTask, STATUS_META } from "@/components/task-row";
 import { Badge, Button, Card, ErrorState, Hairline, LiveDot, LoadingState, Row, SectionTitle, SkeletonRows, T, tap } from "@/components/ui";
-import { useProjectIndex } from "@/lib/workspace";
+import { useProjectIndex, scopeLabel } from "@/lib/workspace";
 import { api, errorText } from "@/lib/api";
 import { activityText, whenText } from "@/lib/format";
 import { dateLocale, intlLocale, currentLanguage } from "@/lib/i18n";
@@ -106,7 +106,7 @@ function AgentView({ agent, team }: { agent: Agent; team: Agent[] }) {
         {presence.state !== "idle" || project ? (
           <Row style={{ gap: 6, flexWrap: "wrap", justifyContent: "center" }}>
             {presence.state !== "idle" ? <Badge label={presenceLabel(presence, currentLanguage())} tone={tone} live={presence.state === "working"} /> : null}
-            {project ? <Badge label={`${project.icon ? `${project.icon} ` : ""}${project.name}`} /> : null}
+            {project ? <Badge label={scopeLabel(project)} /> : null}
           </Row>
         ) : null}
         {agent.description ? (

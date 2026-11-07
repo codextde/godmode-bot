@@ -1,5 +1,6 @@
 {
   "list": {
+    "openFeatures": "Open Features",
     "outdatedTitle": "Not on this computer yet",
     "outdatedBody": "Update Godmode on your computer to see this on your phone.",
     "noMatch": "Nothing matches “{{query}}”"
@@ -64,6 +65,7 @@
     "actionsFor": "Actions for {{site}}"
   },
   "sshKeys": {
+    "off": "SSH keys are turned off",
     "title": "SSH keys",
     "emptyTitle": "No SSH keys",
     "loadFailed": "Couldn't load SSH keys",

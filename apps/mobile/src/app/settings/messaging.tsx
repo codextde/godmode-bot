@@ -3,6 +3,7 @@ import { Alert, RefreshControl, ScrollView, StyleSheet, Switch, View } from "rea
 import { useTranslation } from "react-i18next";
 import { MESSAGING_PROVIDER_LABELS, MESSAGING_PROVIDERS, type MessagingConnection, type MessagingProvider } from "@godmode/shared";
 import { useFullAccess } from "@/components/admin";
+import { CloseButton } from "@/components/close-button";
 import { Group, LinkRow } from "@/components/form";
 import { BotStateBadge, PlatformLogo } from "@/components/messaging-parts";
 import { ListRow, ReadonlyList } from "@/components/readonly-list";
@@ -62,6 +63,7 @@ function MessagingAdmin() {
   return (
     <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content} refreshControl={<RefreshControl {...pull} />}>
       <Stack.Screen options={{ title: t("integrations:messaging.title") }} />
+      <CloseButton />
       {list.isLoading ? (
         <SkeletonRows count={4} avatar={30} />
       ) : isOutdated(list.error) ? (

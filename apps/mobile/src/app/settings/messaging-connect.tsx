@@ -1,3 +1,4 @@
+import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
 import { router, Stack, useLocalSearchParams, useNavigation } from "expo-router";
 import { usePreventRemove } from "expo-router/react-navigation";
@@ -11,6 +12,7 @@ import {
   type MessagingConnection,
   type MessagingProvider,
   type MessagingVerifyResult,
+  slackManifest,
 } from "@godmode/shared";
 import { FullAccessGate } from "@/components/admin";
 import { Group, LinkRow } from "@/components/form";
@@ -162,6 +164,17 @@ function ConnectForm({ provider }: { provider: MessagingProvider }) {
 
       <Group>
         <LinkRow icon="external" title={t(`connect.open.${provider}`)} chevron={false} onPress={() => void Linking.openURL(setupUrl(provider)).catch(() => undefined)} />
+        {provider === "slack" ? (
+          <LinkRow
+            icon="copy"
+            title={t("connect.copyManifest")}
+            chevron={false}
+            onPress={() => {
+              void Clipboard.setStringAsync(JSON.stringify(slackManifest("Godmode"), null, 2));
+              Alert.alert(t("connect.manifestCopied"));
+            }}
+          />
+        ) : null}
       </Group>
 
       <Group title={t("connect.tokens")}>

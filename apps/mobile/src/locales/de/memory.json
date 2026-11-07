@@ -19,7 +19,7 @@
     "edit": "Gedächtnis bearbeiten",
     "dreamingTitle": "{{name}} träumt",
     "dreamingMessage": "Das Gedächtnis wird gerade aufgeräumt. Bearbeite es, wenn der Traum vorbei ist.",
-    "dreamingBanner": "{{name}} träumt — und räumt gerade dieses Gedächtnis auf. Bearbeiten ist pausiert, bis der Traum endet.",
+    "dreamingBanner": "{{name}} träumt und räumt gerade dieses Gedächtnis auf. Bearbeiten ist pausiert, bis der Traum endet.",
     "updated": "aktualisiert {{ago}}",
     "notWritten": "noch nicht geschrieben",
     "unsaved": "Nicht gespeichert",
@@ -33,7 +33,7 @@
   },
   "budget": {
     "ofTarget": "von {{target}} Zeichen",
-    "cut": "Chats laden nur die ersten {{limit}} Zeichen — das Ende fehlt.",
+    "cut": "Chats laden nur die ersten {{limit}} Zeichen. Das Ende fehlt.",
     "over": "{{over}} über dem Ziel. Der nächste Traum kürzt es.",
     "full": "Wird vollständig in jeden Chat geladen.",
     "a11y": "Größe des Gedächtnisses"

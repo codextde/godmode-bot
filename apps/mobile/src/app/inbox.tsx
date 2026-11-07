@@ -13,6 +13,7 @@ import { openHumanTask } from "@/components/human-task-row";
 import { Icon, type IconName } from "@/components/icon";
 import { ClosedList, type ClosedStatus } from "@/components/inbox-closed";
 import { NotificationRow, openNotificationLink } from "@/components/notification-row";
+import { ChatScope, QuestionCard } from "@/components/question-card";
 import { openChat } from "@/components/rows";
 import { openTask } from "@/components/task-row";
 import { Badge, Button, Card, EmptyState, ErrorState, Hairline, Row, SectionTitle, SkeletonRows, T, tap } from "@/components/ui";
@@ -209,7 +210,7 @@ function NeedRow({ need: n }: { need: Need }) {
   const question = n.question;
   return (
     <View>
-      <Pressable accessibilityRole={open ? "button" : undefined} disabled={!open} onPress={open} style={({ pressed }) => [styles.need, pressed && { backgroundColor: c.sunken }]}>
+      <Pressable accessibilityRole={open ? "button" : undefined} disabled={!open} onPress={open} style={({ pressed }) => [styles.need, question && styles.asked, pressed && { backgroundColor: c.sunken }]}>
         <View style={[styles.needIcon, { backgroundColor: tint.bg }]}>
           <Icon name={NEED_ICON[n.kind]} size={14} color={tint.fg} />
         </View>
@@ -217,7 +218,7 @@ function NeedRow({ need: n }: { need: Need }) {
           <T variant="subhead" style={{ fontWeight: "600" }} numberOfLines={2}>
             {n.title}
           </T>
-          {n.detail || n.kind === "access" ? (
+          {(n.detail && !question) || n.kind === "access" ? (
             <T variant="footnote" muted numberOfLines={2}>
               {n.kind === "access" ? [n.detail, t("onComputer")].filter(Boolean).join(" · ") : n.detail}
             </T>
@@ -228,9 +229,14 @@ function NeedRow({ need: n }: { need: Need }) {
         </T>
       </Pressable>
       {question ? (
-        <Row style={styles.rowActions}>
-          <StopButton runId={question.runId} agent={byId.get(question.agentId)?.name ?? t("anAgent")} />
-        </Row>
+        <View style={styles.answer}>
+          <ChatScope.Provider value={{ conversationId: question.conversationId, agentName: byId.get(question.agentId)?.name ?? t("anAgent"), openQuestionId: question.id }}>
+            <QuestionCard inline question={{ ...question, type: "question", askedAt: question.createdAt }} />
+          </ChatScope.Provider>
+          <Row>
+            <StopButton runId={question.runId} agent={byId.get(question.agentId)?.name ?? t("anAgent")} />
+          </Row>
+        </View>
       ) : n.kind === "paused" && n.conversationId ? (
         <Row style={styles.rowActions}>
           <ContinueButton conversationId={n.conversationId} />
@@ -522,6 +528,15 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     gap: space.md,
     padding: space.lg,
+  },
+  asked: {
+    alignItems: "center",
+    paddingBottom: space.sm,
+  },
+  answer: {
+    gap: space.sm,
+    paddingHorizontal: space.lg,
+    paddingBottom: space.md,
   },
   needIcon: {
     width: 30,

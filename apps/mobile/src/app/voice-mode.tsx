@@ -12,7 +12,7 @@ import { Icon } from "@/components/icon";
 import { Button, GlassIconButton, T, tap } from "@/components/ui";
 import { api, errorText } from "@/lib/api";
 import { fetchConversation } from "@/lib/chat-cache";
-import { askToListen, listenTurn, phoneCanDictate, speechLocale, type Listening } from "@/lib/dictation";
+import { askToListen, listenTurn, mayListen, phoneCanDictate, speechLocale, type Listening } from "@/lib/dictation";
 import { useAgents } from "@/lib/hooks";
 import { useChatRun, useLive, useRunActivity } from "@/lib/live";
 import { newQueueId } from "@/lib/pending-queue";
@@ -127,7 +127,7 @@ export default function VoiceMode() {
     if (phase !== "denied") return;
     const sub = AppState.addEventListener("change", (state) => {
       if (state !== "active") return;
-      askToListen().then(
+      mayListen().then(
         ({ granted }) => {
           if (!granted) return;
           setAllowed(true);

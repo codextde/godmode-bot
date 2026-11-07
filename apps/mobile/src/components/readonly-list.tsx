@@ -1,11 +1,12 @@
 import { FlashList } from "@shopify/flash-list";
-import { Stack } from "expo-router";
+import { router, Stack } from "expo-router";
 import { memo, type ReactElement, type ReactNode } from "react";
 import { Pressable, RefreshControl, StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
+import { CloseButton } from "./close-button";
 import { Icon, type IconName } from "./icon";
-import { EmptyState, ErrorState, Hairline, Row, SkeletonRows, T, tap } from "./ui";
-import { errorText } from "@/lib/api";
+import { Button, EmptyState, ErrorState, Hairline, Row, SkeletonRows, T, tap } from "./ui";
+import { ApiError, errorText } from "@/lib/api";
 import { usePullRefresh } from "@/lib/use-pull-refresh";
 import { isOutdated } from "@/lib/vault";
 import { radius, space, useColors } from "@/lib/theme";
@@ -25,6 +26,7 @@ export function ReadonlyList<T>({
   emptyTitle,
   emptyBody,
   failedTitle,
+  offTitle,
   header,
   inset = 64,
   extraData,
@@ -42,6 +44,8 @@ export function ReadonlyList<T>({
   emptyTitle: string;
   emptyBody?: string;
   failedTitle: string;
+  /** Shown when the computer says the feature is switched off (`…_off`). */
+  offTitle?: string;
   header?: ReactNode;
   inset?: number;
   extraData?: unknown;
@@ -52,6 +56,7 @@ export function ReadonlyList<T>({
   return (
     <>
       <Stack.Title>{title}</Stack.Title>
+      <CloseButton />
       {inline ? <Stack.Screen options={{ headerLargeTitleEnabled: false }} /> : null}
       {search ? (
         <Stack.SearchBar placeholder={search.placeholder} hideWhenScrolling onChangeText={(e) => search.onChange(e.nativeEvent.text)} onCancelButtonPress={() => search.onChange("")} />
@@ -80,6 +85,8 @@ export function ReadonlyList<T>({
             </View>
           ) : isOutdated(query.error) ? (
             <EmptyState icon={icon} title={t("list.outdatedTitle")} body={t("list.outdatedBody")} />
+          ) : offTitle && query.error instanceof ApiError && query.error.code?.endsWith("_off") ? (
+            <EmptyState icon="power" title={offTitle} action={<Button title={t("list.openFeatures")} variant="outline" onPress={() => router.push("/settings/features")} />} />
           ) : query.isError ? (
             <ErrorState title={failedTitle} error={errorText(query.error)} onRetry={() => void query.refetch()} />
           ) : searching ? (
@@ -105,6 +112,8 @@ export const ListRow = memo(function ListRow({
   onLongPress,
   accessibilityLabel,
   grouped,
+  lineLimit = 1,
+  chevron = true,
 }: {
   icon?: IconName;
   tint?: string;
@@ -118,6 +127,9 @@ export const ListRow = memo(function ListRow({
   accessibilityLabel?: string;
   /** Inside a Group card: its rows' insets, no corners of its own. */
   grouped?: boolean;
+  /** Lines of text each detail may take. */
+  lineLimit?: number;
+  chevron?: boolean;
 }) {
   const c = useColors();
   const rowStyle = grouped ? [styles.row, styles.grouped] : styles.row;
@@ -134,13 +146,13 @@ export const ListRow = memo(function ListRow({
           {title}
         </T>
         {shown.map((line, i) => (
-          <T key={i} variant="footnote" muted numberOfLines={1}>
+          <T key={i} variant="footnote" muted numberOfLines={lineLimit}>
             {line}
           </T>
         ))}
       </View>
       {trailing ? <Row style={{ gap: space.sm, flexShrink: 0 }}>{trailing}</Row> : null}
-      {onPress ? <Icon name="chevron" size={12} color={c.textFaint} weight="semibold" /> : null}
+      {onPress && chevron ? <Icon name="chevron" size={12} color={c.textFaint} weight="semibold" /> : null}
     </>
   );
   if (!onPress) {

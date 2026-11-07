@@ -14,7 +14,7 @@
     "calls": "Anrufe",
     "artifacts": "Artefakte",
     "status": {
-      "connectedThrough": "Verbunden über {{computer}} — {{away}} ist abwesend",
+      "connectedThrough": "Verbunden über {{computer}}, {{away}} ist abwesend",
       "connected": "{{computer}} · verbunden",
       "connecting": "Verbinde mit {{computer}}…",
       "outOfReach": "{{computer}} ist nicht erreichbar"
@@ -126,7 +126,6 @@
   "tasks": {
     "title": "Aufgaben",
     "myTasks": "Meine Aufgaben",
-    "myTasksCount": "Meine Aufgaben · {{count}}",
     "archived": "Archivierte Aufgaben",
     "filterActive": "Aktiv",
     "loadError": "Das Board konnte nicht geladen werden",
@@ -140,6 +139,12 @@
       "title": "Noch keine Aufgaben",
       "body": "Gib einem Agenten eine Aufgabe und verfolge sie hier: Er arbeitet daran und bittet dich dann um Prüfung."
     },
+    "goals": "Ziele",
+    "newGoal": "Neues Ziel",
+    "archiveAll": "Alle archivieren",
+    "archiveAllTitle_one": "{{count}} Aufgabe aus {{status}} archivieren?",
+    "archiveAllTitle_other": "Alle {{count}} Aufgaben aus {{status}} archivieren?",
+    "archiveAllBody": "Vom Board genommen, nie gelöscht.",
     "archiveFailed": "Aufgabe konnte nicht archiviert werden",
     "stopDialog": {
       "title": "Agenten stoppen?",
@@ -186,7 +191,7 @@
     },
     "empty": {
       "title": "Erstelle deinen ersten Agenten",
-      "body": "Agenten sind Kollegen mit eigenen Anweisungen, eigenem Gedächtnis und Zeitplan — z. B. einer, der jeden Monat deine Rechnungen herunterlädt."
+      "body": "Agenten sind Kollegen mit eigenen Anweisungen, eigenem Gedächtnis und Zeitplan, z. B. einer, der jeden Monat deine Rechnungen herunterlädt."
     }
   }
 }

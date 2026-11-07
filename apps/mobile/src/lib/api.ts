@@ -689,6 +689,8 @@ export const api = {
         "priority" | "dueDate" | "labels" | "goalId" | "waitsFor" | "blockedReason"
       >,
     ) => patch<Task>(`/api/tasks/${id}`, input),
+    /** Off the board, never deleted. */
+    archive: (ids: string[], archived = true) => post<Task[]>("/api/tasks/archive", { ids, archived }),
     /** Gone for good: its worktree is removed, a pushed branch and pull request stay. */
     delete: (id: string) => del<{ ok: true }>(`/api/tasks/${id}`),
     /** Push the ticket's branch to its own remote (or with a pull request into its base branch). */

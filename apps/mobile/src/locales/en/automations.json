@@ -6,7 +6,7 @@
     "noMatch": "No automations match",
     "clearFilters": "Clear filters",
     "emptyTitle": "No automations yet",
-    "emptyBody": "Set one up yourself — a morning inbox summary, a reply draft for every customer email, a watch on competitor pricing."
+    "emptyBody": "Set one up yourself: a morning inbox summary, a reply draft for every customer email, a watch on competitor pricing."
   },
   "describe": {
     "title": "Describe what to automate",
@@ -118,7 +118,7 @@
       "conditionNext": "The next check is {{when}}.",
       "conditionBody": "Once a check finds the condition true, it shows up here.",
       "webhookTitle": "No calls yet",
-      "webhookBody": "Call the webhook URL — or send a test event — and it shows up here."
+      "webhookBody": "Call the webhook URL, or send a test event, and it shows up here."
     }
   },
   "edit": {
@@ -145,7 +145,6 @@
     "loadFailed": "Couldn't load the automation",
     "createFailed": "Couldn't create automation",
     "updateFailed": "Couldn't update automation",
-    "intro": "When it happens, the agent gets to work — even while you're away.",
     "whenRun": "When should it run?",
     "when": "When…",
     "conditionPlaceholder": "a competitor changes the price of their Pro plan (acme.com/pricing)",
@@ -182,12 +181,6 @@
       "app": "the sender is a customer, or the subject mentions an invoice",
       "webhook": "the order total is over $100"
     },
-    "triggerHint": {
-      "schedule": "Every morning, each Monday, on the 1st…",
-      "condition": "Checked regularly, in plain language",
-      "app": "A new email, Slack message, calendar event…",
-      "webhook": "Any service that can send an HTTP POST"
-    },
     "notifyFooter": {
       "never": "No notifications. A failing automation still shows under Needs you. Set up or changed on the phone, its runs fill in logins but never read raw passwords.",
       "always": "A notification after every run, with what it did. Set up or changed on the phone, its runs fill in logins but never read raw passwords.",
@@ -211,13 +204,13 @@
     "pickEvent": "Pick the event to react to",
     "loadingSettings": "Loading the event's settings…",
     "settingsFailed": "Couldn't load the event's settings",
-    "settingsFailedHint": "{{problem}} — check Composio, then try again.",
+    "settingsFailedHint": "{{problem}}. Check Composio, then try again.",
     "composioFailed": "Couldn't reach Composio settings",
     "connectFirstTitle": "Connect your apps first",
-    "connectFirstDescription": "App events come from Composio. Add your Composio API key and connect Gmail, Slack, Calendar or any other app — then pick what should start this automation.",
+    "connectFirstDescription": "App events come from Composio. Add your Composio API key and connect Gmail, Slack, Calendar or any other app, then pick what should start this automation.",
     "setUpComposio": "Set up Composio",
     "accountsFailed": "Couldn't load connected accounts",
-    "chooseAgentFirst": "Choose the agent first — it can only watch accounts it has access to.",
+    "chooseAgentFirst": "Choose the agent first. It can only watch accounts it has access to.",
     "noUsableTitle": "No account {{name}} can use",
     "noUsableDescription": "The connected accounts belong to other agents or workspaces. Connect one for {{name}}, its workspace or globally, then pick the event that starts this automation.",
     "connectApp": "Connect an app",
@@ -239,7 +232,7 @@
     "pollHint": "Composio checks {{app}} for this every few minutes, so new events can take a few minutes to arrive.",
     "needsSetup": "Needs a one-time setup in {{app}} before events arrive.",
     "eventsFailed": "Couldn't load {{app}} events",
-    "noEvents": "{{app}} doesn't offer any events to react to. Try a condition instead — the agent checks it regularly.",
+    "noEvents": "{{app}} doesn't offer any events to react to. Try a condition instead. The agent checks it regularly.",
     "searchPlaceholder": "Search {{app}} events…",
     "searchLabel": "Search {{app}} events",
     "noMatch": "No {{app}} events match “{{query}}”.",
@@ -273,7 +266,7 @@
     "rotateTitle": "Rotate the URL of “{{name}}”?",
     "rotateDescription": "Godmode issues a new secret URL. Anything still calling the old one gets an error until you update it.",
     "rotated": "New webhook URL issued",
-    "rotatedDescription": "The old URL no longer works — update the services that call it.",
+    "rotatedDescription": "The old URL no longer works. Update the services that call it.",
     "rotateFailed": "Couldn't rotate the webhook URL",
     "title": "Webhook URL",
     "urlLabel": "Secret URL",

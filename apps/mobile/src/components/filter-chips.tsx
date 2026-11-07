@@ -1,6 +1,6 @@
 import { Pressable, ScrollView, StyleSheet } from "react-native";
 import { T, tap } from "./ui";
-import { radius, space, useColors } from "@/lib/theme";
+import { radius, space, textScale, useColors } from "@/lib/theme";
 
 export interface Filter<V extends string> {
   id: V;
@@ -34,11 +34,11 @@ export function FilterChips<V extends string>({ filters, value, onChange, bleed 
             }}
             style={[styles.chip, { backgroundColor: active ? c.primary : c.sunken }]}
           >
-            <T variant="subhead" color={active ? c.onPrimary : c.text} style={{ fontWeight: "600" }}>
+            <T variant="subhead" numberOfLines={1} maxScale={textScale.control} color={active ? c.onPrimary : c.text} style={{ fontWeight: "600" }}>
               {f.label}
             </T>
             {f.count ? (
-              <T variant="footnote" color={active ? c.onPrimary : c.textMuted} style={{ fontVariant: ["tabular-nums"], opacity: active ? 0.7 : 1 }}>
+              <T variant="footnote" maxScale={textScale.control} color={active ? c.onPrimary : c.textMuted} style={{ fontVariant: ["tabular-nums"], opacity: active ? 0.7 : 1 }}>
                 {f.count}
               </T>
             ) : null}
@@ -57,7 +57,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    height: 32,
+    minHeight: 32,
     paddingHorizontal: 14,
     borderRadius: radius.pill,
   },

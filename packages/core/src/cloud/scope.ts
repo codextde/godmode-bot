@@ -60,6 +60,7 @@ const RULES: [methods: string, path: string, rule: Rule][] = [
   ["GET", "/api/bootstrap", A],
   ["GET", "/api/settings", A],
   ["PUT", "/api/settings", settingsGroups],
+  ["PUT", "/api/settings/dashboard-password", refused(COMPUTER_ONLY)],
   ["GET|DELETE", "/api/notifications", A],
   ["POST", "/api/notifications/read", A],
   ["GET", "/api/audit", A],
@@ -236,6 +237,7 @@ const RULES: [methods: string, path: string, rule: Rule][] = [
   ["POST", "/api/missing-logins/:id/link-totp", S],
   ["GET", "/api/files/image", A],
   ["GET", "/api/files/markdown", A],
+  ["GET", "/api/files/pdf", A],
   ["GET", "/api/files/text", A],
   ["POST", "/api/files/reveal", refused(COMPUTER_ONLY)],
 

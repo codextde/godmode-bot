@@ -17,7 +17,7 @@ import { errorText } from "@/lib/api";
 import { addFiles, canScanDocuments, chooseCameraMode, fromPasted, MAX_FILES, pickFrom, type FileSource, type PendingFile } from "@/lib/attachments";
 import { isChatFile, openChatFile, openChatImport } from "@/lib/chat-extras";
 import { findCommand, rankCommands, useDraft, useDrafts, useSlashCommands } from "@/lib/composer";
-import { fonts, radius, space, type, useColors } from "@/lib/theme";
+import { fonts, radius, space, textScale, type, useColors } from "@/lib/theme";
 import { addPasteListener, setPasteActive } from "../../modules/paste-input";
 
 export interface ComposerHandle {
@@ -230,6 +230,7 @@ export function Composer({
           multiline
           autoFocus={autoFocus}
           editable={!disabled}
+          maxFontSizeMultiplier={textScale.label}
           style={[styles.input, { color: c.text }]}
           submitBehavior="newline"
           accessibilityLabel={tr("composer.message")}
@@ -249,7 +250,7 @@ export function Composer({
               hitSlop={4}
               style={({ pressed }) => [styles.tool, { backgroundColor: menuOpen ? c.sunken : "transparent", opacity: pressed ? 0.6 : 1 }]}
             >
-              <T style={[styles.slash, { color: menuOpen ? c.text : c.textMuted }]}>/</T>
+              <T maxScale={textScale.control} style={[styles.slash, { color: menuOpen ? c.text : c.textMuted }]}>/</T>
             </Pressable>
           ) : null}
           {dictating ? null : <View style={{ flex: 1 }} />}

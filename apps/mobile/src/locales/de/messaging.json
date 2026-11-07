@@ -50,6 +50,8 @@
       "slack": "Slack-App erstellen",
       "teams": "Azure Bot erstellen"
     },
+    "copyManifest": "Manifest kopieren",
+    "manifestCopied": "Manifest kopiert",
     "tokens": "Tokens",
     "publicUrl": "Öffentliche Adresse",
     "check": "Prüfen",

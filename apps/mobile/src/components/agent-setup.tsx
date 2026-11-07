@@ -11,7 +11,7 @@ import { ik, integrationsApi } from "@/lib/integrations";
 import { folderName, patchAgentSetup } from "@/lib/manage";
 import { qk } from "@/lib/query";
 import { useSettings } from "@/lib/setup";
-import { useWorkspace } from "@/lib/workspace";
+import { useWorkspace, scopeLabel } from "@/lib/workspace";
 
 /** What the sheet `agent-field` picks for an agent. */
 export type AgentField = "workspace" | "lead" | "browserProfile" | "display" | "vm" | "ssh" | "android" | "mcp";
@@ -44,7 +44,7 @@ export function AgentTeam({ agent }: { agent: Agent }) {
       <LinkRow
         icon="layers"
         title={t("agent.workspace")}
-        value={agent.workspaceId ? (workspace ? `${workspace.icon ? `${workspace.icon} ` : ""}${workspace.name}` : "…") : t("agent.global")}
+        value={agent.workspaceId ? (workspace ? scopeLabel(workspace) : "…") : t("agent.global")}
         onPress={() => open("workspace")}
       />
       <LinkRow

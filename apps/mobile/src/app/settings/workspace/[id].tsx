@@ -20,7 +20,7 @@ import { qk, queryClient } from "@/lib/query";
 import { settingsApi, sq } from "@/lib/settings-api";
 import { firstLine, patchWorkspace, useSettings } from "@/lib/setup";
 import { space } from "@/lib/theme";
-import { useWorkspace } from "@/lib/workspace";
+import { useWorkspace, ownEmoji } from "@/lib/workspace";
 
 const DEFAULT = "default";
 const NONE = "none";
@@ -128,7 +128,7 @@ export default function WorkspaceScreen() {
       <Stack.Screen options={{ title: w.name, headerLargeTitleEnabled: false }} />
       <CloseButton />
 
-      <Identity icon={w.icon} name={w.name} description={w.description} fallbackIcon="🗂️" onChange={(patch) => void patchWorkspace(w.id, patch)} />
+      <Identity icon={w.icon} name={w.name} description={w.description} fallbackIcon="layers" onChange={(patch) => void patchWorkspace(w.id, patch)} />
       <WorkspaceColors value={w.color} onChange={(color) => void patchWorkspace(w.id, { color })} />
 
       <View>
@@ -148,7 +148,8 @@ export default function WorkspaceScreen() {
         {w.projects.map((p) => (
           <LinkRow
             key={p.id}
-            emoji={p.icon || "📁"}
+            emoji={ownEmoji(p.icon)}
+            icon="folder"
             title={p.name}
             detail={firstLine(p.instructions) || p.description || t("instructions.workspaces.noProjectContext")}
             onPress={() => router.push({ pathname: "/settings/project/[id]", params: { id: p.id } })}

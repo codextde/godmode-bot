@@ -7,6 +7,7 @@ import { Alert, Linking, Pressable, ScrollView, StyleSheet, View } from "react-n
 import { useTranslation } from "react-i18next";
 import type { Task, TaskStatus } from "@godmode/shared";
 import { CharacterAvatar } from "@/components/character";
+import { ChatFilesScope } from "@/components/chat-files";
 import { Composer } from "@/components/composer";
 import { useFullAccess } from "@/components/full-access";
 import { HeaderActions, type HeaderMenuItem } from "@/components/header-actions";
@@ -24,7 +25,7 @@ import { activityText, hostOf } from "@/lib/format";
 import { useAgents } from "@/lib/hooks";
 import { dateLocale } from "@/lib/i18n";
 import { qk, queryClient } from "@/lib/query";
-import { agentsFor, useWorkspace } from "@/lib/workspace";
+import { agentsFor, useWorkspace, scopeLabel } from "@/lib/workspace";
 import { radius, space, useColors } from "@/lib/theme";
 
 /** A task: what it's about, how far its agent got, and the buttons to move it along. */
@@ -212,13 +213,13 @@ export default function TaskScreen() {
         <Row style={{ gap: 6, flexWrap: "wrap" }}>
           <TaskStatusBadge task={t} />
           {t.archivedAt ? <Badge label={tr("task.archived")} /> : null}
-          <Badge label={workspace ? `${workspace.icon || "🗂️"} ${workspace.name}` : tr("task.global")} />
+          <Badge label={workspace ? scopeLabel(workspace) : tr("task.global")} />
           {projects.length > 0 && !t.archivedAt ? (
             <Pressable accessibilityRole="button" accessibilityLabel={project ? tr("task.projectA11y", { name: project.name }) : tr("task.addToProject")} hitSlop={6} onPress={pickProject}>
-              <Badge label={project ? `${project.icon ? `${project.icon} ` : ""}${project.name}` : tr("task.addProject")} tone={project ? "brand" : "neutral"} />
+              <Badge label={project ? scopeLabel(project) : tr("task.addProject")} tone={project ? "brand" : "neutral"} />
             </Pressable>
           ) : project ? (
-            <Badge label={`${project.icon ? `${project.icon} ` : ""}${project.name}`} tone="brand" />
+            <Badge label={scopeLabel(project)} tone="brand" />
           ) : null}
         </Row>
         {picking && (
@@ -409,9 +410,9 @@ export default function TaskScreen() {
       )}
 
       {t.summary && (whole || loadingTexts) ? (
-        <TextSection title={isWorking(t) ? tr("task.previousResult") : t.type === "research" ? tr("task.report") : tr("task.result")} text={whole ? t.summary : undefined} />
+        <TextSection chat={t.conversationId} title={isWorking(t) ? tr("task.previousResult") : t.type === "research" ? tr("task.report") : tr("task.result")} text={whole ? t.summary : undefined} />
       ) : null}
-      {(whole && t.description) || loadingTexts ? <TextSection title={tr("task.details")} text={whole ? t.description : undefined} /> : null}
+      {(whole && t.description) || loadingTexts ? <TextSection chat={t.conversationId} title={tr("task.details")} text={whole ? t.description : undefined} /> : null}
 
       {canFollowUp && (
         <View>
@@ -506,14 +507,16 @@ function TextSkeleton() {
 }
 
 /** A titled card of Markdown; without `text` it is still loading. */
-function TextSection({ title, text }: { title: string; text?: string }) {
+function TextSection({ title, text, chat }: { title: string; text?: string; chat?: string | null }) {
   const { t } = useTranslation("tasks");
   return (
     <View>
       <SectionTitle title={title} />
       <Card style={styles.text}>
         {text ? (
-          <Markdown text={text} />
+          <ChatFilesScope conversationId={chat}>
+            <Markdown text={text} />
+          </ChatFilesScope>
         ) : (
           <View accessibilityRole="progressbar" accessibilityLabel={t("task.loadingSection", { section: title })}>
             <TextSkeleton />

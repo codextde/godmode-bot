@@ -16,7 +16,7 @@ import { api, ApiError, errorText, updateDesktopMessage } from "@/lib/api";
 import { qk, queryClient } from "@/lib/query";
 import { teamText, templateText } from "@/lib/templates";
 import { radius, space, useColors } from "@/lib/theme";
-import { useWorkspace } from "@/lib/workspace";
+import { useWorkspace, scopeLabel } from "@/lib/workspace";
 
 const NEW = "__new";
 const GLOBAL = "__global";
@@ -160,7 +160,7 @@ function InstallForm({ teamId, kind, icon, name, description, root }: { teamId: 
           options={[
             { value: NEW, label: t("team.newWorkspace") },
             { value: GLOBAL, label: t("team.global") },
-            ...workspaces.map((w) => ({ value: w.id, label: `${w.icon ? `${w.icon} ` : ""}${w.name}` })),
+            ...workspaces.map((w) => ({ value: w.id, label: scopeLabel(w) })),
           ]}
           onChange={setWhere}
         />

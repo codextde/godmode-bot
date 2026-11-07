@@ -13,7 +13,9 @@ let current: { request: FolderRequest; settle: (path: string | null) => void } |
 
 export const folderRequest = () => current?.request ?? null;
 
-export function settleFolder(path: string | null) {
+/** `request`: only while that is the open one. A sheet leaves after the next one opened, and has nothing to say about it. */
+export function settleFolder(path: string | null, request?: FolderRequest | null) {
+  if (request !== undefined && current?.request !== request) return;
   const open = current;
   current = null;
   open?.settle(path);

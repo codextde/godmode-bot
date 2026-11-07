@@ -13,7 +13,7 @@ export default function FolderBrowse() {
   const [request] = useState(folderRequest);
   const [source] = useState(() => (request?.serverId ? serverFolders(request.serverId) : computerFolders));
   // Swiped away: the screen that asked goes on without a folder.
-  useEffect(() => () => settleFolder(null), []);
+  useEffect(() => () => settleFolder(null, request), [request]);
 
   if (fullAccess === false || !request) {
     return (
@@ -30,7 +30,7 @@ export default function FolderBrowse() {
       start={request.start}
       enabled={fullAccess === true}
       onUse={(path) => {
-        settleFolder(path);
+        settleFolder(path, request);
         router.back();
       }}
     />

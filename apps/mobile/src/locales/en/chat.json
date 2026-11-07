@@ -23,12 +23,10 @@
     "fileCount_one": "{{count}} file",
     "fileCount_other": "{{count}} files",
     "kind": "Kind",
-    "codingNeedsWorkspace": ". Pick a workspace with a repository on your computer.",
+    "codingNeedsWorkspace": "Pick a workspace with a repository on your computer.",
     "projectHint": "The agent works with the project's context, folders and repositories.",
     "workspaceHint": "It uses the workspace's setup.",
     "unassigned": "Unassigned",
-    "agentStarts": "{{name}} starts as soon as you create it.",
-    "waitsInBacklog": "It waits in the backlog until you assign an agent.",
     "startWith": "Start with {{name}}",
     "addToBacklog": "Add to backlog"
   },
@@ -96,7 +94,7 @@
     "noMatch": "No runs match these filters",
     "clearFilters": "Clear filters",
     "emptyTitle": "No activity yet",
-    "emptyBody": "When your agents chat, run automations or delegate work, every run shows up here — live.",
+    "emptyBody": "When your agents chat, run automations or delegate work, every run shows up here, live.",
     "workingNow": "Working now",
     "doneToday": "Done today",
     "failedToday": "Failed today",
@@ -154,8 +152,8 @@
       "message": "Message",
       "answer": "Answer {{name}}",
       "howToGoOn": "Tell {{name}} how to go on",
-      "afterReset": "Message {{name}} — goes along after the reset",
-      "whenContinues": "Message {{name}} — goes along when it continues",
+      "afterReset": "Message {{name}}, goes along after the reset",
+      "whenContinues": "Message {{name}}, goes along when it continues",
       "queue": "Queue a message for {{name}}",
       "steer": "Tell {{name}} what to do instead",
       "default": "Message {{name}}, or / for commands"
@@ -185,14 +183,10 @@
       "more_one": " and {{count}} more",
       "more_other": " and {{count}} more"
     },
-    "asking": {
-      "approval": "{{name}} needs your OK — reply below",
-      "question": "{{name}} is waiting for your answer — reply below"
-    },
     "paused": {
       "limit": "Claude's {{limit}} is reached",
-      "limitAuto": "Claude's {{limit}} is reached — continues by itself after the reset",
-      "user": "Paused — continues where it stopped",
+      "limitAuto": "Claude's {{limit}} is reached, continues by itself after the reset",
+      "user": "Paused, continues where it stopped",
       "tryNow": "Try now"
     },
     "longChat": {
@@ -211,7 +205,7 @@
     "switchedOff": "{{name}} is switched off",
     "switchOn": "Switch on",
     "switchOnFailed": "Couldn't switch it on",
-    "switchedOffDraft": "{{name}} is switched off — your message waits here as a draft",
+    "switchedOffDraft": "{{name}} is switched off. Your message waits here as a draft",
     "continuedFrom": "Continues “{{title}}”",
     "handedOverBy": "Handed over by {{name}}",
     "handedOver": "Handed over by another agent",
@@ -280,6 +274,18 @@
     "speechDenied": "Allow the microphone and speech recognition for Godmode in the Settings app to dictate.",
     "phoneUnavailable": "Speech recognition isn't available on this phone right now.",
     "tryAgain": "Try again."
+  },
+  "runnerAway": {
+    "connecting": "Connecting to {{name}}…",
+    "update": "{{name}} needs an update",
+    "offline": "{{name}} is offline",
+    "unreachable": "Couldn't reach {{name}}",
+    "moveHere": "Move here",
+    "devices": "Open devices"
+  },
+  "files": {
+    "pathCopied": "Path copied",
+    "openNamed": "Open {{name}}"
   },
   "archive": {
     "search": "Search archived chats",

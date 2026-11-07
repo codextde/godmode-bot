@@ -173,7 +173,7 @@ function CodeEditor({ mod }: { mod: Mod }) {
           ...(busy ? [] : [{ icon: "shield" as const, label: t("pluginAdmin.code.check"), onPress: () => void check() }]),
           ...(dirty && !busy ? [{ icon: "check" as const, label: t("pluginAdmin.code.save"), prominent: true, onPress: () => void save() }] : []),
         ]}
-        menu={fileMenu}
+        menu={busy ? [] : fileMenu}
       />
       <TextPrompt
         open={!!naming}
@@ -250,6 +250,7 @@ function CodeEditor({ mod }: { mod: Mod }) {
                 setRevision((r) => r + 1);
               }}
               multiline
+              editable={busy !== "save"}
               scrollEnabled={false}
               autoCapitalize="none"
               autoCorrect={false}

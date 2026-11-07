@@ -23,12 +23,10 @@
     "fileCount_one": "{{count}} Datei",
     "fileCount_other": "{{count}} Dateien",
     "kind": "Art",
-    "codingNeedsWorkspace": ". Wähl einen Workspace mit einem Repository auf deinem Computer.",
+    "codingNeedsWorkspace": "Wähl einen Workspace mit einem Repository auf deinem Computer.",
     "projectHint": "Der Agent arbeitet mit Kontext, Ordnern und Repositorys des Projekts.",
     "workspaceHint": "Nutzt das Setup des Workspace.",
     "unassigned": "Niemand",
-    "agentStarts": "{{name}} legt los, sobald du sie erstellst.",
-    "waitsInBacklog": "Wartet im Backlog, bis du einen Agenten zuweist.",
     "startWith": "Mit {{name}} starten",
     "addToBacklog": "Ins Backlog"
   },
@@ -96,7 +94,7 @@
     "noMatch": "Keine Läufe passen zu diesen Filtern",
     "clearFilters": "Filter zurücksetzen",
     "emptyTitle": "Noch keine Aktivität",
-    "emptyBody": "Wenn deine Agenten chatten, Automationen ausführen oder Arbeit delegieren, erscheint hier jeder Lauf — live.",
+    "emptyBody": "Wenn deine Agenten chatten, Automationen ausführen oder Arbeit delegieren, erscheint hier jeder Lauf, live.",
     "workingNow": "Arbeiten gerade",
     "doneToday": "Heute erledigt",
     "failedToday": "Heute fehlgeschlagen",
@@ -154,8 +152,8 @@
       "message": "Nachricht",
       "answer": "{{name}} antworten",
       "howToGoOn": "Sag {{name}}, wie es weitergeht",
-      "afterReset": "Nachricht an {{name}} — geht nach dem Reset mit",
-      "whenContinues": "Nachricht an {{name}} — geht beim Fortsetzen mit",
+      "afterReset": "Nachricht an {{name}}, geht nach dem Reset mit",
+      "whenContinues": "Nachricht an {{name}}, geht beim Fortsetzen mit",
       "queue": "Nachricht für {{name}} einreihen",
       "steer": "Sag {{name}}, was stattdessen zu tun ist",
       "default": "Nachricht an {{name}} oder / für Befehle"
@@ -185,14 +183,10 @@
       "more_one": " und {{count}} weiteres",
       "more_other": " und {{count}} weitere"
     },
-    "asking": {
-      "approval": "{{name}} braucht dein OK — antworte unten",
-      "question": "{{name}} wartet auf deine Antwort — antworte unten"
-    },
     "paused": {
       "limit": "{{limit}} von Claude erreicht",
-      "limitAuto": "{{limit}} von Claude erreicht — geht nach dem Reset von selbst weiter",
-      "user": "Pausiert — macht dort weiter, wo es aufgehört hat",
+      "limitAuto": "{{limit}} von Claude erreicht, geht nach dem Reset von selbst weiter",
+      "user": "Pausiert, macht dort weiter, wo es aufgehört hat",
       "tryNow": "Jetzt versuchen"
     },
     "longChat": {
@@ -211,7 +205,7 @@
     "switchedOff": "{{name}} ist ausgeschaltet",
     "switchOn": "Einschalten",
     "switchOnFailed": "Konnte nicht eingeschaltet werden",
-    "switchedOffDraft": "{{name}} ist ausgeschaltet — deine Nachricht wartet hier als Entwurf",
+    "switchedOffDraft": "{{name}} ist ausgeschaltet. Deine Nachricht wartet hier als Entwurf",
     "continuedFrom": "Geht weiter mit „{{title}}“",
     "handedOverBy": "Übergeben von {{name}}",
     "handedOver": "Von einem anderen Agenten übergeben",
@@ -280,6 +274,18 @@
     "speechDenied": "Erlaube Godmode das Mikrofon und die Spracherkennung in der Einstellungen-App, um zu diktieren.",
     "phoneUnavailable": "Die Spracherkennung ist auf diesem Handy gerade nicht verfügbar.",
     "tryAgain": "Versuch es noch einmal."
+  },
+  "runnerAway": {
+    "connecting": "Verbinde mit {{name}}…",
+    "update": "{{name}} braucht ein Update",
+    "offline": "{{name}} ist offline",
+    "unreachable": "{{name}} nicht erreichbar",
+    "moveHere": "Hierher holen",
+    "devices": "Geräte öffnen"
+  },
+  "files": {
+    "pathCopied": "Pfad kopiert",
+    "openNamed": "{{name}} öffnen"
   },
   "archive": {
     "search": "Archivierte Chats durchsuchen",

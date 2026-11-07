@@ -14,7 +14,7 @@ import { api, errorText } from "@/lib/api";
 import { leave, machinesApi } from "@/lib/machines";
 import { qk, queryClient } from "@/lib/query";
 import { space } from "@/lib/theme";
-import { useWorkspace } from "@/lib/workspace";
+import { useWorkspace, scopeLabel } from "@/lib/workspace";
 
 /**
  * Which workspace a browser profile belongs to, like the desktop's Assign dialog: its cookies and sessions stay with
@@ -99,7 +99,7 @@ function Assign({ profile, profiles }: { profile: BrowserProfile; profiles: Brow
             <ChoiceRow
               key={w.id}
               icon="layers"
-              title={`${w.icon ? `${w.icon} ` : ""}${w.name}${profile.workspaceId === w.id ? ` · ${t("assign.current")}` : ""}`}
+              title={`${scopeLabel(w)}${profile.workspaceId === w.id ? ` · ${t("assign.current")}` : ""}`}
               detail={browser ? t("assign.browsesWith", { name: browser.name }) : t("assign.noProfile", { name: fallback })}
               selected={target === w.id}
               onPress={() => setTarget(w.id)}

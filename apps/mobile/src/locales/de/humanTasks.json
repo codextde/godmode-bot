@@ -66,7 +66,7 @@
     "summaryNothing_other": "Gerade wartet nichts auf dich · {{count}} im Backlog für später. Schließ eins ab oder beantworte es, und sein Agent macht da weiter, wo er aufgehört hat.",
     "loadFailed": "Deine To-dos konnten nicht geladen werden",
     "emptyTitle": "Nichts wartet auf dich",
-    "emptyBody": "Wenn ein Agent ohne dich nicht weiterkommt — ein Passkey, ein CAPTCHA, eine Frage, eine offene Entscheidung —, landet es hier und du bekommst Bescheid. Sobald du es abschließt oder beantwortest, macht der Agent von selbst weiter.",
+    "emptyBody": "Wenn ein Agent ohne dich nicht weiterkommt (ein Passkey, ein CAPTCHA, eine Frage, eine offene Entscheidung), landet es hier und du bekommst Bescheid. Sobald du es abschließt oder beantwortest, macht der Agent von selbst weiter.",
     "addOwn": "Eigenes To-do hinzufügen",
     "addFailed": "To-do konnte nicht hinzugefügt werden",
     "titlePlaceholder": "Was musst du erledigen?",

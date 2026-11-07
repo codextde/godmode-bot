@@ -29,7 +29,7 @@ import { isLive, useLiveScreens } from "@/lib/screens";
 import { confirmHideSuggestions, useSuggestions } from "@/lib/suggestions";
 import { usePullRefresh } from "@/lib/use-pull-refresh";
 import { chatProject, inProject, useProjectIndex, useWorkspace, useWorkspaceRuns } from "@/lib/workspace";
-import { radius, space, useColors } from "@/lib/theme";
+import { radius, space, textScale, useColors } from "@/lib/theme";
 
 const NEEDS_SHOWN = 5;
 const RECENT_SHOWN = 6;
@@ -115,7 +115,7 @@ export default function Home() {
       <Pressable accessibilityRole="button" onPress={() => ask()}>
         <Glass interactive style={styles.ask} fallback={c.surface}>
           <Icon name="sparkles" size={18} color={c.textMuted} />
-          <T variant="body" muted numberOfLines={1} style={{ flex: 1 }}>
+          <T variant="body" muted numberOfLines={1} maxScale={textScale.control} style={{ flex: 1 }}>
             {agent ? t("home.askAgent", { name: agent.name }) : t("home.ask")}
           </T>
           <View style={[styles.askSend, { backgroundColor: c.primary }]}>
@@ -140,7 +140,7 @@ export default function Home() {
               style={({ pressed }) => [styles.suggestion, { backgroundColor: c.surface, borderColor: c.border, opacity: pressed ? 0.6 : 1 }]}
             >
               <Icon name={s.icon} size={13} color={c.textMuted} />
-              <T variant="footnote" muted numberOfLines={1} style={{ flexShrink: 1 }}>
+              <T variant="footnote" muted numberOfLines={1} maxScale={textScale.control} style={{ flexShrink: 1 }}>
                 {s.text}
               </T>
             </Pressable>
@@ -355,7 +355,7 @@ function Head({
       </T>
       {count ? (
         <View style={[styles.count, tone === "warning" ? { backgroundColor: c.warningSoft } : { backgroundColor: c.surface, borderColor: c.border, borderWidth: StyleSheet.hairlineWidth }]}>
-          <T variant="caption" color={tone === "warning" ? c.warning : c.text} style={styles.countText}>
+          <T variant="caption" maxScale={textScale.control} color={tone === "warning" ? c.warning : c.text} style={styles.countText}>
             {count}
           </T>
         </View>
@@ -367,7 +367,7 @@ function Head({
       ) : null}
       {action && onAction ? (
         <Pressable hitSlop={10} onPress={onAction} style={{ marginLeft: "auto", flexShrink: 1 }}>
-          <T variant="footnote" muted numberOfLines={1} style={{ fontWeight: "600" }}>
+          <T variant="footnote" muted numberOfLines={1} maxScale={textScale.control} style={{ fontWeight: "600" }}>
             {action}
           </T>
         </Pressable>

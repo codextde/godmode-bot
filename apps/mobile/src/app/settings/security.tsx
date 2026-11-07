@@ -127,6 +127,12 @@ function Sections({ settings: s, remember, unlocked }: { settings: Settings; rem
       </Group>
 
       <Group title={t("security.web.title")} footer={srv.remoteAccess ? `${t("security.web.exposeBody")}${srv.hasDashboardPassword ? "" : ` ${t("security.web.noPassword")}`}` : t("security.web.footer")}>
+        <LinkRow
+          icon="key"
+          title={t("security.web.password")}
+          value={srv.hasDashboardPassword ? t("security.web.passwordSet") : t("security.web.passwordNotSet")}
+          onPress={() => router.push({ pathname: "/settings/dashboard-password", params: { set: srv.hasDashboardPassword ? "1" : "0" } })}
+        />
         <SwitchRow icon="network" title={t("security.web.remote")} value={srv.remoteAccess} onChange={setRemote} />
         <FieldRow label={t("security.web.host")} value={srv.host} placeholder="127.0.0.1" onCommit={(host) => void patchAnySettings({ server: { host } })} />
         <FieldRow

@@ -8,7 +8,7 @@ import { MenuSheet, type HeaderMenuItem } from "./header-actions";
 import { sfSymbol } from "./icon";
 import { useAgents } from "@/lib/hooks";
 import { moveAgent, teamOf } from "@/lib/manage";
-import { useWorkspace } from "@/lib/workspace";
+import { useWorkspace, scopeLabel } from "@/lib/workspace";
 
 /**
  * The org chart's long-press menu, like dragging on the desktop: report to another agent (it moves into that agent's
@@ -83,7 +83,7 @@ export function AgentMoveMenu({ agent, children }: { agent: Agent; children: (on
           </Link.MenuAction>
           {workspaces.map((w) => (
             <Link.MenuAction key={w.id} isOn={agent.workspaceId === w.id} onPress={() => moveTo(w.id)}>
-              {`${w.icon ? `${w.icon} ` : ""}${w.name}`}
+              {scopeLabel(w)}
             </Link.MenuAction>
           ))}
         </Link.Menu>

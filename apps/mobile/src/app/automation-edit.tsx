@@ -62,11 +62,11 @@ const FILTER_PLACEHOLDERS = {
 } as const satisfies Partial<Record<RoutineTriggerType, string>>;
 
 const TRIGGER_OPTIONS = [
-  { type: "schedule", icon: "clock", hint: "edit.triggerHint.schedule" },
-  { type: "app", icon: "layers", hint: "edit.triggerHint.app" },
-  { type: "condition", icon: "eye", hint: "edit.triggerHint.condition" },
-  { type: "webhook", icon: "link", hint: "edit.triggerHint.webhook" },
-] as const satisfies readonly { type: RoutineTriggerType; icon: IconName; hint: string }[];
+  { type: "schedule", icon: "clock" },
+  { type: "app", icon: "layers" },
+  { type: "condition", icon: "eye" },
+  { type: "webhook", icon: "link" },
+] as const satisfies readonly { type: RoutineTriggerType; icon: IconName }[];
 
 /** A limited phone sets up schedules and conditions; app accounts and secret URLs need full access. */
 const LIMITED_TRIGGERS: readonly RoutineTriggerType[] = ["schedule", "condition"];
@@ -332,10 +332,6 @@ function AutomationForm({ routine, agents, defaultAgentId }: { routine: Routine 
     >
       <Header title={editing ? t("edit.titleEdit") : t("edit.titleNew")} action={editing ? t("common:actions.save") : t("common:actions.create")} saving={saving} onSave={() => void save()} />
       <View style={styles.content}>
-        <T variant="subhead" muted>
-          {t("edit.intro")}
-        </T>
-
         <View style={{ gap: space.sm }}>
           <View style={[styles.fields, { backgroundColor: c.surface, borderColor: touched && problems.name ? c.danger : c.border }]}>
             <TextInput
@@ -379,7 +375,7 @@ function AutomationForm({ routine, agents, defaultAgentId }: { routine: Routine 
           {triggerEditable ? (
             <Group>
               {triggers.map((o) => (
-                <TriggerOption key={o.type} icon={o.icon} title={TRIGGER_TITLES[o.type]} hint={t(o.hint)} active={type === o.type} onPress={() => setType(o.type)} />
+                <TriggerOption key={o.type} icon={o.icon} title={TRIGGER_TITLES[o.type]} active={type === o.type} onPress={() => setType(o.type)} />
               ))}
             </Group>
           ) : (
@@ -646,7 +642,7 @@ function Header({ title, action, saving, onSave }: { title: string; action?: str
   );
 }
 
-function TriggerOption({ icon, title, hint, active, onPress }: { icon: IconName; title: string; hint: string; active: boolean; onPress: () => void }) {
+function TriggerOption({ icon, title, active, onPress }: { icon: IconName; title: string; active: boolean; onPress: () => void }) {
   const c = useColors();
   return (
     <Pressable
@@ -660,14 +656,9 @@ function TriggerOption({ icon, title, hint, active, onPress }: { icon: IconName;
       style={({ pressed }) => [styles.row, pressed && { backgroundColor: c.sunken }]}
     >
       <Tile icon={icon} tint={active ? c.brandStrong : undefined} />
-      <View style={{ flex: 1, minWidth: 0, gap: 1 }}>
-        <T variant="callout" style={{ fontWeight: "500" }}>
-          {title}
-        </T>
-        <T variant="footnote" muted>
-          {hint}
-        </T>
-      </View>
+      <T variant="callout" style={{ flex: 1, minWidth: 0, fontWeight: "500" }}>
+        {title}
+      </T>
       {active ? <Icon name="check" size={15} color={c.brandStrong} weight="bold" /> : null}
     </Pressable>
   );

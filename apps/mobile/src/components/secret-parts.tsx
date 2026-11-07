@@ -8,7 +8,7 @@ import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from "
 import Svg, { Circle } from "react-native-svg";
 import { Icon, sfSymbol, type IconName } from "./icon";
 import { Row, T, tap } from "./ui";
-import { fonts, radius, space, useColors } from "@/lib/theme";
+import { fonts, radius, space, textScale, useColors } from "@/lib/theme";
 
 /** Cancel, a title, and the sheet's action (Save, Add, Unlock…), like the app's other form sheets. */
 export function SheetHeader({
@@ -120,6 +120,7 @@ export function InputRow({
         {label}
       </T>
       <TextInput
+        maxFontSizeMultiplier={textScale.label}
         accessibilityLabel={label}
         value={value}
         onChangeText={onChangeText}

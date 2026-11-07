@@ -8,7 +8,6 @@ import { useTranslation } from "react-i18next";
 import { KeyboardAvoidingView, useKeyboardState } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
-  characterGreeting,
   type Agent,
   type Conversation,
   type ConversationFollowup,
@@ -24,6 +23,7 @@ import {
   runEndOf,
 } from "@godmode/shared";
 import { CharacterAvatar } from "@/components/character";
+import { ChatFilesScope } from "@/components/chat-files";
 import { ChatMoveCard } from "@/components/chat-move-card";
 import { Composer, ComposerDock, type ComposerHandle, type SendOptions } from "@/components/composer";
 import { useFullAccess } from "@/components/full-access";
@@ -35,6 +35,7 @@ import { ModelButton } from "@/components/model-button";
 import { ContextRing } from "@/components/context-ring";
 import { ChatScope, type ChatScopeValue } from "@/components/question-card";
 import { QueueTray } from "@/components/queue-tray";
+import { RunnerOfflineBar } from "@/components/runner-offline-bar";
 import { Button, ErrorState, Skeleton, T, tap } from "@/components/ui";
 import { openHumanTask } from "@/components/human-task-row";
 import { ApiError, api, errorText, updateDesktopMessage } from "@/lib/api";
@@ -55,7 +56,6 @@ import { subscribeConversation, viewConversation } from "@/lib/realtime";
 import { useSettings } from "@/lib/setup";
 import { screenHref, useChatScreens, type LiveScreen } from "@/lib/screens";
 import { radius, space, type, useColors } from "@/lib/theme";
-import { currentLanguage } from "@/lib/i18n";
 import { useTypewriter } from "@/lib/typewriter";
 import { markVoiceRun, useSpokenReplies } from "@/lib/voice-replies";
 
@@ -130,6 +130,7 @@ export default function Chat() {
   const [renaming, setRenaming] = useState(false);
   const { fullAccess } = useFullAccess();
   const places = usePlaces(fullAccess === true);
+  const awayPlace = places.find((p) => p.runnerId === conversation.data?.runnerId && !!p.runnerId && !p.self && p.state !== "online") ?? null;
   const settings = useSettings();
   const isPrivate = !!conversation.data?.private;
   usePrivateChatLifetime(id, isPrivate);
@@ -151,7 +152,8 @@ export default function Chat() {
   const runId = run?.id;
   const running = run?.status === "running";
   const items = useMemo<Item[]>(() => {
-    const out: Item[] = [hasMore ? { key: "earlier", role: "earlier" } : { key: "intro", role: "intro" }];
+    // The agent's picture greets an empty chat only: it never sits above a transcript.
+    const out: Item[] = hasMore ? [{ key: "earlier", role: "earlier" }] : !messages?.length && !running ? [{ key: "intro", role: "intro" }] : [];
     if (isPrivate) out.push({ key: "private", role: "private" });
     if (hasOrigin) out.push({ key: "origin", role: "origin" });
     let answered = false;
@@ -381,7 +383,7 @@ export default function Chat() {
     ({ item }) => {
       switch (item.role) {
         case "intro":
-          return agent ? <Intro agent={agent} conversationId={id} running={!!runId} /> : null;
+          return agent ? <Intro agent={agent} running={!!runId} /> : null;
         case "earlier":
           return <Earlier conversationId={id} />;
         case "user":
@@ -422,28 +424,28 @@ export default function Chat() {
           </View>
         ) : (
           <ChatScope.Provider value={scope}>
-            <FlashList
-              ref={list}
-              data={items}
-              keyExtractor={(item) => item.key}
-              contentInsetAdjustmentBehavior="automatic"
-              keyboardDismissMode="interactive"
-              maintainVisibleContentPosition={{ startRenderingFromBottom: true, autoscrollToBottomThreshold: 0.25 }}
-              onStartReached={() => void loadEarlier(id).catch(() => undefined)}
-              onStartReachedThreshold={0.6}
-              contentContainerStyle={styles.list}
-              ItemSeparatorComponent={Gap}
-              renderItem={renderItem}
-              getItemType={(item) => item.role}
-            />
+            <ChatFilesScope conversationId={id} runnerId={conversation.data.runnerId}>
+              <FlashList
+                ref={list}
+                data={items}
+                keyExtractor={(item) => item.key}
+                contentInsetAdjustmentBehavior="automatic"
+                keyboardDismissMode="interactive"
+                maintainVisibleContentPosition={{ startRenderingFromBottom: true, autoscrollToBottomThreshold: 0.25 }}
+                onStartReached={() => void loadEarlier(id).catch(() => undefined)}
+                onStartReachedThreshold={0.6}
+                contentContainerStyle={styles.list}
+                ItemSeparatorComponent={Gap}
+                renderItem={renderItem}
+                getItemType={(item) => item.role}
+              />
+            </ChatFilesScope>
           </ChatScope.Provider>
         )}
         {off && agent ? <SwitchedOffStrip agent={agent} /> : null}
         {forYou.data?.some((task) => !task.questionId) ? <ForYouStrip tasks={forYou.data.filter((task) => !task.questionId)} /> : null}
         {run && primary ? <ChatLiveStrip screen={primary} runId={run.id} /> : null}
-        {paused?.reason === "question" ? (
-          <AskingStrip agentName={agent?.name ?? t("thread.theAgent")} approval={paused.question?.kind === "approval"} />
-        ) : paused ? (
+        {paused?.reason === "question" ? null : paused ? (
           <PausedStrip conversationId={id} pause={paused} onContinue={resume} />
         ) : ended ? (
           <EndedStrip mode={ended.mode} onRetry={retry} busy={retrying} />
@@ -459,6 +461,7 @@ export default function Chat() {
           />
         ) : null}
         <ChatMoveCard conversationId={id} />
+        {awayPlace ? <RunnerOfflineBar conversationId={id} place={awayPlace} here={places.find((p) => p.self) ?? null} /> : null}
         <QueueTray
           conversationId={id}
           queue={queue}
@@ -718,20 +721,6 @@ function ForYouStrip({ tasks }: { tasks: HumanTask[] }) {
         {t("common:actions.open")}
       </T>
     </Pressable>
-  );
-}
-
-/** Above the composer while the chat's run waits for the human's answer: the reply in the composer is the answer. */
-function AskingStrip({ agentName, approval }: { agentName: string; approval: boolean }) {
-  const c = useColors();
-  const { t } = useTranslation(["chat", "common"]);
-  return (
-    <View style={[styles.paused, { backgroundColor: c.warningSoft, borderColor: c.warning }]}>
-      <Icon name="warning" size={15} color={c.warning} />
-      <T variant="footnote" style={{ flex: 1 }} numberOfLines={2}>
-        {approval ? t("thread.asking.approval", { name: agentName }) : t("thread.asking.question", { name: agentName })}
-      </T>
-    </View>
   );
 }
 
@@ -1012,31 +1001,14 @@ function EndedStrip({ mode, onRetry, busy }: { mode: RetryMode; onRetry: () => v
   );
 }
 
-/** The agent at the top of the chat, saying hello in its own voice. */
-function Intro({ agent, conversationId, running }: { agent: Agent; conversationId: string; running: boolean }) {
-  const c = useColors();
-  // The phone doesn't know the human's name, so the greeting says "there".
-  const greeting = useMemo(
-    () => characterGreeting({ name: agent.name, personality: agent.personality ?? "", seed: conversationId, lang: currentLanguage() }),
-    [agent.name, agent.personality, conversationId],
-  );
+/** An empty chat: who it is with. */
+function Intro({ agent, running }: { agent: Agent; running: boolean }) {
   return (
     <View style={styles.intro}>
       <CharacterAvatar agent={agent} size={88} running={running} />
       <T variant="headline" style={{ marginTop: 4 }}>
         {agent.name}
       </T>
-      <View style={[styles.bubble, { backgroundColor: c.surface, borderColor: c.border }]}>
-        <View style={[styles.tail, { backgroundColor: c.surface, borderColor: c.border }]} />
-        <T variant="subhead" style={{ textAlign: "center" }}>
-          {greeting}
-        </T>
-      </View>
-      {agent.description ? (
-        <T variant="footnote" muted style={{ textAlign: "center", maxWidth: 280, marginTop: 4 }} numberOfLines={3}>
-          {agent.description}
-        </T>
-      ) : null}
     </View>
   );
 }
@@ -1114,25 +1086,5 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingTop: space.xl,
     paddingBottom: 6,
-  },
-  bubble: {
-    marginTop: 8,
-    maxWidth: 300,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: radius.lg,
-    borderCurve: "continuous",
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-  tail: {
-    position: "absolute",
-    top: -6,
-    alignSelf: "center",
-    width: 12,
-    height: 12,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderLeftWidth: StyleSheet.hairlineWidth,
-    borderTopLeftRadius: 3,
-    transform: [{ rotate: "45deg" }],
   },
 });

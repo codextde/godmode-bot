@@ -7,7 +7,7 @@ import { T, tap } from "./ui";
 import { useAgents } from "@/lib/hooks";
 import type { SecretRow } from "@/lib/tools-admin";
 import { fonts, space, useColors } from "@/lib/theme";
-import { useWorkspace } from "@/lib/workspace";
+import { useWorkspace, scopeLabel } from "@/lib/workspace";
 
 /** One field of a form, typed into directly (no save on its own): label on the left, or above for longer text. */
 export function TextRow({
@@ -228,7 +228,7 @@ export function useScopeRows(value: Scope, onChange: (next: Scope) => void) {
         key="pick-workspace"
         title={t("scope.which")}
         value={value.workspaceId ?? ""}
-        options={workspaces.map((w) => ({ value: w.id, label: `${w.icon || "🗂️"} ${w.name}` }))}
+        options={workspaces.map((w) => ({ value: w.id, label: scopeLabel(w) }))}
         onChange={(id) => onChange({ workspaceId: id, agentId: null })}
       />,
     );

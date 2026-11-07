@@ -66,7 +66,7 @@
     "summaryNothing_other": "Nothing waits for you right now · {{count}} in the backlog for later. Close or answer one and its agent picks up where it left off.",
     "loadFailed": "Couldn't load your tasks",
     "emptyTitle": "Nothing waits for you",
-    "emptyBody": "When an agent can't go on without you — a passkey, a CAPTCHA, a question, a decision it left open — it lands here and you are told. Once you close or answer it, the agent continues by itself.",
+    "emptyBody": "When an agent can't go on without you (a passkey, a CAPTCHA, a question, a decision it left open), it lands here and you are told. Once you close or answer it, the agent continues by itself.",
     "addOwn": "Add one of your own",
     "addFailed": "Couldn't add the task",
     "titlePlaceholder": "What do you need to do?",

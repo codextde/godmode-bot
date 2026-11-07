@@ -52,7 +52,8 @@ function MoveForm({ conversation, places }: { conversation: ConversationWithMess
   const working = !!useChatRun(conversation.id);
   const from = places.find((p) => p.runnerId === (conversation.runnerId ?? null)) ?? null;
   const targets = moveTargets(places, conversation.runnerId);
-  const [chosen, setTo] = useState<Place | null>(null);
+  const { to: preferred } = useLocalSearchParams<{ to?: string }>();
+  const [chosen, setTo] = useState<Place | null>(() => targets.find((p) => (p.runnerId ?? "") === preferred) ?? null);
   // The computers may arrive after the sheet opened, and one may go offline while it is open.
   const to = targets.find((p) => p.runnerId === chosen?.runnerId) ?? targets[0] ?? null;
   const fromName = from?.name ?? t("move.theOtherComputer");

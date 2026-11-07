@@ -4,7 +4,6 @@ import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { formatBytes, type Agent } from "@godmode/shared";
 import { CharacterAvatar } from "@/components/character";
-import { CloseButton } from "@/components/close-button";
 import { ListRow, ReadonlyList } from "@/components/readonly-list";
 import { filesApi, fk } from "@/lib/agent-files";
 import { useAgents } from "@/lib/hooks";
@@ -23,7 +22,6 @@ export default function Files() {
 
   return (
     <>
-      <CloseButton />
       <ReadonlyList<Agent>
         title={t("index.title")}
         query={query}

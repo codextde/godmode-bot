@@ -50,6 +50,8 @@
       "slack": "Create the Slack app",
       "teams": "Create an Azure Bot"
     },
+    "copyManifest": "Copy manifest",
+    "manifestCopied": "Manifest copied",
     "tokens": "Tokens",
     "publicUrl": "Public address",
     "check": "Check",

@@ -11,7 +11,7 @@ import { ApiError, api, errorText } from "@/lib/api";
 import { dateLocale, t } from "@/lib/i18n";
 import { useLive } from "@/lib/live";
 import { qk, queryClient } from "@/lib/query";
-import { radius, space, type, useColors } from "@/lib/theme";
+import { radius, space, textScale, type, useColors } from "@/lib/theme";
 
 type QuestionBlock = Extract<MessageBlock, { type: "question" }>;
 
@@ -44,9 +44,10 @@ export async function answerQuestion(id: string, input: AnswerQuestionInput, con
 
 /**
  * A question or an approval the agent asked. While the run waits for it: one tap on an option, or Approve / Decline
- * (with a note). Afterwards it is the record of what was asked and answered.
+ * (with a note). In the chat the composer takes a typed answer; in the inbox (`inline`) the card has its own box.
+ * Afterwards it is the record of what was asked and answered.
  */
-export function QuestionCard({ question: q, streaming }: { question: QuestionBlock; streaming?: boolean }) {
+export function QuestionCard({ question: q, streaming, inline }: { question: QuestionBlock; streaming?: boolean; inline?: boolean }) {
   const c = useColors();
   const { t } = useTranslation("components");
   const scope = useContext(ChatScope);
@@ -54,6 +55,7 @@ export function QuestionCard({ question: q, streaming }: { question: QuestionBlo
   const [pressed, setPressed] = useRecyclingState<string | null>(null, [q.id]);
   const [noting, setNoting] = useRecyclingState(false, [q.id]);
   const [note, setNote] = useRecyclingState("", [q.id]);
+  const [text, setText] = useRecyclingState("", [q.id]);
 
   const approval = q.kind === "approval";
   const open = q.status === "open";
@@ -201,15 +203,33 @@ export function QuestionCard({ question: q, streaming }: { question: QuestionBlo
         </View>
       )}
 
-      {open ? (
+      {open && inline ? (
+        <View style={styles.answer}>
+          <TextInput
+            multiline
+            value={text}
+            onChangeText={setText}
+            editable={answerable && !busy}
+            placeholder={approval ? t("questionCard.tellInstead", { name: agentName }) : q.options.length ? t("questionCard.ownWords") : t("questionCard.answerPlaceholder", { name: agentName })}
+            placeholderTextColor={c.textFaint}
+            accessibilityLabel={t("questionCard.answerPlaceholder", { name: agentName })}
+            maxLength={20_000}
+            maxFontSizeMultiplier={textScale.label}
+            style={[type.subhead, styles.answerInput, { color: c.text, backgroundColor: c.surface, borderColor: c.border }]}
+          />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t("questionCard.sendAnswer")}
+            disabled={!answerable || busy || !text.trim()}
+            onPress={() => send("text", { text: text.trim() })}
+            style={({ pressed: down }) => [styles.answerSend, { backgroundColor: c.primary, opacity: !text.trim() ? 0.4 : down ? 0.75 : 1 }]}
+          >
+            {pressed === "text" ? <ActivityIndicator size="small" color={c.onPrimary} /> : <Icon name="send" size={14} color={c.onPrimary} weight="bold" />}
+          </Pressable>
+        </View>
+      ) : open && (streaming || !answerable) ? (
         <T variant="footnote" muted>
-          {streaming || !answerable
-            ? t("questionCard.finishingStep", { name: agentName })
-            : approval
-              ? t("questionCard.replyCountsAsAnswer")
-              : q.options.length
-                ? t("questionCard.typeOwnAnswer")
-                : t("questionCard.replyToAnswer")}
+          {t("questionCard.finishingStep", { name: agentName })}
         </T>
       ) : q.answer ? (
         <View style={[styles.settled, { borderTopColor: c.border }]}>
@@ -287,6 +307,31 @@ const styles = StyleSheet.create({
     height: 22,
     borderRadius: 7,
     borderWidth: StyleSheet.hairlineWidth,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  answer: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    gap: 6,
+    marginTop: 2,
+  },
+  answerInput: {
+    flex: 1,
+    minHeight: 40,
+    maxHeight: 140,
+    paddingHorizontal: space.md,
+    paddingTop: 10,
+    paddingBottom: 10,
+    borderRadius: radius.sm,
+    borderCurve: "continuous",
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  answerSend: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.sm,
+    borderCurve: "continuous",
     alignItems: "center",
     justifyContent: "center",
   },

@@ -69,6 +69,7 @@ export const adminApi = {
   security: {
     audit: (action?: string) => request<AuditEntry[]>("GET", `/api/audit?limit=200${action ? `&action=${encodeURIComponent(action)}` : ""}`),
     changePassphrase: (current: string, next: string) => request<{ ok: true }>("POST", "/api/vault/passphrase", { current, next }, 60_000),
+    setDashboardPassword: (password: string) => request<{ ok: true }>("PUT", "/api/settings/dashboard-password", { password }),
     remember: (remember: boolean, grant?: string) => request<VaultStatus>("POST", "/api/vault/remember", { remember }, 0, grantHeader(grant)),
     settings: (patch: DeepPartial<Settings>, grant?: string) => request<Settings>("PUT", "/api/settings", patch, 0, grantHeader(grant)),
     agentAccess: (id: string, secretAccess: "fill" | "reveal", grant?: string) =>

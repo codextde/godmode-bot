@@ -37,7 +37,7 @@
     "loadFailed": "Couldn't load plugins",
     "switchOff": "Switch off {{name}}",
     "switchFailed": "Couldn't switch the plugin off",
-    "allOff": "Plugins are switched off on your computer.",
+    "allOff": "Plugins are off",
     "draft": "Draft"
   },
   "messaging": {

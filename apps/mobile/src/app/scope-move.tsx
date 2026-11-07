@@ -8,7 +8,7 @@ import { NeedsFullAccess, useFullAccess } from "@/components/full-access";
 import { PickRow, PickSheet } from "@/components/pick-sheet";
 import { EmptyState, LoadingState } from "@/components/ui";
 import { moveScope, type ScopeMove } from "@/lib/manage";
-import { useWorkspace } from "@/lib/workspace";
+import { useWorkspace, ownEmoji } from "@/lib/workspace";
 
 /** An agent wrote the project's context: as a workspace's it reaches every run there, so the human reads it first. */
 const needsReview = (p: Project) => (p.fillOnly || p.offComputer) && !!(p.instructions.trim() || p.description.trim());
@@ -71,7 +71,7 @@ export default function ScopeMoveSheet() {
         {others.length ? (
           <Group title={t("scope.becomesProjectOf")}>
             {others.map((w) => (
-              <PickRow key={w.id} emoji={w.icon || "🗂️"} title={w.name} detail={w.description || undefined} selected={false} disabled={busy} onPress={() => nest(w)} />
+              <PickRow key={w.id} emoji={ownEmoji(w.icon)} icon="layers" title={w.name} detail={w.description || undefined} selected={false} disabled={busy} onPress={() => nest(w)} />
             ))}
           </Group>
         ) : (
@@ -98,7 +98,7 @@ export default function ScopeMoveSheet() {
           {workspaces.map((w) => (
             <PickRow
               key={w.id}
-              emoji={w.icon || "🗂️"}
+              emoji={ownEmoji(w.icon)} icon="layers"
               title={w.name}
               detail={w.description || undefined}
               selected={w.id === home?.id}

@@ -92,6 +92,7 @@ export default function SshKeys() {
         icon="sshKey"
         emptyTitle={t("sshKeys.emptyTitle")}
         failedTitle={t("sshKeys.loadFailed")}
+        offTitle={t("sshKeys.off")}
         renderRow={(k) => (
           <ListRow
             icon="sshKey"

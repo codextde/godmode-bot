@@ -4,6 +4,7 @@ import { memo, useMemo, useState, type ReactNode } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { fileNameSummary, type Agent, type Task, type TaskEvent, type TaskEventKind } from "@godmode/shared";
+import { ChatFilesScope } from "./chat-files";
 import { Icon, type IconName } from "./icon";
 import { Markdown } from "./markdown";
 import { Skeleton, T, tap } from "./ui";
@@ -94,30 +95,32 @@ export const TaskTimeline = memo(function TaskTimeline({ task, agents }: { task:
   }
 
   return (
-    <View accessibilityRole="list" style={{ paddingHorizontal: 4 }}>
-      <Line icon="dot" text={filer === null ? t("taskTimeline.youFiled") : t("taskTimeline.filedBy", { name: filer })} at={task.createdAt} last={!shown.length && !hidden} />
-      {hidden > 0 && (
-        <Line icon="more">
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={t("taskTimeline.showEarlierLabel", { count: hidden })}
-            hitSlop={10}
-            onPress={() => {
-              tap();
-              setAll(true);
-            }}
-            style={({ pressed }) => [styles.earlier, { opacity: pressed ? 0.6 : 1 }]}
-          >
-            <T variant="subhead" muted style={{ fontWeight: "500" }}>
-              {t("taskTimeline.showEarlier", { count: hidden })}
-            </T>
-          </Pressable>
-        </Line>
-      )}
-      {shown.map((e, i) => (
-        <EventRow key={e.id} event={e} current={e.kind === "delivered" && sameResult(e.body, task.summary)} last={i === shown.length - 1} />
-      ))}
-    </View>
+    <ChatFilesScope conversationId={task.conversationId}>
+      <View accessibilityRole="list" style={{ paddingHorizontal: 4 }}>
+        <Line icon="dot" text={filer === null ? t("taskTimeline.youFiled") : t("taskTimeline.filedBy", { name: filer })} at={task.createdAt} last={!shown.length && !hidden} />
+        {hidden > 0 && (
+          <Line icon="more">
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t("taskTimeline.showEarlierLabel", { count: hidden })}
+              hitSlop={10}
+              onPress={() => {
+                tap();
+                setAll(true);
+              }}
+              style={({ pressed }) => [styles.earlier, { opacity: pressed ? 0.6 : 1 }]}
+            >
+              <T variant="subhead" muted style={{ fontWeight: "500" }}>
+                {t("taskTimeline.showEarlier", { count: hidden })}
+              </T>
+            </Pressable>
+          </Line>
+        )}
+        {shown.map((e, i) => (
+          <EventRow key={e.id} event={e} current={e.kind === "delivered" && sameResult(e.body, task.summary)} last={i === shown.length - 1} />
+        ))}
+      </View>
+    </ChatFilesScope>
   );
 });
 
