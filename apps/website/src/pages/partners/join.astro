@@ -1,0 +1,147 @@
+---
+import Partners from '@/layouts/Partners.astro';
+import Icon from '@/components/ui/Icon.astro';
+import { COUNTRIES, euro, isCountry, PARTNERS, perCustomer, ratePercent } from '@/config/partners';
+import { allowed, BOTS } from '@/lib/limit';
+import { afterResponse, CODE, normalizeCode, partnerIdFromCookies, sameOrigin, setPartnerSession } from '@/lib/partner-auth';
+import { createPartner, ensurePromotionCode, sendWelcomeMail } from '@/lib/partners';
+
+export const prerender = false;
+Astro.response.headers.set('cache-control', 'no-store');
+
+if (await partnerIdFromCookies(Astro.cookies)) return Astro.redirect('/partners/dashboard', 303);
+
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const cf = (Astro.request as Request & { cf?: { country?: string } }).cf;
+const v = { name: '', email: '', code: '', country: cf?.country && isCountry(cf.country) ? cf.country : '', links: '' };
+let error = '';
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData().catch(() => null);
+  const field = (k: string, n = 200) => String(form?.get(k) ?? '').trim().slice(0, n);
+  v.name = field('name', 80);
+  v.email = field('email').toLowerCase();
+  v.code = normalizeCode(field('code', 20));
+  v.country = field('country', 2).toUpperCase();
+  v.links = field('links', 1000);
+  if (!sameOrigin(Astro.request, Astro.url)) error = 'Please send the form from this page.';
+  else if (BOTS.test(Astro.request.headers.get('user-agent') ?? '') || field('website')) error = 'Please try again in your browser.';
+  else if (!(await allowed('PARTNER_LIMIT', Astro.request))) error = 'Too many tries. Wait a minute and try again.';
+  else if (v.name.length < 2) error = 'Enter your name.';
+  else if (!EMAIL.test(v.email)) error = 'Enter a valid email address.';
+  else if (!CODE.test(v.code)) error = 'Your code needs 3 to 20 letters or numbers.';
+  else if (!isCountry(v.country)) error = 'Pick your country.';
+  else if (form?.get('terms') !== 'on') error = 'Please accept the program terms.';
+  else {
+    const res = await createPartner({ email: v.email, name: v.name, code: v.code, country: v.country, links: v.links || null });
+    if (res === 'email_taken') error = 'This email already has a partner account. Log in instead.';
+    else if (res === 'code_taken') error = 'That code is taken. Try another one.';
+    else if (res === 'code_invalid') error = 'That code isn’t available. Try another one.';
+    else {
+      await setPartnerSession(Astro.cookies, res.id, Astro.url.protocol === 'https:');
+      // Neither may block the sign-up: the cron and /admin/partners retry missing promotion codes.
+      await afterResponse(Astro.locals, async () => {
+        await ensurePromotionCode(res).catch((e) => console.error('promotion code at sign-up failed', res.code, e instanceof Error ? e.message : e));
+        await sendWelcomeMail(res).catch((e) => console.error('partner welcome email failed', res.id, e instanceof Error ? e.message : e));
+      });
+      return Astro.redirect('/partners/dashboard?welcome=1', 303);
+    }
+  }
+}
+
+const perks = [
+  `Your own link, and a code for ${PARTNERS.discountPercent}% off`,
+  `${euro(perCustomer('private'))} a month per Private customer, ${euro(perCustomer('company'))} per Company customer, for ${PARTNERS.months} months`,
+  'Monthly payouts by Stripe or PayPal',
+];
+---
+
+<Partners title="Join Godmode Partners" description={`Sign up for Godmode Partners and earn ${ratePercent()}% of every payment from the customers you bring.`}>
+  <main class="relative isolate overflow-hidden pt-[110px] pb-16 sm:pt-[140px] sm:pb-24">
+    <div class="hero-wash pointer-events-none absolute inset-x-0 top-0 -z-10 h-[700px]" aria-hidden="true"></div>
+    <div class="container-x grid items-start gap-10 lg:grid-cols-[0.9fr_1.1fr] lg:gap-16">
+      <div class="lg:pt-8">
+        <p class="eyebrow">{PARTNERS.name}</p>
+        <h1 class="h-section mt-5 !text-[clamp(36px,4.6vw,56px)]">Join and start <span class="serif">earning.</span></h1>
+        <ul class="mt-8 grid gap-3 text-[15.5px] text-text-2">
+          {perks.map((x) => <li class="flex items-start gap-2.5"><Icon name="check" size={18} stroke={2.4} class="mt-0.5 flex-none text-brand" />{x}</li>)}
+        </ul>
+        <p class="mt-8 text-[14.5px] text-muted">Already a partner? <a href="/partners/login" class="link">Log in</a></p>
+      </div>
+
+      <form method="post" class="card p-6 sm:p-8" data-join novalidate>
+        <div class="grid gap-4 sm:grid-cols-2">
+          <label class="field">
+            <span>Name</span>
+            <input class="field-input" name="name" required autocomplete="name" maxlength="80" value={v.name} data-name />
+          </label>
+          <label class="field">
+            <span>Email</span>
+            <input class="field-input" name="email" type="email" required autocomplete="email" maxlength="200" value={v.email} />
+          </label>
+        </div>
+        <label class="field mt-4">
+          <span>Your code</span>
+          <input
+            class="field-input font-mono uppercase tracking-[0.04em]"
+            name="code"
+            required
+            minlength="3"
+            maxlength="20"
+            pattern="[A-Za-z0-9]{3,20}"
+            autocomplete="off"
+            spellcheck="false"
+            placeholder="MIACLIPS"
+            value={v.code}
+            data-code
+          />
+          <small class="text-[13px] font-normal text-dim">usegodmode.com/r/<span class="font-mono text-text-2" data-preview>{v.code || 'YOURCODE'}</span></small>
+        </label>
+        <label class="field mt-4">
+          <span>Country</span>
+          <span class="relative block">
+            <select class="field-input appearance-none pr-10" name="country" required>
+              <option value="" disabled selected={!v.country}>Choose…</option>
+              {COUNTRIES.map((c) => <option value={c.code} selected={c.code === v.country}>{c.name}</option>)}
+            </select>
+            <Icon name="chevron-down" size={16} class="pointer-events-none absolute top-1/2 right-4 -translate-y-1/2 text-dim" />
+          </span>
+        </label>
+        <label class="field mt-4">
+          <span>Where you post <small>(optional)</small></span>
+          <textarea class="field-input !min-h-[88px]" name="links" rows="2" maxlength="1000" placeholder="tiktok.com/@you, youtube.com/@you">{v.links}</textarea>
+        </label>
+        <label class="mt-5 flex items-start gap-3 text-[14px] leading-relaxed text-text-2">
+          <input type="checkbox" name="terms" required class="mt-1 size-4 flex-none accent-[var(--brand)]" />
+          <span>I am 18 or older, mark every video with #ad and the platform’s paid-partnership label, and accept the <a href="/partners/terms" target="_blank" class="link">program terms</a>.</span>
+        </label>
+        <label class="sr-only" aria-hidden="true">Website<input name="website" tabindex="-1" autocomplete="off" /></label>
+        {error && <p class="mt-5 rounded-xl bg-[rgb(184_50_59/0.07)] px-4 py-3 text-[14px] text-danger" role="alert">{error}</p>}
+        <button type="submit" class="btn btn-primary btn-lg mt-6 w-full">
+          <span class="btn-label">Join {PARTNERS.name}</span>
+          <span class="btn-spinner" aria-hidden="true"></span>
+        </button>
+      </form>
+    </div>
+  </main>
+</Partners>
+
+<script>
+  const form = document.querySelector<HTMLFormElement>('[data-join]');
+  const name = form?.querySelector<HTMLInputElement>('[data-name]');
+  const code = form?.querySelector<HTMLInputElement>('[data-code]');
+  const preview = form?.querySelector('[data-preview]');
+  let touched = Boolean(code?.value);
+  const show = () => preview && (preview.textContent = code?.value || 'YOURCODE');
+  name?.addEventListener('input', () => {
+    if (touched || !code) return;
+    code.value = name.value.normalize('NFKD').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 16);
+    show();
+  });
+  code?.addEventListener('input', () => {
+    touched = true;
+    code.value = code.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 20);
+    show();
+  });
+  form?.addEventListener('submit', () => form.querySelector('button[type="submit"]')?.setAttribute('data-loading', ''));
+</script>

@@ -7,7 +7,8 @@
   "main": "./src/worker.ts",
   "assets": { "binding": "ASSETS", "directory": "./dist" },
   "observability": { "enabled": true },
-  // Hourly: lifecycle emails to buyers and trials, and the one abandoned-checkout email (src/lib/mail.ts), sent only with LIFECYCLE_EMAILS = "on".
+  // Hourly: lifecycle emails to buyers and trials, and the one abandoned-checkout email (src/lib/mail.ts), sent only with LIFECYCLE_EMAILS = "on";
+  // partner commissions and payouts (src/lib/partners.ts).
   "triggers": { "crons": ["17 * * * *"] },
   "send_email": [{ "name": "EMAIL", "remote": true }],
   "routes": [
@@ -16,10 +17,11 @@
     // Old home: installed apps, Stripe webhooks and runner scripts still call /api/* here; pages 301 to usegodmode.com
     { "pattern": "godmode.codext.de", "custom_domain": true }
   ],
-  // Per-IP limits: Stripe-backed endpoints, and the analytics beacon.
+  // Per-IP limits: Stripe-backed endpoints, the analytics beacon, and partner sign-up and sign-in.
   "ratelimits": [
     { "name": "CHECKOUT_LIMIT", "namespace_id": "1001", "simple": { "limit": 20, "period": 60 } },
-    { "name": "TRACK_LIMIT", "namespace_id": "1002", "simple": { "limit": 120, "period": 60 } }
+    { "name": "TRACK_LIMIT", "namespace_id": "1002", "simple": { "limit": 120, "period": 60 } },
+    { "name": "PARTNER_LIMIT", "namespace_id": "1003", "simple": { "limit": 10, "period": 60 } }
   ],
   "d1_databases": [
     {
@@ -37,7 +39,9 @@
     // usegodmode.com is onboarded in Cloudflare Email Sending (MAIL_FROM's domain).
     "LIFECYCLE_EMAILS": "on",
     "MAIL_FROM": "daniel@usegodmode.com",
-    "MAIL_REPLY_TO": "daniel.ehrhardt@codext.de"
+    "MAIL_REPLY_TO": "daniel.ehrhardt@codext.de",
+    // Godmode Partners: Stripe payouts the hourly cron sends per calendar month at most (approved ones above it wait).
+    "PARTNER_PAYOUT_MONTHLY_CAP_EUR": "1000"
   }
   // Secrets (wrangler secret put …): STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, ADMIN_PASSWORD, SESSION_SECRET,
   // GITHUB_TOKEN (fine-grained, read-only Contents on codextde/godmode-bot — serves downloads and updates)

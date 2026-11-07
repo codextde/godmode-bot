@@ -5,7 +5,7 @@
   "description": "Godmode Bot — the AI coworker that works like a human on your computer, with your logins, 2FA and tools. Powered by Claude Code + browser-use.",
   "license": "MIT",
   "type": "module",
-  "packageManager": "pnpm@12.9.1",
+  "packageManager": "pnpm@12.18.0",
   "engines": {
     "node": ">=22",
     "bun": ">=1.3"

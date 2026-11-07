@@ -10,3 +10,8 @@ allowBuilds:
   workerd: true
   ssh2: false
   cpu-features: false
+
+# rolldown's wasm binding pins the 2.0 beta of emnapi; mixed with 1.x it crashes `astro check`.
+overrides:
+  "@emnapi/core": ^1.11.3
+  "@emnapi/runtime": ^1.11.3

@@ -99,7 +99,10 @@ const tracking =
             var chosen = /(?:^|; )gm_lang=/.test(document.cookie);
             var ref = document.referrer && new URL(document.referrer).host === location.host;
             var de = (autoDeAll && !/[?&]utm_medium=paid\b/.test(location.search)) || /^de\b/i.test((navigator.languages && navigator.languages[0]) || navigator.language || '');
-            if (!chosen && !ref && de && !/[?&]lang=en\b/.test(location.search)) location.replace(autoDe + location.search + location.hash);
+            if (!chosen && !ref && de && !/[?&]lang=en\b/.test(location.search)) {
+              window.__gmAway = true;
+              location.replace(autoDe + location.search + location.hash);
+            }
           } catch (e) {}
         </script>
       )
@@ -114,6 +117,29 @@ const tracking =
     <script is:inline define:vars={{ tracking }}>
       window.__gmTracking = tracking;
     </script>
+    {
+      !bare && (
+        <script is:inline>
+          // Godmode Partners: ?ref=CODE on any page remembers the partner (cookie set by the server) and leaves the URL.
+          try {
+            var u = new URL(location.href);
+            var code = u.searchParams.get('ref');
+            if (code && !window.__gmAway) {
+              if (/^[A-Za-z0-9]{3,20}$/.test(code)) {
+                fetch('/api/partners/click', {
+                  method: 'POST',
+                  headers: { 'content-type': 'application/json' },
+                  body: JSON.stringify({ code: code, path: location.pathname }),
+                  keepalive: true,
+                });
+              }
+              u.searchParams.delete('ref');
+              history.replaceState(history.state, '', u.pathname + u.search + u.hash);
+            }
+          } catch (e) {}
+        </script>
+      )
+    }
     <script type="application/ld+json" set:html={JSON.stringify(jsonLd)} />
     {
       TRACKING.cfBeacon && (

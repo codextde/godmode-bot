@@ -30,23 +30,29 @@ const SELECT = `SELECT o.session_id, o.created_at, o.plan, o.email, o.name, o.li
 
 type Outgoing = { sessionId: string; kind: string; to: string; mail: Composed; headers?: Record<string, string> };
 
+/** Sends one email right away (no record): for sign-in links, which may be asked for more than once. */
+export async function sendMail(to: string, mail: Composed, headers?: Record<string, string>) {
+  if (!env.EMAIL) throw new Error('EMAIL binding is not configured');
+  return env.EMAIL.send({
+    from: { name: env.MAIL_FROM_NAME ?? 'Daniel from Godmode', email: env.MAIL_FROM ?? 'daniel@usegodmode.com' },
+    replyTo: env.MAIL_REPLY_TO ?? SITE.email,
+    to,
+    subject: mail.subject,
+    text: mail.text,
+    html: mail.html,
+    ...(headers ? { headers } : {}),
+  });
+}
+
 /** Claims the (session, kind) slot in `emails`, sends, and stores the message id; frees the slot again if sending fails. */
-async function sendOnce({ sessionId, kind, to, mail, headers }: Outgoing): Promise<boolean> {
+export async function sendOnce({ sessionId, kind, to, mail, headers }: Outgoing): Promise<boolean> {
   const claim = await db()
     .prepare(`INSERT OR IGNORE INTO emails (session_id, kind, sent_at) VALUES (?, ?, ?)`)
     .bind(sessionId, kind, Date.now())
     .run();
   if (!claim.meta.changes) return false;
   try {
-    const res = await env.EMAIL!.send({
-      from: { name: env.MAIL_FROM_NAME ?? 'Daniel from Godmode', email: env.MAIL_FROM ?? 'daniel@usegodmode.com' },
-      replyTo: env.MAIL_REPLY_TO ?? SITE.email,
-      to,
-      subject: mail.subject,
-      text: mail.text,
-      html: mail.html,
-      ...(headers ? { headers } : {}),
-    });
+    const res = await sendMail(to, mail, headers);
     await db().prepare(`UPDATE emails SET message_id = ? WHERE session_id = ? AND kind = ?`).bind(res.messageId, sessionId, kind).run();
     return true;
   } catch (e) {

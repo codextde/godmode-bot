@@ -15,23 +15,23 @@
     "stripe:setup": "node scripts/stripe-setup.mjs"
   },
   "dependencies": {
-    "@astrojs/cloudflare": "^14.4.4",
+    "@astrojs/cloudflare": "^14.4.6",
     "@astrojs/sitemap": "^3.7.4",
     "@fontsource-variable/geist": "^5.3.0",
     "@fontsource-variable/geist-mono": "^5.3.0",
     "@fontsource/instrument-serif": "^5.3.0",
     "@godmode/shared": "workspace:*",
     "@tailwindcss/vite": "^4.3.4",
-    "astro": "^7.4.5",
+    "astro": "^7.4.7",
     "sharp": "^0.35.5",
     "stripe": "^23.1.0",
     "tailwindcss": "^4.3.4"
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.12",
-    "@cloudflare/workers-types": "^5.20261104.1",
-    "lucide-static": "^1.68.0",
+    "@cloudflare/workers-types": "^5.20261106.1",
+    "lucide-static": "^1.69.0",
     "typescript": "^6.0.3",
-    "wrangler": "^4.157.0"
+    "wrangler": "^4.158.0"
   }
 }

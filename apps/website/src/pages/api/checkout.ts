@@ -8,6 +8,8 @@ import { foundingTaken, insertOpenOrder, type Attribution } from '@/lib/db';
 import { minLivemode } from '@/lib/entitlement';
 import { allowed, BOTS } from '@/lib/limit';
 import { setCheckoutCookie } from '@/lib/signed';
+import { refFromCookies } from '@/lib/partner-auth';
+import { activePartnerByCode } from '@/lib/partners';
 
 export const prerender = false;
 
@@ -64,7 +66,16 @@ export const POST: APIRoute = async ({ request, url, cookies }) => {
 
     const licenseKey = newLicenseKey();
     const founding = foundingOpen(await foundingTaken(minLivemode(), FOUNDING.start).catch(() => FOUNDING.seats));
-    const metadata: Record<string, string> = { plan, license_key: licenseKey, ...(founding ? { founding: '1' } : {}), ...attribution };
+    // The partner whose link this browser came through (Godmode Partners); a partner code entered at checkout wins later.
+    const ref = await refFromCookies(cookies);
+    const partner = ref ? await activePartnerByCode(ref).catch(() => null) : null;
+    const metadata: Record<string, string> = {
+      plan,
+      license_key: licenseKey,
+      ...(founding ? { founding: '1' } : {}),
+      ...attribution,
+      ...(partner ? { partner: partner.code } : {}),
+    };
     const mode = 'subscription';
     const managed = flag(env.STRIPE_MANAGED_PAYMENTS);
     const requireTos = flag(env.STRIPE_REQUIRE_TOS);
@@ -135,7 +146,7 @@ export const POST: APIRoute = async ({ request, url, cookies }) => {
     const session = await stripe().checkout.sessions.create(params);
 
     try {
-      await insertOpenOrder({ sessionId: session.id, plan, mode, licenseKey, livemode: session.livemode, attribution });
+      await insertOpenOrder({ sessionId: session.id, plan, mode, licenseKey, livemode: session.livemode, attribution, partnerId: partner?.id });
     } catch (e) {
       console.error('could not record open order', e);
     }

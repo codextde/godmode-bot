@@ -1,0 +1,160 @@
+---
+import Partners from '@/layouts/Partners.astro';
+import Icon from '@/components/ui/Icon.astro';
+import Words from '@/components/ui/Words.astro';
+import { KIT, PARTNERS } from '@/config/partners';
+import { RECORDINGS } from '@/config/recordings';
+
+const recordings = RECORDINGS.map((r) => ({
+  file: `/media/rec/${r.slug}.mp4`,
+  poster: `/media/rec/${r.slug}-poster.jpg`,
+  title: r.en.label,
+  note: `${r.en.title.split('.')[0]} · real run ${r.en.realRun}, ${r.en.speed}`,
+}));
+---
+
+<Partners title="Partner content kit" description="Hooks, talking points, key facts and screen recordings to cut your Godmode clips from.">
+  <main>
+    <section class="relative isolate overflow-hidden pt-[120px] pb-10 sm:pt-[150px] sm:pb-14">
+      <div class="hero-wash pointer-events-none absolute inset-x-0 top-0 -z-10 h-[700px]" aria-hidden="true"></div>
+      <div class="container-x max-w-[860px] text-center">
+        <p class="eyebrow justify-center" data-reveal>Content kit</p>
+        <Words as="h1" text="Everything you need to *post today.*" class="h-section mt-5" delay={80} />
+        <p class="lead mx-auto mt-6 max-w-[600px]" data-reveal style="--d:300">Real screen recordings to cut, hooks that stop the scroll, and the facts to get right.</p>
+        <nav class="mt-8 flex flex-wrap justify-center gap-2" data-reveal style="--d:380" aria-label="Kit sections">
+          {[['#videos', 'Videos'], ['#hooks', 'Hooks'], ['#points', 'Talking points'], ['#facts', 'Key facts'], ['#rules', 'Do’s and don’ts'], ['#disclosure', 'Disclosure']].map(([href, label]) => <a href={href} class="tab !h-9 !text-[14px]">{label}</a>)}
+        </nav>
+      </div>
+    </section>
+
+    <section id="videos" class="relative py-10 sm:py-14">
+      <div class="container-x">
+        <h2 class="text-[26px] font-semibold tracking-[-0.025em]">Videos to cut</h2>
+        <p class="mt-2 text-[15px] text-muted">Recorded on a normal Mac, real runs, only cut and sped up. Free to use in your clips about Godmode.</p>
+        <div class="mt-8 grid grid-cols-2 gap-4 lg:grid-cols-4">
+          {
+            KIT.videos.map((v) => (
+              <figure class="card flex flex-col p-2">
+                <div class="grid aspect-[4/5] place-items-center overflow-hidden rounded-[18px] bg-surface-2">
+                  <img src={v.poster} alt="" loading="lazy" class="max-h-full w-auto object-contain" />
+                </div>
+                <figcaption class="flex flex-1 flex-col gap-1 p-3">
+                  <span class="text-[14.5px] font-semibold tracking-[-0.01em]">{v.title}</span>
+                  <span class="text-[13px] text-muted">{v.note}</span>
+                  <a href={v.file} download class="link mt-auto inline-flex items-center gap-1.5 pt-2 text-[13.5px]"><Icon name="download" size={14} /> Download MP4</a>
+                </figcaption>
+              </figure>
+            ))
+          }
+        </div>
+        <div class="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+          {
+            recordings.map((v) => (
+              <figure class="card flex flex-col p-2">
+                <img src={v.poster} alt="" loading="lazy" class="aspect-[16/10] w-full rounded-[18px] object-cover" />
+                <figcaption class="flex flex-1 flex-col gap-1 p-3">
+                  <span class="text-[14.5px] font-semibold tracking-[-0.01em]">{v.title}</span>
+                  <span class="text-[13px] leading-snug text-muted">{v.note}</span>
+                  <a href={v.file} download class="link mt-auto inline-flex items-center gap-1.5 pt-2 text-[13.5px]"><Icon name="download" size={14} /> Download MP4</a>
+                </figcaption>
+              </figure>
+            ))
+          }
+        </div>
+      </div>
+    </section>
+
+    <section id="hooks" class="relative py-10 sm:py-14">
+      <div class="container-x grid gap-10 lg:grid-cols-[0.8fr_1.2fr]">
+        <div>
+          <h2 class="text-[26px] font-semibold tracking-[-0.025em]">Hooks</h2>
+          <p class="mt-2 max-w-[340px] text-[15px] text-muted">The first second decides. Start with the result, then show how it happened.</p>
+        </div>
+        <ul class="grid gap-2">
+          {
+            KIT.hooks.map((h) => (
+              <li class="card flex items-center gap-3 !rounded-2xl px-5 py-3.5">
+                <span class="flex-1 text-[15.5px] text-text">{h}</span>
+                <button type="button" class="btn btn-ghost btn-sm flex-none" data-copy={h}><Icon name="copy" size={14} /><span data-copy-label>Copy</span></button>
+              </li>
+            ))
+          }
+        </ul>
+      </div>
+    </section>
+
+    <section id="points" class="relative py-10 sm:py-14">
+      <div class="container-x grid gap-10 lg:grid-cols-[0.8fr_1.2fr]">
+        <div>
+          <h2 class="text-[26px] font-semibold tracking-[-0.025em]">Talking points</h2>
+          <p class="mt-2 max-w-[340px] text-[15px] text-muted">Say it in your own words. One point per clip is plenty.</p>
+        </div>
+        <ol class="grid gap-3">
+          {
+            KIT.talkingPoints.map((t, i) => (
+              <li class="flex gap-4">
+                <span class="step-num !size-9 flex-none !text-[15px]">{i + 1}</span>
+                <p class="pt-1.5 text-[15.5px] leading-relaxed text-text-2">{t}</p>
+              </li>
+            ))
+          }
+        </ol>
+      </div>
+    </section>
+
+    <section id="facts" class="relative py-10 sm:py-14">
+      <div class="container-x grid gap-10 lg:grid-cols-[0.8fr_1.2fr]">
+        <div>
+          <h2 class="text-[26px] font-semibold tracking-[-0.025em]">Key facts</h2>
+          <p class="mt-2 max-w-[340px] text-[15px] text-muted">Get these right in every clip.</p>
+        </div>
+        <dl class="card divide-y divide-line p-2">
+          {
+            KIT.facts.map(([k, v]) => (
+              <div class="grid gap-1 px-4 py-3 sm:grid-cols-[160px_1fr] sm:gap-4">
+                <dt class="text-[14px] text-muted">{k}</dt>
+                <dd class="text-[15px] font-medium text-text">{v}</dd>
+              </div>
+            ))
+          }
+        </dl>
+      </div>
+    </section>
+
+    <section id="rules" class="relative py-10 sm:py-14">
+      <div class="container-x grid gap-4 lg:grid-cols-2">
+        <div class="card p-7 sm:p-8">
+          <h2 class="flex items-center gap-2.5 text-[22px] font-semibold tracking-[-0.02em]"><Icon name="check" size={20} stroke={2.4} class="text-brand" /> Do</h2>
+          <ul class="mt-5 grid gap-3 text-[15px] leading-relaxed text-text-2">
+            {KIT.dos.map((x) => <li class="flex items-start gap-2.5"><span class="mt-2.5 size-1.5 flex-none rounded-full bg-brand"></span>{x}</li>)}
+          </ul>
+        </div>
+        <div class="card p-7 sm:p-8">
+          <h2 class="flex items-center gap-2.5 text-[22px] font-semibold tracking-[-0.02em]"><Icon name="x" size={20} stroke={2.4} class="text-[#8a3d1f]" /> Don’t</h2>
+          <ul class="mt-5 grid gap-3 text-[15px] leading-relaxed text-text-2">
+            {KIT.donts.map((x) => <li class="flex items-start gap-2.5"><span class="mt-2.5 size-1.5 flex-none rounded-full bg-peach"></span>{x}</li>)}
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section id="disclosure" class="relative py-10 sm:py-14">
+      <div class="container-x">
+        <div class="final-panel grid gap-8 p-6 sm:p-10 lg:grid-cols-[0.8fr_1.2fr] lg:p-12">
+          <div>
+            <h2 class="text-[26px] font-semibold tracking-[-0.025em]">Disclosure</h2>
+            <p class="mt-3 text-[15.5px] leading-relaxed text-text-2">{KIT.disclosure}</p>
+            <a href="/partners/terms" class="link mt-5 inline-flex text-[14.5px]">Program terms</a>
+          </div>
+          <div class="card p-5 sm:p-6">
+            <p class="text-[13px] text-muted">Caption to start from</p>
+            <p class="mt-3 text-[15px] leading-relaxed text-text">{KIT.caption('YOURCODE')}</p>
+            <p class="mt-4 text-[13px] text-dim">Your dashboard has it with your own code, ready to copy.</p>
+            <a href="/partners/dashboard" class="btn btn-primary btn-sm mt-5">Open your dashboard</a>
+          </div>
+        </div>
+        <p class="mt-8 text-center text-[14px] text-muted">Not a partner yet? <a href="/partners/join" class="link">Join {PARTNERS.name}</a></p>
+      </div>
+    </section>
+  </main>
+</Partners>

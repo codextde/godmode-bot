@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { differenceInCalendarDays, format, formatDistanceToNow } from "date-fns";
-import { ExternalLink, KeyRound, RefreshCw, Sparkles } from "lucide-react";
+import { ExternalLink, Gift, KeyRound, RefreshCw, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
-import type { LicensePlan, LicenseState, LicenseStatus } from "@godmode/shared";
+import { LICENSE_SITE, type LicensePlan, type LicenseState, type LicenseStatus } from "@godmode/shared";
 import { ActivatePanel, LicenseKeyForm } from "@/components/license/activate";
 import { ReminderEmailForm, ReminderEmailSet } from "@/components/license/reminder-email";
 import {
@@ -28,7 +28,7 @@ import { openExternal } from "@/lib/desktop";
 import { useLicense } from "@/lib/hooks";
 import { qk } from "@/lib/queryKeys";
 import { ToneBadge } from "./cloud-section";
-import { Callout, InfoRow, SectionHeading, SettingsGroup } from "./settings-kit";
+import { Callout, InfoRow, SectionHeading, SettingRow, SettingsGroup } from "./settings-kit";
 
 const STATUS = {
   active: { labelKey: "license.status.active", tone: "live" },
@@ -63,7 +63,10 @@ export function LicenseSection() {
     <div className="space-y-5">
       <SectionHeading title={t("license.title")} description={t("license.description")} />
       {license.data ? (
-        <LicenseCard state={license.data} />
+        <>
+          <LicenseCard state={license.data} />
+          <PartnersRow />
+        </>
       ) : license.isError ? (
         <Callout tone="danger" title={t("license.loadError")}>
           {errorMessage(license.error)}
@@ -218,4 +221,17 @@ function LicenseCard({ state: s }: { state: LicenseState }) {
 function NotEnforced() {
   const { t } = useTranslation("settings");
   return <Callout tone="muted">{t("license.notEnforced")}</Callout>;
+}
+
+function PartnersRow() {
+  const { t } = useTranslation("settings");
+  return (
+    <div className="rounded-xl border bg-card px-5 shadow-card">
+      <SettingRow label={t("license.partners.title")} description={t("license.partners.description")}>
+        <Button variant="outline" size="sm" onClick={() => void openExternal(`${LICENSE_SITE}/partners?utm_source=app&utm_medium=settings`)}>
+          <Gift /> {t("license.partners.open")}
+        </Button>
+      </SettingRow>
+    </div>
+  );
 }

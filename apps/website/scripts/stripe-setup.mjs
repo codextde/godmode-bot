@@ -22,9 +22,10 @@ const stripe = new Stripe(key);
 const mode = key.includes('_live_') ? 'LIVE' : 'TEST';
 const webhookApiVersion = process.env.STRIPE_WEBHOOK_API_VERSION ?? '2026-09-30.endive';
 
-// One product per offer; prices are found by lookup_key, products by metadata.godmode_product. The old USD prices
-// (godmode_monthly_usd, godmode_pro_monthly_usd, godmode_pro_yearly_usd) stay active so existing subscriptions keep
-// renewing; lifetime prices are retired below.
+// One product per offer; prices are found by lookup_key, products by metadata.godmode_product. Each price is in EUR
+// with the same amount in USD (Checkout shows the buyer's currency). The old USD prices (godmode_monthly_usd,
+// godmode_pro_monthly_usd, godmode_pro_yearly_usd) stay active so existing subscriptions keep renewing; lifetime
+// prices and the EUR-only prices are retired below.
 const PRODUCTS = [
   {
     key: 'private',
@@ -34,9 +35,10 @@ const PRODUCTS = [
     },
     prices: [
       {
-        lookup_key: 'godmode_private_monthly_eur',
-        unit_amount: 7900,
+        lookup_key: 'godmode_private_monthly',
+        unit_amount: 4900,
         currency: 'eur',
+        currency_options: { usd: { unit_amount: 4900, tax_behavior: 'inclusive' } },
         tax_behavior: 'inclusive',
         recurring: { interval: 'month' },
         metadata: { plan: 'private' },
@@ -51,9 +53,10 @@ const PRODUCTS = [
     },
     prices: [
       {
-        lookup_key: 'godmode_company_monthly_eur',
+        lookup_key: 'godmode_company_monthly',
         unit_amount: 49900,
         currency: 'eur',
+        currency_options: { usd: { unit_amount: 49900, tax_behavior: 'inclusive' } },
         tax_behavior: 'inclusive',
         recurring: { interval: 'month' },
         metadata: { plan: 'company' },
@@ -71,6 +74,7 @@ const WEBHOOK_EVENTS = [
   'customer.subscription.deleted',
   'charge.refunded',
   'charge.dispute.closed',
+  'invoice.paid',
 ];
 
 console.log(`Stripe setup (${mode} mode) for ${site}\n`);
@@ -103,9 +107,14 @@ for (const def of PRODUCTS) {
   }
 }
 
-// Lifetime is no longer sold: deactivate its prices so no new checkout can use them (never deleted; orders that
-// already used them are unaffected).
-const RETIRED_LOOKUP_KEYS = ['godmode_founder_lifetime_usd', 'godmode_lifetime_usd'];
+// Prices no longer sold: deactivated so no new checkout can use them (never deleted; subscriptions on them keep
+// renewing). Lifetime, and the EUR-only Private (€79) and Company prices replaced by the EUR + USD ones above.
+const RETIRED_LOOKUP_KEYS = [
+  'godmode_founder_lifetime_usd',
+  'godmode_lifetime_usd',
+  'godmode_private_monthly_eur',
+  'godmode_company_monthly_eur',
+];
 const retired = await stripe.prices.list({ lookup_keys: RETIRED_LOOKUP_KEYS, active: true, limit: 10 });
 for (const price of retired.data) {
   await stripe.prices.update(price.id, { active: false });

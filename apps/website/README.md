@@ -1,7 +1,7 @@
 # Godmode website
 
 The sales site for Godmode — https://usegodmode.com. Astro 7 on Cloudflare Workers, Stripe Checkout for
-Godmode Pro (free for 14 days in the app, then €79/month private or €499/month company), a D1 database for orders and cookieless analytics, and an admin dashboard.
+Godmode Pro (free for 14 days in the app, then €49/month private or €499/month company), a D1 database for orders and cookieless analytics, and an admin dashboard.
 
 ```
 src/config/site.ts        prices, guarantee, links, legal details, tracking IDs — edit here first
@@ -9,10 +9,11 @@ src/pages/index.astro     the landing page (sections in src/components/sections/
 src/pages/api/checkout    creates the Stripe Checkout Session (form POST or ?plan=… GET)
 src/pages/api/stripe-webhook  records orders, subscriptions and refunds (idempotent)
 src/pages/checkout/*      success page (license key + downloads) and the abandoned-checkout page
-src/pages/admin           sales dashboard (HTTP Basic auth, password = ADMIN_PASSWORD)
+src/pages/admin           sales and partner dashboards (HTTP Basic auth, password = ADMIN_PASSWORD)
+src/pages/partners        Godmode Partners: landing, sign-up, dashboard, content kit, terms (src/lib/partners.ts)
 src/pages/api/license     license lookup for the desktop app: GET /api/license?key=GM-… (trial/renewal state)
 src/pages/api/portal      Stripe customer portal by welcome-page cookie or ?key=GM-…
-migrations/               D1 schema (orders, events, leads, stripe_events, emails, checkout_recovery)
+migrations/               D1 schema (orders, events, leads, stripe_events, emails, checkout_recovery, partners)
 test/                     bun test: license rules, the webhook and email rules on an in-memory D1 (`pnpm test`)
 scripts/stripe-setup.mjs  creates products/prices, webhook and customer portal (idempotent)
 video/                    HyperFrames sources for the site and ad videos → public/media/
@@ -53,8 +54,9 @@ The site runs live on the Codext GmbH Stripe account (restricted key "Godmode We
 `2025-12-15.clover`). To set it up again, or on another account:
 
 1. `stripe login` with the account that should receive payouts.
-2. Create a restricted key (write: Products, Prices, Checkout Sessions, Customers, Customer portal, Webhook endpoints;
-   read: Charges and Refunds, Subscriptions)
+2. Create a restricted key (write: Products, Prices, Checkout Sessions, Customers, Customer portal, Webhook endpoints,
+   Coupons, Promotion codes, Connect (accounts, account links, login links), Transfers; read: Charges and Refunds,
+   Subscriptions, Invoices, PaymentIntents, Balance transactions)
    and run `STRIPE_SECRET_KEY=rk_live_… SITE_URL=https://usegodmode.com pnpm stripe:setup`.
    It prints the new `STRIPE_WEBHOOK_SECRET`. If Stripe answers "maximum of 3 unique versions of live webhook
    endpoints", add `STRIPE_WEBHOOK_API_VERSION=<a version the account's other live webhooks already use>`.
@@ -67,7 +69,9 @@ The site runs live on the Codext GmbH Stripe account (restricted key "Godmode We
 ## Plans
 
 Prices, the trial length and the guarantee live in `src/config/site.ts`; the Stripe prices are found by lookup key
-(`godmode_private_monthly_eur`, `godmode_company_monthly_eur`). Lifetime is no longer sold: `/api/checkout?plan=lifetime`
+(`godmode_private_monthly`, `godmode_company_monthly`: €49 and €499, with the same amounts in USD as currency options,
+so Checkout shows the buyer's currency). `pnpm stripe:setup` deactivates the earlier EUR-only prices
+(`godmode_private_monthly_eur`, `godmode_company_monthly_eur`); subscriptions on them keep renewing. Lifetime is no longer sold: `/api/checkout?plan=lifetime`
 answers 410 / redirects to pricing, and `pnpm stripe:setup` deactivates the old lifetime prices (never deletes them).
 Licenses sold earlier (lifetime, and the old $50, $39 and $348 plans, whose prices stay active so they keep renewing) stay valid.
 Free licenses can be issued from `/admin` and don't count toward revenue.
@@ -81,6 +85,24 @@ download, but only to people who opted in and never more than once per address (
 reports email and consent on expired sessions where it collected promotional consent, which it doesn't do for a DE
 business, so the opt-in comes from "Get this checkout by email" on `/checkout/canceled` (`/api/remind`). Unsubscribes
 (`/unsubscribe`, also one-click from the mail client) land in `unsubscribes`.
+
+## Godmode Partners
+
+Clippers post short videos about Godmode and earn 20% of every payment of the customers they bring, for 12 months
+(`src/config/partners.ts` holds every number; terms at `/partners/terms`).
+
+- `/partners` landing, `/partners/join` (signs the partner in right away and emails a link that confirms the address),
+  `/partners/login` (emailed sign-in link, 30 minutes, good once), `/partners/dashboard`, `/partners/kit`.
+- Attribution: `/r/CODE` or `?ref=CODE` on any page sets the signed `gm_ref` cookie (60 days, last click wins); checkout
+  copies it into the session and subscription metadata (`partner`). A partner's Stripe promotion code (code = partner
+  code, one shared coupon `godmode_partner_first_month`: 20% off the first invoice) entered at checkout wins over the
+  cookie. Self-referrals (same email) are kept as `rejected`.
+- The webhook records referrals (`checkout.session.completed`), commissions (`invoice.paid`, in EUR at Stripe's rate,
+  minus tax) and reversals (`charge.refunded`, lost `charge.dispute.closed`).
+- The hourly cron releases commission after 30 days, proposes payouts on the 1st (≥ €25, confirmed email, Stripe
+  Connect Express with payouts on or a PayPal address), sends every `approved` Stripe payout as a transfer (at most
+  `PARTNER_PAYOUT_MONTHLY_CAP_EUR` a month) and retries missing promotion codes. Approve payouts in `/admin/partners`
+  or by setting `status = 'approved'` in D1; PayPal payouts are paid by hand and marked paid there.
 
 ## Analytics
 

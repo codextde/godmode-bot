@@ -1,0 +1,420 @@
+---
+import { env } from 'cloudflare:workers';
+import Base from '@/layouts/Base.astro';
+import Logo from '@/components/ui/Logo.astro';
+import { checkAdmin } from '@/lib/auth';
+import { db } from '@/lib/db';
+import {
+  approvePayout,
+  cancelPayoutChecked,
+  cents,
+  createMissingPromotionCodes,
+  executeApprovedPayouts,
+  markPayoutPaid,
+  payoutMethod,
+  proposePayouts,
+  setPartnerStatus,
+  type Partner,
+} from '@/lib/partners';
+import { PARTNERS } from '@/config/partners';
+import { isPlan, PRICING } from '@/config/site';
+
+export const prerender = false;
+
+const denied = checkAdmin(Astro.request);
+if (denied) return denied;
+Astro.response.headers.set('cache-control', 'no-store');
+
+const live = Astro.url.searchParams.get('mode') !== 'test';
+const liveFlag = live ? 1 : 0;
+const back = (msg: string) => Astro.redirect(`/admin/partners?mode=${live ? 'live' : 'test'}&msg=${encodeURIComponent(msg)}`, 303);
+
+// Browsers send Basic auth with cross-site form posts too, so only same-origin posts are accepted.
+if (Astro.request.method === 'POST') {
+  if (Astro.request.headers.get('origin') !== Astro.url.origin) return back('Rejected: the form must be sent from this page.');
+  const form = await Astro.request.formData().catch(() => null);
+  const get = (k: string) => String(form?.get(k) ?? '').trim();
+  const id = Number(get('id'));
+  // The amount the page showed: approving or marking paid only works if the payout still has exactly that.
+  const amount = get('amount') === '' ? undefined : Number(get('amount'));
+  const D = db();
+  switch (get('action')) {
+    case 'status': {
+      const status = get('status');
+      if (status === 'active' || status === 'paused' || status === 'banned') await setPartnerStatus(id, status);
+      return back(`Partner ${id} is ${status}.`);
+    }
+    case 'rate': {
+      const pct = Number(get('rate'));
+      if (!(pct >= 0 && pct <= 50)) return back('Rate must be between 0 and 50%.');
+      await D.prepare(`UPDATE partners SET rate_bps = ? WHERE id = ?`).bind(Math.round(pct * 100), id).run();
+      return back(`Partner ${id} now earns ${pct}%.`);
+    }
+    case 'approve':
+      return back(
+        (await approvePayout(id, 'admin', amount))
+          ? `Payout ${id} approved. Stripe payouts go out with the next hourly run.`
+          : `Payout ${id} changed since you loaded the page. Check the amount and approve again.`,
+      );
+    case 'pay': {
+      const row = await D.prepare(`SELECT status FROM partner_payouts WHERE id = ?`).bind(id).first<{ status: string }>();
+      if (row?.status !== 'approved' && !(await approvePayout(id, 'admin', amount))) return back(`Payout ${id} changed since you loaded the page. Check the amount.`);
+      const paid = await executeApprovedPayouts(Date.now(), id);
+      const after = await D.prepare(`SELECT error FROM partner_payouts WHERE id = ?`).bind(id).first<{ error: string | null }>();
+      return back(paid.length ? `Payout ${id} sent.` : `Payout ${id} not sent: ${after?.error ?? 'not a Stripe payout'}.`);
+    }
+    case 'paypal_paid': {
+      const reference = get('reference').slice(0, 120);
+      if (!reference) return back('Enter the PayPal transaction ID.');
+      return back(
+        (await markPayoutPaid(id, { reference, amount }))
+          ? `Payout ${id} marked paid.`
+          : `Payout ${id} changed since you loaded the page (or is already paid). Check the amount.`,
+      );
+    }
+    case 'cancel': {
+      const result = await cancelPayoutChecked(id);
+      return back(
+        result === 'paid'
+          ? `Payout ${id} had already gone out with Stripe; it is marked paid now.`
+          : result === 'canceled'
+            ? `Payout ${id} canceled; its commissions are available again.`
+            : `Payout ${id} was not changed.`,
+      );
+    }
+    case 'propose': {
+      const ids = await proposePayouts();
+      return back(`${ids.length} payout${ids.length === 1 ? '' : 's'} proposed.`);
+    }
+    case 'clip': {
+      const status = get('status');
+      if (status === 'approved' || status === 'rejected' || status === 'submitted') {
+        await D.prepare(`UPDATE partner_clips SET status = ?, note = COALESCE(NULLIF(?, ''), note) WHERE id = ?`).bind(status, get('note').slice(0, 300), id).run();
+      }
+      return back(`Clip ${id} ${status}.`);
+    }
+    case 'views': {
+      const views = get('views') === '' ? null : Math.max(0, Math.round(Number(get('views')) || 0));
+      const likes = get('likes') === '' ? null : Math.max(0, Math.round(Number(get('likes')) || 0));
+      await D.prepare(`UPDATE partner_clips SET views = ?, likes = ?, views_checked_at = ? WHERE id = ?`).bind(views, likes, Date.now(), id).run();
+      return back(`Clip ${id} updated.`);
+    }
+    case 'promo': {
+      const r = await createMissingPromotionCodes(50);
+      return back(`Created ${r.created} of ${r.tried} missing promotion codes.`);
+    }
+    default:
+      return back('Unknown action.');
+  }
+}
+
+const D = db();
+type Row = Record<string, number | string | null>;
+const all = async (sql: string, ...args: unknown[]) => ((await D.prepare(sql).bind(...args).all()).results ?? []) as Row[];
+const one = async (sql: string, ...args: unknown[]) => ((await D.prepare(sql).bind(...args).first()) ?? {}) as Row;
+const n = (v: unknown) => Number(v ?? 0);
+const now = Date.now();
+const DAY = 86_400_000;
+const monthStart = Date.UTC(new Date(now).getUTCFullYear(), new Date(now).getUTCMonth(), 1);
+const sinceDay = new Date(now - 29 * DAY).toISOString().slice(0, 10);
+const monthDay = new Date(monthStart).toISOString().slice(0, 10);
+
+const [counts, active, clipStats, traffic, money, partners, payouts, clips, commissions, referrals, referred] = await Promise.all([
+  one(`SELECT COUNT(*) AS total, SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) AS active, SUM(CASE WHEN promotion_code_id IS NULL AND status = 'active' THEN 1 ELSE 0 END) AS no_promo FROM partners`),
+  one(
+    `SELECT COUNT(*) AS n FROM partners p WHERE
+       EXISTS (SELECT 1 FROM events e WHERE e.ref = p.code AND e.day >= ?1)
+       OR EXISTS (SELECT 1 FROM partner_clips c WHERE c.partner_id = p.id AND c.created_at >= ?2)
+       OR EXISTS (SELECT 1 FROM partner_commissions m WHERE m.partner_id = p.id AND m.created_at >= ?2)`,
+    monthDay,
+    monthStart,
+  ),
+  one(`SELECT COUNT(*) AS submitted, SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) AS approved, COALESCE(SUM(views), 0) AS views FROM partner_clips`),
+  one(
+    `SELECT SUM(CASE WHEN type = 'ref_click' THEN 1 ELSE 0 END) AS clicks, SUM(CASE WHEN type = 'download' THEN 1 ELSE 0 END) AS downloads
+     FROM events WHERE ref IS NOT NULL AND day >= ?`,
+    sinceDay,
+  ),
+  one(
+    `SELECT COALESCE(SUM(CASE WHEN status = 'pending' THEN amount_cents END), 0) AS pending,
+            COALESCE(SUM(CASE WHEN status = 'available' THEN amount_cents END), 0) AS available,
+            COALESCE(SUM(CASE WHEN status = 'paid' THEN amount_cents END), 0) AS paid,
+            (SELECT COALESCE(SUM(amount_cents), 0) FROM partner_payouts WHERE status IN ('proposed', 'approved', 'failed') AND livemode = ?1) AS due
+     FROM partner_commissions WHERE livemode = ?1`,
+    liveFlag,
+  ),
+  all(
+    `SELECT p.*,
+       (SELECT COUNT(*) FROM events e WHERE e.ref = p.code AND e.type = 'ref_click') AS clicks,
+       (SELECT COUNT(*) FROM events e WHERE e.ref = p.code AND e.type = 'download') AS downloads,
+       (SELECT COUNT(*) FROM partner_referrals r WHERE r.partner_id = p.id AND r.status = 'active' AND r.first_paid_at IS NOT NULL AND r.livemode = ?1) AS customers,
+       (SELECT COALESCE(SUM(amount_cents), 0) FROM partner_commissions c WHERE c.partner_id = p.id AND c.status <> 'reversed' AND c.livemode = ?1) AS earned,
+       (SELECT COALESCE(SUM(amount_cents), 0) FROM partner_commissions c WHERE c.partner_id = p.id AND c.status = 'available' AND c.livemode = ?1) AS balance,
+       (SELECT COUNT(*) FROM partner_clips c WHERE c.partner_id = p.id) AS clip_count
+     FROM partners p ORDER BY earned DESC, clicks DESC, p.created_at DESC LIMIT 200`,
+    liveFlag,
+  ),
+  all(
+    `SELECT pp.*, p.code, p.name, p.email, p.paypal_email, p.stripe_account_id FROM partner_payouts pp JOIN partners p ON p.id = pp.partner_id
+     WHERE pp.livemode = ? AND (pp.status IN ('proposed', 'approved', 'failed') OR pp.created_at >= ?)
+     ORDER BY CASE pp.status WHEN 'failed' THEN 0 WHEN 'approved' THEN 1 WHEN 'proposed' THEN 2 ELSE 3 END, pp.created_at DESC LIMIT 60`,
+    liveFlag,
+    now - 120 * DAY,
+  ),
+  all(`SELECT c.*, p.code FROM partner_clips c JOIN partners p ON p.id = c.partner_id ORDER BY CASE c.status WHEN 'submitted' THEN 0 ELSE 1 END, c.created_at DESC LIMIT 60`),
+  all(
+    `SELECT c.*, p.code, r.plan, r.email FROM partner_commissions c JOIN partners p ON p.id = c.partner_id LEFT JOIN partner_referrals r ON r.id = c.referral_id
+     WHERE c.livemode = ? ORDER BY c.created_at DESC, c.id DESC LIMIT 30`,
+    liveFlag,
+  ),
+  all(
+    `SELECT r.*, p.code FROM partner_referrals r JOIN partners p ON p.id = r.partner_id WHERE r.livemode = ? ORDER BY r.created_at DESC LIMIT 30`,
+    liveFlag,
+  ),
+  all(`SELECT partner_id, plan FROM partner_referrals WHERE livemode = ? AND status = 'active' AND first_paid_at IS NOT NULL`, liveFlag),
+]);
+
+const price = (plan: unknown) => (isPlan(plan) ? PRICING.plans[plan].price : PRICING.plans.private.price);
+const mrrOf = (partnerId?: number) => referred.filter((r) => partnerId == null || n(r.partner_id) === partnerId).reduce((s, r) => s + price(r.plan), 0);
+const eur = (v: number) => `€${v.toLocaleString('en-US')}`;
+const date = (ms: unknown) => (ms ? new Date(n(ms)).toISOString().slice(0, 10) : '—');
+const msg = Astro.url.searchParams.get('msg');
+const q = (mode: string) => `?mode=${mode}`;
+const input = 'h-8 rounded-lg bg-[rgb(0_0_0/0.3)] px-2.5 text-[12.5px] ring-1 ring-line-2 outline-none placeholder:text-dim focus:ring-brand';
+const tiles = [
+  ['Partners', n(counts.total), `${n(counts.active)} active · ${n(active.n)} active this month`],
+  ['Clips', n(clipStats.submitted), `${n(clipStats.approved)} approved · ${n(clipStats.views).toLocaleString('en-US')} views`],
+  ['Clicks · 30d', n(traffic.clicks), `${n(traffic.downloads)} downloads`],
+  ['Referred customers', referred.length, `${eur(mrrOf())} MRR`],
+  ['Commission', cents(n(money.pending) + n(money.available) + n(money.paid)), `${cents(n(money.pending))} pending · ${cents(n(money.available))} available · ${cents(n(money.paid))} paid`],
+  ['Payouts due', cents(n(money.due)), `Stripe cap ${eur(Number(env.PARTNER_PAYOUT_MONTHLY_CAP_EUR || PARTNERS.monthlyCapEur))} a month`],
+] as const;
+---
+
+<Base title="Partners" noindex bare>
+  <main class="pb-20" data-no-pageview>
+    <header class="border-b border-line">
+      <div class="container-x flex h-16 items-center justify-between gap-4">
+        <div class="flex items-center gap-5">
+          <a href={`/admin?mode=${live ? 'live' : 'test'}`} class="flex items-center gap-2.5"><Logo size={24} /><span class="text-[14px] text-muted hover:text-text">Sales</span></a>
+          <span class="text-[15px] font-semibold tracking-tight">Partners</span>
+        </div>
+        <div class="flex items-center gap-1.5 text-[13px]">
+          <a href={q('live')} class="tab !h-8" aria-current={live ? 'page' : undefined}>Live</a>
+          <a href={q('test')} class="tab !h-8" aria-current={!live ? 'page' : undefined}>Test</a>
+        </div>
+      </div>
+    </header>
+
+    <div class="container-x mt-8">
+      {!live && <p class="mb-6 rounded-xl p-3 text-[13px] text-warn ring-1 ring-[rgb(232_165_58/0.3)]">Showing Stripe test-mode money.</p>}
+      {msg && <p class="mb-6 rounded-xl p-3 text-[13px] text-text-2 ring-1 ring-line-2">{msg}</p>}
+
+      <section class="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+        {
+          tiles.map(([label, value, note]) => (
+            <div class="card p-5">
+              <p class="text-[13px] text-muted">{label}</p>
+              <p class="mt-2 text-[28px] leading-none font-semibold tracking-[-0.04em] tabular-nums">{value}</p>
+              <p class="mt-2 text-[12px] leading-snug text-dim">{note}</p>
+            </div>
+          ))
+        }
+      </section>
+
+      <section class="card mt-3 overflow-x-auto p-6">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <p class="text-[13px] text-muted">Partners</p>
+          <form method="post" class="flex flex-wrap items-center gap-3">
+            {n(counts.no_promo) > 0 && <span class="text-[12.5px] text-warn">{n(counts.no_promo)} without a promotion code</span>}
+            <button name="action" value="promo" class="btn btn-ghost btn-sm">Create missing promotion codes</button>
+          </form>
+        </div>
+        <table class="mt-4 w-full min-w-[1180px] text-[13px]">
+          <thead class="text-left text-[12px] text-dim">
+            <tr>
+              <th class="py-2 font-normal">Code</th><th class="font-normal">Name</th><th class="font-normal">Country</th><th class="font-normal">Joined</th>
+              <th class="text-right font-normal">Clicks</th><th class="text-right font-normal">Downloads</th><th class="text-right font-normal">Customers</th>
+              <th class="text-right font-normal">MRR</th><th class="text-right font-normal">Earned</th><th class="text-right font-normal">Balance</th>
+              <th class="pl-4 font-normal">Payout</th><th class="font-normal">Status</th><th class="font-normal">Rate</th>
+            </tr>
+          </thead>
+          <tbody>
+            {partners.map((row) => {
+              const p = row as unknown as Partner;
+              const method = payoutMethod(p);
+              return (
+                <tr class="border-t border-line align-middle">
+                  <td class="py-2 font-mono text-[12px] text-text">{p.code}{!p.promotion_code_id && <span class="ml-1 text-warn" title="No Stripe promotion code">*</span>}</td>
+                  <td class="text-text-2" title={`${p.email}${p.links ? `\n${p.links}` : ''}`}>
+                    {p.name}
+                    <span class="block text-[11.5px] text-dim">{p.email}{p.email_verified_at ? '' : ' · unverified'}</span>
+                  </td>
+                  <td class="text-muted">{p.country ?? '—'}</td>
+                  <td class="font-mono text-[12px] text-muted">{date(p.created_at)}</td>
+                  <td class="text-right tabular-nums">{n(row.clicks)}</td>
+                  <td class="text-right tabular-nums">{n(row.downloads)}</td>
+                  <td class="text-right tabular-nums">{n(row.customers)}</td>
+                  <td class="text-right tabular-nums">{eur(mrrOf(p.id))}</td>
+                  <td class="text-right tabular-nums">{cents(n(row.earned))}</td>
+                  <td class="text-right tabular-nums">{cents(n(row.balance))}</td>
+                  <td class="pl-4 text-muted">{method === 'stripe' ? 'Stripe' : method === 'paypal' ? 'PayPal' : p.stripe_account_id ? 'Stripe (pending)' : '—'}</td>
+                  <td>
+                    <form method="post" class="flex items-center gap-1.5">
+                      <input type="hidden" name="id" value={p.id} />
+                      <input type="hidden" name="action" value="status" />
+                      <span class:list={['chip', p.status === 'active' ? 'chip-brand' : 'chip-warn']}>{p.status}</span>
+                      {p.status !== 'active' && <button name="status" value="active" class="text-[12px] text-muted hover:text-text">activate</button>}
+                      {p.status === 'active' && <button name="status" value="paused" class="text-[12px] text-muted hover:text-text">pause</button>}
+                      {p.status !== 'banned' && <button name="status" value="banned" class="text-[12px] text-muted hover:text-danger">ban</button>}
+                    </form>
+                  </td>
+                  <td>
+                    <form method="post" class="flex items-center gap-1">
+                      <input type="hidden" name="id" value={p.id} />
+                      <input type="hidden" name="action" value="rate" />
+                      <input name="rate" type="number" min="0" max="50" step="0.5" value={p.rate_bps / 100} class:list={[input, 'w-16 text-right']} aria-label="Commission %" />
+                      <button class="text-[12px] text-muted hover:text-text">%</button>
+                    </form>
+                  </td>
+                </tr>
+              );
+            })}
+            {!partners.length && <tr><td colspan="13" class="py-2 text-dim">No partners yet.</td></tr>}
+          </tbody>
+        </table>
+      </section>
+
+      <section class="card mt-3 overflow-x-auto p-6">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <p class="text-[13px] text-muted">Payouts · proposed on the 1st, Stripe ones sent hourly once approved</p>
+          <form method="post"><button name="action" value="propose" class="btn btn-ghost btn-sm">Propose payouts now</button></form>
+        </div>
+        <table class="mt-4 w-full min-w-[980px] text-[13px]">
+          <thead class="text-left text-[12px] text-dim">
+            <tr><th class="py-2 font-normal">#</th><th class="font-normal">Created</th><th class="font-normal">Partner</th><th class="text-right font-normal">Amount</th><th class="pl-4 font-normal">Method</th><th class="font-normal">Status</th><th class="font-normal">Actions</th></tr>
+          </thead>
+          <tbody>
+            {payouts.map((x) => (
+              <tr class="border-t border-line align-middle">
+                <td class="py-2 pr-3 font-mono text-[12px] text-muted">{x.id}</td>
+                <td class="pr-3 font-mono text-[12px] whitespace-nowrap text-muted">{date(x.created_at)}</td>
+                <td class="pr-3 whitespace-nowrap text-text-2">{x.code} <span class="text-dim">· {x.name}</span></td>
+                <td class="text-right font-medium tabular-nums">{cents(n(x.amount_cents))}</td>
+                <td class="pl-4 text-muted">{x.method === 'paypal' ? <>PayPal<span class="block text-[11.5px] text-dim">{x.paypal_email ?? '—'}</span></> : 'Stripe'}</td>
+                <td>
+                  <span class:list={['chip', x.status === 'paid' && 'chip-brand', (x.status === 'failed' || x.error) && x.status !== 'paid' && 'chip-warn']}>{x.status}</span>
+                  {x.error && x.status !== 'paid' && <span class="ml-1.5 text-[12px] text-warn">{x.error}</span>}
+                  {x.status === 'paid' && <span class="ml-1.5 font-mono text-[11.5px] text-dim">{date(x.paid_at)} {x.stripe_transfer_id ?? x.reference ?? ''}</span>}
+                </td>
+                <td>
+                  {(x.status === 'proposed' || x.status === 'approved' || x.status === 'failed') && (
+                    <div class="flex flex-wrap items-center gap-2">
+                      {x.status !== 'approved' && (
+                        <form method="post"><input type="hidden" name="id" value={x.id} /><input type="hidden" name="amount" value={x.amount_cents} /><button name="action" value="approve" class="btn btn-ghost btn-sm !h-8">Approve</button></form>
+                      )}
+                      {x.method === 'stripe' ? (
+                        <form method="post"><input type="hidden" name="id" value={x.id} /><input type="hidden" name="amount" value={x.amount_cents} /><button name="action" value="pay" class="btn btn-ghost btn-sm !h-8">Pay now</button></form>
+                      ) : (
+                        <form method="post" class="flex items-center gap-1.5">
+                          <input type="hidden" name="id" value={x.id} />
+                          <input type="hidden" name="amount" value={x.amount_cents} />
+                          <input name="reference" placeholder="PayPal transaction ID" class:list={[input, 'w-44']} />
+                          <button name="action" value="paypal_paid" class="btn btn-ghost btn-sm !h-8">Mark paid</button>
+                        </form>
+                      )}
+                      <form method="post"><input type="hidden" name="id" value={x.id} /><button name="action" value="cancel" class="text-[12px] text-muted hover:text-danger">cancel</button></form>
+                    </div>
+                  )}
+                </td>
+              </tr>
+            ))}
+            {!payouts.length && <tr><td colspan="7" class="py-2 text-dim">No payouts yet.</td></tr>}
+          </tbody>
+        </table>
+      </section>
+
+      <section class="card mt-3 overflow-x-auto p-6">
+        <p class="text-[13px] text-muted">Clips</p>
+        <table class="mt-4 w-full min-w-[980px] text-[13px]">
+          <thead class="text-left text-[12px] text-dim">
+            <tr><th class="py-2 font-normal">Added</th><th class="font-normal">Partner</th><th class="font-normal">Clip</th><th class="font-normal">Status</th><th class="font-normal">Views · likes</th></tr>
+          </thead>
+          <tbody>
+            {clips.map((c) => (
+              <tr class="border-t border-line align-middle">
+                <td class="py-2 font-mono text-[12px] text-muted">{date(c.created_at)}</td>
+                <td class="font-mono text-[12px] text-text-2">{c.code}</td>
+                <td class="max-w-[360px] truncate"><span class="text-muted">{c.platform} · </span><a href={String(c.url)} target="_blank" rel="noopener noreferrer" class="text-text-2 hover:text-text">{String(c.url).replace(/^https:\/\//, '')}</a></td>
+                <td>
+                  <form method="post" class="flex items-center gap-1.5">
+                    <input type="hidden" name="id" value={c.id} />
+                    <input type="hidden" name="action" value="clip" />
+                    <span class:list={['chip', c.status === 'approved' && 'chip-brand', c.status === 'rejected' && 'chip-warn']}>{c.status}</span>
+                    {c.status !== 'approved' && <button name="status" value="approved" class="text-[12px] text-muted hover:text-text">approve</button>}
+                    {c.status !== 'rejected' && <button name="status" value="rejected" class="text-[12px] text-muted hover:text-danger">reject</button>}
+                  </form>
+                </td>
+                <td>
+                  <form method="post" class="flex items-center gap-1">
+                    <input type="hidden" name="id" value={c.id} />
+                    <input type="hidden" name="action" value="views" />
+                    <input name="views" type="number" min="0" value={c.views ?? ''} placeholder="views" class:list={[input, 'w-24']} />
+                    <input name="likes" type="number" min="0" value={c.likes ?? ''} placeholder="likes" class:list={[input, 'w-20']} />
+                    <button class="text-[12px] text-muted hover:text-text">save</button>
+                  </form>
+                </td>
+              </tr>
+            ))}
+            {!clips.length && <tr><td colspan="5" class="py-2 text-dim">No clips yet.</td></tr>}
+          </tbody>
+        </table>
+      </section>
+
+      <section class="mt-3 grid gap-3 xl:grid-cols-2">
+        <div class="card overflow-x-auto p-6">
+          <p class="text-[13px] text-muted">Recent commissions</p>
+          <table class="mt-4 w-full min-w-[560px] text-[13px]">
+            <thead class="text-left text-[12px] text-dim">
+              <tr><th class="py-2 font-normal">Date</th><th class="font-normal">Partner</th><th class="font-normal">Kind</th><th class="text-right font-normal">Base</th><th class="text-right font-normal">Amount</th><th class="pl-4 font-normal">Status</th></tr>
+            </thead>
+            <tbody>
+              {commissions.map((c) => (
+                <tr class="border-t border-line">
+                  <td class="py-2 font-mono text-[12px] text-muted">{date(c.created_at)}</td>
+                  <td class="font-mono text-[12px] text-text-2">{c.code}</td>
+                  <td class="text-muted" title={`${c.invoice_id} · ${c.kind}`}>{c.kind === 'sale' ? (isPlan(c.plan) ? c.plan : 'sale') : String(c.kind).startsWith('refund') ? 'refund' : c.kind}</td>
+                  <td class="text-right tabular-nums text-muted">{cents(n(c.base_cents))}</td>
+                  <td class:list={['text-right tabular-nums', n(c.amount_cents) < 0 && 'text-danger']}>{cents(n(c.amount_cents))}</td>
+                  <td class="pl-4"><span class:list={['chip', c.status === 'available' && 'chip-brand', c.status === 'reversed' && 'chip-warn']}>{c.status}</span></td>
+                </tr>
+              ))}
+              {!commissions.length && <tr><td colspan="6" class="py-2 text-dim">No commissions yet.</td></tr>}
+            </tbody>
+          </table>
+        </div>
+        <div class="card overflow-x-auto p-6">
+          <p class="text-[13px] text-muted">Recent referrals</p>
+          <table class="mt-4 w-full min-w-[560px] text-[13px]">
+            <thead class="text-left text-[12px] text-dim">
+              <tr><th class="py-2 font-normal">Date</th><th class="font-normal">Partner</th><th class="font-normal">Customer</th><th class="font-normal">Plan</th><th class="font-normal">Via</th><th class="font-normal">Status</th></tr>
+            </thead>
+            <tbody>
+              {referrals.map((r) => (
+                <tr class="border-t border-line">
+                  <td class="py-2 font-mono text-[12px] text-muted">{date(r.created_at)}</td>
+                  <td class="font-mono text-[12px] text-text-2">{r.code}</td>
+                  <td class="text-text-2">{r.email ?? '—'}</td>
+                  <td class="text-muted">{r.plan ?? '—'}</td>
+                  <td class="text-muted">{r.source}</td>
+                  <td><span class:list={['chip', r.status === 'active' && 'chip-brand', r.status === 'rejected' && 'chip-warn']}>{r.status === 'rejected' ? 'self-referral' : r.status}{r.status === 'active' && !r.first_paid_at ? ' · unpaid' : ''}</span></td>
+                </tr>
+              ))}
+              {!referrals.length && <tr><td colspan="6" class="py-2 text-dim">No referrals yet.</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  </main>
+</Base>
