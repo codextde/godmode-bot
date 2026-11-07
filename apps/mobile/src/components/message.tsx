@@ -3,8 +3,8 @@ import { Image } from "expo-image";
 import { useRecyclingState } from "@shopify/flash-list";
 import { format } from "date-fns";
 import { router } from "expo-router";
-import { memo, useContext, useEffect, useMemo } from "react";
-import { LayoutAnimation, Pressable, StyleSheet, View } from "react-native";
+import { Fragment, memo, useContext, useEffect, useMemo } from "react";
+import { Alert, LayoutAnimation, Pressable, StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import Animated, { FadeIn, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming } from "react-native-reanimated";
 import type { Agent, Attachment, CharacterMood, CompactInfo, Message, MessageBlock } from "@godmode/shared";
@@ -17,16 +17,20 @@ import { FileChip } from "./attachments";
 import { CALL_STATUS, callName, openCall } from "./call-parts";
 import { Icon, type IconName } from "./icon";
 import { Markdown } from "./markdown";
+import { McpAppSlots } from "./mcp-app-view";
 import { ChatScope, QuestionCard } from "./question-card";
 import { RemoteImage } from "./remote-image";
 import { Row, T, tap } from "./ui";
+import { errorText } from "@/lib/api";
 import { cardKindOf, quoteOf, type CardKind } from "@/lib/chat-blocks";
 import { useDrafts } from "@/lib/composer";
 import { toolLabel } from "@/lib/format";
 import { useChatPrefs, useLightAnimations } from "@/lib/chat-prefs";
 import { useNow } from "@/lib/hooks";
 import { dateLocale, t as translate } from "@/lib/i18n";
+import { useSettings } from "@/lib/setup";
 import { radius, space, useColors } from "@/lib/theme";
+import { readAloud, stopReading, useReadAloud } from "@/lib/voice-mode";
 
 type Step = Extract<MessageBlock, { type: "tool_use" | "thinking" }>;
 type ToolUse = Extract<MessageBlock, { type: "tool_use" }>;
@@ -164,7 +168,10 @@ export const AssistantMessage = memo(function AssistantMessage({ blocks, streami
       {parts.length === 0 && streaming ? <Thinking /> : null}
       {parts.map((p, i) =>
         p.kind === "steps" ? (
-          <Steps key={i} steps={p.steps} live={streaming && p === last} />
+          <Fragment key={i}>
+            <Steps steps={p.steps} live={streaming && p === last} />
+            <McpAppSlots steps={p.steps} />
+          </Fragment>
         ) : p.kind === "card" ? (
           <ToolCard key={p.block.id} kind={p.card} block={p.block} streaming={!!streaming} />
         ) : p.kind === "subagent" ? (
@@ -207,6 +214,7 @@ function ReplyActions({ text }: { text: string }) {
     <View style={styles.actions}>
       <CopyReply text={text} />
       {scope ? <QuoteReply text={text} conversationId={scope.conversationId} /> : null}
+      <ReadReply text={text} />
     </View>
   );
 }
@@ -268,6 +276,34 @@ function QuoteReply({ text, conversationId }: { text: string; conversationId: st
       <Icon name={quoted ? "check" : "quote"} size={13} color={quoted ? c.success : c.textFaint} />
       <T variant="caption" color={quoted ? c.success : c.textFaint}>
         {quoted ? t("message.quoted") : t("message.quote")}
+      </T>
+    </Pressable>
+  );
+}
+
+/** Reads the reply out, or stops; only with voice switched on in Settings → Voice. */
+function ReadReply({ text }: { text: string }) {
+  const c = useColors();
+  const { t } = useTranslation("components");
+  const voice = useSettings().data?.voice;
+  const reading = useReadAloud((s) => s.key === text);
+  if (!voice?.enabled) return null;
+  const label = reading ? t("message.stopReading") : t("message.readAloud");
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      hitSlop={10}
+      onPress={() => {
+        tap();
+        if (reading) stopReading();
+        else readAloud(text, voice, text).catch((err: unknown) => Alert.alert(t("message.readFailed"), errorText(err)));
+      }}
+      style={({ pressed }) => [styles.copy, pressed && { backgroundColor: c.sunken }]}
+    >
+      <Icon name={reading ? "stop" : "speaker"} size={13} color={reading ? c.text : c.textFaint} />
+      <T variant="caption" color={reading ? c.text : c.textFaint}>
+        {reading ? t("message.stop") : t("message.read")}
       </T>
     </Pressable>
   );

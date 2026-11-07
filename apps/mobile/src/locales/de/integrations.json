@@ -75,5 +75,82 @@
     "stop": "Stoppen",
     "interrupts": "Neu starten oder Stoppen unterbricht Agenten, die darin arbeiten.",
     "failed": "VM konnte nicht geändert werden"
+  },
+  "composioAdmin": {
+    "statusFailed": "Composio-Einstellungen nicht erreichbar",
+    "connectionsFailed": "Verbundene Konten konnten nicht geladen werden",
+    "status": {
+      "active": "Aktiv",
+      "pending": "Wartet auf Anmeldung",
+      "deleted": "Beim Anbieter gelöscht"
+    },
+    "key": {
+      "label": "API-Schlüssel",
+      "short": "Schlüssel",
+      "notSetUp": "Noch kein Composio-Schlüssel",
+      "connectedTitle": "Composio ist verbunden",
+      "invalidTitle": "Composio-Schlüssel funktioniert nicht",
+      "rejectedReplace": "Der Schlüssel wurde abgelehnt. Ersetze ihn durch einen gültigen.",
+      "pending": "Schlüssel gespeichert, Prüfung läuft.",
+      "stored": "Verschlüsselt im Tresor gespeichert, wird nie wieder angezeigt",
+      "rejected": "Composio hat diesen Schlüssel abgelehnt",
+      "rejectedHint": "Prüf ihn noch einmal in deinem Composio-Dashboard.",
+      "saveFailed": "Composio-Schlüssel konnte nicht gespeichert werden",
+      "valid": "Schlüssel ist gültig",
+      "checkFailed": "Schlüssel konnte nicht geprüft werden",
+      "recheck": "Erneut prüfen",
+      "replace": "Schlüssel ersetzen",
+      "checking": "Wird geprüft…",
+      "save": "Schlüssel speichern",
+      "getKey": "Kostenlosen Schlüssel auf app.composio.dev holen",
+      "removeTitle": "Composio-Schlüssel entfernen?",
+      "removeDescription": "Agenten verlieren den Zugriff auf alle Composio-Apps, bis du wieder einen Schlüssel hinzufügst. Deine verbundenen Konten bleiben bei Composio.",
+      "removeConfirm": "Schlüssel entfernen"
+    },
+    "connections": {
+      "global": "Jeder Agent",
+      "connectedAgo": "Verbunden {{ago}}",
+      "checkStatus": "Status prüfen",
+      "isActive": "Verbindung ist aktiv",
+      "statusIs": "Status: {{status}}",
+      "refreshFailed": "Verbindung konnte nicht geprüft werden",
+      "disconnect": "Trennen",
+      "disconnectTitle": "{{name}} trennen?",
+      "disconnectDescription": "Agenten in diesem Geltungsbereich verlieren sofort den Zugriff auf dieses Konto. Du kannst es jederzeit neu verbinden.",
+      "disconnectFailed": "Verbindung konnte nicht getrennt werden",
+      "empty": "Verbinde Gmail, Slack, Kalender oder eine andere App, und deine Agenten bekommen ihre Aktionen als Tools."
+    },
+    "gallery": {
+      "title": "App verbinden",
+      "search": "Apps suchen",
+      "loadFailed": "Composio-Apps konnten nicht geladen werden",
+      "noMatch": "Keine Apps passen zu „{{search}}“",
+      "none": "Keine Apps",
+      "noDescription": "Keine Beschreibung.",
+      "connected": "Verbunden",
+      "accounts": "{{n}} Konten",
+      "noSignIn": "Ohne Anmeldung"
+    },
+    "connect": {
+      "title": "{{name}} verbinden",
+      "whoCanUse": "Wer darf dieses Konto nutzen?",
+      "noAuth": "Diese App braucht keine Anmeldung, sie ist sofort aktiv.",
+      "signInHint": "Du meldest dich auf der Seite von {{name}} in deinem Browser an. Godmode sieht dieses Passwort nie; Composio verwahrt das Token.",
+      "continueTo": "Weiter zu {{name}}",
+      "otherApp": "Andere App wählen",
+      "waiting": "Warte, bis du im Browser fertig bist…",
+      "waitingHint": "Melde dich bei {{name}} an und erlaube den Zugriff. Das aktualisiert sich von selbst, sobald Composio die Verbindung bestätigt.",
+      "reopen": "Anmeldeseite erneut öffnen",
+      "checkNow": "Jetzt prüfen",
+      "isConnected": "{{name}} ist verbunden",
+      "availableTo": "Verfügbar für {{who}} ab dem nächsten Lauf.",
+      "failed": "{{name}} konnte nicht verbunden werden",
+      "reportedAs": "Composio meldet die Verbindung als {{status}}.",
+      "timedOut": "Zeitüberschreitung beim Warten auf die Anmeldung. Du kannst es erneut versuchen.",
+      "theAgent": "den Agenten",
+      "agentsIn": "Agenten in {{name}}",
+      "theWorkspace": "Agenten im Workspace",
+      "everyAgent": "jeden Agenten"
+    }
   }
 }

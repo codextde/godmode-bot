@@ -4,9 +4,14 @@ import type {
   ApiToolInput,
   ApiToolTestResult,
   CardPurchase,
+  CardPurchasePatch,
   Credential,
   CredentialInput,
   MacPasswordStatus,
+  MissingLogin,
+  MissingLoginTotpChoices,
+  MissingLoginTotpLinkInput,
+  MissingLoginTotpLinkResult,
   Passkey,
   PasswordImportPreview,
   PasswordImportResult,
@@ -20,6 +25,8 @@ import type {
   SshKeyPatch,
   SshKeysOverview,
   SshManagedKey,
+  TotpAutoLinkResult,
+  TotpAutoLinkSuggestion,
   TotpCode,
   TotpEntry,
   TotpImportResult,
@@ -65,12 +72,25 @@ export const fullVaultApi = {
   importTotp: (uris: string[], workspaceId: string | null) => request<TotpImportResult>("POST", "/api/totp/import", { uris, workspaceId }),
   updateTotp: (totpId: string, input: Partial<TotpInput>) => request<TotpEntry>("PATCH", `/api/totp/${id(totpId)}`, input),
   deleteTotp: (totpId: string) => request<{ ok: true }>("DELETE", `/api/totp/${id(totpId)}`),
+  /** Logins and 2FA codes that belong together by service and account, like the desktop's suggestions. */
+  autolinkSuggestions: () => get<TotpAutoLinkSuggestion[]>("/api/totp/autolink"),
+  autolink: (pairs: { credentialId: string; totpId: string }[]) => request<TotpAutoLinkResult>("POST", "/api/totp/autolink", { pairs }),
   deletePasskey: (passkeyId: string) => request<{ ok: true }>("DELETE", `/api/passkeys/${id(passkeyId)}`),
   revealCard: (cardId: string, grant?: string) => request<PaymentCardSecrets>("POST", `/api/cards/${id(cardId)}/reveal`, {}, 0, grantHeader(grant)),
   createCard: (input: PaymentCardInput) => request<PaymentCard>("POST", "/api/cards", input),
   /** Loosening a card (higher limits, fewer approvals, unfreezing) needs a grant. */
   updateCard: (cardId: string, input: Partial<PaymentCardInput>, grant?: string) => request<PaymentCard>("PATCH", `/api/cards/${id(cardId)}`, input, 0, grantHeader(grant)),
   deleteCard: (cardId: string) => request<{ ok: true }>("DELETE", `/api/cards/${id(cardId)}`),
+  /** Paid, not charged, or a subscription ended or active again. Not charged and ended free room under the limits: a grant. */
+  updatePurchase: (purchaseId: string, patch: CardPurchasePatch, grant?: string) =>
+    request<CardPurchase>("PATCH", `/api/card-purchases/${id(purchaseId)}`, patch, 0, grantHeader(grant)),
+  /** A login an agent reported missing is saved: the report is resolved with it. */
+  resolveMissingLogin: (missingId: string, credentialId: string) => request<MissingLogin>("PATCH", `/api/missing-logins/${id(missingId)}`, { status: "resolved", credentialId }),
+  /** The site's logins and the 2FA codes that most likely belong to a missing-2FA report. */
+  totpChoices: (missingId: string) => get<MissingLoginTotpChoices>(`/api/missing-logins/${id(missingId)}/totp-choices`),
+  /** Links a saved 2FA code to the site's login and resolves the report. */
+  linkMissingTotp: (missingId: string, input: MissingLoginTotpLinkInput) =>
+    request<MissingLoginTotpLinkResult>("POST", `/api/missing-logins/${id(missingId)}/link-totp`, input),
   secrets: () => get<AppSecret[]>("/api/vault/secrets"),
   setSecret: (key: string, value: string) => request<{ ok: true }>("PUT", `/api/vault/secrets/${id(key)}`, { value }),
   deleteSecret: (key: string) => request<{ ok: true }>("DELETE", `/api/vault/secrets/${id(key)}`),
@@ -153,6 +173,8 @@ export const vk = {
   sshKeys: ["vault", "ssh-keys"],
   secrets: ["vault", "secrets"],
   apiTools: ["vault", "api-tools"],
+  autolink: ["vault", "totp-autolink"],
+  totpChoices: (missingId: string) => ["vault", "totp-choices", missingId],
 } as const;
 
 /** An older Godmode on the computer doesn't let phones read this yet. */
@@ -208,4 +230,45 @@ export function loginHost(c: Pick<Credential, "domains" | "url">): string {
   } catch {
     return "";
   }
+}
+
+/** "github.com", not "github" or a whole address: what a login's list of sites takes. */
+export const isDomain = (s: string) => /^[a-z0-9-]+(\.[a-z0-9-]+)+$/i.test(s);
+
+/** A login's domains plus what was typed or pasted (several at once, by comma or space), skipping what isn't a site. */
+export function withDomains(domains: string[], typed: string): string[] {
+  const next = [...domains];
+  for (const part of typed.split(/[,\s]+/)) {
+    const d = domainFromUrl(part);
+    if (d && isDomain(d) && !next.includes(d)) next.push(d);
+  }
+  return next;
+}
+
+/** "app.example.co.uk" → "example.co.uk". */
+export function rootDomain(domain: string): string {
+  const parts = domain.split(".").filter(Boolean);
+  if (parts.length <= 2) return domain;
+  const sld = parts[parts.length - 2]!;
+  if (sld.length <= 3 && parts[parts.length - 1]!.length === 2) return parts.slice(-3).join(".");
+  return parts.slice(-2).join(".");
+}
+
+const PRETTY: Record<string, string> = {
+  github: "GitHub",
+  gitlab: "GitLab",
+  linkedin: "LinkedIn",
+  youtube: "YouTube",
+  paypal: "PayPal",
+  openai: "OpenAI",
+  hubspot: "HubSpot",
+  wordpress: "WordPress",
+  icloud: "iCloud",
+};
+
+/** A login's name from its site, like the desktop: "github.com" → "GitHub", "stripe.com" → "Stripe". */
+export function prettyName(domain: string): string {
+  if (!domain) return "";
+  const label = rootDomain(domain).split(".")[0] ?? "";
+  return PRETTY[label] ?? label.charAt(0).toUpperCase() + label.slice(1);
 }

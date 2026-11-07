@@ -1,4 +1,4 @@
-import { githubBranchUrl, isOverdue, isWaiting, mergesOnApprove, reopenStatus, waitsForAnswer, waitsForSubtasks, waitsForTickets } from "@godmode/shared";
+import { githubBranchUrl, isOverdue, parsePullRequestUrl, isWaiting, mergesOnApprove, reopenStatus, waitsForAnswer, waitsForSubtasks, waitsForTickets } from "@godmode/shared";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { format, formatDistanceToNowStrict } from "date-fns";
 import { useMemo, useState, type ReactNode } from "react";
@@ -8,6 +8,7 @@ import { useTranslation } from "react-i18next";
 import type { Task, TaskStatus } from "@godmode/shared";
 import { CharacterAvatar } from "@/components/character";
 import { Composer } from "@/components/composer";
+import { useFullAccess } from "@/components/full-access";
 import { HeaderActions, type HeaderMenuItem } from "@/components/header-actions";
 import { Icon } from "@/components/icon";
 import { Markdown } from "@/components/markdown";
@@ -37,6 +38,7 @@ export default function TaskScreen() {
   const { data: agents, byId } = useAgents();
   const { workspaces, id: pickedWorkspace } = useWorkspace();
   const [picking, setPicking] = useState(false);
+  const { fullAccess } = useFullAccess();
 
   const onDone = (next: Task) => {
     queryClient.setQueryData(qk.task(id), next);
@@ -104,6 +106,7 @@ export default function TaskScreen() {
 
   const gone = task.error instanceof ApiError && task.error.status === 404;
   const t = task.data ?? (gone ? undefined : seed);
+  const prInApp = fullAccess === true && !!t?.pullRequest?.number && !!parsePullRequestUrl(t.pullRequest.url);
   if (!t) {
     if (!task.isError) return <TaskSkeleton />;
     return (
@@ -386,7 +389,9 @@ export default function TaskScreen() {
           style={styles.pr}
           onPress={() => {
             tap();
-            void Linking.openURL(t.pullRequest!.url);
+            // A pull request on GitHub opens here (checks, merge) for a phone with full access; anything else on the web.
+            if (prInApp) router.push({ pathname: "/pull-request", params: { url: t.pullRequest!.url } });
+            else void Linking.openURL(t.pullRequest!.url);
           }}
         >
           <Icon name="branch" size={17} color={c.textMuted} />
@@ -399,7 +404,7 @@ export default function TaskScreen() {
               {t.branch ? ` · ${t.branch}` : ""}
             </T>
           </View>
-          <Icon name="external" size={14} color={c.textFaint} />
+          <Icon name={prInApp ? "chevron" : "external"} size={prInApp ? 12 : 14} color={c.textFaint} />
         </Card>
       )}
 

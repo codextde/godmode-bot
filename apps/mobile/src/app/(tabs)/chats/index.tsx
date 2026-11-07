@@ -6,6 +6,7 @@ import { Alert, Pressable, RefreshControl, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import type { Agent, Conversation, Project } from "@godmode/shared";
 import { FilterToolbar } from "@/components/filter-toolbar";
+import { useFullAccess } from "@/components/full-access";
 import { ConversationRow } from "@/components/rows";
 import { Icon, type IconName } from "@/components/icon";
 import { SegmentedTabs } from "@/components/segmented-tabs";
@@ -44,7 +45,8 @@ function useChatRuns(): { running: Set<string>; queued: Set<string> } {
 }
 
 export default function Chats() {
-  const { t } = useTranslation("tabs");
+  const { t } = useTranslation(["tabs", "chat"]);
+  const { fullAccess } = useFullAccess();
   const [search, setSearch] = useState("");
   // The search reads every message on the computer: ask once the typing pauses.
   const [q, setQ] = useState("");
@@ -161,6 +163,7 @@ export default function Chats() {
           { icon: "archive", label: t("chats.archived"), onPress: () => router.push("/archived") },
           { icon: "compose", label: t("home.newChat"), onPress: () => router.push("/compose") },
         ]}
+        menu={fullAccess ? [{ icon: "inbox", title: t("chat:import.menu"), onPress: () => router.push("/chat-import") }] : []}
         filters={[
           {
             id: "status",

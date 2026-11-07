@@ -133,11 +133,13 @@ const ICONS = {
   creditCard: ["creditcard", "credit_card"],
   mic: ["mic.fill", "mic"],
   waveform: ["waveform", "graphic_eq"],
+  speaker: ["speaker.wave.2", "volume_up"],
   incognito: ["eye.slash", "visibility_off"],
   files: ["folder.fill", "folder"],
   gift: ["gift", "redeem"],
   quote: ["text.quote", "format_quote"],
   code: ["chevron.left.forwardslash.chevron.right", "code"],
+  download: ["square.and.arrow.down", "download"],
 } as const satisfies Record<string, readonly [SFSymbol, AndroidSymbol]>;
 
 export type IconName = keyof typeof ICONS;

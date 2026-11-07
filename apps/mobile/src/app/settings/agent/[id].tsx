@@ -11,6 +11,7 @@ import {
   heartbeatIntervalLabel,
   type Effort,
 } from "@godmode/shared";
+import { AgentAccess, AgentTeam } from "@/components/agent-setup";
 import { CharacterAvatar } from "@/components/character";
 import { CloseButton } from "@/components/close-button";
 import { useFullAccess } from "@/components/full-access";
@@ -188,6 +189,8 @@ export default function AgentSettings() {
         />
       </Group>
 
+      <AgentTeam agent={agent} />
+
       <Group title={t("agent.thinking.title")}>
         <PickerRow
           icon="cpu"
@@ -269,6 +272,8 @@ export default function AgentSettings() {
           />
         </View>
       ) : null}
+
+      <AgentAccess agent={agent} />
     </ScrollView>
   );
 }

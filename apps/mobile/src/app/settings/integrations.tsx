@@ -65,12 +65,13 @@ export default function Integrations() {
               {admin ? <ActionRow icon="plus" title={t("tools:api.add")} onPress={() => router.push("/settings/api-tool")} /> : null}
             </Group>
           ) : null}
-          {composio.data?.configured || apps.length ? (
+          {composio.data?.configured || apps.length || admin ? (
             <Group title={t("composio.title")}>
               <ListRow
                 grouped
                 icon="layers"
                 title={t("composio.account")}
+                onPress={admin ? () => router.push("/settings/composio") : undefined}
                 trailing={
                   composio.data?.valid === false ? (
                     <Badge label={t("composio.invalid")} tone="danger" />
@@ -82,8 +83,11 @@ export default function Integrations() {
                 }
               />
               {apps.map((a) => (
-                <ComposioRow key={a.id} connection={a} />
+                <ComposioRow key={a.id} connection={a} onPress={admin ? () => router.push("/settings/composio") : undefined} />
               ))}
+              {admin && composio.data?.configured && composio.data.valid !== false ? (
+                <ActionRow icon="plus" title={t("integrations:composioAdmin.gallery.title")} onPress={() => router.push("/settings/composio-connect")} />
+              ) : null}
             </Group>
           ) : null}
         </View>
@@ -139,12 +143,12 @@ function ApiToolRow({ tool, admin }: { tool: ApiTool; admin: boolean }) {
   );
 }
 
-function ComposioRow({ connection: c }: { connection: ComposioConnection }) {
+function ComposioRow({ connection: c, onPress }: { connection: ComposioConnection; onPress?: () => void }) {
   const { t } = useTranslation("integrations");
   const state = c.status.toUpperCase();
   const tone = state === "ACTIVE" ? "success" : state === "INITIATED" || state === "INITIALIZING" ? "warning" : "danger";
   const label = state === "ACTIVE" ? t("composio.active") : state === "INITIATED" || state === "INITIALIZING" ? t("composio.waiting") : t("composio.attention");
-  return <ListRow grouped icon="layers" title={c.toolkit.charAt(0).toUpperCase() + c.toolkit.slice(1)} trailing={<Badge label={label} tone={tone} />} />;
+  return <ListRow grouped icon="layers" title={c.toolkit.charAt(0).toUpperCase() + c.toolkit.slice(1)} trailing={<Badge label={label} tone={tone} />} onPress={onPress} />;
 }
 
 const styles = StyleSheet.create({

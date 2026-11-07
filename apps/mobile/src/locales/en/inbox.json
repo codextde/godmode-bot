@@ -50,6 +50,37 @@
     "dismiss": "Dismiss",
     "markResolved": "Mark resolved"
   },
+  "loginActions": {
+    "addLogin": "Add login",
+    "updateLogin": "Update login",
+    "add2fa": "Add 2FA"
+  },
+  "linkTotp": {
+    "title": "Use a saved 2FA code",
+    "gone": "This request is closed",
+    "link": "Link",
+    "linkFailed": "Couldn't link the 2FA code",
+    "loginFor": "Login for {{host}}",
+    "noLogin": "No login is saved for {{host}} yet. Add the login first, then link its 2FA here.",
+    "search": "Search 2FA codes",
+    "loadFailed": "Couldn't load the 2FA codes",
+    "noMatch": "No 2FA code matches “{{query}}”.",
+    "noCodes": "Your vault has no 2FA codes yet.",
+    "suggestedFor": "Suggested for {{host}}",
+    "allCodes": "All 2FA codes",
+    "matches": "Matches",
+    "hiddenMore_one": "{{count}} more. Keep typing to narrow it down.",
+    "hiddenMore_other": "{{count}} more. Keep typing to narrow it down.",
+    "importNew": "Import a new code",
+    "notLinked": "Not linked",
+    "outcome": {
+      "alreadyLinked": "Already linked to {{who}}. This closes the request.",
+      "links": "Links it to {{who}}.",
+      "staysCovered": "It stays with {{owner}}, which already covers {{host}}.",
+      "sameAccount": "Same account: it stays with {{owner}} ({{domain}}) and {{host}} is added to that login, so both sign-ins get the code.",
+      "moves": "Moves it from {{from}} to {{who}}."
+    }
+  },
   "notifications": {
     "title": "Notifications",
     "titleNew": "Notifications · {{count}} new",

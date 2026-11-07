@@ -26,8 +26,10 @@ const SCHEDULES = [
   { value: "0 3 * * 0", labelKey: "memory.schedule.sundays" },
 ] as const;
 
+const CUSTOM = "custom";
+
 export default function Memory() {
-  const { t } = useTranslation(["settings", "common"]);
+  const { t } = useTranslation(["settings", "common", "manage"]);
   const settings = useSettings();
   const admin = useFullAccess().fullAccess === true;
   const s = settings.data;
@@ -52,7 +54,10 @@ export default function Memory() {
     onError: (err) => Alert.alert(t("memory.dreamAll.failed"), err instanceof ApiError && err.code === "device_forbidden" ? updateDesktopMessage() : errorText(err)),
   });
   const presets = SCHEDULES.map((o) => ({ value: o.value as string, label: t(o.labelKey) }));
-  const schedules = SCHEDULES.some((o) => o.value === cron) ? presets : [{ value: cron, label: t("memory.schedule.custom", { cron }) }, ...presets];
+  const schedules = [
+    ...(SCHEDULES.some((o) => o.value === cron) ? presets : [{ value: cron, label: t("memory.schedule.custom", { cron }) }, ...presets]),
+    { value: CUSTOM, label: t("manage:dreaming.customItem") },
+  ];
 
   return (
     <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content}>
@@ -75,7 +80,13 @@ export default function Memory() {
 
           <Group title={t("memory.dreaming.title")}>
             <SwitchRow icon="moon" title={t("memory.dreaming.title")} value={d.enabled} onChange={(enabled) => void patchSettings({ memory: { dreaming: { enabled } } })} />
-            <PickerRow icon="clock" title={t("memory.dreaming.when")} value={cron} options={schedules} onChange={(next) => void patchSettings({ memory: { dreaming: { cron: next } } })} />
+            <PickerRow
+              icon="clock"
+              title={t("memory.dreaming.when")}
+              value={cron}
+              options={schedules}
+              onChange={(next) => (next === CUSTOM ? router.push("/dream-schedule") : void patchSettings({ memory: { dreaming: { cron: next } } }))}
+            />
             <SwitchRow
               icon="folder"
               title={t("memory.dreaming.tidy")}

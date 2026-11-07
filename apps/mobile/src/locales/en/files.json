@@ -10,7 +10,14 @@
     "title": "Folder",
     "search": "Search this agent's files",
     "emptyTitle": "Nothing in here",
-    "loadFailed": "Couldn't open the folder"
+    "loadFailed": "Couldn't open the folder",
+    "theAgent": "the agent",
+    "newNote": "New note",
+    "newFolder": "New folder",
+    "review": "Review",
+    "bin": "Recently deleted",
+    "binCount": "Recently deleted ({{count}})",
+    "dreaming": "{{name}} is dreaming. Changes wait until the dream ends."
   },
   "preview": {
     "share": "Share",
@@ -25,5 +32,169 @@
     "refusedTitle": "Stays on your computer",
     "imageFailed": "Couldn't load the picture",
     "imageFailedBody": "Your computer didn't send it. Check that Godmode runs there."
+  },
+  "actions": {
+    "move": "Move"
+  },
+  "editor": {
+    "readOnly": {
+      "claude": "Generated from the agent's settings. Edit the instructions in Settings instead.",
+      "state": "Snapshot written by Godmode. Changes would be overwritten.",
+      "runs": "Raw run log, read-only.",
+      "conversations": "Conversation transcript, read-only.",
+      "tooLarge": "This file is too large to edit here."
+    },
+    "dreaming": "{{name}} is dreaming. Editing waits until the dream ends.",
+    "editorLabel": "Contents of {{path}}",
+    "saveFailed": "Couldn't save {{name}}",
+    "conflictTitle": "{{name}} changed while you were editing",
+    "conflictBody": "{{agent}} may have rewritten it. Reload to see the new version (your edits are discarded), or overwrite it with yours.",
+    "reload": "Reload",
+    "overwrite": "Overwrite",
+    "discardTitle": "Discard your changes?",
+    "keepEditing": "Keep editing",
+    "discard": "Discard",
+    "discardChanges": "Discard changes",
+    "stopEditing": "Stop editing"
+  },
+  "name": {
+    "titleRename": "Rename {{name}}",
+    "titleNote": "New note",
+    "titleFolder": "New folder",
+    "in": "In {{dir}}/",
+    "theRepository": "the agent's folder",
+    "pinned": "Named in {{names}}. Change the name there too, or the agent looks for the old one.",
+    "defaultNote": "untitled.md",
+    "defaultFolder": "new folder",
+    "createFailed": "Couldn't create it",
+    "renameFailed": "Couldn't rename it",
+    "errors": {
+      "empty": "Give it a name.",
+      "slash": "A name can't contain a slash. Use Move to put it elsewhere.",
+      "dot": "Names can't start with a dot here.",
+      "tooLong": "That name is too long.",
+      "taken": "{{name}} is already there."
+    }
+  },
+  "move": {
+    "title": "Move {{name}}",
+    "fold": "Fold",
+    "unfold": "Unfold",
+    "to": "To {{dir}}/",
+    "notUpdated": "Not updated by the move",
+    "namedIn": "{{file}} is named in {{names}}",
+    "changeHint": "Change the path there too, or the agent looks for it in the old place.",
+    "moveAnyway": "Move anyway",
+    "moveHere": "Move here",
+    "failed": "Couldn't move it",
+    "moved": "Moved {{name}}",
+    "renamedTo": "Renamed to {{name}}",
+    "pathUpdated": "Updated the path in {{files}}."
+  },
+  "delete": {
+    "titleOne": "Delete {{name}}?",
+    "titleMany": "Delete {{items}}?",
+    "description": "It goes to {{name}}'s bin: you can put it back there for 30 days.",
+    "stillNamesOne": "{{name}} still names it",
+    "stillNamesMany": "{{name}} still names {{n}} of these",
+    "namedIn": "{{file}}: in {{names}}",
+    "mayNeedOne": "It may still need it. Remove the mention too, or keep the file.",
+    "mayNeedMany": "It may still need them. Remove the mention too, or keep the files.",
+    "stays": "{{name}} stays: {{reason}}",
+    "moveToBin": "Move to bin",
+    "failed": "Couldn't delete it",
+    "loadFailed": "Couldn't look at it",
+    "someStayed": "Some of it stayed",
+    "nothingDeleted": "Nothing was deleted"
+  },
+  "bin": {
+    "title": "Recently deleted",
+    "keptWith": "{{items}} · {{size}} · kept {{days}} days, then the daily cleanup removes them.",
+    "emptyBin": "Empty bin",
+    "emptyTitle": "The bin is empty",
+    "emptyDescription": "What you delete here waits {{days}} days, so you can put it back.",
+    "emptyFolder": "empty folder",
+    "deletedAgo": "deleted {{time}}",
+    "daysLeft_one": "{{count}} day left",
+    "daysLeft_other": "{{count}} days left",
+    "goesToday": "goes today",
+    "putBack": "Put back",
+    "actionsFor": "Actions for {{name}}",
+    "deleteForGood": "Delete for good",
+    "confirmEmptyTitle": "Empty {{name}}'s bin?",
+    "confirmDeleteTitle": "Delete {{name}} for good?",
+    "confirmEmptyBody": "{{items}} ({{size}}) are removed for good.",
+    "confirmDeleteBody": "It can't be put back afterwards.",
+    "historyNote": "Files the agent had committed stay in its version history.",
+    "restoreFailed": "Couldn't put it back",
+    "purgeFailed": "Couldn't delete it",
+    "loadFailed": "Couldn't load the bin"
+  },
+  "review": {
+    "title": "Review",
+    "kinds": {
+      "build": {
+        "title": "Installed packages and build output",
+        "hint": "Installing or building again brings them back."
+      },
+      "junk": {
+        "title": "Junk files",
+        "hint": "Logs, temporary files and Finder leftovers."
+      },
+      "empty": {
+        "title": "Empty files and folders",
+        "hint": "Nothing in them."
+      },
+      "duplicate": {
+        "title": "Copies",
+        "hint": "The same content lies somewhere else too. The other copy stays."
+      },
+      "large": {
+        "title": "Large files",
+        "hint": "Check whether they are still needed."
+      },
+      "scratch": {
+        "title": "Large scratch in tmp/",
+        "hint": "Goes by itself a week after its last change. Delete now to free the space today."
+      },
+      "stale": {
+        "title": "Untouched for 30 days",
+        "hint": "Old reports, exports and experiments: keep what still matters."
+      },
+      "loose": {
+        "title": "Unsorted",
+        "hint": "Loose files at the top: sort them into a folder."
+      },
+      "unlinkedNote": {
+        "title": "Notes nothing links to",
+        "hint": "Memory notes without a link from MEMORY.md are rarely read: link, merge or delete them."
+      },
+      "brokenLink": {
+        "title": "Broken links in memory",
+        "hint": "The memory points at notes that don't exist: fix the link in the note."
+      }
+    },
+    "toLookAt": "{{things}} to look at",
+    "couldGo": "{{size}} could go",
+    "checked": "checked {{time}}",
+    "partial": "very large, not everything was looked at",
+    "looking": "Looking through the files…",
+    "checkAgain": "Check again",
+    "tidyTitle": "{{name}}'s files look tidy",
+    "tidyDescription": "No build output, junk, copies or forgotten notes. The nightly dream keeps sorting the workspace too.",
+    "tickHint": "Tick what can go",
+    "deleteSelected": "Delete {{items}} · {{size}}",
+    "selectItem": "Select {{path}}",
+    "namedIn": "named in {{names}}",
+    "open": "Open {{name}}",
+    "loadFailed": "Couldn't look through the files"
+  },
+  "count": {
+    "item_one": "{{n}} item",
+    "item_other": "{{n}} items",
+    "file_one": "{{n}} file",
+    "file_other": "{{n}} files",
+    "thing_one": "{{n}} thing",
+    "thing_other": "{{n}} things"
   }
 }

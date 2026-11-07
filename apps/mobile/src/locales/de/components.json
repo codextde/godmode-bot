@@ -372,7 +372,9 @@
     "triggerBroken": "Der Auslöser funktioniert nicht.",
     "runNamedNow": "{{name}} jetzt ausführen",
     "turnOff": "{{name}} ausschalten",
-    "turnOn": "{{name}} einschalten"
+    "turnOn": "{{name}} einschalten",
+    "moreEvents_one": "+ {{count}} weiteres Ereignis",
+    "moreEvents_other": "+ {{count}} weitere Ereignisse"
   },
   "followupRow": {
     "anyMoment": "jeden Moment",
@@ -825,6 +827,7 @@
   },
   "composer": {
     "message": "Nachricht",
+    "chatFileFailed": "Die Chat-Datei ließ sich nicht öffnen",
     "addMessage": "Nachricht hinzufügen",
     "slashCommands": "Slash-Befehle",
     "attach": "Anhängen",
@@ -890,6 +893,11 @@
       "handoff": "Übergabe aus einem früheren Chat"
     },
     "copyReply": "Antwort kopieren",
+    "read": "Vorlesen",
+    "stop": "Stopp",
+    "readAloud": "Vorlesen",
+    "stopReading": "Vorlesen stoppen",
+    "readFailed": "Vorlesen hat nicht geklappt",
     "followup": {
       "now": "Jetzt fortgesetzt, vor der Wiedervorlage",
       "late": "Verspätet fortgesetzt, wie geplant",

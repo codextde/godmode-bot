@@ -1,11 +1,12 @@
 import { useMutation, useQuery, type UseQueryResult } from "@tanstack/react-query";
-import { Stack } from "expo-router";
+import { router, Stack } from "expo-router";
 import { useState } from "react";
 import { ActivityIndicator, Alert, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, TextInput, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import type { BotCheckReport, BotCheckStatus, BrowserProfile } from "@godmode/shared";
 import { useFullAccess } from "@/components/admin";
 import { BrowserAdvancedGroup, CaptchaGroup } from "@/components/browser-extras";
+import { ProfileUseGroup } from "@/components/browser-sync";
 import { CloseButton } from "@/components/close-button";
 import { Group, LinkRow, StepperRow, SwitchRow, Tile } from "@/components/form";
 import { MenuSheet, type HeaderMenuItem } from "@/components/header-actions";
@@ -125,7 +126,8 @@ export default function BrowserSettings() {
             />
           </Group>
 
-          <Profiles query={profiles} disabled={!s.browser.enabled} onName={askName} />
+          <Profiles query={profiles} disabled={!s.browser.enabled} admin={admin} onName={askName} />
+          {admin ? <ProfileUseGroup /> : null}
           {admin ? <CaptchaGroup browser={s.browser} /> : null}
           {admin ? <BrowserAdvancedGroup browser={s.browser} /> : null}
         </>
@@ -148,13 +150,15 @@ export default function BrowserSettings() {
 function Profiles({
   query,
   disabled,
+  admin,
   onName,
 }: {
   query: UseQueryResult<BrowserProfile[]>;
   disabled: boolean;
+  admin: boolean;
   onName: (profile: BrowserProfile | null) => void;
 }) {
-  const { t } = useTranslation(["settings", "common"]);
+  const { t } = useTranslation(["settings", "common", "machines"]);
   const { workspaces } = useWorkspace();
   const [menu, setMenu] = useState<BrowserProfile | null>(null);
   const check = useMutation({
@@ -191,6 +195,12 @@ function Profiles({
 
   const items = (p: BrowserProfile): HeaderMenuItem[] => [
     { icon: "pencil", title: t("common:actions.rename"), onPress: () => onName(p) },
+    ...(admin
+      ? [
+          { icon: "layers" as IconName, title: t("machines:browser.workspace"), onPress: () => router.push({ pathname: "/settings/browser-workspace", params: { id: p.id } }) },
+          { icon: "download" as IconName, title: t("machines:import.title"), onPress: () => router.push({ pathname: "/settings/browser-import", params: { id: p.id } }) },
+        ]
+      : []),
     ...(p.isDefault ? [] : [{ icon: "check" as IconName, title: t("browser.makeDefault"), onPress: () => void settingsApi.browser.makeDefault(p.id).then(refresh, fail(t("browser.defaultFailed"))) }]),
     ...(p.running ? [{ icon: "stop" as IconName, title: t("common:actions.stop"), onPress: () => void settingsApi.browser.stop(p.id).then(refresh, fail(t("browser.stopFailed"))) }] : []),
     ...(disabled ? [] : [{ icon: "shield" as IconName, title: t("browser.botCheck.run"), onPress: () => check.mutate(p.id) }]),
@@ -214,6 +224,7 @@ function Profiles({
                 <ProfileRow key={p.id} profile={p} workspace={workspaceName(p.workspaceId)} checking={check.isPending && check.variables === p.id} onPress={() => setMenu(p)} />
               ))}
         <LinkRow icon="plus" tone="brand" chevron={false} title={t("browser.newProfile")} onPress={() => onName(null)} />
+        {admin ? <LinkRow icon="download" title={t("machines:import.title")} onPress={() => router.push("/settings/browser-import")} /> : null}
       </Group>
       {list.map((p) => (
         <BotCheckResult key={p.id} profile={p} checking={check.isPending && check.variables === p.id} />

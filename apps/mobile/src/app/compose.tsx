@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next";
 import { chatOptionsBody, useNewChatOptions } from "@/lib/chat-options";
 import { CharacterAvatar } from "@/components/character";
 import { Icon } from "@/components/icon";
-import { Composer, type ComposerHandle } from "@/components/composer";
+import { Composer, type ComposerHandle, type SendOptions } from "@/components/composer";
 import { ModelButton } from "@/components/model-button";
 import { ProjectPicker } from "@/components/project-picker";
 import { Skeleton, T, tap } from "@/components/ui";
@@ -14,6 +14,7 @@ import { api, errorText } from "@/lib/api";
 import { encodeFiles, type PendingFile } from "@/lib/attachments";
 import { pickAgent, SUGGESTIONS } from "@/lib/desktop-parity";
 import { useNewChatChoice } from "@/lib/composer";
+import { markVoiceRun } from "@/lib/voice-replies";
 import { confirmHideSuggestions, useSuggestions } from "@/lib/suggestions";
 import { useAgents } from "@/lib/hooks";
 import { useLive } from "@/lib/live";
@@ -58,7 +59,7 @@ export default function Compose() {
   // The model belongs to the agent picked here: a new pick starts from that agent's default.
   useEffect(() => useNewChatChoice.getState().reset(), [current?.id]);
 
-  const start = async (content: string, files: PendingFile[]) => {
+  const start = async (content: string, files: PendingFile[], sent: SendOptions) => {
     try {
       const attachments = await encodeFiles(files);
       const result = await api.chat.start({
@@ -74,6 +75,7 @@ export default function Compose() {
       });
       useNewChatOptions.getState().reset();
       useLive.getState().runStarted(result.run);
+      if (sent.voice) markVoiceRun(result.run.id);
       router.dismiss();
       router.push({ pathname: "/chat/[id]", params: { id: result.conversation.id } });
     } catch (err) {
@@ -154,7 +156,15 @@ export default function Compose() {
             current ? (
               <>
                 <OptionsButton
-                  set={!!options.browserProfileId || !!options.instructions.trim()}
+                  set={
+                    !!options.browserProfileId ||
+                    !!options.instructions.trim() ||
+                    !!options.workingDirectory ||
+                    !!options.vmId ||
+                    options.sshServerIds.length > 0 ||
+                    options.androidDeviceIds.length > 0 ||
+                    options.runnerId !== undefined
+                  }
                   onPress={() => router.push({ pathname: "/chat-options", params: { agentId: current.id, ...(workspaceId ? { workspaceId } : {}) } })}
                 />
                 <ModelButton agent={current} choice={choice} />

@@ -62,7 +62,7 @@ export default function CardDetail() {
       {purchases.data?.length ? (
         <Group title={t("purchases.title")}>
           {purchases.data.map((p) => (
-            <PurchaseRow key={p.id} purchase={p} />
+            <PurchaseRow key={p.id} purchase={p} actions={!!fullAccess} />
           ))}
         </Group>
       ) : purchases.isSuccess ? (

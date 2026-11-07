@@ -1,24 +1,28 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { CameraView, scanFromURLAsync, useCameraPermissions, type BarcodeScanningResult } from "expo-camera";
+import * as Clipboard from "expo-clipboard";
+import { ClipboardPasteButton } from "expo-clipboard";
 import { File } from "expo-file-system";
 import * as ImagePicker from "expo-image-picker";
 import { router, useLocalSearchParams } from "expo-router";
 import { useMemo, useRef, useState } from "react";
-import { Alert, ScrollView, StyleSheet, View } from "react-native";
+import { Alert, ScrollView, StyleSheet, TextInput, View } from "react-native";
 import { useTranslation } from "react-i18next";
-import type { TotpEntry } from "@godmode/shared";
+import type { TotpEntry, TotpImportResult } from "@godmode/shared";
 import { Group, PickerRow, Segmented } from "@/components/form";
 import { NeedsFullAccess, useFullAccess } from "@/components/full-access";
 import { confirmDelete, FieldCard, InputRow, SheetHeader } from "@/components/secret-parts";
-import { Button, LoadingState, T } from "@/components/ui";
+import { Button, Card, LoadingState, T } from "@/components/ui";
 import { api, errorText } from "@/lib/api";
 import { qk } from "@/lib/query";
 import { fullVaultApi, refreshVault, useLogins, useTotp } from "@/lib/vault";
-import { radius, space, useColors } from "@/lib/theme";
+import { fonts, radius, space, useColors } from "@/lib/theme";
 
 const OTP_URI = /^otpauth(-migration)?:\/\//i;
 const normalizeBase32 = (s: string) => s.replace(/[\s-]/g, "").replace(/=+$/, "").toUpperCase();
 const isBase32 = (s: string) => normalizeBase32(s).length >= 16 && /^[A-Z2-7]+$/.test(normalizeBase32(s));
+/** Every otpauth:// (or an authenticator's export) link in pasted text, once each. */
+const linksIn = (text: string) => [...new Set(text.match(/otpauth(?:-migration)?:\/\/[^\s"'<>]+/gi) ?? [])];
 
 /** Add a 2FA code (its setup key, a pasted otpauth link or the QR code) or change which login and workspace it is for. */
 export default function TotpEdit() {
@@ -51,7 +55,9 @@ function TotpForm({ entry }: { entry: TotpEntry | null }) {
   const { t } = useTranslation(["vault", "common"]);
   const logins = useLogins();
   const workspaces = useQuery({ queryKey: qk.workspaces, queryFn: api.workspaces });
-  const [mode, setMode] = useState<"key" | "scan">("key");
+  const [mode, setMode] = useState<"key" | "scan" | "links">("key");
+  const [pasted, setPasted] = useState("");
+  const links = useMemo(() => linksIn(pasted), [pasted]);
   const [issuer, setIssuer] = useState(entry?.issuer ?? "");
   const [account, setAccount] = useState(entry?.accountName ?? "");
   const [secret, setSecret] = useState("");
@@ -78,8 +84,19 @@ function TotpForm({ entry }: { entry: TotpEntry | null }) {
     return res.imported.length;
   };
 
+  /** Several links at once: what was added, and a note on what the computer skipped and why. */
+  const importLinks = async () => {
+    const res = await fullVaultApi.importTotp(links, workspaceId || null);
+    if (!res.imported.length) throw new Error(skippedText(res) || t("totpEdit.nothingImported"));
+    if (res.skipped.length) Alert.alert(t("totpLinks.added", { count: res.imported.length }), `${t("totpLinks.skipped", { count: res.skipped.length })}\n\n${skippedText(res)}`);
+  };
+
   const save = useMutation({
     mutationFn: async () => {
+      if (!entry && mode === "links") {
+        await importLinks();
+        return;
+      }
       if (entry) {
         await fullVaultApi.updateTotp(entry.id, { issuer: issuer.trim(), accountName: account.trim(), workspaceId: workspaceId || null, credentialId: credentialId || null });
         return;
@@ -92,6 +109,7 @@ function TotpForm({ entry }: { entry: TotpEntry | null }) {
     },
     onSuccess: () => {
       setSecret("");
+      setPasted("");
       refreshVault();
       router.back();
     },
@@ -108,8 +126,9 @@ function TotpForm({ entry }: { entry: TotpEntry | null }) {
   });
 
   const uri = OTP_URI.test(secret.trim());
-  const ready = entry ? !!issuer.trim() : uri || (!!issuer.trim() && isBase32(secret));
+  const ready = entry ? !!issuer.trim() : mode === "links" ? links.length > 0 : uri || (!!issuer.trim() && isBase32(secret));
   const scanning = !entry && mode === "scan";
+  const pasting = !entry && mode === "links";
 
   return (
     <ScrollView
@@ -130,8 +149,9 @@ function TotpForm({ entry }: { entry: TotpEntry | null }) {
       {entry ? null : (
         <Segmented
           options={[
-            { value: "key", label: t("totpEdit.enterKey") },
-            { value: "scan", label: t("totpEdit.scan") },
+            { value: "key", label: t("totpLinks.key") },
+            { value: "scan", label: t("totpLinks.qr") },
+            { value: "links", label: t("totpLinks.links") },
           ]}
           value={mode}
           onChange={setMode}
@@ -143,6 +163,8 @@ function TotpForm({ entry }: { entry: TotpEntry | null }) {
           <Scanner onUri={(scanned) => importUris([scanned]).then(() => (refreshVault(), router.back()))} />
           <PhotoButton onUris={(uris) => importUris(uris).then(() => (refreshVault(), router.back()))} />
         </View>
+      ) : pasting ? (
+        <LinksBox value={pasted} onChange={setPasted} found={links.length} />
       ) : (
         <>
           <FieldCard>
@@ -159,7 +181,7 @@ function TotpForm({ entry }: { entry: TotpEntry | null }) {
       )}
 
       <Group>
-        <PickerRow icon="key" title={t("totpEdit.login")} value={credentialId} options={loginOptions} onChange={setCredentialId} />
+        {pasting ? null : <PickerRow icon="key" title={t("totpEdit.login")} value={credentialId} options={loginOptions} onChange={setCredentialId} />}
         <PickerRow icon="layers" title={t("loginEdit.availableTo")} value={workspaceId} options={workspaceOptions} onChange={setWorkspaceId} />
       </Group>
 
@@ -173,6 +195,79 @@ function TotpForm({ entry }: { entry: TotpEntry | null }) {
         />
       ) : null}
     </ScrollView>
+  );
+}
+
+/** "GitHub · dan@x.de: already in the vault", one per line. */
+function skippedText(res: TotpImportResult): string {
+  return res.skipped.map((s) => [s.label || labelOf(s.uri), s.reason].filter(Boolean).join(": ")).join("\n");
+}
+
+/** "otpauth://totp/GitHub:dan@x.de?…" → "GitHub · dan@x.de". */
+function labelOf(uri: string): string {
+  const m = /^otpauth:\/\/[^/]+\/([^?]*)/i.exec(uri.trim());
+  if (!m) return "";
+  try {
+    return decodeURIComponent(m[1]!).split(":").map((part) => part.trim()).filter(Boolean).join(" · ");
+  } catch {
+    return m[1]!;
+  }
+}
+
+/**
+ * Several otpauth:// links pasted at once (one per line, or an export of them): the desktop takes them one paste at a
+ * time, the phone all together.
+ */
+function LinksBox({ value, onChange, found }: { value: string; onChange: (next: string) => void; found: number }) {
+  const c = useColors();
+  const { t } = useTranslation("vault");
+  const add = (text: string) => {
+    if (!text.trim()) return;
+    onChange(value.trim() ? `${value.trim()}\n${text.trim()}` : text.trim());
+  };
+  return (
+    <View style={{ gap: space.sm }}>
+      <Card style={styles.links}>
+        <TextInput
+          accessibilityLabel={t("totpLinks.links")}
+          value={value}
+          onChangeText={onChange}
+          placeholder={"otpauth://totp/GitHub:you@example.com?secret=…\notpauth://totp/…"}
+          placeholderTextColor={c.textFaint}
+          multiline
+          autoCapitalize="none"
+          autoCorrect={false}
+          spellCheck={false}
+          autoComplete="off"
+          importantForAutofill="no"
+          textContentType="oneTimeCode"
+          style={[styles.linksInput, { color: c.text, fontFamily: fonts.mono }]}
+        />
+      </Card>
+      {found ? (
+        <T variant="footnote" muted style={styles.count}>
+          {t("totpLinks.found", { count: found })}
+        </T>
+      ) : value.trim() ? (
+        <T variant="footnote" color={c.danger} style={styles.count}>
+          {t("totpLinks.none")}
+        </T>
+      ) : null}
+      {Clipboard.isPasteButtonAvailable ? (
+        // The system's Paste control reads the clipboard without asking each time.
+        <ClipboardPasteButton
+          acceptedContentTypes={["plain-text"]}
+          onPress={(data) => data.type === "text" && add(data.text)}
+          backgroundColor={c.sunken}
+          foregroundColor={c.text}
+          cornerStyle="medium"
+          displayMode="iconAndLabel"
+          style={styles.paste}
+        />
+      ) : (
+        <Button title={t("totpLinks.paste")} icon="copy" variant="outline" onPress={() => void Clipboard.getStringAsync().then(add, () => undefined)} />
+      )}
+    </View>
   );
 }
 
@@ -268,6 +363,23 @@ const styles = StyleSheet.create({
   note: {
     marginTop: -space.md,
     paddingHorizontal: 4,
+  },
+  links: {
+    padding: space.md,
+  },
+  linksInput: {
+    minHeight: 140,
+    maxHeight: 280,
+    fontSize: 12,
+    lineHeight: 17,
+    textAlignVertical: "top",
+  },
+  count: {
+    paddingHorizontal: 4,
+  },
+  paste: {
+    height: 44,
+    width: "100%",
   },
   camera: {
     height: 300,

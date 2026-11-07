@@ -196,5 +196,109 @@
     "unarchiveA11y": "Unarchive {{title}}",
     "unarchiveThis": "Unarchive this chat",
     "unarchive": "Unarchive"
+  },
+  "pullRequest": {
+    "title": "Pull request",
+    "refresh": "Refresh",
+    "openOnGithub": "Open on GitHub",
+    "tryAgain": "Try again",
+    "errors": {
+      "rateLimited": "GitHub only allows a certain number of looks per hour, and they're used up for now.",
+      "notFound": "GitHub can't find this pull request. If it's private, this computer needs to be signed in to GitHub: run “gh auth login” in Terminal.",
+      "unauthorized": "GitHub didn't accept this computer's GitHub login. Run “gh auth login” in Terminal to sign in again.",
+      "other": "Couldn't load it from GitHub: {{message}}",
+      "notALink": "Not a GitHub pull request link"
+    },
+    "states": {
+      "open": "Open",
+      "draft": "Draft",
+      "merged": "Merged",
+      "closed": "Closed"
+    },
+    "when": {
+      "merged": "merged {{ago}}",
+      "closed": "closed {{ago}}",
+      "opened": "opened {{ago}}"
+    },
+    "stale": "GitHub's hourly limit is used up, so this is what was loaded {{ago}}.",
+    "staleUntil": "GitHub's hourly limit is used up, so this is what was loaded {{ago}}. It refreshes after {{time}}.",
+    "signedOut": "This computer isn't signed in to GitHub, so GitHub allows only a few looks per hour. Run “gh auth login” in Terminal for more.",
+    "files_one": "{{count}} file",
+    "files_other": "{{count}} files",
+    "commits_one": "{{count}} commit",
+    "commits_other": "{{count}} commits",
+    "conflicts": "Has conflicts with the base branch",
+    "blocked": "Can't be merged yet: a required review or check is missing",
+    "sections": {
+      "description": "Description",
+      "reviews": "Reviews",
+      "checks": "Checks",
+      "files": "Files"
+    },
+    "showLess": "Show less",
+    "showAll": "Show all",
+    "showFewer": "Show fewer",
+    "showAllCount": "Show all {{count}}",
+    "review": {
+      "approved": "approved",
+      "changes_requested": "wants changes",
+      "commented": "commented"
+    },
+    "checks": {
+      "failed": "{{count}} failed",
+      "running": "{{count}} running",
+      "passed": "{{count}} passed",
+      "skipped": "{{count}} skipped"
+    },
+    "moreOnGithub": "{{count}} more on GitHub",
+    "merge": {
+      "button": "Merge",
+      "into": "Into {{base}}",
+      "blockedDraft": "It's still a draft. Mark it ready for review on GitHub first.",
+      "blockedConflicts": "Resolve the conflicts with the base branch first.",
+      "blockedNoMethod": "This repository allows no merge method.",
+      "warnFailing_one": "{{count}} check failed",
+      "warnFailing_other": "{{count}} checks failed",
+      "warnRunning_one": "{{count}} check is still running",
+      "warnRunning_other": "{{count}} checks are still running",
+      "warnChanges": "a reviewer asked for changes",
+      "warnBlocked": "GitHub reports a required review or check missing",
+      "headsUp": "Heads up: {{warnings}}.",
+      "refused": "GitHub didn't merge it: {{reason}}",
+      "confirmTitle": "Merge #{{number}} into {{base}}?",
+      "how": "How to merge",
+      "cancel": "Cancel",
+      "done": "Merged #{{number}} into {{base}}",
+      "methods": {
+        "merge": {
+          "label": "Merge",
+          "hint": "All commits, plus a merge commit"
+        },
+        "squash": {
+          "label": "Squash and merge",
+          "hint": "All changes as one commit"
+        },
+        "rebase": {
+          "label": "Rebase and merge",
+          "hint": "The commits, replayed on the base branch"
+        }
+      }
+    },
+    "autoMerge": {
+      "button": "Auto-merge",
+      "confirmTitle": "Auto-merge #{{number}} into {{base}}?",
+      "explain": "GitHub merges it on its own once the required reviews and checks pass.",
+      "confirm": "Enable auto-merge",
+      "enabled": "Auto-merge on for #{{number}}",
+      "disabled": "Auto-merge off for #{{number}}",
+      "disableFailed": "Couldn't turn off auto-merge: {{reason}}",
+      "refused": "GitHub didn't enable auto-merge: {{reason}}",
+      "on": "Auto-merge on ({{method}}): merges into {{base}} once checks pass",
+      "by": "by {{login}}",
+      "turnOff": "Turn off"
+    },
+    "loadFailed": "Couldn't load the pull request",
+    "comments_one": "{{count}} comment",
+    "comments_other": "{{count}} comments"
   }
 }

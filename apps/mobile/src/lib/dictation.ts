@@ -116,7 +116,7 @@ let settled: Promise<void> = Promise.resolve();
 /** Drops the dictation that runs now (a new one takes the recognizer). */
 let current: (() => void) | null = null;
 
-function recognize(options: ExpoSpeechRecognitionOptions, onEnd: (heard: Heard) => void, onLevel?: (level: number) => void) {
+function recognize(options: ExpoSpeechRecognitionOptions, onEnd: (heard: Heard) => void, onLevel?: (level: number) => void, onWords?: (text: string) => void) {
   const native = speech;
   if (!native) {
     onEnd({ text: "", error: { code: "service-not-allowed", message: "Speech recognition isn't available" } });
@@ -178,6 +178,7 @@ function recognize(options: ExpoSpeechRecognitionOptions, onEnd: (heard: Heard) 
           if (text && text !== said[said.length - 1]) said.push(text);
           interim = "";
         }
+        onWords?.([...said, interim].filter(Boolean).join(" "));
       }),
       native.addListener("error", (e) => {
         error ??= { code: e.error, message: e.message };
@@ -222,6 +223,11 @@ export type Listening = ReturnType<typeof recognize>;
  */
 export function listen(lang: string, handlers: { onLevel: (level: number) => void; onEnd: (heard: Heard) => void }): Listening {
   return recognize({ lang, volumeChangeEventOptions: { enabled: true, intervalMillis: 100 } }, handlers.onEnd, handlers.onLevel);
+}
+
+/** One turn of a voice conversation: ends by itself when the human pauses; `onWords` hears what was said so far. */
+export function listenTurn(lang: string, handlers: { onLevel: (level: number) => void; onWords: (text: string) => void; onEnd: (heard: Heard) => void }): Listening {
+  return recognize({ lang, continuous: false, volumeChangeEventOptions: { enabled: true, intervalMillis: 100 } }, handlers.onEnd, handlers.onLevel, handlers.onWords);
 }
 
 /** What a recording of up to `FILE_MAX_MS` says, written down on the phone (iOS, `tag` the Voice language); "" when it can't. */

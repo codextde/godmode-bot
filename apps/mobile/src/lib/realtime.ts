@@ -3,6 +3,7 @@ import type { InvalidateQueryFilters } from "@tanstack/react-query";
 import { browserView, type Agent, type AgentQuestion, type ClientEvent, type EntityName, type ServerEvent, type Task, type TaskEvent, type Vm } from "@godmode/shared";
 import { answeringBase, api, ApiError, forget, reachableBase, retryAddresses } from "./api";
 import { noteQueue, upsertMessage } from "./chat-cache";
+import { noteChatMove } from "./chat-moves";
 import { setQueue } from "./composer";
 import { withPending } from "./pending-queue";
 import { useLive } from "./live";
@@ -295,6 +296,9 @@ function handle(event: ServerEvent) {
       // Into the cached chat as it is; a fetch on its way gets it too (see chat-cache), so nothing is fetched again.
       upsertMessage(event.message);
       break;
+    case "chat.move":
+      noteChatMove(event.conversationId, event.move);
+      break;
     case "queue.updated":
       setQueue(event.conversationId, () => withPending(event.conversationId, event.queue));
       noteQueue(event.conversationId, event.queue);
@@ -499,7 +503,8 @@ async function connect() {
     useLive.getState().setStatus("offline");
     if (e.code === 4003) {
       const current = useSession.getState().connection;
-      if (!current || removedBy(current, instanceId)) return void useSession.getState().disconnect("removed");
+      // Only for this socket's own key: the phone may have paired again (with this computer too) or unpaired meanwhile.
+      if (!current || removedBy(current, instanceId)) return void useSession.getState().refused(connection.token);
       // Another computer of the group: the paired one says whether the phone was removed.
       forget(base, true);
     }

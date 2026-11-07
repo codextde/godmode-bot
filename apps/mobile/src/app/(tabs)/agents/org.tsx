@@ -3,6 +3,7 @@ import { memo, useMemo } from "react";
 import { Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { leadOf, teamTree, type Agent, type TeamNode, type Workspace } from "@godmode/shared";
+import { AgentMoveMenu } from "@/components/agent-move-menu";
 import { CharacterAvatar, moodOf, presenceText, useAgentPresence } from "@/components/character";
 import { Icon } from "@/components/icon";
 import { Badge, Button, Card, EmptyState, ErrorState, LiveDot, SkeletonRows, T, tap } from "@/components/ui";
@@ -32,8 +33,8 @@ function openAgent(id: string) {
 const size = (n: TeamNode<Agent>): number => 1 + n.reports.reduce((s, r) => s + size(r), 0);
 
 /**
- * Who reports to whom, read-only like the desktop's chart: the built-in agent on top, then a card per workspace (all
- * workspaces) or per team (one workspace) with everyone under their lead. Leads and workspaces change on the computer.
+ * Who reports to whom, like the desktop's chart: the built-in agent on top, then a card per workspace (all workspaces)
+ * or per team (one workspace) with everyone under their lead. A long press moves an agent to another lead or workspace.
  */
 export default function OrgChart() {
   const { t } = useTranslation(["agents", "common"]);
@@ -187,33 +188,35 @@ const Node = memo(function Node({ agent, reports, leadElsewhere }: { agent: Agen
   const dot = state === "idle" ? c.success : state === "waiting" || state === "paused" ? c.warning : state === "failed" ? c.danger : alpha(c.textMuted, 0.5);
   const detail = [agent.role || null, leadElsewhere ? t("org.reportsTo", { name: leadElsewhere.name }) : null].filter(Boolean).join(" · ");
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={[agent.name, detail, presenceText(presence)].filter(Boolean).join(", ")}
-      onPress={() => openAgent(agent.id)}
-      style={({ pressed }) => [styles.node, pressed && { backgroundColor: c.sunken }]}
-    >
-      <CharacterAvatar agent={agent} size={34} mood={moodOf(presence)} running={state === "working"} />
-      <View style={{ flex: 1, minWidth: 0, gap: 1 }}>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-          {state === "working" ? <LiveDot size={6} /> : <View style={[styles.dot, { backgroundColor: dot }]} />}
-          <T variant="callout" numberOfLines={1} style={{ flexShrink: 1, fontWeight: "500" }}>
-            {agent.name}
+    <AgentMoveMenu agent={agent}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={[agent.name, detail, presenceText(presence)].filter(Boolean).join(", ")}
+        onPress={() => openAgent(agent.id)}
+        style={({ pressed }) => [styles.node, pressed && { backgroundColor: c.sunken }]}
+      >
+        <CharacterAvatar agent={agent} size={34} mood={moodOf(presence)} running={state === "working"} />
+        <View style={{ flex: 1, minWidth: 0, gap: 1 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+            {state === "working" ? <LiveDot size={6} /> : <View style={[styles.dot, { backgroundColor: dot }]} />}
+            <T variant="callout" numberOfLines={1} style={{ flexShrink: 1, fontWeight: "500" }}>
+              {agent.name}
+            </T>
+          </View>
+          <T variant="footnote" muted numberOfLines={1}>
+            {detail || presenceText(presence)}
           </T>
         </View>
-        <T variant="footnote" muted numberOfLines={1}>
-          {detail || presenceText(presence)}
-        </T>
-      </View>
-      {reports ? (
-        <View style={[styles.count, { backgroundColor: c.sunken }]}>
-          <Icon name="orgChart" size={10} color={c.textMuted} />
-          <T variant="caption" muted style={{ fontVariant: ["tabular-nums"] }}>
-            {reports}
-          </T>
-        </View>
-      ) : null}
-    </Pressable>
+        {reports ? (
+          <View style={[styles.count, { backgroundColor: c.sunken }]}>
+            <Icon name="orgChart" size={10} color={c.textMuted} />
+            <T variant="caption" muted style={{ fontVariant: ["tabular-nums"] }}>
+              {reports}
+            </T>
+          </View>
+        ) : null}
+      </Pressable>
+    </AgentMoveMenu>
   );
 });
 

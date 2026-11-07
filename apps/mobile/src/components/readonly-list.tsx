@@ -102,6 +102,7 @@ export const ListRow = memo(function ListRow({
   lines = [],
   trailing,
   onPress,
+  onLongPress,
   accessibilityLabel,
   grouped,
 }: {
@@ -112,6 +113,8 @@ export const ListRow = memo(function ListRow({
   lines?: (string | null | undefined | false)[];
   trailing?: ReactNode;
   onPress?: () => void;
+  /** More for the row (its actions), on a long press. */
+  onLongPress?: () => void;
   accessibilityLabel?: string;
   /** Inside a Group card: its rows' insets, no corners of its own. */
   grouped?: boolean;
@@ -155,6 +158,7 @@ export const ListRow = memo(function ListRow({
         tap();
         onPress();
       }}
+      onLongPress={onLongPress}
       style={({ pressed }) => [rowStyle, pressed && { backgroundColor: c.sunken }]}
     >
       {body}

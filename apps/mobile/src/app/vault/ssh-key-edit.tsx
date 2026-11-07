@@ -15,7 +15,7 @@ import { queryClient } from "@/lib/query";
 import { copyPlain } from "@/lib/secrets";
 import { keyNameProblem } from "@/lib/ssh-keys";
 import { fullVaultApi, useSshKeys, vk } from "@/lib/vault";
-import { space, useColors } from "@/lib/theme";
+import { fonts, space, useColors } from "@/lib/theme";
 
 /** One SSH key, like the desktop's open key row: rename it, change its comment, see where it is used, add it to a server. */
 export default function SshKeyEdit() {
@@ -104,12 +104,20 @@ function KeyForm({ sshKey: key, taken, onSaved }: { sshKey: SshManagedKey; taken
         ) : null}
       </View>
 
-      {key.publicKey || key.fingerprint ? (
+      {key.publicKey || key.fingerprint || key.randomart ? (
         <FieldCard>
           {key.publicKey ? (
             <ValueRow label={t("sshEdit.publicKey")} value={key.publicKey} trailing={<CopyButton label={t("sshKeys.copyPublicShort")} copy={() => copyPlain(key.publicKey!)} />} />
           ) : null}
           {key.fingerprint ? <ValueRow label={t("sshEdit.fingerprint")} value={key.fingerprint} trailing={<CopyButton label={t("sshEdit.copyFingerprint")} copy={() => copyPlain(key.fingerprint!)} />} /> : null}
+          {key.randomart ? (
+            // The key's picture, as ssh-keygen draws it, to tell keys apart at a glance (decoration only, like on the desktop).
+            <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.art}>
+              <T color={c.textMuted} style={styles.artText}>
+                {key.randomart}
+              </T>
+            </View>
+          ) : null}
         </FieldCard>
       ) : null}
 
@@ -172,6 +180,16 @@ const styles = StyleSheet.create({
   },
   note: {
     paddingHorizontal: 4,
+  },
+  art: {
+    alignItems: "center",
+    paddingVertical: space.md,
+  },
+  artText: {
+    fontFamily: fonts.mono,
+    fontSize: 10,
+    lineHeight: 11.5,
+    letterSpacing: 0,
   },
   row: {
     flexDirection: "row",

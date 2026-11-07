@@ -372,7 +372,9 @@
     "triggerBroken": "The trigger isn't working.",
     "runNamedNow": "Run {{name}} now",
     "turnOff": "Turn off {{name}}",
-    "turnOn": "Turn on {{name}}"
+    "turnOn": "Turn on {{name}}",
+    "moreEvents_one": "+ {{count}} more event",
+    "moreEvents_other": "+ {{count}} more events"
   },
   "followupRow": {
     "anyMoment": "any moment",
@@ -825,6 +827,7 @@
   },
   "composer": {
     "message": "Message",
+    "chatFileFailed": "Couldn't open the chat file",
     "addMessage": "Add a message",
     "slashCommands": "Slash commands",
     "attach": "Attach",
@@ -890,6 +893,11 @@
       "handoff": "Brief from an earlier chat"
     },
     "copyReply": "Copy reply",
+    "read": "Read",
+    "stop": "Stop",
+    "readAloud": "Read aloud",
+    "stopReading": "Stop reading",
+    "readFailed": "Couldn't read it out",
     "followup": {
       "now": "Continued now, ahead of its follow-up",
       "late": "Continued late, as it planned",

@@ -1,13 +1,16 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus } from "expo-audio";
 import { Stack } from "expo-router";
+import { useEffect, useRef, useState } from "react";
 import { Alert, ScrollView, StyleSheet } from "react-native";
 import { useTranslation } from "react-i18next";
 import { formatBytes, HEX_MODELS, type SttProvider, type TtsProvider, type VoiceSettings } from "@godmode/shared";
-import { useFullAccess } from "@/components/admin";
+import { isRefused, useFullAccess } from "@/components/admin";
 import { CloseButton } from "@/components/close-button";
 import { FieldRow, Group, PickerRow, SegmentRow, StepperRow, SwitchRow } from "@/components/form";
 import { ActionPill, ToolRow } from "@/components/program-parts";
 import { QueryState } from "@/components/settings-state";
+import { ActionRow, TextRow } from "@/components/tool-form";
 import { patchAnySettings } from "@/lib/admin";
 import { errorText } from "@/lib/api";
 import { languageName } from "@/lib/languages";
@@ -15,6 +18,8 @@ import { pk, programsApi } from "@/lib/programs";
 import { queryClient } from "@/lib/query";
 import { patchSettings, useSettings } from "@/lib/setup";
 import { space } from "@/lib/theme";
+import { speak, type Speech } from "@/lib/voice-mode";
+import { speakSample } from "@/lib/voice-test";
 
 const LANGUAGES = ["en-US", "en-GB", "de-DE", "fr-FR", "es-ES", "it-IT", "nl-NL", "pt-BR", "ja-JP"] as const;
 const RATES = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2] as const;
@@ -47,6 +52,8 @@ export default function Voice() {
                 <SwitchRow icon="waveform" title={t("voice.mode.enable")} value={v.enabled} onChange={(enabled) => save({ enabled })} />
                 <SwitchRow icon="call" title={t("voice.mode.autoSpeak")} detail={t("voice.mode.autoSpeakDetail")} value={v.autoSpeak} onChange={(autoSpeak) => save({ autoSpeak })} />
                 <PickerRow icon="globe" title={t("voice.mode.language")} value={v.language || "en-US"} options={languages} onChange={(language) => save({ language })} />
+                <TagRow key={v.language} value={v.language} onCommit={(language) => save({ language })} />
+                {v.ttsProvider === "browser" ? <TestPhoneVoiceRow voice={v} /> : <TestVoiceRow admin={admin} />}
               </Group>
 
               <Group title={t("voice.stt.title")}>
@@ -113,6 +120,68 @@ export default function Voice() {
       </QueryState>
     </ScrollView>
   );
+}
+
+/** A language tag the list doesn't have (BCP-47, e.g. "de-AT"), saved when the field is left. */
+function TagRow({ value, onCommit }: { value: string; onCommit: (tag: string) => void }) {
+  const { t } = useTranslation("settings");
+  const [text, setText] = useState(value);
+  const commit = () => {
+    const tag = text.trim();
+    if (tag !== value) onCommit(tag);
+  };
+  return <TextRow label={t("voice.mode.tag")} value={text} onChange={setText} onBlur={commit} placeholder="en-US" maxLength={35} mono />;
+}
+
+/** The sample sentence in the phone's own voice, in the language and speed set here; again to stop. */
+function TestPhoneVoiceRow({ voice }: { voice: VoiceSettings }) {
+  const { t } = useTranslation(["settings", "common"]);
+  const speech = useRef<Speech | null>(null);
+  const [speaking, setSpeaking] = useState(false);
+  useEffect(() => () => speech.current?.stop(), []);
+
+  const test = () => {
+    if (speech.current) return speech.current.stop();
+    const said = speak(t("voice.sample"), voice);
+    speech.current = said;
+    setSpeaking(true);
+    said.done
+      .catch((err: unknown) => Alert.alert(t("voice.testFailed"), errorText(err)))
+      .finally(() => {
+        speech.current = null;
+        setSpeaking(false);
+      });
+  };
+
+  return <ActionRow icon={speaking ? "stop" : "play"} title={speaking ? t("common:actions.stop") : t("voice.mode.test")} onPress={test} />;
+}
+
+/** Plays a sample sentence in the voice set up for replies, spoken by the computer (`voice.speak`); again to stop. */
+function TestVoiceRow({ admin }: { admin: boolean }) {
+  const { t } = useTranslation(["settings", "common", "components"]);
+  const player = useAudioPlayer(null);
+  const status = useAudioPlayerStatus(player);
+  const [loading, setLoading] = useState(false);
+  // The player only ever holds the sample, so its state is the row's.
+  const playing = status.playing;
+
+  const test = async () => {
+    if (!admin) return Alert.alert(t("components:fullAccess.title"));
+    if (playing) return player.pause();
+    setLoading(true);
+    try {
+      const file = await speakSample(t("voice.sample"));
+      await setAudioModeAsync({ playsInSilentMode: true }).catch(() => undefined);
+      player.replace({ uri: file.uri });
+      player.play();
+    } catch (err) {
+      Alert.alert(isRefused(err) ? t("components:fullAccess.title") : t("voice.testFailed"), isRefused(err) ? undefined : errorText(err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return <ActionRow icon={playing ? "stop" : "play"} title={playing ? t("common:actions.stop") : t("voice.mode.test")} busy={loading} onPress={() => void test()} />;
 }
 
 /** Hex, local dictation on the computer: its app, the speech model it downloads, where it lives. */

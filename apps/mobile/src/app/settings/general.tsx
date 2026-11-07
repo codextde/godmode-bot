@@ -4,9 +4,10 @@ import { useTranslation } from "react-i18next";
 import { PALETTES, type AppLanguage, type InterfaceMode, type Palette, type Theme, type TimeFormat } from "@godmode/shared";
 import { CloseButton } from "@/components/close-button";
 import { FieldRow, Group, PickerRow, SegmentRow, SwitchRow } from "@/components/form";
+import { useFullAccess } from "@/components/full-access";
 import { QueryState } from "@/components/settings-state";
 import { useAppearance } from "@/lib/appearance";
-import { useChatPrefs, type Animations, type ToolCallView } from "@/lib/chat-prefs";
+import { useChatPrefs, type Animations, type FollowUp, type ToolCallView } from "@/lib/chat-prefs";
 import { useLanguage, useTimeFormat } from "@/lib/i18n";
 import { patchSettings, useSettings } from "@/lib/setup";
 import { useSuggestions } from "@/lib/suggestions";
@@ -37,7 +38,7 @@ const MODE_OPTIONS = [
 
 /** Settings → General: who you are, how the apps look and read, and how chats look on this phone. */
 export default function General() {
-  const { t } = useTranslation(["settings", "common"]);
+  const { t } = useTranslation(["settings", "common", "manage"]);
   const settings = useSettings();
   const theme = useAppearance((s) => s.theme);
   const palette = useAppearance((s) => s.palette);
@@ -46,6 +47,9 @@ export default function General() {
   const hideSuggestions = useSuggestions((s) => s.hidden);
   const toolCalls = useChatPrefs((s) => s.toolCalls);
   const animations = useChatPrefs((s) => s.animations);
+  const followUp = useChatPrefs((s) => s.followUp);
+  const mcpApps = useChatPrefs((s) => s.mcpApps);
+  const { fullAccess } = useFullAccess();
 
   return (
     <ScrollView contentInsetAdjustmentBehavior="automatic" keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets contentContainerStyle={styles.content}>
@@ -124,6 +128,16 @@ export default function General() {
                   value={toolCalls}
                   onChange={(next) => useChatPrefs.getState().setToolCalls(next)}
                 />
+                <SegmentRow<FollowUp>
+                  title={t("manage:followUp.title")}
+                  options={[
+                    { value: "queue", label: t("manage:followUp.queue") },
+                    { value: "steer", label: t("manage:followUp.steer") },
+                  ]}
+                  value={followUp}
+                  onChange={(next) => useChatPrefs.getState().setFollowUp(next)}
+                />
+                {fullAccess ? <SwitchRow icon="puzzle" title={t("general.chat.mcpApps")} value={mcpApps} onChange={(on) => useChatPrefs.getState().setMcpApps(on)} /> : null}
                 <SwitchRow
                   icon="sparkles"
                   title={t("overview.suggestions.title")}

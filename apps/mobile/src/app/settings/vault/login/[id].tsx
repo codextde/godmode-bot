@@ -145,6 +145,16 @@ function LoginBody({ login }: { login: Credential }) {
             trailing={openable ? <IconButton icon="external" label={t("login.openWebsite")} onPress={() => void Linking.openURL(site)} /> : null}
           />
         ) : null}
+        {login.domains.length > 1 ? (
+          <View style={styles.domains}>
+            <T variant="footnote" muted>
+              {t("loginEdit.domains")}
+            </T>
+            <T variant="callout" selectable>
+              {login.domains.join("\n")}
+            </T>
+          </View>
+        ) : null}
       </Group>
 
       <Group>
@@ -246,5 +256,10 @@ const styles = StyleSheet.create({
   codeRow: {
     paddingHorizontal: space.lg,
     paddingVertical: 12,
+  },
+  domains: {
+    paddingHorizontal: space.lg,
+    paddingVertical: 12,
+    gap: 2,
   },
 });

@@ -10,8 +10,10 @@ import { Group } from "@/components/form";
 import { LicenseActions } from "@/components/license-actions";
 import { QueryState } from "@/components/settings-state";
 import { InfoRow } from "@/components/status-rows";
+import { hours, UsageCard } from "@/components/usage-chart";
 import type { Tone } from "@/components/ui";
 import { dateLocale, intlLocale } from "@/lib/i18n";
+import { queryClient } from "@/lib/query";
 import { settingsApi, sq } from "@/lib/settings-api";
 import { usePullRefresh } from "@/lib/use-pull-refresh";
 import { space } from "@/lib/theme";
@@ -57,23 +59,15 @@ function money(minor: number, currency: string): string {
   }
 }
 
-function hours(ms: number): string {
-  const minutes = Math.round(ms / 60_000);
-  if (minutes < 1) return ms > 0 ? "< 1 min" : "0 min";
-  if (minutes < 60) return `${minutes} min`;
-  return `${(minutes / 60).toLocaleString(intlLocale(), { maximumFractionDigits: 1 })} h`;
-}
-
 /** Settings → Licence: the licence, what this computer's agents did, and the Godmode Cloud plan. Keys and plans change on the computer. */
 export default function License() {
   const { t } = useTranslation(["settings", "common"]);
   const license = useQuery({ queryKey: sq.license, queryFn: settingsApi.license.get });
   const usage = useQuery({ queryKey: sq.licenseUsage, queryFn: settingsApi.license.usage });
-  const agents = useQuery({ queryKey: sq.usage(30), queryFn: () => settingsApi.usage(30) });
   const cloud = useQuery({ queryKey: sq.cloud, queryFn: settingsApi.cloud.status });
   const linked = !!cloud.data && cloud.data.state !== "unlinked";
   const billing = useQuery({ queryKey: sq.cloudBilling, queryFn: settingsApi.cloud.billing, enabled: linked, retry: false });
-  const pull = usePullRefresh(() => Promise.all([license.refetch(), usage.refetch(), agents.refetch(), cloud.refetch(), linked ? billing.refetch() : null]));
+  const pull = usePullRefresh(() => Promise.all([license.refetch(), usage.refetch(), queryClient.invalidateQueries({ queryKey: ["usage"] }), cloud.refetch(), linked ? billing.refetch() : null]));
 
   return (
     <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content} refreshControl={<RefreshControl {...pull} />}>
@@ -96,21 +90,7 @@ export default function License() {
               </Group>
             ) : null}
 
-            {agents.data ? (
-              <Group title={t("license.agents.title")}>
-                <InfoRow icon="play" label={t("license.agents.runs")} value={count(agents.data.runs)} />
-                <InfoRow icon="clock" label={t("license.agents.time")} value={hours(agents.data.durationMs)} />
-                <InfoRow
-                  icon="cpu"
-                  label={t("license.agents.tokens")}
-                  detail={t("license.agents.tokensDetail", { input: count(agents.data.tokens.input), output: count(agents.data.tokens.output) })}
-                  value={count(agents.data.tokens.input + agents.data.tokens.output + agents.data.tokens.cacheRead + agents.data.tokens.cacheWrite)}
-                />
-                {agents.data.byModel.map((m) => (
-                  <InfoRow key={m.model} icon="sparkles" label={m.model === "unknown" ? t("common:status.unknown") : m.model} value={t("license.agents.modelRuns", { count: m.runs })} />
-                ))}
-              </Group>
-            ) : null}
+            <UsageCard />
 
             {billing.data ? <CloudPlanGroup billing={billing.data} /> : null}
           </>

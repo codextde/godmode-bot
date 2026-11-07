@@ -1,36 +1,43 @@
 import { useQuery } from "@tanstack/react-query";
 import { router, useLocalSearchParams } from "expo-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import {
-  cronToHuman,
   DEFAULT_CRON,
+  findModel,
   validateCron,
   type Agent,
+  type AppTriggerEvent,
+  type ComposioConnection,
   type Routine,
   type RoutineInput,
   type RoutineNotify,
   type RoutineTrigger,
   type RoutineTriggerType,
 } from "@godmode/shared";
+import { useFullAccess } from "@/components/admin";
+import { AppTriggerFields } from "@/components/app-trigger-fields";
 import { CharacterAvatar } from "@/components/character";
 import { CronBuilder, StartWindowField, startWindowProblem } from "@/components/cron-builder";
 import { Group, PickerRow, SwitchRow, Tile, type Option } from "@/components/form";
 import { Icon, type IconName } from "@/components/icon";
 import { phoneTimezone, triggerText, TRIGGER_TITLES } from "@/components/routine-row";
 import { ErrorState, LoadingState, T, tap } from "@/components/ui";
+import { WebhookPanel } from "@/components/webhook-panel";
 import { api, errorText } from "@/lib/api";
+import { appTriggerProblems, connectionUsableBy, EMPTY_APP_TRIGGER, useAppTriggerSchema, type AppTriggerDraft } from "@/lib/automation-admin";
+import { useModelCatalog } from "@/lib/composer";
 import { useAgents } from "@/lib/hooks";
+import { ik } from "@/lib/integrations";
 import { qk, queryClient } from "@/lib/query";
+import { configValue } from "@/lib/schema-form";
 import { radius, space, useColors } from "@/lib/theme";
-import { currentLanguage, uses12Hour } from "@/lib/i18n";
-
-type PhoneTrigger = "schedule" | "condition";
 
 /** Conditions are checked hourly unless the human picks otherwise. */
 const DEFAULT_CHECK_CRON = "0 * * * *";
-const CHECK_EVERY = ["*/5 * * * *", "*/15 * * * *", "*/30 * * * *", "0 * * * *", "0 9 * * *"];
+const AGENT_MODEL = "__agent";
+const MAX_MORE_APPS = 9;
 
 const NAME_PLACEHOLDERS = {
   schedule: "edit.namePlaceholder.schedule",
@@ -53,8 +60,13 @@ const FILTER_PLACEHOLDERS = {
 
 const TRIGGER_OPTIONS = [
   { type: "schedule", icon: "clock", hint: "edit.triggerHint.schedule" },
+  { type: "app", icon: "layers", hint: "edit.triggerHint.app" },
   { type: "condition", icon: "eye", hint: "edit.triggerHint.condition" },
-] as const satisfies readonly { type: PhoneTrigger; icon: IconName; hint: string }[];
+  { type: "webhook", icon: "link", hint: "edit.triggerHint.webhook" },
+] as const satisfies readonly { type: RoutineTriggerType; icon: IconName; hint: string }[];
+
+/** A limited phone sets up schedules and conditions; app accounts and secret URLs need full access. */
+const LIMITED_TRIGGERS: readonly RoutineTriggerType[] = ["schedule", "condition"];
 
 const NOTIFY_VALUES: RoutineNotify[] = ["failures", "always", "never"];
 
@@ -62,6 +74,13 @@ const NOTIFY_FOOTERS = {
   never: "edit.notifyFooter.never",
   always: "edit.notifyFooter.always",
   failures: "edit.notifyFooter.failures",
+} as const satisfies Record<RoutineNotify, string>;
+
+/** A full-access phone's automations aren't limited to filling in logins. */
+const NOTIFY_FOOTERS_FULL = {
+  never: "edit.notifyFooterFull.never",
+  always: "edit.notifyFooterFull.always",
+  failures: "edit.notifyFooterFull.failures",
 } as const satisfies Record<RoutineNotify, string>;
 
 interface Draft {
@@ -77,6 +96,11 @@ interface Draft {
   /** Condition triggers: how often to check. */
   checkCron: string;
   condition: string;
+  /** Model for condition checks; null = the agent's. */
+  checkModel: string | null;
+  app: AppTriggerDraft;
+  /** More app events that start the same automation. */
+  moreApps: MoreAppDraft[];
   /** App/webhook triggers: only act on matching events. */
   filter: string;
   prompt: string;
@@ -84,6 +108,17 @@ interface Draft {
   reuseConversation: boolean;
   notify: RoutineNotify;
 }
+
+type MoreAppDraft = AppTriggerDraft & { key: string };
+
+const newKey = () => Math.random().toString(36).slice(2, 10);
+
+function appDraftOf(e: AppTriggerEvent): AppTriggerDraft {
+  return { connectionId: e.connectionId, toolkit: e.toolkit, triggerSlug: e.triggerSlug, triggerName: e.triggerName, config: { values: e.config ?? {}, json: {} } };
+}
+
+/** Like the core: events get a chat each (named after the event); schedules and conditions keep one. */
+const defaultReuse = (type: RoutineTriggerType) => type === "schedule" || type === "condition";
 
 function initialDraft(routine: Routine | null, agentId: string): Draft {
   const t = routine?.trigger;
@@ -96,6 +131,9 @@ function initialDraft(routine: Routine | null, agentId: string): Draft {
     runs: t?.type === "schedule" ? (t.runsPerWindow ?? 1) : 1,
     checkCron: t?.type === "condition" ? routine!.cron : DEFAULT_CHECK_CRON,
     condition: t?.type === "condition" ? t.condition : "",
+    checkModel: t?.type === "condition" ? t.checkModel : null,
+    app: t?.type === "app" ? appDraftOf(t) : EMPTY_APP_TRIGGER,
+    moreApps: t?.type === "app" ? (t.moreEvents ?? []).map((e) => ({ ...appDraftOf(e), key: newKey() })) : [],
     filter: routine?.filter ?? "",
     prompt: routine?.prompt ?? "",
     enabled: routine?.enabled ?? true,
@@ -104,7 +142,10 @@ function initialDraft(routine: Routine | null, agentId: string): Draft {
   };
 }
 
-/** Create (`agentId` preselects the agent) or edit (`id`) an automation that runs on a schedule or when a condition is met. */
+/**
+ * Create (`agentId` preselects the agent) or edit (`id`) an automation, like the desktop's routine dialog: a schedule, an
+ * app event, a condition or a webhook. A limited phone sets up schedules and conditions only.
+ */
 export default function AutomationEdit() {
   const { t } = useTranslation(["automations", "common"]);
   const { id, agentId } = useLocalSearchParams<{ id?: string; agentId?: string }>();
@@ -139,41 +180,94 @@ export default function AutomationEdit() {
 function AutomationForm({ routine, agents, defaultAgentId }: { routine: Routine | null; agents: Agent[]; defaultAgentId: string }) {
   const c = useColors();
   const { t } = useTranslation(["automations", "common"]);
+  const admin = useFullAccess().fullAccess === true;
+  const catalog = useModelCatalog();
   const editing = !!routine;
   const [draft, setDraft] = useState(() => initialDraft(routine, defaultAgentId));
   const [touched, setTouched] = useState(false);
   const [saving, setSaving] = useState(false);
+  // Until the human sets "Keep one chat" on a new automation, it follows the trigger's default.
+  const [reuseChosen, setReuseChosen] = useState(editing);
+  const [moreResolved, setMoreResolved] = useState<Record<string, AppTriggerEvent | null>>({});
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setDraft((d) => ({ ...d, [k]: v }));
 
   const type = draft.triggerType;
-  // App and webhook triggers need connections and secret URLs that live on the computer.
-  const phoneTrigger = type === "schedule" || type === "condition";
-  const eventTrigger = !phoneTrigger;
+  // A limited phone keeps an app or webhook trigger as it is: accounts and secret URLs need full access.
+  const triggerEditable = admin || LIMITED_TRIGGERS.includes(type);
+  const eventTrigger = type === "app" || type === "webhook";
+  // A limited phone can't ask for app events; it keeps the trigger as it is anyway.
+  const appSchema = useAppTriggerSchema(admin ? draft.app : EMPTY_APP_TRIGGER);
   const timezone = routine?.timezone || phoneTimezone() || "UTC";
   const zone = timezone !== phoneTimezone() ? timezone.replace(/_/g, " ") : null;
   const windowProblem = type === "schedule" ? startWindowProblem(draft.cron, timezone, draft.startWindow) : null;
   const cronError = type === "schedule" ? (validateCron(draft.cron) ?? windowProblem) : type === "condition" ? validateCron(draft.checkCron) : null;
+  const appProblems = type === "app" && admin ? appTriggerProblems(draft.app, appSchema) : null;
   const problems = {
     agentId: !draft.agentId ? t("edit.problem.agent") : null,
     name: !draft.name.trim() ? t("edit.problem.name") : null,
     condition: type === "condition" && !draft.condition.trim() ? t("edit.problem.condition") : null,
     prompt: !draft.prompt.trim() ? (eventTrigger ? t("edit.problem.promptEvent") : t("edit.problem.prompt")) : null,
   };
-  const firstProblem = Object.values(problems).find(Boolean) ?? cronError;
+  const appProblem = appProblems
+    ? (appProblems.connection ??
+      appProblems.trigger ??
+      appProblems.schema ??
+      Object.values(appProblems.config)[0] ??
+      (draft.moreApps.some((m) => !moreResolved[m.key]) ? t("edit.problem.moreApps") : null))
+    : null;
+  const firstProblem = Object.values(problems).find(Boolean) ?? cronError ?? appProblem;
   const choosable = agents.filter((a) => a.enabled || a.id === draft.agentId);
   const agent = agents.find((a) => a.id === draft.agentId);
   const notifyOptions: Option<RoutineNotify>[] = NOTIFY_VALUES.map((value) => ({ value, label: t(`notify.${value}`) }));
-  const checkOptions: Option<string>[] = [...new Set([...CHECK_EVERY, draft.checkCron])].map((cron) => ({ value: cron, label: cronToHuman(cron, currentLanguage(), uses12Hour()) }));
+  const models = catalog.data?.models ?? [];
+  const checkModel = findModel(models, draft.checkModel)?.id ?? draft.checkModel ?? AGENT_MODEL;
+  const modelOptions: Option<string>[] = [
+    { value: AGENT_MODEL, label: t("edit.agentModel") },
+    ...models.map((m) => ({ value: m.id, label: m.label, detail: m.description || undefined })),
+    ...(draft.checkModel && !findModel(models, draft.checkModel) ? [{ value: draft.checkModel, label: draft.checkModel }] : []),
+  ];
+  const triggers = TRIGGER_OPTIONS.filter((o) => admin || LIMITED_TRIGGERS.includes(o.type));
+
+  const setType = (next: RoutineTriggerType) => setDraft((d) => ({ ...d, triggerType: next, reuseConversation: reuseChosen ? d.reuseConversation : defaultReuse(next) }));
+  /** Another agent may not reach the chosen account: then it is dropped (the account picker offers only reachable ones). */
+  const setAgent = (id: string) =>
+    setDraft((d) => {
+      const next = agents.find((a) => a.id === id);
+      const connections = queryClient.getQueryData<ComposioConnection[]>(ik.composioConnections) ?? [];
+      const keep = (app: AppTriggerDraft) => {
+        const connection = connections.find((x) => x.id === app.connectionId);
+        return !app.connectionId || (!!next && !!connection && connectionUsableBy(connection, next));
+      };
+      return { ...d, agentId: id, app: keep(d.app) ? d.app : EMPTY_APP_TRIGGER, moreApps: d.moreApps.filter(keep) };
+    });
+  const setMoreApp = (key: string, app: AppTriggerDraft) => set("moreApps", draft.moreApps.map((m) => (m.key === key ? { ...app, key } : m)));
+  const addMoreApp = () => set("moreApps", [...draft.moreApps, { ...EMPTY_APP_TRIGGER, connectionId: draft.app.connectionId, toolkit: draft.app.toolkit, key: newKey() }]);
 
   const buildTrigger = (): RoutineTrigger => {
-    if (type === "condition") {
-      const before = routine?.trigger.type === "condition" ? routine.trigger.checkModel : null;
-      return { type: "condition", condition: draft.condition.trim(), checkModel: before };
+    switch (type) {
+      case "condition":
+        return { type: "condition", condition: draft.condition.trim(), checkModel: draft.checkModel };
+      case "app": {
+        const { connectionId, toolkit, triggerSlug, triggerName, config } = draft.app;
+        const more = draft.moreApps.map((m) => moreResolved[m.key]).filter((e): e is AppTriggerEvent => !!e);
+        return {
+          type: "app",
+          connectionId,
+          toolkit,
+          triggerSlug,
+          triggerName: appSchema.triggerType?.name ?? triggerName,
+          config: configValue(appSchema.fields, config),
+          ...(more.length ? { moreEvents: more } : {}),
+        };
+      }
+      case "webhook":
+        return { type: "webhook" };
+      default:
+        if (!draft.startWindow) return { type: "schedule" };
+        return draft.runs > 1
+          ? { type: "schedule", startWindowMinutes: draft.startWindow, runsPerWindow: draft.runs }
+          : { type: "schedule", startWindowMinutes: draft.startWindow };
     }
-    if (!draft.startWindow) return { type: "schedule" };
-    return draft.runs > 1
-      ? { type: "schedule", startWindowMinutes: draft.startWindow, runsPerWindow: draft.runs }
-      : { type: "schedule", startWindowMinutes: draft.startWindow };
   };
 
   const save = async () => {
@@ -190,17 +284,19 @@ function AutomationForm({ routine, agents, defaultAgentId }: { routine: Routine 
       reuseConversation: draft.reuseConversation,
       notify: draft.notify,
     };
-    // An app or webhook trigger is never sent from the phone: only what it does and how it reports changes.
-    const input: Partial<RoutineInput> = phoneTrigger
-      ? { ...common, trigger: buildTrigger(), cron: (type === "schedule" ? draft.cron : draft.checkCron).trim(), timezone, filter: "" }
+    const cron = type === "schedule" ? draft.cron.trim() : type === "condition" ? draft.checkCron.trim() : undefined;
+    // A limited phone never sends an app or webhook trigger: only what it does and how it reports changes.
+    const input: Partial<RoutineInput> = triggerEditable
+      ? { ...common, trigger: buildTrigger(), cron, timezone, filter: eventTrigger ? draft.filter.trim() : "" }
       : { ...common, filter: draft.filter.trim() };
     setSaving(true);
     try {
-      if (routine) await api.routines.update(routine.id, input);
-      else await api.routines.create({ ...input, agentId: draft.agentId } as RoutineInput);
+      const saved = routine ? await api.routines.update(routine.id, input) : await api.routines.create({ ...input, agentId: draft.agentId } as RoutineInput);
       void queryClient.invalidateQueries({ queryKey: qk.routines });
       tap();
       router.back();
+      // A new webhook: its secret URL is on the automation's page.
+      if (!routine && saved.trigger.type === "webhook") router.push({ pathname: "/automation/[id]", params: { id: saved.id } });
     } catch (err) {
       Alert.alert(editing ? t("edit.updateFailed") : t("edit.createFailed"), errorText(err));
     } finally {
@@ -251,7 +347,7 @@ function AutomationForm({ routine, agents, defaultAgentId }: { routine: Routine 
           ) : (
             <View style={styles.chips}>
               {choosable.map((a) => (
-                <AgentChip key={a.id} agent={a} active={a.id === draft.agentId} onPress={() => set("agentId", a.id)} />
+                <AgentChip key={a.id} agent={a} active={a.id === draft.agentId} onPress={() => setAgent(a.id)} />
               ))}
             </View>
           )}
@@ -262,10 +358,10 @@ function AutomationForm({ routine, agents, defaultAgentId }: { routine: Routine 
           <T variant="eyebrow" muted>
             {t("edit.whenRun")}
           </T>
-          {phoneTrigger ? (
+          {triggerEditable ? (
             <Group>
-              {TRIGGER_OPTIONS.map((o) => (
-                <TriggerOption key={o.type} icon={o.icon} title={TRIGGER_TITLES[o.type]} hint={t(o.hint)} active={type === o.type} onPress={() => set("triggerType", o.type)} />
+              {triggers.map((o) => (
+                <TriggerOption key={o.type} icon={o.icon} title={TRIGGER_TITLES[o.type]} hint={t(o.hint)} active={type === o.type} onPress={() => setType(o.type)} />
               ))}
             </Group>
           ) : (
@@ -302,6 +398,31 @@ function AutomationForm({ routine, agents, defaultAgentId }: { routine: Routine 
           </View>
         ) : null}
 
+        {type === "app" && admin ? (
+          <View style={{ gap: space.lg }}>
+            <AppTriggerFields value={draft.app} onChange={(app) => set("app", app)} agent={agent} showProblems={touched} />
+            {draft.moreApps.map((m) => (
+              <MoreAppEvent
+                key={m.key}
+                value={m}
+                agent={agent}
+                showProblems={touched}
+                onChange={(app) => setMoreApp(m.key, app)}
+                onRemove={() => set("moreApps", draft.moreApps.filter((x) => x.key !== m.key))}
+                onResolved={(event) => setMoreResolved((prev) => (JSON.stringify(prev[m.key] ?? null) === JSON.stringify(event) ? prev : { ...prev, [m.key]: event }))}
+              />
+            ))}
+            {draft.app.connectionId && draft.moreApps.length < MAX_MORE_APPS ? (
+              <Pressable accessibilityRole="button" onPress={addMoreApp} style={({ pressed }) => [styles.addEvent, pressed && { opacity: 0.6 }]}>
+                <Icon name="plus" size={14} color={c.brandStrong} />
+                <T variant="subhead" color={c.brandStrong} style={{ fontWeight: "600" }}>
+                  {t("edit.addAppEvent")}
+                </T>
+              </Pressable>
+            ) : null}
+          </View>
+        ) : null}
+
         {type === "condition" ? (
           <View style={{ gap: space.md }}>
             <View style={{ gap: space.sm }}>
@@ -322,10 +443,26 @@ function AutomationForm({ routine, agents, defaultAgentId }: { routine: Routine 
                 {t("edit.conditionHint")}
               </T>
             </View>
-            <Group footer={zone ? t("edit.checkedInZone", { zone }) : undefined}>
-              <PickerRow title={t("edit.howOften")} value={draft.checkCron} options={checkOptions} onChange={(cron) => set("checkCron", cron)} />
+            <View style={{ gap: space.sm }}>
+              <T variant="eyebrow" muted>
+                {t("edit.howOften")}
+              </T>
+              <CronBuilder value={draft.checkCron} onChange={(cron) => set("checkCron", cron)} zone={zone} />
+            </View>
+            <Group footer={t("edit.checkModelHint")}>
+              <PickerRow icon="sparkles" title={t("edit.checkModel")} value={checkModel} options={modelOptions} onChange={(v) => set("checkModel", v === AGENT_MODEL ? null : v)} />
             </Group>
           </View>
+        ) : null}
+
+        {type === "webhook" && admin ? (
+          routine?.trigger.type === "webhook" ? (
+            <WebhookPanel routine={routine} />
+          ) : (
+            <T variant="footnote" muted>
+              {editing ? t("edit.webhookAfterSave") : t("edit.webhookAfterCreate")}
+            </T>
+          )
         ) : null}
 
         {eventTrigger ? (
@@ -364,16 +501,15 @@ function AutomationForm({ routine, agents, defaultAgentId }: { routine: Routine 
           <Problem text={touched ? problems.prompt : null} />
         </View>
 
-        <Group footer={t(NOTIFY_FOOTERS[draft.notify])}>
+        <Group footer={t(admin ? NOTIFY_FOOTERS_FULL[draft.notify] : NOTIFY_FOOTERS[draft.notify])}>
           <SwitchRow
             title={t("automation.keepOneChat")}
-            detail={
-              eventTrigger
-                ? t("edit.keepOneChatEvent")
-                : t("edit.keepOneChat")
-            }
+            detail={eventTrigger ? t("edit.keepOneChatEvent") : t("edit.keepOneChat")}
             value={draft.reuseConversation}
-            onChange={(v) => set("reuseConversation", v)}
+            onChange={(v) => {
+              setReuseChosen(true);
+              set("reuseConversation", v);
+            }}
           />
           <SwitchRow
             title={t("automation.enabled")}
@@ -386,6 +522,43 @@ function AutomationForm({ routine, agents, defaultAgentId }: { routine: Routine 
       </View>
     </ScrollView>
   );
+}
+
+/** One more app event of the same automation; it says what it resolves to once its settings are known and valid. */
+function MoreAppEvent({
+  value,
+  agent,
+  showProblems,
+  onChange,
+  onRemove,
+  onResolved,
+}: {
+  value: AppTriggerDraft;
+  agent: Agent | undefined;
+  showProblems: boolean;
+  onChange: (value: AppTriggerDraft) => void;
+  onRemove: () => void;
+  onResolved: (event: AppTriggerEvent | null) => void;
+}) {
+  const { t } = useTranslation("automations");
+  const schema = useAppTriggerSchema(value);
+  const problems = appTriggerProblems(value, schema);
+  const invalid = !!problems.connection || !!problems.trigger || !!problems.schema || Object.keys(problems.config).length > 0;
+  const signature = invalid
+    ? "null"
+    : JSON.stringify({
+        connectionId: value.connectionId,
+        toolkit: value.toolkit,
+        triggerSlug: value.triggerSlug,
+        triggerName: schema.triggerType?.name ?? value.triggerName,
+        config: configValue(schema.fields, value.config),
+      });
+  useEffect(() => {
+    onResolved(JSON.parse(signature) as AppTriggerEvent | null);
+    // Only a new signature is news; the callback changes with every render of the form.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [signature]);
+  return <AppTriggerFields title={t("edit.moreAppEvent")} value={value} onChange={onChange} agent={agent} showProblems={showProblems} onRemove={onRemove} />;
 }
 
 /** The sheet's bar: Cancel, the title and Save. */
@@ -532,6 +705,13 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     gap: space.sm,
+  },
+  addEvent: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    gap: 6,
+    paddingVertical: space.xs,
   },
   chip: {
     flexDirection: "row",

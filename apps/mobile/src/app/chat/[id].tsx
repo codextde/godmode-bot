@@ -24,7 +24,9 @@ import {
   runEndOf,
 } from "@godmode/shared";
 import { CharacterAvatar } from "@/components/character";
-import { Composer, ComposerDock, type ComposerHandle } from "@/components/composer";
+import { ChatMoveCard } from "@/components/chat-move-card";
+import { Composer, ComposerDock, type ComposerHandle, type SendOptions } from "@/components/composer";
+import { useFullAccess } from "@/components/full-access";
 import { HeaderActions, MenuSheet, type HeaderMenuItem } from "@/components/header-actions";
 import { LiveStrip } from "@/components/live-strip";
 import { AssistantMessage, UserMessage } from "@/components/message";
@@ -39,6 +41,8 @@ import { ApiError, api, errorText, updateDesktopMessage } from "@/lib/api";
 import { useArchive } from "@/lib/archive";
 import { encodeFiles, type PendingFile } from "@/lib/attachments";
 import { fetchConversation, loadEarlier } from "@/lib/chat-cache";
+import { moveTargets, usePlaces } from "@/lib/chat-extras";
+import { useChatPrefs } from "@/lib/chat-prefs";
 import { isCompressCommand, useContextGauge } from "@/lib/chat-memory";
 import { setQueue } from "@/lib/composer";
 import { askHandoff, canHandoff, handoffChatIn, isHandoffCommand, takeHandoff } from "@/lib/handoff";
@@ -48,10 +52,12 @@ import { useAgents, useNow } from "@/lib/hooks";
 import { useChatRun, useLive, useRunActivity } from "@/lib/live";
 import { qk, queryClient } from "@/lib/query";
 import { subscribeConversation, viewConversation } from "@/lib/realtime";
+import { useSettings } from "@/lib/setup";
 import { screenHref, useChatScreens, type LiveScreen } from "@/lib/screens";
 import { radius, space, type, useColors } from "@/lib/theme";
 import { currentLanguage } from "@/lib/i18n";
 import { useTypewriter } from "@/lib/typewriter";
+import { markVoiceRun, useSpokenReplies } from "@/lib/voice-replies";
 
 type Item =
   | { key: string; role: "intro" }
@@ -122,6 +128,9 @@ export default function Chat() {
   const screens = useChatScreens(conversation.data, agent);
   const composer = useRef<ComposerHandle>(null);
   const [renaming, setRenaming] = useState(false);
+  const { fullAccess } = useFullAccess();
+  const places = usePlaces(fullAccess === true);
+  const settings = useSettings();
   const isPrivate = !!conversation.data?.private;
   usePrivateChatLifetime(id, isPrivate);
   const continuedFrom = conversation.data?.continuedFrom ?? null;
@@ -192,7 +201,11 @@ export default function Chat() {
     [id, agent?.name, pause, t],
   );
 
-  const send = async (content: string, files: PendingFile[]) => {
+  const followUp = useChatPrefs((s) => s.followUp);
+  const working = !!run && !paused;
+  useSpokenReplies(id, runId, settings.data?.voice);
+
+  const send = async (content: string, files: PendingFile[], options?: SendOptions) => {
     if (isHandoffCommand(content)) askHandoff(id);
     const key = qk.conversation(id);
     const queueId = newQueueId();
@@ -224,6 +237,8 @@ export default function Chat() {
         });
         // Also settles the queue when the agent took the message before this answer arrived.
         void queryClient.invalidateQueries({ queryKey: key });
+        // Steer (Settings → General, or the other way when the button was held): the agent stops and starts on the queue right away.
+        if (working && (followUp === "steer") !== !!options?.otherWay) void api.conversations.queue.sendNow(id).catch(() => undefined);
         return;
       }
       if ("question" in result) {
@@ -243,6 +258,7 @@ export default function Chat() {
         };
       });
       useLive.getState().runStarted(result.run);
+      if (options?.voice) markVoiceRun(result.run.id);
       requestAnimationFrame(() => list.current?.scrollToEnd({ animated: true }));
     } catch (err) {
       pendingQueued.delete(queueId);
@@ -342,7 +358,12 @@ export default function Chat() {
           ? [{ icon: "pause" as const, title: t("thread.menu.pause"), onPress: () => void api.conversations.pause(id).catch((err) => Alert.alert(t("thread.pauseFailed"), errorText(err))) }]
           : []),
         ...(handoffOk && !handoffQueued ? [{ icon: "handoff" as const, title: t("conv.handoff"), onPress: handoff }] : []),
+        ...(settings.data?.voice.enabled !== false ? [{ icon: "waveform" as const, title: t("voiceMode.title"), onPress: () => router.push({ pathname: "/voice-mode", params: { conversationId: id } }) }] : []),
         { icon: "slider", title: t("conv.settings"), onPress: () => router.push({ pathname: "/chat-options", params: { conversationId: id } }) },
+        ...(fullAccess && !data.private ? [{ icon: "share" as const, title: t("share.menu"), onPress: () => router.push({ pathname: "/chat-share", params: { conversationId: id } }) }] : []),
+        ...(fullAccess && !data.private && moveTargets(places, data.runnerId).length
+          ? [{ icon: "laptop" as const, title: t("move.menu"), onPress: () => router.push({ pathname: "/chat-move", params: { conversationId: id } }) }]
+          : []),
         { icon: "pencil", title: t("common:actions.rename"), onPress: rename },
         ...(data.private
           ? []
@@ -437,6 +458,7 @@ export default function Chat() {
             onHide={() => setCompressHiddenAt(longChat.tokens)}
           />
         ) : null}
+        <ChatMoveCard conversationId={id} />
         <QueueTray
           conversationId={id}
           queue={queue}
@@ -453,8 +475,9 @@ export default function Chat() {
             attachments
             onSend={send}
             onStop={stop}
-            running={!!run && !paused}
-            sendLabel={waiting ? t("thread.send.answer") : paused ? (paused.reason === "user" ? t("thread.send.andContinue") : t("thread.send.queue")) : queueing ? t("thread.send.queue") : null}
+            running={working}
+            sendLabel={waiting ? t("thread.send.answer") : paused ? (paused.reason === "user" ? t("thread.send.andContinue") : t("thread.send.queue")) : working && followUp === "steer" ? t("thread.send.steer") : queueing ? t("thread.send.queue") : null}
+            otherSend={working ? (followUp === "steer" ? t("thread.send.queue") : t("thread.send.steer")) : null}
             placeholder={
               !agent
                 ? t("thread.placeholder.message")

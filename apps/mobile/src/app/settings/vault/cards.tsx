@@ -47,7 +47,7 @@ export default function Cards() {
       {recent.length ? (
         <Group title={t("purchases.title")}>
           {recent.map((p) => (
-            <PurchaseRow key={p.id} purchase={p} card={byId.get(p.cardId)} />
+            <PurchaseRow key={p.id} purchase={p} card={byId.get(p.cardId)} actions={!!fullAccess} />
           ))}
         </Group>
       ) : null}

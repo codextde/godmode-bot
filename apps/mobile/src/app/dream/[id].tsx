@@ -12,14 +12,16 @@ import { api, ApiError, errorText, updateDesktopMessage } from "@/lib/api";
 import { useAgents } from "@/lib/hooks";
 import { diffFile, foldContext, type DiffLine, type FileDiff } from "@/lib/line-diff";
 import { qk, queryClient } from "@/lib/query";
+import { useFullAccess } from "@/components/full-access";
 import { HeaderActions } from "@/components/header-actions";
+import { manageApi } from "@/lib/manage";
 import { intlLocale } from "@/lib/i18n";
 import { alpha, fonts, radius, space, useColors, type Colors } from "@/lib/theme";
 
 /** Rows rendered per file before "Show everything" (a new or deleted note can be long). */
 const MAX_ROWS = 400;
 
-/** One dream, read-only like the desktop's review: what the agent says it did, and a line diff of every file it changed. */
+/** One dream, like the desktop's review: what the agent says it did, a line diff of every file it changed, and undo. */
 export default function DreamScreen() {
   const { t } = useTranslation("dreams");
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -59,6 +61,35 @@ function DreamView({ dream: d }: { dream: DreamDetail }) {
   });
   const canStop = ACTIVE_DREAM.includes(d.status) && !!d.runId && !stop.isPending && !(stop.isSuccess && stop.variables === d.runId);
   const agentName = useAgents().byId.get(d.agentId)?.name ?? t("view.theAgent");
+  const fullAccess = useFullAccess().fullAccess === true;
+  const { t: tm } = useTranslation(["manage", "components", "common"]);
+  const revert = useMutation({
+    mutationFn: () => manageApi.revertDream(d.id),
+    onSuccess: () => {
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      for (const key of [qk.dream(d.id), qk.dreams(d.agentId), qk.agentMemory(d.agentId), qk.agentCommits(d.agentId), ["agents", d.agentId, "notes"]]) void queryClient.invalidateQueries({ queryKey: key });
+      Alert.alert(tm("dream.undone"));
+    },
+    onError: (err) => {
+      void queryClient.invalidateQueries({ queryKey: qk.dream(d.id) });
+      Alert.alert(tm("dream.undoFailed"), errorText(err));
+    },
+  });
+  const canUndo = d.canRevert && fullAccess && !revert.isPending && !revert.isSuccess;
+  const undo = () => {
+    const files = d.files;
+    const moved = d.workspace.length;
+    const list = files.length === 2 ? tm("dream.fileListTwo", { first: files[0], second: files[1] }) : files.length < 2 ? files.join("") : tm("dream.memoryFiles", { count: files.length });
+    const entries = tm("dream.entries", { count: moved });
+    const body =
+      files.length || !moved
+        ? `${!files.length ? tm("dream.putMemory") : moved ? tm("dream.putFilesAndMove", { count: files.length, files: list, entries }) : tm("dream.putFiles", { count: files.length, files: list })} ${tm("dream.forgotten", { name: agentName })}`
+        : tm("dream.moveOnly", { count: moved, entries });
+    Alert.alert(tm("dream.undoTitle"), body, [
+      { text: tm("dream.keep"), style: "cancel" },
+      { text: tm("dream.undo"), style: "destructive", onPress: () => revert.mutate() },
+    ]);
+  };
   const files = useMemo(() => d.fileChanges.map((f) => ({ file: f, diff: diffFile(f.before, f.after) })), [d.fileChanges]);
   const totals = files.reduce((sum, f) => ({ added: sum.added + f.diff.added, removed: sum.removed + f.diff.removed }), { added: 0, removed: 0 });
   const rolledBack = ROLLED_BACK.includes(d.status);
@@ -66,7 +97,9 @@ function DreamView({ dream: d }: { dream: DreamDetail }) {
     d.status === "reverted"
       ? t("view.reverted")
       : d.canRevert
-        ? t("view.undoOnComputer")
+        ? fullAccess
+          ? tm("dream.canUndo")
+          : tm("components:fullAccess.title")
         : d.files.length && !ACTIVE_DREAM.includes(d.status)
           ? t("view.cantUndo")
           : null;
@@ -74,7 +107,14 @@ function DreamView({ dream: d }: { dream: DreamDetail }) {
   return (
     <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content}>
       <Stack.Title>{t("view.title")}</Stack.Title>
-      {canStop ? <HeaderActions actions={[{ icon: "stop", label: t("agents:dreamStop.stop"), onPress: () => stop.mutate(d.runId!) }]} /> : null}
+      {canStop || canUndo ? (
+        <HeaderActions
+          actions={[
+            ...(canStop ? [{ icon: "stop" as const, label: t("agents:dreamStop.stop"), onPress: () => stop.mutate(d.runId!) }] : []),
+            ...(canUndo ? [{ icon: "unarchive" as const, label: tm("dream.undo"), onPress: undo }] : []),
+          ]}
+        />
+      ) : null}
       <View style={{ gap: space.sm, paddingTop: space.md }}>
         <Row style={{ gap: 6 }}>
           <Icon name="moon" size={13} color={c.dream} />
@@ -103,7 +143,7 @@ function DreamView({ dream: d }: { dream: DreamDetail }) {
         ) : null}
         {note ? (
           <Row style={{ gap: 6, marginTop: 2 }}>
-            <Icon name={d.status === "reverted" ? "unarchive" : "display"} size={12} color={c.textMuted} />
+            <Icon name={d.status === "reverted" || (d.canRevert && fullAccess) ? "unarchive" : d.canRevert ? "lock" : "display"} size={12} color={c.textMuted} />
             <T variant="footnote" muted style={{ flex: 1 }}>
               {note}
             </T>

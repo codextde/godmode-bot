@@ -9,7 +9,7 @@ import { ListRow, ReadonlyList } from "@/components/readonly-list";
 import { filesApi, fk } from "@/lib/agent-files";
 import { useAgents } from "@/lib/hooks";
 
-/** Every agent's folder, the largest first: what it keeps, its notes. Opened read-only. */
+/** Every agent's folder, the largest first: what it keeps, its notes. */
 export default function Files() {
   const { t } = useTranslation("files");
   const agents = useAgents();

@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import Constants from "expo-constants";
 import { Stack } from "expo-router";
-import { Linking, ScrollView, StyleSheet, View } from "react-native";
+import { Alert, Linking, ScrollView, StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { LICENSE_SITE } from "@godmode/shared";
 import { CloseButton } from "@/components/close-button";
@@ -11,6 +11,7 @@ import { InfoRow } from "@/components/status-rows";
 import { T } from "@/components/ui";
 import { api } from "@/lib/api";
 import { qk } from "@/lib/query";
+import { copyPlain } from "@/lib/secrets";
 import { useSession } from "@/lib/session";
 import { space } from "@/lib/theme";
 
@@ -18,9 +19,15 @@ const PLATFORM: Record<string, string> = { darwin: "macOS", win32: "Windows", li
 
 /** Settings → About: which Godmode the computer and this phone run, and where to read more. */
 export default function About() {
-  const { t } = useTranslation("settings");
+  const { t } = useTranslation(["settings", "manage"]);
   const connection = useSession((s) => s.connection);
   const me = useQuery({ queryKey: qk.me, queryFn: api.me });
+  const boot = useQuery({ queryKey: qk.bootstrap, queryFn: api.bootstrap });
+  const dataDir = boot.data?.dataDir ?? "";
+  // The desktop's Settings → System → Installation: where Godmode keeps its data and writes its log.
+  const sep = dataDir.includes("\\") ? "\\" : "/";
+  const logPath = dataDir ? [dataDir.replace(/[\\/]+$/, ""), "logs", "godmode.jsonl"].join(sep) : "";
+  const copy = (value: string) => void copyPlain(value).then(() => Alert.alert(t("manage:install.copied"), value));
   const instance = me.data?.instance ?? connection?.instance;
   const appVersion = Constants.expoConfig?.version ?? "";
   const open = (path: string) => void Linking.openURL(`${LICENSE_SITE}${path}`).catch(() => undefined);
@@ -40,6 +47,13 @@ export default function About() {
           <InfoRow icon="display" label={t("about.name")} value={instance.name} />
           <InfoRow icon="bolt" label={t("about.version")} value={instance.version} mono />
           <InfoRow icon="cpu" label={t("about.platform")} value={PLATFORM[instance.platform] ?? instance.platform} />
+        </Group>
+      ) : null}
+
+      {dataDir ? (
+        <Group title={t("manage:install.title")}>
+          <LinkRow icon="folder" title={t("manage:install.dataDir")} detail={dataDir} chevron={false} onPress={() => copy(dataDir)} />
+          <LinkRow icon="list" title={t("manage:install.logFile")} detail={logPath} chevron={false} onPress={() => copy(logPath)} />
         </Group>
       ) : null}
 

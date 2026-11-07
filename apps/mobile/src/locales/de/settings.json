@@ -753,7 +753,8 @@
       "title": "Chat",
       "toolCalls": "Werkzeugaufrufe",
       "cardsLabel": "Karten",
-      "compactLabel": "Kompakt"
+      "compactLabel": "Kompakt",
+      "mcpApps": "MCP-App-Ansichten"
     },
     "summaries": {
       "title": "KI-Zusammenfassungen",
@@ -773,7 +774,9 @@
       "enable": "Sprachmodus",
       "autoSpeak": "Antworten vorlesen",
       "autoSpeakDetail": "Wenn du die Nachricht diktiert hast",
-      "language": "Sprache"
+      "language": "Sprache",
+      "tag": "Sprach-Tag",
+      "test": "Stimme testen"
     },
     "stt": {
       "title": "Sprache zu Text",
@@ -788,7 +791,9 @@
     "openai": {
       "sttModel": "Transkriptionsmodell",
       "ttsModel": "Sprachmodell"
-    }
+    },
+    "sample": "Hallo, ich bin Godmode, dein KI-Kollege. Ich kümmere mich um den Kleinkram, damit du dich auf das Wichtige konzentrieren kannst.",
+    "testFailed": "Stimmtest fehlgeschlagen"
   },
   "calls": {
     "title": "Anrufe",
@@ -1043,5 +1048,16 @@
     "openSettings": "Einstellungen öffnen",
     "failed": "Mitteilungen konnten nicht geändert werden",
     "loadFailed": "Mitteilungen konnten nicht geladen werden"
+  },
+  "usageChart": {
+    "days_one": "{{count}} Tag",
+    "days_other": "{{count}} Tage",
+    "loadFailed": "Verbrauch konnte nicht geladen werden",
+    "perDay": "Läufe pro Tag",
+    "runs_one": "{{count}} Lauf",
+    "runs_other": "{{count}} Läufe",
+    "upTo": "Bis zu {{max}} am Tag",
+    "label": "Läufe pro Tag in den letzten {{days}} Tagen: {{total}} insgesamt, bis zu {{max}} am Tag.",
+    "title": "Was die Agenten getan haben"
   }
 }

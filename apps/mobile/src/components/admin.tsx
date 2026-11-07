@@ -12,10 +12,10 @@ export { confirmWithBiometrics, NeedsFullAccess, useFullAccess };
 export const isRefused = needsFullAccess;
 
 /** A screen only full-access phones use: the lock state for the others, a skeleton while that is unknown. */
-export function FullAccessGate({ children, skeleton }: { children: ReactNode; skeleton?: ReactNode }) {
+export function FullAccessGate({ children, skeleton, locked }: { children: ReactNode; skeleton?: ReactNode; locked?: ReactNode }) {
   const { fullAccess } = useFullAccess();
   if (fullAccess === undefined) return <>{skeleton ?? <FormSkeleton />}</>;
-  if (!fullAccess) return <NeedsFullAccess />;
+  if (!fullAccess) return <>{locked ?? <NeedsFullAccess />}</>;
   return <>{children}</>;
 }
 

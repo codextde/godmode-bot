@@ -753,7 +753,8 @@
       "title": "Chat",
       "toolCalls": "Tool calls",
       "cardsLabel": "Cards",
-      "compactLabel": "Compact"
+      "compactLabel": "Compact",
+      "mcpApps": "MCP app views"
     },
     "summaries": {
       "title": "AI summaries",
@@ -773,7 +774,9 @@
       "enable": "Voice mode",
       "autoSpeak": "Speak replies",
       "autoSpeakDetail": "When you dictated the message",
-      "language": "Language"
+      "language": "Language",
+      "tag": "Language tag",
+      "test": "Test voice"
     },
     "stt": {
       "title": "Speech to text",
@@ -788,7 +791,9 @@
     "openai": {
       "sttModel": "Transcription model",
       "ttsModel": "Speech model"
-    }
+    },
+    "sample": "Hi, I'm Godmode, your AI coworker. I'll take care of the busywork so you can focus on what matters.",
+    "testFailed": "Voice test failed"
   },
   "calls": {
     "title": "Phone calls",
@@ -1043,5 +1048,16 @@
     "openSettings": "Open Settings",
     "failed": "Couldn't change notifications",
     "loadFailed": "Couldn't load notifications"
+  },
+  "usageChart": {
+    "days_one": "{{count}} day",
+    "days_other": "{{count}} days",
+    "loadFailed": "Couldn't load usage",
+    "perDay": "Runs per day",
+    "runs_one": "{{count}} run",
+    "runs_other": "{{count}} runs",
+    "upTo": "Up to {{max}} a day",
+    "label": "Runs per day over the last {{days}} days: {{total}} in total, up to {{max}} a day.",
+    "title": "What the agents did"
   }
 }

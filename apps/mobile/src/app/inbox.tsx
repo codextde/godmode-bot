@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next";
 import type { Agent, AppNotification, MissingLogin, MissingLoginKind, MissingLoginStatus } from "@godmode/shared";
 import { CharacterAvatar } from "@/components/character";
 import { FilterChips } from "@/components/filter-chips";
+import { useFullAccess } from "@/components/full-access";
 import { HeaderActions } from "@/components/header-actions";
 import { openHumanTask } from "@/components/human-task-row";
 import { Icon, type IconName } from "@/components/icon";
@@ -335,7 +336,17 @@ function setLoginStatus(item: MissingLogin, status: MissingLoginStatus) {
 function LoginCard({ item, agent }: { item: MissingLogin; agent?: Agent }) {
   const c = useColors();
   const { t } = useTranslation("inbox");
+  const { fullAccess } = useFullAccess();
   const kind = LOGIN_KIND[item.kind] ?? LOGIN_KIND.other;
+  // Like the desktop: a missing 2FA code is picked from the vault, anything else gets a login (resolved once saved).
+  const act =
+    item.kind === "missing_totp"
+      ? { title: t("loginActions.add2fa"), icon: "shield" as const, open: () => router.push({ pathname: "/vault/link-totp", params: { id: item.id } }) }
+      : {
+          title: item.kind === "invalid_credential" ? t("loginActions.updateLogin") : t("loginActions.addLogin"),
+          icon: "key" as const,
+          open: () => router.push({ pathname: "/vault/login-edit", params: { missingLoginId: item.id } }),
+        };
   const kindLabel = t(kind.labelKey);
   return (
     <Card style={[styles.login, { borderColor: kind.tone === "danger" ? c.danger : c.border }]}>
@@ -363,10 +374,21 @@ function LoginCard({ item, agent }: { item: MissingLogin; agent?: Agent }) {
           {agent ? t("login.reportedBy", { name: agent.name }) : item.agentId ? t("login.reportedByAgent") : t("login.reportedByGodmode")} · {shortTime(item.updatedAt || item.createdAt)}
         </T>
       </Row>
-      <T variant="footnote" muted>
-        {t("login.addOnComputer")}
-      </T>
-      <Row style={{ gap: space.sm }}>
+      {fullAccess === false ? (
+        <T variant="footnote" muted>
+          {t("login.addOnComputer")}
+        </T>
+      ) : null}
+      <Row style={{ gap: space.sm, flexWrap: "wrap" }}>
+        {fullAccess ? <LoginButton
+            title={act.title}
+            icon={act.icon}
+            primary
+            onPress={() => {
+              tap();
+              act.open();
+            }}
+          /> : null}
         <LoginButton title={t("login.dismiss")} icon="close" onPress={() => setLoginStatus(item, "dismissed")} />
         <LoginButton title={t("login.markResolved")} icon="check" onPress={() => setLoginStatus(item, "resolved")} />
       </Row>
@@ -374,12 +396,17 @@ function LoginCard({ item, agent }: { item: MissingLogin; agent?: Agent }) {
   );
 }
 
-function LoginButton({ title, icon, onPress }: { title: string; icon: IconName; onPress: () => void }) {
+function LoginButton({ title, icon, onPress, primary }: { title: string; icon: IconName; onPress: () => void; primary?: boolean }) {
   const c = useColors();
+  const fg = primary ? c.onPrimary : c.text;
   return (
-    <Pressable accessibilityRole="button" onPress={onPress} style={({ pressed }) => [styles.loginButton, { backgroundColor: c.sunken, opacity: pressed ? 0.7 : 1 }]}>
-      <Icon name={icon} size={12} color={c.text} weight="semibold" />
-      <T variant="footnote" style={{ fontWeight: "600" }}>
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      style={({ pressed }) => [styles.loginButton, { backgroundColor: primary ? c.primary : c.sunken, opacity: pressed ? 0.7 : 1 }]}
+    >
+      <Icon name={icon} size={12} color={fg} weight="semibold" />
+      <T variant="footnote" color={fg} style={{ fontWeight: "600" }}>
         {title}
       </T>
     </Pressable>

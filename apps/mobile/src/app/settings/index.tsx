@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import Constants from "expo-constants";
 import * as LocalAuthentication from "expo-local-authentication";
 import { router, Stack } from "expo-router";
+import { useState } from "react";
 import { Alert, ScrollView, StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { effortLabel, findModel } from "@godmode/shared";
@@ -9,6 +10,7 @@ import { CloseButton } from "@/components/close-button";
 import { ChoiceRow, Group, LinkRow, SwitchRow } from "@/components/form";
 import { Icon, type IconName } from "@/components/icon";
 import { Logo } from "@/components/logo";
+import { SettingsSearchResults } from "@/components/settings-search";
 import { ThisPhoneAccess } from "@/components/this-phone-access";
 import { ToolsLinks } from "@/components/tools-links";
 import { Button, Card, LiveDot, Row, T } from "@/components/ui";
@@ -34,7 +36,7 @@ const FEATURES = ["activity", "artifacts", "integrations", "plugins", "messaging
 
 export default function Settings() {
   const c = useColors();
-  const { t } = useTranslation(["settings", "common", "archive", "admin", "programs"]);
+  const { t } = useTranslation(["settings", "common", "archive", "admin", "programs", "manage"]);
   const connection = useSession((s) => s.connection);
   const appLock = useSession((s) => s.appLock);
   const status = useLive((s) => s.status);
@@ -50,8 +52,21 @@ export default function Settings() {
     queryKey: ["biometrics"],
     queryFn: async () => (await LocalAuthentication.hasHardwareAsync()) && (await LocalAuthentication.isEnrolledAsync()),
   });
+  const [search, setSearch] = useState("");
+  const searchBar = <Stack.SearchBar placeholder={t("manage:search.placeholder")} autoCapitalize="none" onChangeText={(e) => setSearch(e.nativeEvent.text)} onCancelButtonPress={() => setSearch("")} />;
 
   if (!connection) return null;
+  // Same root and leading children as below, so the search bar keeps its focus while results replace the list.
+  if (search.trim()) {
+    return (
+      <ScrollView contentInsetAdjustmentBehavior="automatic" keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" contentContainerStyle={styles.content}>
+        <Stack.Screen options={{ title: t("common:words.settings") }} />
+        {searchBar}
+        <CloseButton />
+        <SettingsSearchResults query={search} />
+      </ScrollView>
+    );
+  }
   const instance = me.data?.instance ?? connection.instance;
   const s = settings.data;
   const model = s ? (findModel(catalog.data?.models ?? [], s.runner.model)?.label ?? s.runner.model) : undefined;
@@ -93,6 +108,7 @@ export default function Settings() {
   return (
     <ScrollView contentInsetAdjustmentBehavior="automatic" keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
       <Stack.Screen options={{ title: t("common:words.settings") }} />
+      {searchBar}
       <CloseButton />
 
       <Card style={styles.computer}>

@@ -7,6 +7,7 @@ import { CloseButton } from "@/components/close-button";
 import { FieldRow, Group, PickerRow, StepperRow, SwitchRow, Tile } from "@/components/form";
 import { ActionPill, reportInstall } from "@/components/program-parts";
 import { FormSkeleton, isOutdated } from "@/components/settings-state";
+import { TartGroup, useVmAccessRows } from "@/components/vm-settings";
 import { ErrorState, LiveDot, T, tap } from "@/components/ui";
 import { patchAnySettings } from "@/lib/admin";
 import { errorText } from "@/lib/api";
@@ -49,6 +50,7 @@ export default function ComputerSettings() {
     },
   });
   const s = settings.data;
+  const vmRows = useVmAccessRows(s?.vm);
   const cua = status.data?.cua;
   const size = s?.computer.screenshotMaxSize ?? 1280;
   const sizes = SCREENSHOT_SIZES.some((n) => n === size) ? SCREENSHOT_SIZES : [...SCREENSHOT_SIZES, size].sort((a, b) => a - b);
@@ -174,7 +176,9 @@ export default function ComputerSettings() {
                 onChange={(idleStopMinutes) => void patchSettings({ vm: { idleStopMinutes } })}
               />
             ) : null}
+            {admin ? vmRows : null}
           </Group>
+          {admin ? <TartGroup vm={s.vm} /> : null}
         </>
       )}
     </ScrollView>

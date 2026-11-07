@@ -4,6 +4,8 @@ import { Alert, ScrollView, StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { MAX_INSTRUCTIONS_LENGTH, type Agent, type ConversationWithMessages } from "@godmode/shared";
 import { Group, PickerRow, TextEditor } from "@/components/form";
+import { useFullAccess } from "@/components/full-access";
+import { NewChatPlace } from "@/components/new-chat-place";
 import { ErrorState, Skeleton, T } from "@/components/ui";
 import { ApiError, api, errorText, updateDesktopMessage, type ChatPlacePatch } from "@/lib/api";
 import { fetchConversation } from "@/lib/chat-cache";
@@ -32,6 +34,7 @@ export default function ChatOptionsSheet() {
   });
   const { byId } = useAgents();
   const options = useNewChatOptions((s) => s.options);
+  const { fullAccess } = useFullAccess();
   const data = conversation.data;
   const agent = byId.get(data?.agentId ?? agentId ?? "");
 
@@ -72,6 +75,7 @@ export default function ChatOptionsSheet() {
         )
       ) : (
         <>
+          {!conversationId && agent && fullAccess ? <NewChatPlace agent={agent} /> : null}
           {data || agent ? (
             <Place
               agent={agent}

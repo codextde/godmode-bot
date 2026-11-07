@@ -196,5 +196,109 @@
     "unarchiveA11y": "{{title}} wiederherstellen",
     "unarchiveThis": "Diesen Chat wiederherstellen",
     "unarchive": "Wiederherstellen"
+  },
+  "pullRequest": {
+    "title": "Pull Request",
+    "refresh": "Aktualisieren",
+    "openOnGithub": "Auf GitHub öffnen",
+    "tryAgain": "Erneut versuchen",
+    "errors": {
+      "rateLimited": "GitHub erlaubt nur eine bestimmte Zahl an Abrufen pro Stunde, und die sind gerade aufgebraucht.",
+      "notFound": "GitHub findet diesen Pull Request nicht. Ist er privat, muss dieser Computer bei GitHub angemeldet sein: Führe „gh auth login“ im Terminal aus.",
+      "unauthorized": "GitHub hat die GitHub-Anmeldung dieses Computers nicht akzeptiert. Führe „gh auth login“ im Terminal aus, um dich neu anzumelden.",
+      "other": "Konnte nicht von GitHub geladen werden: {{message}}",
+      "notALink": "Kein Link zu einem GitHub Pull Request"
+    },
+    "states": {
+      "open": "Offen",
+      "draft": "Entwurf",
+      "merged": "Gemergt",
+      "closed": "Geschlossen"
+    },
+    "when": {
+      "merged": "gemergt {{ago}}",
+      "closed": "geschlossen {{ago}}",
+      "opened": "eröffnet {{ago}}"
+    },
+    "stale": "Das stündliche Limit von GitHub ist aufgebraucht, das hier wurde {{ago}} geladen.",
+    "staleUntil": "Das stündliche Limit von GitHub ist aufgebraucht, das hier wurde {{ago}} geladen. Es aktualisiert sich nach {{time}}.",
+    "signedOut": "Dieser Computer ist nicht bei GitHub angemeldet, deshalb erlaubt GitHub nur wenige Abrufe pro Stunde. Führe „gh auth login“ im Terminal aus, um mehr zu bekommen.",
+    "files_one": "{{count}} Datei",
+    "files_other": "{{count}} Dateien",
+    "commits_one": "{{count}} Commit",
+    "commits_other": "{{count}} Commits",
+    "conflicts": "Hat Konflikte mit dem Basis-Branch",
+    "blocked": "Kann noch nicht gemergt werden: Ein nötiges Review oder ein Check fehlt",
+    "sections": {
+      "description": "Beschreibung",
+      "reviews": "Reviews",
+      "checks": "Checks",
+      "files": "Dateien"
+    },
+    "showLess": "Weniger anzeigen",
+    "showAll": "Alles anzeigen",
+    "showFewer": "Weniger anzeigen",
+    "showAllCount": "Alle {{count}} anzeigen",
+    "review": {
+      "approved": "hat zugestimmt",
+      "changes_requested": "wünscht Änderungen",
+      "commented": "hat kommentiert"
+    },
+    "checks": {
+      "failed": "{{count}} fehlgeschlagen",
+      "running": "{{count}} laufen",
+      "passed": "{{count}} bestanden",
+      "skipped": "{{count}} übersprungen"
+    },
+    "moreOnGithub": "{{count}} weitere auf GitHub",
+    "merge": {
+      "button": "Mergen",
+      "into": "In {{base}}",
+      "blockedDraft": "Noch ein Entwurf. Markiere ihn zuerst auf GitHub als bereit zum Review.",
+      "blockedConflicts": "Löse zuerst die Konflikte mit dem Basis-Branch.",
+      "blockedNoMethod": "Dieses Repository erlaubt keine Merge-Methode.",
+      "warnFailing_one": "{{count}} Check fehlgeschlagen",
+      "warnFailing_other": "{{count}} Checks fehlgeschlagen",
+      "warnRunning_one": "{{count}} Check läuft noch",
+      "warnRunning_other": "{{count}} Checks laufen noch",
+      "warnChanges": "ein Reviewer hat Änderungen angefordert",
+      "warnBlocked": "laut GitHub fehlt ein erforderliches Review oder ein Check",
+      "headsUp": "Achtung: {{warnings}}.",
+      "refused": "GitHub hat nicht gemergt: {{reason}}",
+      "confirmTitle": "#{{number}} in {{base}} mergen?",
+      "how": "Wie mergen",
+      "cancel": "Abbrechen",
+      "done": "#{{number}} in {{base}} gemergt",
+      "methods": {
+        "merge": {
+          "label": "Mergen",
+          "hint": "Alle Commits plus ein Merge-Commit"
+        },
+        "squash": {
+          "label": "Squashen und mergen",
+          "hint": "Alle Änderungen als ein Commit"
+        },
+        "rebase": {
+          "label": "Rebasen und mergen",
+          "hint": "Die Commits, neu auf den Basis-Branch gesetzt"
+        }
+      }
+    },
+    "autoMerge": {
+      "button": "Auto-Merge",
+      "confirmTitle": "#{{number}} automatisch in {{base}} mergen?",
+      "explain": "GitHub mergt ihn selbst, sobald die nötigen Reviews und Checks durch sind.",
+      "confirm": "Auto-Merge aktivieren",
+      "enabled": "Auto-Merge für #{{number}} aktiviert",
+      "disabled": "Auto-Merge für #{{number}} deaktiviert",
+      "disableFailed": "Auto-Merge konnte nicht deaktiviert werden: {{reason}}",
+      "refused": "GitHub hat Auto-Merge nicht aktiviert: {{reason}}",
+      "on": "Auto-Merge an ({{method}}): wird in {{base}} gemergt, sobald die Checks durch sind",
+      "by": "von {{login}}",
+      "turnOff": "Ausschalten"
+    },
+    "loadFailed": "Pull Request konnte nicht geladen werden",
+    "comments_one": "{{count}} Kommentar",
+    "comments_other": "{{count}} Kommentare"
   }
 }

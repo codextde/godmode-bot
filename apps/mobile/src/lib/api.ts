@@ -79,7 +79,7 @@ import { t } from "./i18n";
 import { useLive } from "./live";
 import { withPending } from "./pending-queue";
 import { accepts, baseUrl, candidateOrder, computerOf, removedBy, type Candidate } from "./peers";
-import { useSession, type Connection } from "./session";
+import { giveUp, useSession, type Connection } from "./session";
 
 const TIMEOUT_MS = 12_000;
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
@@ -331,7 +331,8 @@ export async function request<T>(method: string, path: string, body?: unknown, m
     const { error, code } = await failure(res);
     if (isRemoved(res.status, code)) {
       if (removedBy(connection, found)) {
-        await useSession.getState().disconnect("removed");
+        // A request with a key the phone has since replaced or given up says nothing about the current pairing.
+        await useSession.getState().refused(connection.token);
         throw new ApiError(401, t("system:api.removed"), "unauthorized");
       }
       // Another computer of the group that doesn't have this phone's key yet; it refused before doing anything.
@@ -489,7 +490,12 @@ export const api = {
   me: () => get<MobileSession>("/api/mobile/me"),
   /** Only off: the computer gives a phone full access. */
   setFullAccess: (fullAccess: false) => patch<MobileSession>("/api/mobile/me", { fullAccess }),
-  unpair: () => del<{ ok: true }>("/api/mobile/me"),
+  /** Ends this pairing on the computer; its refusals of the key from now on don't count as "removed". */
+  unpair: () => {
+    const token = useSession.getState().connection?.token;
+    if (token) giveUp(token);
+    return del<{ ok: true }>("/api/mobile/me");
+  },
   /** This phone's push notifications: its Expo push token on the computer, or none. */
   push: {
     on: (token: string, platform: "ios" | "android") => post<MobileSession>("/api/mobile/me/push", { token, platform }),

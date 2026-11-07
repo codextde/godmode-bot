@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { MAX_INSTRUCTIONS_LENGTH } from "@godmode/shared";
 import { CharacterAvatar } from "@/components/character";
 import { CloseButton } from "@/components/close-button";
+import { useFullAccess } from "@/components/full-access";
 import { Group, LinkRow, PickerRow, TextEditor } from "@/components/form";
 import { Identity, Sources } from "@/components/setup";
 import { EmptyState, SectionTitle } from "@/components/ui";
@@ -19,8 +20,9 @@ import { useWorkspace } from "@/lib/workspace";
 const DEFAULT = "default";
 
 export default function ProjectScreen() {
-  const { t } = useTranslation(["settings", "common", "archive"]);
+  const { t } = useTranslation(["settings", "common", "archive", "manage", "components"]);
   const { id } = useLocalSearchParams<{ id: string }>();
+  const admin = useFullAccess().fullAccess === true;
   const { workspaces, loading } = useWorkspace();
   const { data: agents } = useAgents();
   const profiles = useQuery({ queryKey: qk.browserProfiles, queryFn: api.browser.profiles });
@@ -121,6 +123,11 @@ export default function ProjectScreen() {
       </Group>
 
       <Group>
+        <LinkRow
+          icon="move"
+          title={t("manage:project.move")}
+          onPress={() => (admin ? router.push({ pathname: "/scope-move", params: { kind: "project", id: p.id } }) : Alert.alert(t("components:fullAccess.title")))}
+        />
         <LinkRow icon="archive" title={t("archive:archive")} chevron={false} onPress={() => archive({ kind: "project", id: p.id, name: p.name })} />
         <LinkRow icon="trash" title={t("project.delete")} tone="danger" chevron={false} onPress={remove} />
       </Group>

@@ -1,4 +1,5 @@
 import { useMutation } from "@tanstack/react-query";
+import { router } from "expo-router";
 import { useState } from "react";
 import { ActivityIndicator, Alert, Switch } from "react-native";
 import { useTranslation } from "react-i18next";
@@ -61,6 +62,7 @@ export default function Plugins() {
       { text: t("common:actions.delete"), style: "destructive", onPress: () => void run(m.id, () => toolsAdmin.plugins.remove(m.id), t("tools:plugins.deleteFailed")) },
     ]);
 
+  /** A long press: update or delete right from the list. */
   const actions = (m: Mod) => {
     const name = m.title || m.name;
     Alert.alert(name, m.source ? [m.source.repo, m.source.version].filter(Boolean).join(" · ") : undefined, [
@@ -71,6 +73,7 @@ export default function Plugins() {
       { text: t("common:actions.cancel"), style: "cancel" as const },
     ]);
   };
+  const openPlugin = (m: Mod) => router.push({ pathname: "/settings/plugin", params: { id: m.id } });
 
   const checkUpdates = () => void run("updates", () => toolsAdmin.plugins.checkUpdates().then((mods) => queryClient.setQueryData(ik.plugins, mods)), t("tools:plugins.checkFailed"));
   const fromRepos = (list.data ?? []).some((m) => m.source);
@@ -83,12 +86,19 @@ export default function Plugins() {
       keyOf={(m) => m.id}
       icon="puzzle"
       emptyTitle={t("plugins.emptyTitle")}
-      emptyBody={t("plugins.emptyBody")}
+      emptyBody={admin ? t("tools:pluginAdmin.emptyBody") : t("plugins.emptyBody")}
       failedTitle={t("plugins.loadFailed")}
       extraData={`${admin}-${busy}`}
       header={
         <>
-          {admin && fromRepos ? <HeaderActions actions={[{ icon: "refresh", label: t("tools:plugins.checkUpdates"), onPress: checkUpdates }]} /> : null}
+          {admin ? (
+            <HeaderActions
+              actions={[
+                ...(fromRepos ? [{ icon: "refresh" as const, label: t("tools:plugins.checkUpdates"), onPress: checkUpdates }] : []),
+                { icon: "plus" as const, label: t("tools:pluginAdmin.add"), onPress: () => router.push("/settings/plugin-install") },
+              ]}
+            />
+          ) : null}
           {off ? (
             <T variant="footnote" muted>
               {t("plugins.allOff")}
@@ -136,7 +146,8 @@ export default function Plugins() {
             title={name}
             lines={[m.description, m.source ? [m.source.repo, m.source.version].filter(Boolean).join(" · ") : null]}
             trailing={trailing}
-            onPress={admin ? () => actions(m) : undefined}
+            onPress={admin ? () => openPlugin(m) : undefined}
+            onLongPress={admin ? () => actions(m) : undefined}
           />
         );
       }}

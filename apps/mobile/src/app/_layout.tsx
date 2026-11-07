@@ -123,10 +123,15 @@ export default function RootLayout() {
                 <Stack.Screen name="chat-memory" options={{ presentation: "formSheet", sheetAllowedDetents: [0.62, 1], sheetGrabberVisible: true, headerShown: false }} />
                 <Stack.Screen name="memory-import" options={{ presentation: "formSheet", sheetAllowedDetents: [1], sheetGrabberVisible: true, headerShown: false }} />
                 <Stack.Screen name="chat-options" options={{ presentation: "formSheet", sheetAllowedDetents: [0.62, 1], sheetGrabberVisible: true, headerShown: false }} />
+                <Stack.Screen name="chat-share" options={{ presentation: "formSheet", sheetAllowedDetents: [0.75, 1], sheetGrabberVisible: true, headerShown: false }} />
+                <Stack.Screen name="chat-import" options={{ presentation: "formSheet", sheetAllowedDetents: [1], sheetGrabberVisible: true, headerShown: false }} />
+                <Stack.Screen name="chat-move" options={{ presentation: "formSheet", sheetAllowedDetents: [0.62, 1], sheetGrabberVisible: true, headerShown: false }} />
+                <Stack.Screen name="chat-folder" options={{ presentation: "formSheet", sheetAllowedDetents: [1], sheetGrabberVisible: true, headerShown: false }} />
                 <Stack.Screen name="subagent" options={{ presentation: "formSheet", sheetAllowedDetents: [0.75, 1], sheetGrabberVisible: true, headerShown: false }} />
                 <Stack.Screen name="workspaces" options={{ presentation: "formSheet", sheetAllowedDetents: [0.5, 1], sheetGrabberVisible: true, headerShown: false }} />
                 <Stack.Screen name="automation/[id]" options={{ headerTransparent: process.env.EXPO_OS === "ios", title: "" }} />
                 <Stack.Screen name="automation-edit" options={{ presentation: "formSheet", sheetAllowedDetents: [1], sheetGrabberVisible: true, headerShown: false }} />
+                <Stack.Screen name="automation-test" options={{ presentation: "formSheet", sheetAllowedDetents: [0.6, 1], sheetGrabberVisible: true, headerShown: false }} />
                 <Stack.Screen name="run/[id]" options={{ headerTransparent: process.env.EXPO_OS === "ios", title: "" }} />
                 <Stack.Screen name="dream/[id]" options={{ headerTransparent: process.env.EXPO_OS === "ios", title: t("layout.dream") }} />
                 <Stack.Screen name="agent-chats/[id]" options={{ headerTransparent: process.env.EXPO_OS === "ios", title: "" }} />
@@ -138,14 +143,25 @@ export default function RootLayout() {
                 <Stack.Screen name="vault/passphrase" options={{ presentation: "formSheet", sheetAllowedDetents: [0.4, 1], sheetGrabberVisible: true, headerShown: false }} />
                 <Stack.Screen name="vault/login-edit" options={{ presentation: "formSheet", sheetAllowedDetents: [1], sheetGrabberVisible: true, headerShown: false }} />
                 <Stack.Screen name="vault/totp-edit" options={{ presentation: "formSheet", sheetAllowedDetents: [1], sheetGrabberVisible: true, headerShown: false }} />
+                <Stack.Screen name="vault/link-totp" options={{ presentation: "formSheet", sheetAllowedDetents: [1], sheetGrabberVisible: true, headerShown: false }} />
                 <Stack.Screen name="vault/card-edit" options={{ presentation: "formSheet", sheetAllowedDetents: [1], sheetGrabberVisible: true, headerShown: false }} />
                 <Stack.Screen name="vault/ssh-key-new" options={{ presentation: "formSheet", sheetAllowedDetents: [0.75, 1], sheetGrabberVisible: true, headerShown: false }} />
                 <Stack.Screen name="vault/key-edit" options={{ presentation: "formSheet", sheetAllowedDetents: [0.5, 1], sheetGrabberVisible: true, headerShown: false }} />
                 <Stack.Screen name="vault/password-import" options={{ presentation: "formSheet", sheetAllowedDetents: [1], sheetGrabberVisible: true, headerShown: false }} />
                 <Stack.Screen name="vault/ssh-key-import" options={{ presentation: "formSheet", sheetAllowedDetents: [0.75, 1], sheetGrabberVisible: true, headerShown: false }} />
                 <Stack.Screen name="vault/ssh-key-edit" options={{ presentation: "formSheet", sheetAllowedDetents: [0.75, 1], sheetGrabberVisible: true, headerShown: false }} />
+                <Stack.Screen name="agent-field" options={{ presentation: "formSheet", sheetAllowedDetents: [0.62, 1], sheetGrabberVisible: true, headerShown: false }} />
+                <Stack.Screen name="folder-pick" options={{ presentation: "formSheet", sheetAllowedDetents: [1], sheetGrabberVisible: true, headerShown: false }} />
+                <Stack.Screen name="scope-move" options={{ presentation: "formSheet", sheetAllowedDetents: [0.62, 1], sheetGrabberVisible: true, headerShown: false }} />
+                <Stack.Screen name="dream-schedule" options={{ presentation: "formSheet", sheetAllowedDetents: [1], sheetGrabberVisible: true, headerShown: false }} />
+                <Stack.Screen name="files/name" options={{ presentation: "formSheet", sheetAllowedDetents: [0.5, 1], sheetGrabberVisible: true, headerShown: false }} />
+                <Stack.Screen name="files/move" options={{ presentation: "formSheet", sheetAllowedDetents: [0.75, 1], sheetGrabberVisible: true, headerShown: false }} />
+                <Stack.Screen name="files/delete" options={{ presentation: "formSheet", sheetAllowedDetents: [0.62, 1], sheetGrabberVisible: true, headerShown: false }} />
+                <Stack.Screen name="pull-request" options={{ headerTransparent: process.env.EXPO_OS === "ios", title: "" }} />
+                <Stack.Screen name="pull-request-merge" options={{ presentation: "formSheet", sheetAllowedDetents: [0.62, 1], sheetGrabberVisible: true, headerShown: false }} />
                 <Stack.Screen name="settings" options={{ presentation: "modal", headerShown: false, contentStyle: { backgroundColor: c.background } }} />
                 <Stack.Screen name="live" options={{ presentation: "fullScreenModal", headerShown: false, contentStyle: { backgroundColor: "#000" } }} />
+                <Stack.Screen name="voice-mode" options={{ presentation: "fullScreenModal", headerShown: false }} />
               </Stack.Protected>
               <Stack.Protected guard={!paired}>
                 <Stack.Screen name="welcome" options={{ headerShown: false }} />

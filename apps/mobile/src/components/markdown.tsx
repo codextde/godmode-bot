@@ -3,12 +3,13 @@ import { marked, type Token, type Tokens } from "marked";
 import { memo, useMemo, type ReactNode } from "react";
 import { UITextView as Text } from "@bsky.app/react-native-uitextview";
 import { Alert, Linking, StyleSheet, View } from "react-native";
-import { TASK_ATTACHMENT_PATH } from "@godmode/shared";
+import { parsePullRequestUrl, TASK_ATTACHMENT_PATH } from "@godmode/shared";
 import { CodeBlock, PaymentCard, TableBlock } from "./markdown-parts";
 import { RemoteImage } from "./remote-image";
 import { tap } from "./ui";
 import { appHref } from "@/lib/chat-blocks";
 import { t as translate } from "@/lib/i18n";
+import { qk, queryClient } from "@/lib/query";
 import { alpha, fonts, space, type, useColors, type Colors } from "@/lib/theme";
 
 /**
@@ -172,6 +173,11 @@ function inline(tokens: Token[] | undefined, c: Colors, color: string): ReactNod
 
 /** Pages of Godmode open the phone's screen for them; the web and mail open outside. */
 function openLink(href: string) {
+  // A pull request opens its screen (checks, merge) on a phone with full access, like the desktop's side panel.
+  if (parsePullRequestUrl(href) && (queryClient.getQueryData(qk.me) as { fullAccess?: boolean } | undefined)?.fullAccess === true) {
+    tap();
+    return void router.push({ pathname: "/pull-request", params: { url: href } });
+  }
   if (/^(https?|mailto|tel):/i.test(href)) return void Linking.openURL(href);
   const to = appHref(href);
   if (to) {

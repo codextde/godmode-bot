@@ -7,6 +7,7 @@ import { confirmWithBiometrics, useFullAccess } from "@/components/full-access";
 import { HeaderActions } from "@/components/header-actions";
 import { ListRow, ReadonlyList } from "@/components/readonly-list";
 import { confirmDelete, CountdownRing, RowMenu } from "@/components/secret-parts";
+import { TotpAutoLink, useLinkSuggestions } from "@/components/totp-autolink";
 import { Badge, Row, T, tap } from "@/components/ui";
 import { errorText } from "@/lib/api";
 import { useNow } from "@/lib/hooks";
@@ -30,6 +31,7 @@ export default function TwoFactor() {
   const shown = useRevealed<true>(SHOW_MS);
   const live = useLiveCodes(!!fullAccess && !!shown.value);
   const names = useMemo(() => new Map((logins.data ?? []).map((c) => [c.id, c.name])), [logins.data]);
+  const suggestions = useLinkSuggestions(list.data, logins.data, !!fullAccess);
   const items = useMemo(() => {
     const q = search.trim().toLowerCase();
     const all = list.data ?? [];
@@ -72,10 +74,15 @@ export default function TwoFactor() {
         emptyTitle={t("totp.emptyTitle")}
         failedTitle={t("totp.loadFailed")}
         header={
-          shown.value && live.error && !live.codes.size ? (
-            <T variant="footnote" color={c.danger}>
-              {isVaultLocked(live.error) ? t("totp.locked") : `${t("totp.codesFailed")} ${errorText(live.error)}`}
-            </T>
+          (suggestions.length && !search.trim()) || (shown.value && live.error && !live.codes.size) ? (
+            <View style={{ gap: space.md }}>
+              {suggestions.length && !search.trim() ? <TotpAutoLink rows={suggestions} /> : null}
+              {shown.value && live.error && !live.codes.size ? (
+                <T variant="footnote" color={c.danger}>
+                  {isVaultLocked(live.error) ? t("totp.locked") : `${t("totp.codesFailed")} ${errorText(live.error)}`}
+                </T>
+              ) : null}
+            </View>
           ) : undefined
         }
         renderRow={(e) =>

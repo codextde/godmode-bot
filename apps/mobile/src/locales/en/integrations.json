@@ -75,5 +75,82 @@
     "stop": "Stop",
     "interrupts": "Restarting or stopping interrupts agents working in it.",
     "failed": "Couldn't change the VM"
+  },
+  "composioAdmin": {
+    "statusFailed": "Couldn't reach Composio settings",
+    "connectionsFailed": "Couldn't load connected accounts",
+    "status": {
+      "active": "Active",
+      "pending": "Waiting for sign-in",
+      "deleted": "Deleted upstream"
+    },
+    "key": {
+      "label": "API key",
+      "short": "Key",
+      "notSetUp": "No Composio key yet",
+      "connectedTitle": "Composio is connected",
+      "invalidTitle": "Composio key isn't working",
+      "rejectedReplace": "The key was rejected. Replace it with a valid key.",
+      "pending": "Key saved, validation pending.",
+      "stored": "Stored encrypted in your vault, never shown again",
+      "rejected": "Composio rejected this key",
+      "rejectedHint": "Double-check it in your Composio dashboard.",
+      "saveFailed": "Couldn't save the Composio key",
+      "valid": "Key is valid",
+      "checkFailed": "Couldn't check the key",
+      "recheck": "Check again",
+      "replace": "Replace key",
+      "checking": "Checking…",
+      "save": "Save key",
+      "getKey": "Get a free key at app.composio.dev",
+      "removeTitle": "Remove the Composio key?",
+      "removeDescription": "Agents lose access to every Composio app until you add a key again. Your connected accounts stay in Composio.",
+      "removeConfirm": "Remove key"
+    },
+    "connections": {
+      "global": "Every agent",
+      "connectedAgo": "Connected {{ago}}",
+      "checkStatus": "Check status",
+      "isActive": "Connection is active",
+      "statusIs": "Status: {{status}}",
+      "refreshFailed": "Couldn't check the connection",
+      "disconnect": "Disconnect",
+      "disconnectTitle": "Disconnect {{name}}?",
+      "disconnectDescription": "Agents in this scope immediately lose access to this account. You can reconnect it any time.",
+      "disconnectFailed": "Couldn't disconnect",
+      "empty": "Connect Gmail, Slack, Calendar or any other app, and your agents get its actions as tools."
+    },
+    "gallery": {
+      "title": "Connect an app",
+      "search": "Search apps",
+      "loadFailed": "Couldn't load Composio apps",
+      "noMatch": "No apps match “{{search}}”",
+      "none": "No apps",
+      "noDescription": "No description.",
+      "connected": "Connected",
+      "accounts": "{{n}} accounts",
+      "noSignIn": "No sign-in"
+    },
+    "connect": {
+      "title": "Connect {{name}}",
+      "whoCanUse": "Who can use this account?",
+      "noAuth": "This app doesn't need a sign-in, it's enabled right away.",
+      "signInHint": "You sign in on {{name}}'s own page in your browser. Godmode never sees that password; Composio keeps the token.",
+      "continueTo": "Continue to {{name}}",
+      "otherApp": "Choose another app",
+      "waiting": "Waiting for you to finish in the browser…",
+      "waitingHint": "Sign in to {{name}} and allow access. This updates by itself once Composio confirms the connection.",
+      "reopen": "Open the sign-in page again",
+      "checkNow": "Check now",
+      "isConnected": "{{name}} is connected",
+      "availableTo": "Available to {{who}} from their next run.",
+      "failed": "Couldn't connect {{name}}",
+      "reportedAs": "Composio reports the connection as {{status}}.",
+      "timedOut": "Timed out waiting for the sign-in to finish. You can try again.",
+      "theAgent": "the agent",
+      "agentsIn": "agents in {{name}}",
+      "theWorkspace": "agents in the workspace",
+      "everyAgent": "every agent"
+    }
   }
 }
