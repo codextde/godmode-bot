@@ -30,8 +30,22 @@ const recordings = RECORDINGS.map((r) => ({
     <section id="videos" class="relative py-10 sm:py-14">
       <div class="container-x">
         <h2 class="text-[26px] font-semibold tracking-[-0.025em]">Videos to cut</h2>
-        <p class="mt-2 text-[15px] text-muted">Recorded on a normal Mac, real runs, only cut and sped up. Free to use in your clips about Godmode.</p>
-        <div class="mt-8 grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <p class="mt-2 text-[15px] text-muted">Real runs on a normal Mac with demo data. Free to use in your clips about Godmode.</p>
+        <div class="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+          {
+            KIT.takes.map((v) => (
+              <figure class="card flex flex-col p-2">
+                <img src={v.poster} alt="" loading="lazy" class="aspect-[9/16] w-full rounded-[18px] bg-surface-2 object-cover" />
+                <figcaption class="flex flex-1 flex-col gap-1 p-3">
+                  <span class="text-[14.5px] font-semibold tracking-[-0.01em]">{v.title}</span>
+                  <span class="text-[13px] leading-snug text-muted">{v.note}</span>
+                  <a href={v.file} download class="link mt-auto inline-flex items-center gap-1.5 pt-2 text-[13.5px]"><Icon name="download" size={14} /> 9:16 · {v.seconds}s</a>
+                </figcaption>
+              </figure>
+            ))
+          }
+        </div>
+        <div class="mt-4 grid grid-cols-2 gap-4 lg:grid-cols-4">
           {
             KIT.videos.map((v) => (
               <figure class="card flex flex-col p-2">

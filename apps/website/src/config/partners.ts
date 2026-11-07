@@ -89,6 +89,13 @@ export const KIT = {
     ['Money-back', `${PRICING.guaranteeDays} days on the first payment`],
     ['Website', 'usegodmode.com'],
   ] as [string, string][],
+  takes: [
+    { slug: 'inbox', title: 'Sorts the inbox', note: '8 emails into 5 folders, 3 reply drafts, nothing sent', seconds: 98 },
+    { slug: 'invoices', title: 'Downloads the invoices', note: 'Logs in with the vault, saves 4 PDFs, adds up the total', seconds: 51 },
+    { slug: 'shop-orders', title: 'Answers “where is my order?”', note: 'Checks new orders and tracking, drafts the reply', seconds: 64 },
+    { slug: 'pdf-form', title: 'Fills a form from a PDF', note: '16 fields from a company PDF, submitted', seconds: 56 },
+    { slug: 'ads-report', title: 'Pulls the ads report', note: 'Last week per campaign into a sheet, best and worst', seconds: 51 },
+  ].map((t) => ({ ...t, file: `/media/partners/${t.slug}-9x16.mp4`, poster: `/media/partners/${t.slug}-poster.jpg` })),
   videos: [
     { file: '/media/ad-vm-9x16.mp4', poster: '/media/ad-vm-9x16.jpg', title: 'Vertical demo (9:16)', note: 'Ready for TikTok, Reels and Shorts' },
     { file: '/media/ad-main-1x1.mp4', poster: '/media/ad-main-1x1.jpg', title: 'Square demo (1:1)', note: 'Main ad cut' },
@@ -98,7 +105,7 @@ export const KIT = {
   dos: [
     'Show a real task from start to finish. Results beat features.',
     'Say your link or code out loud and put it in the caption.',
-    'Cut fast: the recordings are sped up, say so if you show a time.',
+    'Cut fast. The task recordings run in real time; the older demos are sped up, so say so if you show a time.',
     'Reply to comments with your link where the platform allows it.',
   ],
   donts: [
