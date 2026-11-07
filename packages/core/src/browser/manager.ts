@@ -18,7 +18,7 @@ import { onSettingsApplied } from "../services/runtime";
 import { resolveUvx, toolPath } from "../services/doctor";
 import { hasBrowserSubscribers, hasBrowserWatchers } from "../server/ws";
 import { CdpClient, attachToPage, getCookies, pickActivePage, probeCdp, isUserPage, type CdpCookie, type CdpCookieParam, type PageSession, type PageTarget } from "./cdp";
-import { clearLaunchMarker, findChrome, isProcessAlive, launchChrome, readLaunchMarker, writeLaunchMarker, type ChromeProcess } from "./chrome";
+import { askToQuit, clearLaunchMarker, findChrome, isProcessAlive, launchChrome, readLaunchMarker, writeLaunchMarker, type ChromeProcess } from "./chrome";
 import { fillIntoActivePage, fillPrecheck, probeOtpInActivePage, type OtpProbe, type FillKind } from "./fill";
 import { solveInBrowser, type SolveOptions, type SolveResult } from "./captcha";
 import { browserUseCommand, browserUseEnv, writeBrowserUseConfig } from "./browserUse";
@@ -511,8 +511,13 @@ function killBrowser(rb: RunningBrowser, signal: NodeJS.Signals) {
   }
 }
 
-/** Make sure the process is gone: SIGTERM, then SIGKILL. */
+/** Make sure the process is gone: asked to quit first (see `askToQuit`), then SIGTERM, then SIGKILL. */
 async function terminate(rb: RunningBrowser) {
+  if (!pidAlive(rb)) return;
+  // Browser.close also lets Chromium flush cookies and session state to disk.
+  if (rb.client.closed) await askToQuit(rb.wsUrl);
+  else await rb.client.send("Browser.close", {}, undefined, 3000).catch(() => {});
+  await waitForExit(rb, 5000);
   if (!pidAlive(rb)) return;
   killBrowser(rb, "SIGTERM");
   await waitForExit(rb, 3000);
@@ -561,13 +566,6 @@ export async function stopBrowser(profileId: string): Promise<void> {
 async function shutdownOne(rb: RunningBrowser) {
   rb.stopping = true;
   emitProfile(rb.profileId);
-  // Browser.close lets Chromium flush cookies and session state to disk.
-  try {
-    await rb.client.send("Browser.close", {}, undefined, 3000);
-  } catch {
-    /* connection already gone */
-  }
-  await waitForExit(rb, 5000);
   await terminate(rb);
   forget(rb);
   log.info(`stopped browser for profile ${rb.profileId}`);

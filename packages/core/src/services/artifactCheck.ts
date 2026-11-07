@@ -82,7 +82,7 @@ export async function stopArtifactCheck(): Promise<void> {
   if (!b) return;
   if (b.idle) clearTimeout(b.idle);
   b.client.close();
-  b.proc.kill();
+  await b.proc.close();
 }
 
 function firstLine(text: unknown): string {

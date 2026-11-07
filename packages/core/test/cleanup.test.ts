@@ -6,6 +6,7 @@ import { join } from "node:path";
 import type { Agent, CleanupItem, CleanupReport, CleanupRun } from "@godmode/shared";
 import { commitAll, log as gitLog } from "../src/agents/repo";
 import { createAgent } from "../src/agents/service";
+import { __setCodeSignClonesForTests, type StartedProcess } from "../src/browser/codeSignClones";
 import { ensureDefaultProfile } from "../src/browser/manager";
 import { Database } from "bun:sqlite";
 import { config, loadConfig } from "../src/config";
@@ -24,6 +25,7 @@ const suite = process.platform !== "win32" ? describe : describe.skip;
 
 let dataDir: string;
 let tempDir: string;
+let running: StartedProcess[] | null = [];
 let agent: Agent;
 let taskNumber = 0;
 
@@ -102,6 +104,7 @@ beforeAll(async () => {
   resetSettingsCache();
   setVmSupportForTests(false);
   __setTempDirForTests(tempDir);
+  __setCodeSignClonesForTests({ dir: join(tempDir, "X"), list: async () => running });
   agent = await createAgent({ name: "Cleaner" });
 });
 
@@ -109,6 +112,7 @@ afterAll(() => {
   stopMaintenance();
   __resetMaintenanceForTests();
   __setTempDirForTests(null);
+  __setCodeSignClonesForTests(null);
   setVmSupportForTests(null);
   closeDb();
   resetSettingsCache();
@@ -177,6 +181,42 @@ suite("leftovers of interrupted work", () => {
     expect(result.freedBytes).toBeGreaterThan(0);
     for (const gone of [stale, output, importDir, oldRun, goneProfile, clone]) expect(existsSync(gone)).toBe(false);
     for (const kept of [fresh, sameDay, recentImport, foreign, newRun, helper]) expect(existsSync(kept)).toBe(true);
+  });
+
+  test("copies of Chrome's app a killed browser left; a running browser's own copy stays", async () => {
+    const group = join(tempDir, "X", "com.google.Chrome.code_sign_clone");
+    const clone = (name: string, ms: number) => {
+      const dir = join(group, name);
+      file(join(dir, "Google Chrome.app.bundle", "Contents", "MacOS", "Google Chrome"), 1024);
+      age(dir, ms);
+      return dir;
+    };
+    const killed = clone("code_sign_clone.Ab3dEf", 3 * HOUR);
+    const ownOfRunning = clone("code_sign_clone.xY_9-k", 2 * DAY);
+    const nearAHelper = clone("code_sign_clone.Qq1Qq1", 5 * HOUR);
+    const starting = clone("code_sign_clone.Zz0Zz0", 10 * 60_000);
+    const notChromes = clone("code_sign_clone.toolong", 3 * DAY);
+    running = [
+      { name: "Google Chrome", startedAt: Date.now() - 2 * DAY - 1500 },
+      { name: "Google Chrome Helper (Renderer)", startedAt: Date.now() - 5 * HOUR - 1000 },
+    ];
+
+    let leftovers = item(await scanCleanup(), "temp-files");
+    expect(paths(leftovers).sort()).toEqual([killed, nearAHelper].sort());
+    expect(leftovers.entries.find((e) => e.path === killed)?.name).toBe("Leftover copy of Google Chrome");
+
+    // Nothing goes when the running processes can't be listed.
+    running = null;
+    expect(paths(item(await scanCleanup(), "temp-files"))).toEqual([]);
+
+    running = [{ name: "Google Chrome", startedAt: Date.now() - 2 * DAY - 1500 }];
+    const result = await runCleanup(["temp-files"]);
+    expect(result.results).toMatchObject([{ id: "temp-files", ok: true, removed: 2 }]);
+    for (const gone of [killed, nearAHelper]) expect(existsSync(gone)).toBe(false);
+    for (const kept of [ownOfRunning, starting, notChromes]) expect(existsSync(kept)).toBe(true);
+    leftovers = item(await scanCleanup(), "temp-files");
+    expect(paths(leftovers)).toEqual([]);
+    running = [];
   });
 });
 

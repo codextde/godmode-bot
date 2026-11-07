@@ -286,6 +286,39 @@ export interface ChromeProcess {
   isAlive(): boolean;
   stderrTail(): string;
   kill(signal?: NodeJS.Signals): void;
+  /** Quit the orderly way (`askToQuit`); SIGTERM, then SIGKILL, only when it doesn't go within `timeoutMs`. */
+  close(timeoutMs?: number): Promise<void>;
+}
+
+/**
+ * Ask the browser to quit (CDP `Browser.close`). Only an orderly exit lets Chrome remove what it made for this launch:
+ * on macOS a clone of its whole app, which stays until the Mac restarts when the browser is killed.
+ */
+export async function askToQuit(wsUrl: string, timeoutMs = 3000): Promise<void> {
+  let client: CdpClient | null = null;
+  try {
+    client = await CdpClient.connect(wsUrl, timeoutMs);
+    await client.send("Browser.close", {}, undefined, timeoutMs);
+  } catch {
+    /* gone already, or not answering: the caller's signals end it */
+  } finally {
+    client?.close();
+  }
+}
+
+function withClose(p: Omit<ChromeProcess, "close">): ChromeProcess {
+  return {
+    ...p,
+    close: async (timeoutMs = 5000) => {
+      if (!p.isAlive()) return;
+      await askToQuit(p.wsUrl);
+      await Promise.race([p.exited, sleep(timeoutMs)]);
+      if (!p.isAlive()) return;
+      p.kill("SIGTERM");
+      await Promise.race([p.exited, sleep(3000)]);
+      if (p.isAlive()) p.kill("SIGKILL");
+    },
+  };
 }
 
 export class ChromeLaunchError extends Error {}
@@ -369,7 +402,7 @@ export async function launchChrome(opts: LaunchOptions): Promise<ChromeProcess> 
       const version = await probeCdp(port, 1000);
       if (version) {
         if (!bundle) {
-          return {
+          return withClose({
             pid: proc.pid,
             port,
             wsUrl: version.webSocketDebuggerUrl,
@@ -386,12 +419,14 @@ export async function launchChrome(opts: LaunchOptions): Promise<ChromeProcess> 
                 /* already exited */
               }
             },
-          };
+          });
         }
         let pid: number;
         try {
           pid = await openBackgroundWindow(version.webSocketDebuggerUrl, opts.startUrl ?? "about:blank");
         } catch (err) {
+          await askToQuit(version.webSocketDebuggerUrl);
+          await Promise.race([exited, sleep(3000)]);
           killLockHolder(opts.userDataDir, startedAt);
           await Promise.race([exited, sleep(3000)]);
           try {
@@ -403,7 +438,7 @@ export async function launchChrome(opts: LaunchOptions): Promise<ChromeProcess> 
         }
         // `open` can go away first (e.g. Ctrl-C in a terminal); the browser's own pid is what counts.
         const isAlive = () => isProcessAlive(pid);
-        return {
+        return withClose({
           pid,
           port,
           wsUrl: version.webSocketDebuggerUrl,
@@ -423,7 +458,7 @@ export async function launchChrome(opts: LaunchOptions): Promise<ChromeProcess> 
               /* already exited */
             }
           },
-        };
+        });
       }
       await sleep(150);
     }
