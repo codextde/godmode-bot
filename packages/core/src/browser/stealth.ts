@@ -9,7 +9,6 @@ import { mkdtempSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { logger } from "../log";
-import { sleep } from "../util";
 import { launchChrome, type ChromeProcess, type LaunchOptions } from "./chrome";
 
 const log = logger("browser");
@@ -35,7 +34,7 @@ export function withoutHeadless(userAgent: string): string {
   return userAgent.replace(/HeadlessChrome\//g, "Chrome/");
 }
 
-type Launch = (opts: LaunchOptions) => Promise<Pick<ChromeProcess, "userAgent" | "kill" | "exited">>;
+type Launch = (opts: LaunchOptions) => Promise<Pick<ChromeProcess, "userAgent" | "close">>;
 
 const userAgents = new Map<string, Promise<string | null>>();
 const probes = new Set<AbortController>();
@@ -77,17 +76,17 @@ async function probeUserAgent(executable: string, launch: Launch): Promise<strin
     return null;
   } finally {
     probes.delete(abort);
-    if (proc) {
-      proc.kill("SIGKILL");
-      await Promise.race([proc.exited, sleep(3000)]);
-    }
-    if (dir) {
-      try {
-        rmSync(dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
-      } catch {
-        /* a leftover temp profile is harmless */
+    // The answer doesn't wait for the probe browser to quit.
+    void (async () => {
+      await proc?.close();
+      if (dir) {
+        try {
+          rmSync(dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+        } catch {
+          /* a leftover temp profile is harmless */
+        }
       }
-    }
+    })();
   }
 }
 

@@ -13,7 +13,7 @@ import { homedir, tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import type { ChromeImportInput, ChromeImportResult, LocalChromeProfile } from "@godmode/shared";
 import { logger } from "../log";
-import { badRequest, domainMatches, sleep } from "../util";
+import { badRequest, domainMatches } from "../util";
 import { CdpClient, getCookies, setCookies, type CdpCookie, type CdpCookieParam } from "./cdp";
 import { findChrome, launchChrome, profileOwnerCandidates, type DetectOptions } from "./chrome";
 
@@ -437,21 +437,8 @@ export async function readProfileCookies(sourcePath: string): Promise<{ cookies:
     log.info(`read ${cookies.length} cookies from ${browser} profile "${profileLabel}"`);
     return { cookies, browser, profileLabel };
   } finally {
-    if (client) {
-      try {
-        await client.send("Browser.close", {}, undefined, 3000);
-      } catch {
-        /* ignore */
-      }
-      client.close();
-    }
-    if (chrome) {
-      await Promise.race([chrome.exited, sleep(5000)]);
-      if (chrome.isAlive()) {
-        chrome.kill("SIGKILL");
-        await Promise.race([chrome.exited, sleep(2000)]);
-      }
-    }
+    client?.close();
+    await chrome?.close();
     removeDir(tmpRoot);
   }
 }

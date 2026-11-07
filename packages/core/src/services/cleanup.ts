@@ -4,7 +4,8 @@
  * repositories (scratch files, installed packages, old run logs, unpacked git history), old screenshots in chats, free
  * database pages, old logs, unfinished VM downloads and the trash.
  *
- * Only Godmode's own files are removed. Whatever may hold work stays: checkouts with uncommitted changes or commits no
+ * Only Godmode's own files are removed, and the copies of its app a killed Chrome leaves (see `codeSignClones.ts`).
+ * Whatever may hold work stays: checkouts with uncommitted changes or commits no
  * branch holds, clones with commits that were never pushed, and anything an agent or a browser uses right now. What is
  * removed is looked at twice: for the report, and again right before it goes.
  */
@@ -19,6 +20,7 @@ import { DELETED_DAYS, expiredDeletedFiles } from "../agents/files";
 import { withRepoLock } from "../agents/repo";
 import { namedBy } from "../memory/workspace";
 import { backupInProgress } from "../backup/backup";
+import { leftoverClones } from "../browser/codeSignClones";
 import { getRegistered } from "../browser/state";
 import { config } from "../config";
 import { all, deleteMeta, get, getDb, getMeta, run as sql, setMeta, tx } from "../db";
@@ -307,7 +309,12 @@ async function tempFiles(scan: Scan): Promise<Category> {
       targets.push(await target(scan, path, `Interrupted clone ${name.replace(CLONING, "")}`));
     }
   }
-  return { id: "temp-files", detail: "Temporary files of runs, clones and imports that were cut off — when Godmode quit in the middle of them.", targets };
+
+  // Not sized: a clone shares its data with the app and its other clones, so its file sizes would count gigabytes each.
+  for (const clone of await leftoverClones(scan.at, HOUR)) {
+    targets.push({ entry: { name: `Leftover copy of ${clone.app}`, path: clone.path, bytes: 0, modifiedAt: iso(clone.bornAt), kept: null }, clean: () => remove(clone.path) });
+  }
+  return { id: "temp-files", detail: "Temporary files of runs, clones, imports and browsers that were cut off — when Godmode quit in the middle of them.", targets };
 }
 
 /** Caches Chromium rebuilds by itself; cookies, logins and site data stay. */

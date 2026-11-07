@@ -62,13 +62,16 @@ describe("stealth launch", () => {
 
   test("learns the windowed user agent once per executable; a failed probe never throws and isn't retried right away", async () => {
     let launches = 0;
+    let closed = 0;
     const ok = async () => {
       launches++;
-      return { userAgent: UA.replace("Chrome/", "HeadlessChrome/"), kill: () => {}, exited: Promise.resolve(0) };
+      return { userAgent: UA.replace("Chrome/", "HeadlessChrome/"), close: async () => void closed++ };
     };
     expect(await windowedUserAgent("/nonexistent/ok-chrome", ok)).toBe(UA);
     expect(await windowedUserAgent("/nonexistent/ok-chrome", ok)).toBe(UA);
     expect(launches).toBe(1);
+    // Quit, not killed: a killed Chrome leaves a clone of its app behind on macOS.
+    expect(closed).toBe(1);
 
     let failures = 0;
     const broken = async (): Promise<never> => {

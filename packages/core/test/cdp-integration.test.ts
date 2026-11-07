@@ -804,8 +804,7 @@ suite("managed Chromium (CDP integration)", () => {
     } finally {
       off();
       manager.releaseChatBrowser(run.runId);
-      squatter.kill("SIGKILL");
-      await Promise.race([squatter.exited, Bun.sleep(5000)]);
+      await squatter.close();
       updateSettings({ browser: { browserUseCommand: "" } });
     }
   }, 60_000);
@@ -862,8 +861,7 @@ macVisible("visible Chromium on macOS", () => {
       proc.proc.kill("SIGKILL");
       await proc.proc.exited;
       expect(proc.isAlive()).toBe(true);
-      proc.kill();
-      await Promise.race([proc.exited, Bun.sleep(8000)]);
+      await proc.close();
       expect(proc.isAlive()).toBe(false);
       expect(isProcessAlive(proc.pid)).toBe(false);
     } finally {
