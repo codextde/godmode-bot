@@ -81,7 +81,7 @@ async function chatFiles(c: Context, runnerId: string, id: string): Promise<Resp
   } catch (err) {
     if (!isUnanswered(err)) throw err;
   }
-  const here = resolveChatFiles(id, messages);
+  const here = resolveChatFiles(id, messages, { onlyAgentFolder: isLimitedPhone(c) });
   const files = messages.map((refs, n) => {
     const found = new Map([...(here[n] ?? []), ...(there[n] ?? []).map((f) => ({ ...f, remote: true }))].map((f) => [f.ref, f]));
     return [...new Set(refs)].flatMap((ref) => found.get(ref) ?? []);
@@ -268,7 +268,7 @@ export const remoteRouting: MiddlewareHandler = async (c, next) => {
       }
     }
 
-    if ((path === "/api/files/image" || path === "/api/files/markdown" || path === "/api/files/text") && c.req.query("runner")) {
+    if ((path === "/api/files/image" || path === "/api/files/markdown" || path === "/api/files/text" || path === "/api/files/pdf") && c.req.query("runner")) {
       const url = new URL(c.req.url);
       const runnerId = url.searchParams.get("runner")!;
       url.searchParams.delete("runner");

@@ -237,7 +237,7 @@ const RULES: [methods: string, path: string, rule: Rule][] = [
   ["POST", "/api/missing-logins/:id/link-totp", S],
   ["GET", "/api/files/image", A],
   ["GET", "/api/files/markdown", A],
-  ["GET", "/api/files/pdf", A],
+  ["GET", "/api/files/pdf", "owner"],
   ["GET", "/api/files/text", A],
   ["POST", "/api/files/reveal", refused(COMPUTER_ONLY)],
 

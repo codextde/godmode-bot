@@ -3,7 +3,7 @@ import type { ChatFiles } from "@godmode/shared";
 import { MAX_CHAT_FILE_REFS } from "@godmode/shared";
 import { chatFilesForPhone, readChatImage, readChatMarkdown, readChatPdf, readChatText, resolveChatFiles, revealInFileManager } from "../../services/chatFiles";
 import { HttpError, badRequest } from "../../util";
-import { isLocalRequest, isPhoneRequest } from "../auth";
+import { isLimitedPhone, isLocalRequest, isPhoneRequest } from "../auth";
 import { body, z } from "../validate";
 
 const refs = z.array(z.string().max(1024)).max(MAX_CHAT_FILE_REFS);
@@ -13,7 +13,7 @@ export function registerFileRoutes(app: Hono): void {
   app.post("/api/conversations/:id/files", async (c) => {
     const { messages } = await body(c, chatFilesBody);
     const id = c.req.param("id");
-    const files = resolveChatFiles(id, messages);
+    const files = resolveChatFiles(id, messages, { onlyAgentFolder: isLimitedPhone(c) });
     return c.json<ChatFiles>({ local: isLocalRequest(c), ...(isPhoneRequest(c) ? chatFilesForPhone(id, files) : { files }) });
   });
 

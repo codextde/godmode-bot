@@ -217,10 +217,12 @@ function inline(tokens: Token[] | undefined, c: Colors, color: string, files: Fi
         );
       case "codespan": {
         const named = files?.byRef.get(decode((t as Tokens.Codespan).text).trim());
-        if (named && files) return fileLink(named, i, c, files, ` ${decode((t as Tokens.Codespan).text)} `, true);
+        // Padded with no-break spaces: a plain one stays alone on the line above when the code wraps.
+        const code = `\u00A0${decode((t as Tokens.Codespan).text)}\u00A0`;
+        if (named && files) return fileLink(named, i, c, files, code, true);
         return (
           <Text key={i} style={[type.mono, { fontSize: 14, backgroundColor: c.sunken, color }]}>
-            {` ${decode((t as Tokens.Codespan).text)} `}
+            {code}
           </Text>
         );
       }

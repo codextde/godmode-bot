@@ -161,6 +161,7 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
   },
   picture: {
+    alignSelf: "center",
     borderRadius: 0,
   },
   name: {

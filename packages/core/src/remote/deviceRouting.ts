@@ -27,6 +27,7 @@ import { link } from "./runners";
 const LOCAL: RegExp[] = [
   /^\/api\/health$/,
   /^\/api\/auth\//,
+  /^\/api\/settings\/dashboard-password$/,
   /^\/api\/link\//,
   /^\/api\/devices(\/|$)/,
   /^\/api\/doctor(\/|$)/,

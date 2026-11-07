@@ -3,9 +3,8 @@ import * as Haptics from "expo-haptics";
 import { Image } from "expo-image";
 import { Stack, useLocalSearchParams, useNavigation } from "expo-router";
 import { useHeaderHeight, usePreventRemove } from "expo-router/react-navigation";
-import { useEffect, useRef, useState, type ComponentType, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, TextInput, useWindowDimensions, View, type TextInputInstance } from "react-native";
-import RNWebView, { type WebViewProps } from "react-native-webview";
 import { useTranslation } from "react-i18next";
 import { KeyboardAvoidingView, useKeyboardState } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -15,6 +14,7 @@ import { HeaderActions, MenuSheet, type HeaderMenuItem } from "@/components/head
 import { Icon } from "@/components/icon";
 import { Markdown } from "@/components/markdown";
 import { MemoryBudget } from "@/components/memory-budget";
+import { PdfPage } from "@/components/pdf-page";
 import { EmptyState, ErrorState, T } from "@/components/ui";
 import { api, ApiError, errorText, pictureBases } from "@/lib/api";
 import {
@@ -43,9 +43,6 @@ import { intlLocale } from "@/lib/i18n";
 import { qk, queryClient } from "@/lib/query";
 import { useSession } from "@/lib/session";
 import { fonts, space, useColors } from "@/lib/theme";
-
-/** Its class defaults its extra props to `undefined`, which TypeScript 6 turns into `never`. */
-const WebView = RNWebView as unknown as ComponentType<WebViewProps>;
 
 /** Long files show their beginning: a phone screen doesn't need two megabytes of log. */
 const MAX_SHOWN = 200_000;
@@ -373,10 +370,9 @@ function ImageView({ agent, path }: { agent: string; path: string }) {
   );
 }
 
-/** A PDF fetched into the app's cache and shown by the system's PDF view (no scripts). */
+/** A PDF fetched into the app's cache. */
 function PdfView({ agent, path, slot }: { agent: string; path: string; slot: string }) {
   const { t } = useTranslation("files");
-  const c = useColors();
   const file = useQuery({ queryKey: ["agent-files", agent, "pdf", path, slot], queryFn: () => localCopy(agent, path, slot), retry: false, gcTime: 0 });
   if (file.isLoading) {
     return (
@@ -392,18 +388,7 @@ function PdfView({ agent, path, slot }: { agent: string; path: string; slot: str
       </Centered>
     );
   }
-  const uri = file.data.uri;
-  return (
-    <WebView
-      source={{ uri }}
-      originWhitelist={["file://*"]}
-      allowingReadAccessToURL={uri.slice(0, uri.lastIndexOf("/") + 1)}
-      allowFileAccess
-      javaScriptEnabled={false}
-      style={{ flex: 1, backgroundColor: c.background }}
-      contentInsetAdjustmentBehavior="automatic"
-    />
-  );
+  return <PdfPage file={file.data} />;
 }
 
 const styles = StyleSheet.create({

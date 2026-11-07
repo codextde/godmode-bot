@@ -17,6 +17,7 @@ import type { IconName } from "@/components/icon";
 import { ApiError, pictureBases, request } from "./api";
 import { t } from "./i18n";
 import { queryClient } from "./query";
+import { saveOrShareFile } from "./save-file";
 import { useSession } from "./session";
 
 /**
@@ -292,10 +293,11 @@ export function forgetLocalCopies(slot?: string) {
   }
 }
 
-/** The share sheet with the file itself (iOS), or its text (Android, which shares no local files without a provider). */
+/** The share sheet with the file itself (iOS). Android's takes no local files: its text, or else a folder to save it in. */
 export async function shareFile(file: File, text?: string): Promise<void> {
   if (process.env.EXPO_OS === "ios") await Share.share({ url: file.uri });
-  else await Share.share({ message: text ?? file.name, title: file.name });
+  else if (text !== undefined) await Share.share({ message: text, title: file.name });
+  else await saveOrShareFile(file);
 }
 
 /** The headings of a Markdown text (levels 1 to 3), with their lines; what is in a code fence isn't one. */

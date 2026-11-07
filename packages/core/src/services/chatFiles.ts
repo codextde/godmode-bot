@@ -77,11 +77,13 @@ function kindOf(path: string): Kind | null {
 }
 
 /** The file or folder `path` names: as it is when absolute, else in the first of the folders that has it. */
-function locate(path: string, folders: string[]): { path: string; kind: Kind } | null {
+function locate(path: string, folders: string[], allowed?: (path: string) => boolean): { path: string; kind: Kind } | null {
   // `src/app.ts:42` points into a file.
   const plain = path.replace(/(?::\d+){1,2}$/, "");
   for (const name of plain === path ? [path] : [path, plain]) {
     for (const candidate of isAbsolute(name) ? [name] : folders.map((f) => join(f, name))) {
+      // Never looked at, so that an answer can't tell whether it is there.
+      if (allowed && !allowed(resolve(candidate))) continue;
       const kind = kindOf(candidate);
       if (kind) return { path: resolve(candidate), kind };
     }
@@ -184,7 +186,7 @@ function describe(ref: string, found: { path: string; kind: Kind }): ChatFile {
 }
 
 /** The references of one message that exist, in their order. */
-function resolveMessage(refs: string[], folders: string[]): ChatFile[] {
+function resolveMessage(refs: string[], folders: string[], allowed?: (path: string) => boolean): ChatFile[] {
   const found = new Map<string, ChatFile>();
   // Folders the message itself points at, the latest first.
   let near: string[] = [];
@@ -194,7 +196,7 @@ function resolveMessage(refs: string[], folders: string[]): ChatFile[] {
     if (!path) continue;
     // A bare name most likely lies in the folder named just before it; a longer path starts where the agent works.
     const name = !isAbsolute(path) && !/[\\/]/.test(path.replace(/[\\/]+$/, ""));
-    const hit = locate(path, name ? [...near, ...folders] : [...folders, ...near]);
+    const hit = locate(path, name ? [...near, ...folders] : [...folders, ...near], allowed);
     if (!hit) {
       if (!isAbsolute(path)) later.push([ref, path]);
       continue;
@@ -205,22 +207,39 @@ function resolveMessage(refs: string[], folders: string[]): ChatFile[] {
   }
   // "`01.png` and `02.png` are in `workspace/shots/`": the folder came after its files.
   for (const [ref, path] of later) {
-    const hit = locate(path, near);
+    const hit = locate(path, near, allowed);
     if (hit) found.set(ref, describe(ref, hit));
   }
   return [...new Set(refs)].flatMap((ref) => found.get(ref) ?? []);
 }
 
 /** For every message of a chat (its references as a list), the files and folders that exist. */
-export function resolveChatFiles(conversationId: string, messages: string[][]): ChatFile[][] {
+export function resolveChatFiles(conversationId: string, messages: string[][], opts: { onlyAgentFolder?: boolean } = {}): ChatFile[][] {
   const folders = chatFolders(conversationId);
-  return messages.map((refs) => resolveMessage(refs, folders));
+  const allowed = opts.onlyAgentFolder ? insideAgentFolder(conversationId) : undefined;
+  return messages.map((refs) => resolveMessage(refs, folders, allowed));
+}
+
+function chatAgent(conversationId: string): { agentId: string | null; repo: string | null } {
+  const agentId = get<{ agent_id: string }>("SELECT agent_id FROM conversations WHERE id = ?", conversationId)?.agent_id ?? null;
+  return { agentId, repo: agentId ? (get<{ repo_path: string }>("SELECT repo_path FROM agents WHERE id = ?", agentId)?.repo_path ?? null) : null };
+}
+
+function insideAgentFolder(conversationId: string): (path: string) => boolean {
+  const { repo } = chatAgent(conversationId);
+  if (!repo) return () => false;
+  const roots = [resolve(repo)];
+  try {
+    roots.push(realpathSync.native(repo));
+  } catch {
+    /* no folder yet */
+  }
+  return (path) => roots.some((root) => path === root || path.startsWith(root + sep));
 }
 
 /** For a phone: the chat's agent and where its files lie in the agent's folder, which is where a phone opens them. */
 export function chatFilesForPhone(conversationId: string, files: ChatFile[][]): Required<Pick<ChatFiles, "agentId">> & Pick<ChatFiles, "files"> {
-  const agentId = get<{ agent_id: string }>("SELECT agent_id FROM conversations WHERE id = ?", conversationId)?.agent_id;
-  const repo = agentId ? (get<{ repo_path: string }>("SELECT repo_path FROM agents WHERE id = ?", agentId)?.repo_path ?? null) : null;
+  const { agentId, repo } = chatAgent(conversationId);
   if (!agentId || !repo) return { agentId: null, files };
   const inRepo = (f: ChatFile): ChatFile => {
     const rel = relative(repo, f.path);

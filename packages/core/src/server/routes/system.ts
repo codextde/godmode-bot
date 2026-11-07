@@ -25,7 +25,7 @@ import { getModelCatalog } from "../../runner/models";
 import { getDefaultAgentId } from "../../agents/service";
 import { applyRuntimeSettings } from "../../services/runtime";
 import { powerStatus, setLidClosedAwake } from "../../services/power";
-import { hasDashboardPassword, isLimitedPhone, isOwnComputer, isPhoneRequest, requestVia, setDashboardPassword } from "../auth";
+import { hasDashboardPassword, isOwnComputer, isPhoneRequest, requestDevice, requestVia, setDashboardPassword } from "../auth";
 import { requireGrant } from "../grants";
 import { body, z } from "../validate";
 import { pendingRequestCount } from "../../messaging/service";
@@ -86,7 +86,7 @@ export function registerSystemRoutes(app: Hono) {
 
   // Like POST /api/auth/password, which a phone's channel doesn't reach: for the computer and phones with full access.
   app.put("/api/settings/dashboard-password", async (c) => {
-    if (isLimitedPhone(c) || !(isOwnComputer(c) || isPhoneRequest(c))) throw new HttpError(403, "Set the dashboard password on your computer.", "forbidden");
+    if (!isOwnComputer(c) && !requestDevice(c)?.fullAccess) throw new HttpError(403, "Set the dashboard password on your computer.", "forbidden");
     const { password } = await body(c, z.object({ password: z.string().min(8).max(512) }));
     setDashboardPassword(password);
     updateSettings({ server: { hasDashboardPassword: true } });

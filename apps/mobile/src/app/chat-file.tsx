@@ -1,20 +1,17 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Image } from "expo-image";
 import { Stack, useLocalSearchParams } from "expo-router";
-import { useEffect, useState, type ComponentType } from "react";
+import { useEffect, useState } from "react";
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, useWindowDimensions, View } from "react-native";
 import { useTranslation } from "react-i18next";
-import RNWebView, { type WebViewProps } from "react-native-webview";
 import { HeaderActions } from "@/components/header-actions";
 import { Markdown } from "@/components/markdown";
+import { PdfPage } from "@/components/pdf-page";
 import { ErrorState, T } from "@/components/ui";
 import FilePreview from "./settings/files/preview";
 import { forgetLocalCopies, servedCopy, shareFile } from "@/lib/agent-files";
 import { errorText } from "@/lib/api";
 import { fonts, space, useColors } from "@/lib/theme";
-
-/** Its class defaults its extra props to `undefined`, which TypeScript 6 turns into `never`. */
-const WebView = RNWebView as unknown as ComponentType<WebViewProps>;
 
 const MAX_SHOWN = 200_000;
 
@@ -73,15 +70,7 @@ function ServedFile() {
           <Image source={{ uri }} accessibilityLabel={name} contentFit="contain" style={{ width, height: height * 0.75 }} />
         </ScrollView>
       ) : kind === "pdf" ? (
-        <WebView
-          source={{ uri: uri! }}
-          originWhitelist={["file://*"]}
-          allowingReadAccessToURL={uri!.slice(0, uri!.lastIndexOf("/") + 1)}
-          allowFileAccess
-          javaScriptEnabled={false}
-          style={{ flex: 1, backgroundColor: c.background }}
-          contentInsetAdjustmentBehavior="automatic"
-        />
+        <PdfPage file={copy.data.file} />
       ) : (
         <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.text}>
           {kind === "markdown" ? (

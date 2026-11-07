@@ -27,6 +27,9 @@ const refusedSockets = new Set<string>();
 /** Computers the link was moved to whose socket failed: not moved to again on its own before this time. */
 const moveRefused = new Map<string, number>();
 const MOVE_REFUSED_MS = 3 * 60_000;
+const PING_MS = 25_000;
+/** Silent this long despite the pings: the link is gone, even if the socket still says it is open. */
+const SILENT_MS = 40_000;
 /** Counts moves, so a connect that started before one doesn't open the link where it was. */
 let moves = 0;
 /** The computer the last move went to, until its socket opened or failed. */
@@ -377,10 +380,12 @@ function handle(event: ServerEvent) {
     case "question.created":
     case "question.updated": {
       const q = event.question;
-      // The lists are of open questions: a settled one leaves at once.
-      queryClient.setQueriesData<AgentQuestion[]>({ queryKey: qk.questions }, (list) => {
-        if (!Array.isArray(list) || !list.some((x) => x.id === q.id)) return list;
-        return q.status === "open" ? list.map((x) => (x.id === q.id ? q : x)) : list.filter((x) => x.id !== q.id);
+      // The list of open questions: a new one joins and a settled one leaves at once.
+      queryClient.setQueryData<AgentQuestion[]>(qk.questions, (list) => {
+        if (!Array.isArray(list)) return list;
+        if (q.status !== "open") return list.filter((x) => x.id !== q.id);
+        if (list.some((x) => x.id === q.id)) return list.map((x) => (x.id === q.id ? q : x));
+        return event.type === "question.created" ? [q, ...list] : list;
       });
       refreshSoon({ queryKey: qk.questions });
       refreshSoon({ queryKey: qk.bootstrap });
@@ -462,8 +467,10 @@ async function connect() {
   );
   socket = ws;
   let opened = false;
+  let heardAt = Date.now();
   ws.onopen = () => {
     opened = true;
+    heardAt = Date.now();
     refusedSockets.clear();
     attempt = 0;
     // Another computer of the group than before: what it has may differ.
@@ -483,10 +490,21 @@ async function connect() {
     // window). Not on the first connect to the same computer: every screen has just fetched its own.
     if (wasOpen || moved) void queryClient.invalidateQueries();
     wasOpen = true;
-    pingTimer = setInterval(() => sendEvent({ type: "ping" }), 25_000);
+    pingTimer = setInterval(() => {
+      if (Date.now() - heardAt < SILENT_MS) return sendEvent({ type: "ping" });
+      // The computer slept or the network changed without the socket noticing: no close event comes, and no more events.
+      socket = null;
+      socketComputer = null;
+      clearTimers();
+      ws.close();
+      forget(base);
+      useLive.getState().setStatus("offline");
+      scheduleReconnect();
+    }, PING_MS);
     awayTimer = setInterval(() => void checkPreferred(instanceId), 30_000);
   };
   ws.onmessage = (msg) => {
+    heardAt = Date.now();
     try {
       handle(JSON.parse(String(msg.data)) as ServerEvent);
     } catch {

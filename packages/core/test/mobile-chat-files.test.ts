@@ -7,6 +7,7 @@ import { loadConfig } from "../src/config";
 import { closeDb, openDb } from "../src/db";
 import { setLogLevel } from "../src/log";
 import { mobileUrls, startMobileAccess, stopMobileAccess } from "../src/mobile/access";
+import { cloudRefusal } from "../src/cloud/scope";
 import { deviceBodyKeys, deviceMayCall } from "../src/mobile/scope";
 import { setTailscaleOverride } from "../src/mobile/tailscale";
 import { createApp } from "../src/server/app";
@@ -158,6 +159,21 @@ describe("the files a chat names, on a phone", () => {
     }
   });
 
+  test("a limited phone can't tell what exists outside the agent's folder", async () => {
+    const elsewhere = join(outside, "probe");
+    mkdirSync(elsewhere, { recursive: true });
+    writeFileSync(join(elsewhere, "secret-name.txt"), "x");
+    mkdirSync(join(agent.repoPath, "memory"), { recursive: true });
+    writeFileSync(join(agent.repoPath, "memory", "secret-name.txt"), "x");
+    const asked = async (dir: string) => Object.keys(byRef((await askFiles(limited, ["memory/", `${dir}/`, "secret-name.txt"])).files[0]!));
+    expect(await asked(elsewhere)).toEqual(await asked(join(outside, "not-there")));
+  });
+
+  test("the PDF route is for the owner on the cloud channel", async () => {
+    expect(await cloudRefusal("GET", "/api/files/pdf", "viewer", async () => ({}))).toBeTruthy();
+    expect(await cloudRefusal("GET", "/api/files/pdf", "owner", async () => ({}))).toBeNull();
+  });
+
   test("a limited phone can't send more than the references", async () => {
     const res = await phone(limited, `/api/conversations/${chatId}/files`, send("POST", { messages: [], agentId: "x" }));
     expect(res.status).toBe(403);
@@ -212,6 +228,14 @@ describe("the dashboard password from a phone", () => {
     expect(through.status).toBe(403);
     expect(await code(through)).toBe("cloud_forbidden");
     expect(checkDashboardPassword("long enough 1") || checkDashboardPassword("long enough 2") || checkDashboardPassword("long enough 3")).toBe(false);
+  });
+
+  test("another computer can't set it by calling itself a phone with full access", async () => {
+    for (const header of ["1", "full"]) {
+      const res = await app.fetch(new Request(`http://link${route}`, { method: "PUT", body: JSON.stringify({ password: "long enough 4" }), headers: { "content-type": "application/json", authorization: `Bearer ${token}`, "x-godmode-phone": header } }), { channel: "runner-link" });
+      expect([header, res.status]).toEqual([header, 403]);
+    }
+    expect(checkDashboardPassword("long enough 4")).toBe(false);
   });
 
   test("validates like the auth route", async () => {

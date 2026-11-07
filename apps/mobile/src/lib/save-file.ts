@@ -7,7 +7,8 @@ export async function saveOrShareFile(file: File, mime = "application/octet-stre
     const result = await Share.share({ url: file.uri });
     return result.action !== Share.dismissedAction;
   }
-  const dir = await Directory.pickDirectoryAsync();
+  const dir = await Directory.pickDirectoryAsync().catch(() => null);
+  if (!dir) return false;
   const target = dir.createFile(file.name, mime);
   await target.write(await file.bytes());
   return true;

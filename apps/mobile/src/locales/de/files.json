@@ -44,6 +44,7 @@
   },
   "preview": {
     "share": "Teilen",
+    "pdfElsewhere": "Android zeigt PDFs nicht in der App. Speichere die Datei und öffne sie mit einer PDF-App.",
     "shareFailed": "Datei konnte nicht geteilt werden",
     "loadFailed": "Datei konnte nicht geöffnet werden",
     "empty": "Diese Datei ist leer",

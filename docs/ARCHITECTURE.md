@@ -1587,10 +1587,18 @@ views. `mobile/` in the core pairs phones and serves them; the desktop's Setting
   files (`mobile/views.ts`). Lists of passwords, 2FA entries, passkeys, cards, SSH keys, integrations, plugins,
   messaging and servers are read-only and pass through `applyDeviceView` (end of `requireAuth`), which strips every secret
   field, also on answers a secondary forwards from its primary (`x-godmode-phone`). Revealing, unlocking, keys,
-  backups, pairing, the cloud link, security, program paths, installs and commands stay on the computer. A phone only
+  backups, pairing, the cloud link, security, program paths, installs and commands take Full access. A limited phone only
   watches and controls screens shared in a chat (`computer.subscribe` and `/api/computer/input`); Godmode's VMs it may
   always take over (`POST /api/vms/:id/input`). The listener checks the decoded path, so `/api/%61uth/…` is refused
   like `/api/auth/…`.
+* **Full access.** `MobileDevice.fullAccess` (unreplicated, per computer), switched on only by this computer's own app or
+  dashboard over loopback; a phone can only give it up. Such a phone skips the allowlist and `applyDeviceView` and acts
+  like the desktop app, except the `HARD` list in `mobile/scope.ts`. Over the Godmode Cloud gateway it keeps the cloud's
+  rules (`cloud/scope.ts`). Everything a limited phone starts is fill-only for good: chats, tickets, goals, artifacts,
+  follow-ups (`runs.fill_only`, `tasks.fill_only`), without API tool keys in the environment and without Edit/Write in the
+  data folder, and it can't change the instructions or memory of an agent that reads raw secrets.
+* **Push.** The core sends through Expo's push service (`mobile/push.ts`), so no server of ours sits in between; tokens
+  are never in API answers, private chats get a neutral line, known secrets are masked.
 * **Key hygiene.** The app only sends its key over plain HTTP to a Tailscale address (100.64.0.0/10 or `*.ts.net`;
   https anywhere, which is how the Godmode Cloud gateway is reached — `isPhoneUrlAllowed`), and first asks the address's `/api/health`, which on
   the phones' listener returns the instance id; an address that answers as another instance never gets the key.

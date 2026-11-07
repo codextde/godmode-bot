@@ -45,6 +45,7 @@
   "preview": {
     "share": "Share",
     "shareFailed": "Couldn't share the file",
+    "pdfElsewhere": "Android can't show PDFs in the app. Save it and open it with a PDF app.",
     "loadFailed": "Couldn't open the file",
     "empty": "This file is empty",
     "clipped": "Showing the beginning. The whole file is on your computer.",
